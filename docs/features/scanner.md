@@ -15,8 +15,9 @@
 2. (Optional) Use **Import from Autoscan** — upload or paste your Autoscan `config.yml` to fill auth, triggers, and rewrites. Plex URL/token still come from Settings → Plex.
 3. Turn **Enable Scanner** on (if not already).
 4. Optionally turn on **Show Home Widget** for a queue/activity card on Home (admins).
-5. Review webhook username/password and rewrites, then Save Settings.
-6. Open **Scanner** in the nav.
+5. Optionally turn off **Show ARR Webhooks on Scanner Page** if you don’t want the webhook URL helper block on the Scanner page.
+6. Review webhook username/password and rewrites, then Save Settings.
+7. Open **Scanner** in the nav.
 
 ## Manual scan
 

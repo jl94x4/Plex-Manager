@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ArrowUpCircle,
-    ChevronDown,
     Clock3,
     Copy,
     FileMinus2,
@@ -30,6 +29,7 @@ type ScannerStatus = {
     remaining: number;
     processed: number;
     targetCount: number;
+    showWebhooks?: boolean;
     webhookPaths: {
         manual: string;
         sonarr: string[];
@@ -64,16 +64,6 @@ type QueueItem = {
     title?: string;
     quality?: string;
     isUpgrade?: boolean;
-};
-
-const WEBHOOKS_COLLAPSED_KEY = 'scanner-webhooks-collapsed';
-
-const readWebhooksCollapsed = () => {
-    try {
-        return localStorage.getItem(WEBHOOKS_COLLAPSED_KEY) === '1';
-    } catch {
-        return false;
-    }
 };
 
 const ActionIcon: React.FC<{ action?: string; className?: string }> = ({ action, className }) => {
@@ -116,19 +106,6 @@ export const ScannerDashboard: React.FC = () => {
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [webhooksCollapsed, setWebhooksCollapsed] = useState(readWebhooksCollapsed);
-
-    const toggleWebhooks = () => {
-        setWebhooksCollapsed((prev) => {
-            const next = !prev;
-            try {
-                localStorage.setItem(WEBHOOKS_COLLAPSED_KEY, next ? '1' : '0');
-            } catch {
-                // ignore
-            }
-            return next;
-        });
-    };
 
     const refresh = useCallback(async () => {
         try {
@@ -288,56 +265,39 @@ export const ScannerDashboard: React.FC = () => {
                 />
             </div>
 
+            {status?.showWebhooks !== false ? (
             <section className="glass-card p-4 md:p-5 shadow-xl space-y-4">
-                <button
-                    type="button"
-                    onClick={toggleWebhooks}
-                    className="w-full flex items-start justify-between gap-3 text-left group"
-                    aria-expanded={!webhooksCollapsed}
-                >
-                    <div className="min-w-0">
-                        <h2 className="text-lg font-bold text-text tracking-tight group-hover:text-sky-200 transition-colors">
-                            ARR webhooks
-                        </h2>
-                        {webhooksCollapsed ? (
-                            <p className="text-xs text-muted mt-1">Hidden — click to show webhook URLs and setup tips.</p>
-                        ) : (
-                            <p className="text-sm text-muted mt-1 leading-relaxed">
-                                In Sonarr / Radarr / Lidarr: Settings → Connect → Webhook → On Import + On Upgrade
-                                (and delete/rename if you want those too). Use Basic Auth from Settings → Scanner.
-                            </p>
-                        )}
-                    </div>
-                    <span className="inline-flex items-center gap-1.5 shrink-0 mt-0.5 px-2.5 py-1.5 rounded-lg border border-white/10 text-xs font-semibold text-muted group-hover:text-text group-hover:bg-white/5 transition-colors">
-                        {webhooksCollapsed ? 'Show' : 'Hide'}
-                        <ChevronDown className={`w-4 h-4 transition-transform ${webhooksCollapsed ? '' : 'rotate-180'}`} />
-                    </span>
-                </button>
-                {!webhooksCollapsed ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                        {webhookRows.map((row) => {
-                            const full = webhookUrl(row.path);
-                            return (
-                                <div
-                                    key={`${row.label}-${row.path}`}
-                                    className="group flex items-center gap-3 rounded-xl border border-white/10 bg-black/25 hover:bg-black/35 px-3.5 py-3 transition-colors"
+                <div>
+                    <h2 className="text-lg font-bold text-text tracking-tight">ARR webhooks</h2>
+                    <p className="text-sm text-muted mt-1 leading-relaxed">
+                        In Sonarr / Radarr / Lidarr: Settings → Connect → Webhook → On Import + On Upgrade
+                        (and delete/rename if you want those too). Use Basic Auth from Settings → Scanner.
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+                    {webhookRows.map((row) => {
+                        const full = webhookUrl(row.path);
+                        return (
+                            <div
+                                key={`${row.label}-${row.path}`}
+                                className="group flex items-center gap-3 rounded-xl border border-white/10 bg-black/25 hover:bg-black/35 px-3.5 py-3 transition-colors"
+                            >
+                                <ScannerSourceBadge source={row.key} className={`w-[5.5rem] shrink-0 ${row.tone}`} />
+                                <code className="flex-1 text-xs text-text/85 truncate font-mono">{full}</code>
+                                <button
+                                    type="button"
+                                    onClick={() => void copyText(full)}
+                                    className="p-2 rounded-lg border border-transparent text-muted hover:text-text hover:bg-white/10 hover:border-white/10 transition-colors"
+                                    title="Copy"
                                 >
-                                    <ScannerSourceBadge source={row.key} className={`w-[5.5rem] shrink-0 ${row.tone}`} />
-                                    <code className="flex-1 text-xs text-text/85 truncate font-mono">{full}</code>
-                                    <button
-                                        type="button"
-                                        onClick={() => void copyText(full)}
-                                        className="p-2 rounded-lg border border-transparent text-muted hover:text-text hover:bg-white/10 hover:border-white/10 transition-colors"
-                                        title="Copy"
-                                    >
-                                        <Copy className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : null}
+                                    <Copy className="w-4 h-4" />
+                                </button>
+                            </div>
+                        );
+                    })}
+                </div>
             </section>
+            ) : null}
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5">
                 <section className="glass-card p-4 md:p-5 shadow-xl space-y-4 min-h-[16rem]">

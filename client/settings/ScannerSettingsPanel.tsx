@@ -147,6 +147,8 @@ type Props = {
     onEnabledChange: (v: boolean) => void;
     homeWidgetEnabled: boolean;
     onHomeWidgetEnabledChange: (v: boolean) => void;
+    webhooksVisible: boolean;
+    onWebhooksVisibleChange: (v: boolean) => void;
     scanner: ScannerSettings;
     onChange: (next: ScannerSettings) => void;
     sectionId: string;
@@ -158,6 +160,8 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
     onEnabledChange,
     homeWidgetEnabled,
     onHomeWidgetEnabledChange,
+    webhooksVisible,
+    onWebhooksVisibleChange,
     scanner,
     onChange,
     sectionId,
@@ -321,6 +325,15 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                         hint={<SettingHint>Adds a full-width Scanner strip on Home above Recently Added (admins). Reorder it under Home → Edit layout.</SettingHint>}
                         checked={!!homeWidgetEnabled && enabled}
                         onChange={onHomeWidgetEnabledChange}
+                        disabled={!enabled}
+                        border={false}
+                        className="!py-0"
+                    />
+                    <SettingsToggleRow
+                        title="Show ARR Webhooks on Scanner Page"
+                        hint={<SettingHint>When off, the ARR webhooks URL block is hidden on the Scanner page. Triggers still work — this only hides the helper section.</SettingHint>}
+                        checked={!!webhooksVisible && enabled}
+                        onChange={onWebhooksVisibleChange}
                         disabled={!enabled}
                         border={false}
                         className="!py-0"
