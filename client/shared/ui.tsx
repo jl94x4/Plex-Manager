@@ -66,7 +66,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ id, value, onChange,
         setIsOpen((v) => !v);
     };
 
-    const selectedOption = options.find(opt => String(opt.value) === String(value)) || options[0];
+    const selectableOptions = options.filter((opt) => !opt.isGroup);
+    const selectedOption = selectableOptions.find(opt => String(opt.value) === String(value)) || selectableOptions[0];
 
     const dropdown = isOpen && dropPos ? ReactDOM.createPortal(
         <div
@@ -74,15 +75,28 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ id, value, onChange,
             style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, minWidth: dropPos.width, zIndex: 99999 }}
             className="bg-card border border-border rounded-lg shadow-2xl py-1 max-h-64 overflow-y-auto custom-scrollbar"
         >
-            {options.map(opt => (
-                <div
-                    key={String(opt.value)}
-                    className={`px-4 py-2.5 cursor-pointer hover:bg-border/40 transition-colors whitespace-nowrap text-sm ${String(value) === String(opt.value) ? 'bg-plex/10 text-plex font-bold' : 'text-text'}`}
-                    onMouseDown={e => { e.preventDefault(); onChange(String(opt.value)); setIsOpen(false); }}
-                >
-                    {opt.label}
-                </div>
-            ))}
+            {options.map((opt, index) => {
+                if (opt.isGroup) {
+                    return (
+                        <div
+                            key={`group-${opt.label}-${index}`}
+                            className={`px-4 pt-2.5 pb-1 text-[10px] uppercase tracking-wider font-bold text-plex ${index > 0 ? 'mt-1 border-t border-border/70' : ''}`}
+                        >
+                            {opt.label}
+                        </div>
+                    );
+                }
+                return (
+                    <div
+                        key={String(opt.value)}
+                        className={`px-4 py-2.5 cursor-pointer hover:bg-border/40 transition-colors whitespace-nowrap text-sm flex items-center gap-2 ${String(value) === String(opt.value) ? 'bg-plex/10 text-plex font-bold' : 'text-text'}`}
+                        onMouseDown={e => { e.preventDefault(); onChange(String(opt.value)); setIsOpen(false); }}
+                    >
+                        {opt.icon ? <span className="inline-flex shrink-0 opacity-90">{opt.icon}</span> : null}
+                        <span className="truncate">{opt.label}</span>
+                    </div>
+                );
+            })}
         </div>,
         document.body
     ) : null;
@@ -93,8 +107,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ id, value, onChange,
                 className={`flex justify-between items-center w-full cursor-pointer h-full rounded-lg border bg-background text-text transition-all ${compact ? 'px-3 py-2' : 'px-4 py-3'} ${isOpen ? 'border-plex ring-1 ring-plex' : 'border-border hover:border-plex/50'}`}
                 onClick={openDropdown}
             >
-                <span className={`truncate mr-4 font-medium ${compact ? 'text-xs' : 'text-sm'}`}>{selectedOption?.label || 'Select...'}</span>
-                <span className={`text-[10px] transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                <span className={`truncate mr-4 font-medium flex items-center gap-2 min-w-0 ${compact ? 'text-xs' : 'text-sm'}`}>
+                    {selectedOption?.icon ? <span className="inline-flex shrink-0 opacity-90">{selectedOption.icon}</span> : null}
+                    <span className="truncate">{selectedOption?.label || 'Select...'}</span>
+                </span>
+                <span className={`text-[10px] transition-transform shrink-0 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
             </div>
             {dropdown}
         </div>

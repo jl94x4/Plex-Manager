@@ -1516,7 +1516,14 @@ export const SettingsDashboard: React.FC = () => {
                                 const entry = resolveSettingsEntry(val);
                                 if (entry) navigateToSetting(entry);
                             }}
-                            options={settingsTabsFlat.map(tab => ({ label: tab.label, value: tab.id }))}
+                            options={visibleTabGroups.flatMap((group) => [
+                                { label: group.title, value: `__group_${group.title}`, isGroup: true as const },
+                                ...group.tabs.map((tab) => ({
+                                    label: tab.label,
+                                    value: tab.id,
+                                    icon: <SettingsTabIcon id={tab.id} />,
+                                })),
+                            ])}
                         />
                         </div>
                     </div>

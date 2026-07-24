@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 export interface User {
     id: string;
     username: string;
@@ -156,7 +158,7 @@ export interface CustomSelectProps {
     id?: string;
     value: string | number;
     onChange: (value: string) => void;
-    options: { label: string; value: string | number }[];
+    options: { label: string; value: string | number; icon?: ReactNode; isGroup?: boolean }[];
     className?: string;
     compact?: boolean;
 }
