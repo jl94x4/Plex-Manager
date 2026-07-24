@@ -2702,10 +2702,10 @@ app.post('/api/admin/stop-impersonation', requireAuth, async (req, res) => {
 
 const DEFAULT_DASHBOARD_LAYOUT = {
     version: 1,
-    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'recentlyAdded', 'bazarrTools'],
+    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'recentlyAdded', 'bazarrTools'],
     mainGridOrder: [
         'adminBadge', 'quickActions', 'accessStatus', 'announcement', 'referral',
-        'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'scanner', 'analytics'
+        'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'analytics'
     ],
     recentlyAddedOrder: ['recentMovies', 'recentShows', 'recentMusic'],
     hiddenSections: [],
@@ -2716,10 +2716,10 @@ const DEFAULT_DASHBOARD_LAYOUT = {
     topWatchedRows: 1
 };
 
-const DASHBOARD_SECTIONS = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'recentlyAdded', 'bazarrTools'];
+const DASHBOARD_SECTIONS = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'recentlyAdded', 'bazarrTools'];
 const DASHBOARD_MAIN_GRID_WIDGETS = [
     'adminBadge', 'accessStatus', 'tempAccessSetup', 'quickActions', 'announcement',
-    'referral', 'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'scanner', 'analytics'
+    'referral', 'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'analytics'
 ];
 const DASHBOARD_RECENTLY_ADDED_WIDGETS = ['recentMovies', 'recentShows', 'recentMusic'];
 const DASHBOARD_WIDGETS = [...DASHBOARD_MAIN_GRID_WIDGETS, ...DASHBOARD_RECENTLY_ADDED_WIDGETS];
@@ -2774,6 +2774,19 @@ const migrateDashboardSections = (sections) => {
         next.splice(mainGridIndex + 1, 0, 'pendingRequests');
     } else if (!next.includes('pendingRequests')) {
         next.push('pendingRequests');
+    }
+    const placeScannerBeforeRecentlyAdded = () => {
+        const existing = next.indexOf('scanner');
+        if (existing >= 0) next.splice(existing, 1);
+        const ra = next.indexOf('recentlyAdded');
+        if (ra >= 0) next.splice(ra, 0, 'scanner');
+        else next.push('scanner');
+    };
+    if (!next.includes('scanner')) placeScannerBeforeRecentlyAdded();
+    else {
+        const si = next.indexOf('scanner');
+        const ra = next.indexOf('recentlyAdded');
+        if (si >= 0 && ra >= 0 && si > ra) placeScannerBeforeRecentlyAdded();
     }
     if (!next.includes('bazarrTools')) next.push('bazarrTools');
     return next;

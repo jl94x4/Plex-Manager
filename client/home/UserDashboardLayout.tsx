@@ -37,6 +37,7 @@ type Props = {
     renderWrapUp: () => React.ReactNode;
     renderMainGridWidget: (id: MainGridWidgetId) => React.ReactNode;
     renderPendingRequests: () => React.ReactNode;
+    renderScanner?: () => React.ReactNode;
     renderBazarrTools?: () => React.ReactNode;
     renderWatchRowLeft?: () => React.ReactNode;
     renderWatchRowRight?: () => React.ReactNode;
@@ -52,6 +53,7 @@ export const UserDashboardLayout: React.FC<Props> = ({
     renderWrapUp,
     renderMainGridWidget,
     renderPendingRequests,
+    renderScanner,
     renderBazarrTools,
     renderWatchRowLeft,
     renderWatchRowRight,
@@ -199,6 +201,16 @@ export const UserDashboardLayout: React.FC<Props> = ({
                 if (!content) break;
                 sectionNodes.push(
                     <div key="watchRow" className="relative z-[1] w-full min-w-0">
+                        {content}
+                    </div>
+                );
+                break;
+            }
+            case 'scanner': {
+                const content = renderScanner?.();
+                if (!content) break;
+                sectionNodes.push(
+                    <div key="scanner" className="relative z-[1] w-full min-w-0">
                         {content}
                     </div>
                 );

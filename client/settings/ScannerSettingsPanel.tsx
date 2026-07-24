@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FileUp, Loader2, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Download, FileUp, Loader2, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 import { apiFetch } from '../shared/api';
 import { scannerActionStyles, sourceAppLabel } from '../scanner/eventMeta';
+import { ScannerSourceBadge } from '../scanner/ScannerSourceBadge';
 
 export type RewriteRule = { from: string; to: string };
 export type ScannerTrigger = { name: string; priority: number; rewrite: RewriteRule[] };
@@ -317,7 +318,7 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                     </p>
                     <SettingsToggleRow
                         title="Show Home Widget"
-                        hint={<SettingHint>Adds a premium Scanner card on the Home dashboard for admins (queue, targets, latest activity). Also available under Home → Edit layout.</SettingHint>}
+                        hint={<SettingHint>Adds a full-width Scanner strip on Home above Recently Added (admins). Reorder it under Home → Edit layout.</SettingHint>}
                         checked={!!homeWidgetEnabled && enabled}
                         onChange={onHomeWidgetEnabledChange}
                         disabled={!enabled}
@@ -498,7 +499,7 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                     After changing these options, click <strong className="text-text">Save Settings</strong> at the bottom of the page.
                 </p>
 
-                <ScannerLiveLogs enabled={enabled} />
+                <ScannerLiveLogs enabled={enabled} addToast={addToast} />
             </section>
         </div>
     );
@@ -528,13 +529,51 @@ const formatLogTime = (iso?: string) => {
     }
 };
 
-const ScannerLiveLogs: React.FC<{ enabled: boolean }> = ({ enabled }) => {
+const formatLiveLogText = (entries: LogEntry[], meta?: { queueCount?: number; processed?: number }) => {
+    const header = [
+        'Scanner Live Activity',
+        `Exported ${new Date().toISOString()}`,
+        `Queue ${meta?.queueCount ?? 0} · Processed ${meta?.processed ?? 0}`,
+        `Entries ${entries.length}`,
+        '',
+    ].join('\n');
+
+    const body = entries.map((entry, i) => {
+        const style = scannerActionStyles(entry.action || entry.reason, entry.isUpgrade);
+        const lines = [
+            `#${i + 1} ${entry.ok ? 'OK' : 'ERROR'} · ${formatLogTime(entry.at)} · ${sourceAppLabel(entry.source) || entry.source || '—'}`,
+            entry.reason || entry.action ? `Reason: ${entry.reason || style.label}` : null,
+            entry.title ? `Title: ${entry.title}` : null,
+            `Path: ${entry.folder || '—'}`,
+            entry.quality || entry.eventType
+                ? `Meta: ${[entry.quality, entry.eventType].filter(Boolean).join(' · ')}`
+                : null,
+            entry.error ? `Error: ${entry.error}` : null,
+            Array.isArray(entry.results) && entry.results.length
+                ? `Targets: ${entry.results.map((r: any) => (
+                    `${r.type || 'target'}${r.skipped ? ` skipped (${r.reason || 'no library'})` : ' scanned'}`
+                )).join('; ')}`
+                : null,
+        ].filter(Boolean);
+        return lines.join('\n');
+    }).join('\n\n');
+
+    return `${header}${body || '(no entries)'}\n`;
+};
+
+const PAGE_SIZE = 10;
+
+const ScannerLiveLogs: React.FC<{
+    enabled: boolean;
+    addToast?: (msg: string, type?: 'success' | 'error') => void;
+}> = ({ enabled, addToast }) => {
     const [entries, setEntries] = useState<LogEntry[]>([]);
     const [queueCount, setQueueCount] = useState(0);
     const [processed, setProcessed] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [paused, setPaused] = useState(false);
+    const [page, setPage] = useState(0);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const listRef = useRef<HTMLDivElement>(null);
     const stickToTopRef = useRef(true);
@@ -567,10 +606,43 @@ const ScannerLiveLogs: React.FC<{ enabled: boolean }> = ({ enabled }) => {
         return () => window.clearInterval(id);
     }, [paused, refresh]);
 
+    const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE) || 1);
+    const safePage = Math.min(page, totalPages - 1);
+    const pageEntries = entries.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+    useEffect(() => {
+        if (page > totalPages - 1) setPage(Math.max(0, totalPages - 1));
+    }, [page, totalPages]);
+
     useEffect(() => {
         if (!stickToTopRef.current || !listRef.current) return;
         listRef.current.scrollTop = 0;
-    }, [entries]);
+    }, [pageEntries]);
+
+    const copyLogs = async () => {
+        const text = formatLiveLogText(entries, { queueCount, processed });
+        try {
+            await navigator.clipboard.writeText(text);
+            addToast?.('Live activity copied to clipboard', 'success');
+        } catch {
+            addToast?.('Could not copy to clipboard', 'error');
+        }
+    };
+
+    const exportLogs = () => {
+        const text = formatLiveLogText(entries, { queueCount, processed });
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `scanner-live-activity-${stamp}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        addToast?.('Live activity exported', 'success');
+    };
 
     return (
         <SectionCard
@@ -592,6 +664,26 @@ const ScannerLiveLogs: React.FC<{ enabled: boolean }> = ({ enabled }) => {
                     </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-50"
+                        onClick={() => void copyLogs()}
+                        disabled={!entries.length}
+                        title="Copy live logs to clipboard"
+                    >
+                        <Copy className="w-3.5 h-3.5" />
+                        Copy
+                    </button>
+                    <button
+                        type="button"
+                        className="btn-secondary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-50"
+                        onClick={exportLogs}
+                        disabled={!entries.length}
+                        title="Export live logs as .txt"
+                    >
+                        <Download className="w-3.5 h-3.5" />
+                        Export
+                    </button>
                     <button
                         type="button"
                         className="btn-secondary px-3 py-1.5 text-xs"
@@ -634,10 +726,11 @@ const ScannerLiveLogs: React.FC<{ enabled: boolean }> = ({ enabled }) => {
                     </div>
                 ) : (
                     <ul className="divide-y divide-white/5">
-                        {entries.map((entry, i) => {
+                        {pageEntries.map((entry, i) => {
                             const style = scannerActionStyles(entry.action || entry.reason, entry.isUpgrade);
+                            const globalIndex = safePage * PAGE_SIZE + i;
                             return (
-                            <li key={`${entry.at}-${i}`} className="px-3 py-2.5 hover:bg-white/[0.03]">
+                            <li key={`${entry.at}-${globalIndex}`} className="px-3 py-2.5 hover:bg-white/[0.03]">
                                 <div className="flex flex-wrap items-center gap-2 mb-1">
                                     <span className={`font-bold uppercase tracking-wide ${entry.ok ? 'text-emerald-300' : 'text-red-300'}`}>
                                         {entry.ok ? 'ok' : 'error'}
@@ -648,11 +741,7 @@ const ScannerLiveLogs: React.FC<{ enabled: boolean }> = ({ enabled }) => {
                                         </span>
                                     ) : null}
                                     <span className="text-muted">{formatLogTime(entry.at)}</span>
-                                    {sourceAppLabel(entry.source) ? (
-                                        <span className="text-blue-300/90">{sourceAppLabel(entry.source)}</span>
-                                    ) : entry.source ? (
-                                        <span className="text-blue-300/90">{entry.source}</span>
-                                    ) : null}
+                                    <ScannerSourceBadge source={entry.source} className="text-blue-300/90" />
                                 </div>
                                 {entry.title ? <div className="text-text font-semibold mb-0.5">{entry.title}</div> : null}
                                 <div className="text-text/90 break-all leading-relaxed">{entry.folder || '—'}</div>
@@ -678,6 +767,37 @@ const ScannerLiveLogs: React.FC<{ enabled: boolean }> = ({ enabled }) => {
                     </ul>
                 )}
             </div>
+
+            {entries.length > 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <p className="text-xs text-muted">
+                        Showing {safePage * PAGE_SIZE + 1}–{Math.min(entries.length, (safePage + 1) * PAGE_SIZE)} of {entries.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-40"
+                            disabled={safePage <= 0}
+                            onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                            Prev
+                        </button>
+                        <span className="text-xs font-semibold text-muted tabular-nums">
+                            {safePage + 1} / {totalPages}
+                        </span>
+                        <button
+                            type="button"
+                            className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-40"
+                            disabled={safePage >= totalPages - 1}
+                            onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                        >
+                            Next
+                            <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                </div>
+            ) : null}
         </SectionCard>
     );
 };

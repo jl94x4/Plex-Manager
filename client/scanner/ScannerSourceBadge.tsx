@@ -1,0 +1,34 @@
+import React from 'react';
+import { FolderInput } from 'lucide-react';
+import { sourceAppIconUrl, sourceAppKey, sourceAppLabel } from './eventMeta';
+
+type Props = {
+    source?: string;
+    className?: string;
+};
+
+export const ScannerSourceBadge: React.FC<Props> = ({ source, className = '' }) => {
+    const label = sourceAppLabel(source);
+    if (!label) return null;
+    const key = sourceAppKey(source);
+    const iconUrl = sourceAppIconUrl(source);
+
+    return (
+        <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted ${className}`}>
+            {iconUrl ? (
+                <img
+                    src={iconUrl}
+                    alt=""
+                    className="w-3.5 h-3.5 shrink-0 object-contain"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                />
+            ) : key === 'manual' ? (
+                <FolderInput className="w-3.5 h-3.5 shrink-0 text-sky-300/90" />
+            ) : null}
+            {label}
+        </span>
+    );
+};
+
+export default ScannerSourceBadge;

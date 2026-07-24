@@ -19,8 +19,8 @@ import { portalUrl } from '../shared/basePath';
 import {
     formatScannerWhen,
     scannerActionStyles,
-    sourceAppLabel,
 } from './eventMeta';
+import { ScannerSourceBadge } from './ScannerSourceBadge';
 
 type ScannerStatus = {
     enabled: boolean;
@@ -163,10 +163,10 @@ export const ScannerDashboard: React.FC = () => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const webhookUrl = (p: string) => `${origin}${portalUrl(p)}`;
     const webhookRows = [
-        ...(status?.webhookPaths?.sonarr || ['/triggers/sonarr']).map((p) => ({ label: 'Sonarr', tone: 'text-sky-300', path: p })),
-        ...(status?.webhookPaths?.radarr || ['/triggers/radarr']).map((p) => ({ label: 'Radarr', tone: 'text-amber-300', path: p })),
-        ...(status?.webhookPaths?.lidarr || ['/triggers/lidarr']).map((p) => ({ label: 'Lidarr', tone: 'text-violet-300', path: p })),
-        { label: 'Manual', tone: 'text-emerald-300', path: status?.webhookPaths?.manual || '/triggers/manual' },
+        ...(status?.webhookPaths?.sonarr || ['/triggers/sonarr']).map((p) => ({ label: 'Sonarr', key: 'sonarr', tone: 'text-sky-300', path: p })),
+        ...(status?.webhookPaths?.radarr || ['/triggers/radarr']).map((p) => ({ label: 'Radarr', key: 'radarr', tone: 'text-amber-300', path: p })),
+        ...(status?.webhookPaths?.lidarr || ['/triggers/lidarr']).map((p) => ({ label: 'Lidarr', key: 'lidarr', tone: 'text-violet-300', path: p })),
+        { label: 'Manual', key: 'manual', tone: 'text-emerald-300', path: status?.webhookPaths?.manual || '/triggers/manual' },
     ];
 
     return (
@@ -280,9 +280,7 @@ export const ScannerDashboard: React.FC = () => {
                                 key={`${row.label}-${row.path}`}
                                 className="group flex items-center gap-3 rounded-xl border border-white/10 bg-black/25 hover:bg-black/35 px-3.5 py-3 transition-colors"
                             >
-                                <span className={`text-[11px] font-black uppercase tracking-wider w-[4.25rem] shrink-0 ${row.tone}`}>
-                                    {row.label}
-                                </span>
+                                <ScannerSourceBadge source={row.key} className={`w-[5.5rem] shrink-0 ${row.tone}`} />
                                 <code className="flex-1 text-xs text-text/85 truncate font-mono">{full}</code>
                                 <button
                                     type="button"
@@ -327,11 +325,7 @@ export const ScannerDashboard: React.FC = () => {
                                                 <ActionIcon action={item.action} className="w-3 h-3" />
                                                 {item.reason || style.label}
                                             </span>
-                                            {sourceAppLabel(item.source) ? (
-                                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted">
-                                                    {sourceAppLabel(item.source)}
-                                                </span>
-                                            ) : null}
+                                            <ScannerSourceBadge source={item.source} />
                                             <span className="text-[10px] text-muted ml-auto">P{item.priority ?? 0}</span>
                                         </div>
                                         {item.title ? <p className="text-sm font-semibold text-text mb-1">{item.title}</p> : null}
@@ -386,11 +380,7 @@ export const ScannerDashboard: React.FC = () => {
                                                 <ActionIcon action={entry.action} className="w-3 h-3" />
                                                 {entry.reason || style.label}
                                             </span>
-                                            {sourceAppLabel(entry.source) ? (
-                                                <span className="text-[10px] font-bold uppercase tracking-wider text-muted">
-                                                    {sourceAppLabel(entry.source)}
-                                                </span>
-                                            ) : null}
+                                            <ScannerSourceBadge source={entry.source} />
                                             <span className="text-[10px] text-muted ml-auto">{formatScannerWhen(entry.at)}</span>
                                         </div>
                                         {entry.title ? <p className="text-sm font-semibold text-text mb-1">{entry.title}</p> : null}

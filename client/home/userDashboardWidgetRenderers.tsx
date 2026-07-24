@@ -449,8 +449,6 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                 );
             case 'collexions':
                 return <CollexionsHomeWidget onOpen={onViewCollexions} />;
-            case 'scanner':
-                return <ScannerHomeWidget onOpen={onViewScanner} />;
             case 'analytics':
                 if (!sessionInfo.session.isAdmin && !user) return null;
                 if (!isJellyfinPortal) return null;
@@ -606,6 +604,15 @@ const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNod
             </div>
         </div>
     );
+};
+
+export const createScannerSectionRenderer = (deps: UserDashboardWidgetDeps) => {
+    const { sessionInfo, onViewScanner } = deps;
+    return (): React.ReactNode => {
+        if (!sessionInfo?.session?.isAdmin) return null;
+        if (!sessionInfo?.navFeatures?.scannerHomeWidget) return null;
+        return <ScannerHomeWidget onOpen={onViewScanner} />;
+    };
 };
 
 export const createBazarrToolsSectionRenderer = (deps: UserDashboardWidgetDeps) => {

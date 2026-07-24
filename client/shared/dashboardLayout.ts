@@ -1,4 +1,4 @@
-export type DashboardSectionId = 'wrapUp' | 'mainGrid' | 'pendingRequests' | 'watchRow' | 'recentlyAdded' | 'bazarrTools';
+export type DashboardSectionId = 'wrapUp' | 'mainGrid' | 'pendingRequests' | 'watchRow' | 'scanner' | 'recentlyAdded' | 'bazarrTools';
 
 export type MainGridWidgetId =
     | 'adminBadge'
@@ -11,7 +11,6 @@ export type MainGridWidgetId =
     | 'support'
     | 'libraryStats'
     | 'collexions'
-    | 'scanner'
     | 'analytics';
 
 export type RecentlyAddedWidgetId = 'recentMovies' | 'recentShows' | 'recentMusic';
@@ -37,6 +36,7 @@ export const DASHBOARD_SECTION_LABELS: Record<DashboardSectionId, string> = {
     mainGrid: 'Main dashboard grid',
     pendingRequests: 'Pending Requests',
     watchRow: 'Recently / Most Watched',
+    scanner: 'Scanner',
     recentlyAdded: 'Recently Added rows',
     bazarrTools: 'Bazarr Subtitle Tools',
 };
@@ -52,7 +52,6 @@ export const MAIN_GRID_WIDGET_META: Record<MainGridWidgetId, { label: string; co
     support: { label: 'Need Help / contact', column: 'left', userOnly: true },
     libraryStats: { label: 'Server Library Size', column: 'right' },
     collexions: { label: 'ColleXions', column: 'right', adminOnly: true },
-    scanner: { label: 'Scanner', column: 'right', adminOnly: true },
     analytics: { label: 'Your Analytics', column: 'right' },
 };
 
@@ -64,7 +63,7 @@ export const RECENTLY_ADDED_WIDGET_META: Record<RecentlyAddedWidgetId, string> =
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     version: 1,
-    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'recentlyAdded', 'bazarrTools'],
+    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'recentlyAdded', 'bazarrTools'],
     mainGridOrder: [
         'adminBadge',
         'quickActions',
@@ -75,7 +74,6 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
         'support',
         'libraryStats',
         'collexions',
-        'scanner',
         'analytics',
     ],
     recentlyAddedOrder: ['recentMovies', 'recentShows', 'recentMusic'],
@@ -87,7 +85,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     topWatchedRows: 2,
 };
 
-const ALL_SECTIONS: DashboardSectionId[] = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'recentlyAdded', 'bazarrTools'];
+const ALL_SECTIONS: DashboardSectionId[] = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'recentlyAdded', 'bazarrTools'];
 const ALL_MAIN_GRID: MainGridWidgetId[] = Object.keys(MAIN_GRID_WIDGET_META) as MainGridWidgetId[];
 const ALL_RECENTLY_ADDED: RecentlyAddedWidgetId[] = ['recentMovies', 'recentShows', 'recentMusic'];
 const ALL_WIDGETS: DashboardWidgetId[] = [...ALL_MAIN_GRID, ...ALL_RECENTLY_ADDED];
@@ -142,6 +140,19 @@ const migrateDashboardSections = (sections: DashboardSectionId[]): DashboardSect
     } else if (!next.includes('pendingRequests')) {
         next.push('pendingRequests');
     }
+    const placeScannerBeforeRecentlyAdded = () => {
+        const existing = next.indexOf('scanner');
+        if (existing >= 0) next.splice(existing, 1);
+        const ra = next.indexOf('recentlyAdded');
+        if (ra >= 0) next.splice(ra, 0, 'scanner');
+        else next.push('scanner');
+    };
+    if (!next.includes('scanner')) placeScannerBeforeRecentlyAdded();
+    else {
+        const si = next.indexOf('scanner');
+        const ra = next.indexOf('recentlyAdded');
+        if (si >= 0 && ra >= 0 && si > ra) placeScannerBeforeRecentlyAdded();
+    }
     if (!next.includes('bazarrTools')) next.push('bazarrTools');
     return next;
 };
@@ -186,9 +197,6 @@ export const isMainGridWidgetAvailable = (id: MainGridWidgetId, ctx: DashboardLa
         // Collexions is a Plex-only integration.
         if (String(ctx.mediaServerType || 'plex').toLowerCase() !== 'plex') return false;
     }
-    if (id === 'scanner') {
-        if (!ctx.scannerHomeWidgetEnabled) return false;
-    }
     if (id === 'analytics') {
         const isJellyfin = String(ctx.mediaServerType || '').toLowerCase() === 'jellyfin';
         if (!isJellyfin) return false;
@@ -212,6 +220,7 @@ export const resolveRecentlyAddedWidgets = (layout: DashboardLayoutConfig): Rece
 export const isDashboardSectionAvailable = (id: DashboardSectionId, ctx: DashboardLayoutContext): boolean => {
     if (id === 'pendingRequests') return !!ctx.isAdmin;
     if (id === 'bazarrTools') return !!ctx.isAdmin;
+    if (id === 'scanner') return !!ctx.isAdmin && !!ctx.scannerHomeWidgetEnabled;
     return true;
 };
 
@@ -258,6 +267,11 @@ export const SECTION_PREVIEW_META: Record<
         shortLabel: 'Watch history',
         description: 'Recently watched & most watched',
         previewClass: 'h-16',
+    },
+    scanner: {
+        shortLabel: 'Scanner',
+        description: 'Full-width library refresh status',
+        previewClass: 'h-14',
     },
     recentlyAdded: {
         shortLabel: 'Recently added',

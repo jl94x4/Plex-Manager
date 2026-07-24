@@ -51,7 +51,7 @@ import {
 import { StatusSpeedTest } from './shared/StatusSpeedTest';
 import { ANALYTICS_PERIOD_OPTIONS, persistAnalyticsDays, readPersistedAnalyticsDays } from './shared/analyticsPeriodOptions';
 import { UserDashboardLayout } from './home/UserDashboardLayout';
-import { createBazarrToolsSectionRenderer, createMainGridWidgetRenderer, createPendingRequestsSectionRenderer, createRecentlyAddedWidgetRenderer } from './home/userDashboardWidgetRenderers';
+import { createBazarrToolsSectionRenderer, createMainGridWidgetRenderer, createPendingRequestsSectionRenderer, createRecentlyAddedWidgetRenderer, createScannerSectionRenderer } from './home/userDashboardWidgetRenderers';
 import {
     DEFAULT_DASHBOARD_LAYOUT,
     DASHBOARD_SECTION_LABELS,
@@ -6596,6 +6596,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
 
     const renderMainGridWidget = useMemo(() => createMainGridWidgetRenderer(widgetDeps), [widgetDeps]);
     const renderPendingRequests = useMemo(() => createPendingRequestsSectionRenderer(widgetDeps), [widgetDeps]);
+    const renderScanner = useMemo(() => createScannerSectionRenderer(widgetDeps), [widgetDeps]);
     const renderBazarrTools = useMemo(() => createBazarrToolsSectionRenderer(widgetDeps), [widgetDeps]);
     const renderRecentlyAddedWidget = useMemo(() => createRecentlyAddedWidgetRenderer(widgetDeps), [widgetDeps]);
 
@@ -6771,6 +6772,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                 layoutCtx={layoutCtx}
                 renderMainGridWidget={renderMainGridWidget}
                 renderPendingRequests={renderPendingRequests}
+                renderScanner={renderScanner}
                 renderBazarrTools={renderBazarrTools}
                 renderRecentlyAddedWidget={renderRecentlyAddedWidget}
                 recentlyAddedLoading={serverDataLoading}

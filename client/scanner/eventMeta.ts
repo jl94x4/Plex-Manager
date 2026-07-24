@@ -114,3 +114,27 @@ export const sourceAppLabel = (source?: string) => {
     if (/^manual/i.test(head)) return 'Manual';
     return head;
 };
+
+/** Official-ish ARR icons (same CDN used elsewhere in Settings). */
+const SOURCE_APP_ICONS: Record<string, string> = {
+    sonarr: 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/sonarr.svg',
+    radarr: 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/radarr.svg',
+    lidarr: 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/lidarr.svg',
+};
+
+export const sourceAppKey = (source?: string): 'sonarr' | 'radarr' | 'lidarr' | 'manual' | '' => {
+    if (!source) return '';
+    const head = String(source).split(':')[0].toLowerCase();
+    if (head === 'sonarr') return 'sonarr';
+    if (head === 'radarr') return 'radarr';
+    if (head === 'lidarr') return 'lidarr';
+    if (head.startsWith('manual')) return 'manual';
+    return '';
+};
+
+export const sourceAppIconUrl = (source?: string): string | null => {
+    const key = sourceAppKey(source);
+    if (!key || key === 'manual') return null;
+    return SOURCE_APP_ICONS[key] || null;
+};
+
