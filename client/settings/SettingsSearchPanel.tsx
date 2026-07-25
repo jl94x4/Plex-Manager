@@ -65,7 +65,7 @@ export const SettingsSearchPanel: React.FC<{
 
     return (
         <div ref={containerRef} className="shrink-0 relative">
-            <label className="text-muted text-[10px] uppercase tracking-wider font-bold mb-1 block">Find Setting</label>
+            <label className="sr-only">Find Setting</label>
             <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted pointer-events-none" />
                 <input

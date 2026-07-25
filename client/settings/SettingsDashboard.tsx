@@ -177,7 +177,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
 
 const SettingsTabIcon: React.FC<{ id: string }> = ({ id }) => {
     const Icon = SETTINGS_TAB_ICONS[id] || Settings;
-    return <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />;
+    return <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />;
 };
 
 const ProgramIcon: React.FC<{ app: string; label: string }> = ({ app, label }) => (
@@ -1580,23 +1580,23 @@ export const SettingsDashboard: React.FC = () => {
                     </div>
 
                     {/* Desktop Sidebar Navigation — sticky within the main scroll area */}
-                    <aside className="hidden md:flex md:flex-col w-72 shrink-0 sticky top-0 self-start glass-card nav-shell p-4 shadow-2xl z-10">
-                        <h1 className="text-2xl font-bold text-plex px-2 mb-3 shrink-0">Settings</h1>
+                    <aside className="hidden md:flex md:flex-col w-72 shrink-0 sticky top-0 self-start glass-card nav-shell px-3 py-3 shadow-2xl z-10">
+                        <h1 className="text-xl font-bold text-plex px-2 mb-2 shrink-0">Settings</h1>
                         <SettingsSearchPanel onSelect={navigateToSetting} activeEntryId={activeSettingId} />
-                        <div className="mt-2.5">
+                        <div className="mt-2">
                         {visibleTabGroups.length === 0 ? (
                             <p className="text-xs text-muted px-2 py-2">No settings sections found.</p>
                         ) : (
-                            <div className="space-y-2">
+                            <div className="space-y-1.5">
                                 {visibleTabGroups.map(group => (
                                     <div key={group.title}>
-                                        <p className="text-[10px] uppercase tracking-wider font-bold text-plex px-2 mb-0.5">{group.title}</p>
+                                        <p className="text-[10px] uppercase tracking-wider font-bold text-plex px-2 mb-0.5 leading-none">{group.title}</p>
                                         <div className="space-y-0.5">
                                             {group.tabs.map(tab => (
                                                 <button
                                                     key={tab.id}
                                                     onClick={() => navigateToSetting({ id: tab.id, tabId: tab.id as SettingsTabId, label: tab.label, group: group.title, keywords: tab.keywords || [] })}
-                                                    className={`w-full text-left px-2 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTab === tab.id
+                                                    className={`w-full text-left px-2 py-1 rounded-md text-[13px] leading-snug font-medium transition-all flex items-center gap-1.5 ${activeTab === tab.id
                                                         ? 'nav-item-active'
                                                         : 'text-muted hover:text-text hover:bg-white/5'
                                                         }`}
