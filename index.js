@@ -26,6 +26,7 @@ import {
     findTriggerByName,
     enqueueScans,
     getQueueStats,
+    appendLog,
     listLog,
     processOne,
     startScannerWorker,
@@ -17961,9 +17962,18 @@ const handleArrTrigger = async (req, res, kind) => {
         }
 
         const event = req.body || {};
-        const eventType = String(event.eventType || '');
+        const eventType = String(event.eventType || event.EventType || '');
         if (/^test$/i.test(eventType)) {
             log(`[scanner] ${kind} test webhook OK`);
+            await appendLog({
+                ok: true,
+                folder: 'Webhook authenticated — no scan queued',
+                source: `${kind}:${trigger.name}`,
+                eventType: 'Test',
+                action: 'test',
+                reason: 'Connection test',
+                title: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} webhook test`,
+            }, { countProcessed: false });
             return res.status(200).json({ ok: true, test: true });
         }
 
@@ -18173,6 +18183,90 @@ app.post('/api/scanner/test-targets', requireAdmin, requireScanner, async (req, 
         res.json({ targets: results });
     } catch (e) {
         res.status(500).json({ error: e?.message || 'Target test failed' });
+    }
+});
+
+app.post('/api/scanner/test-trigger', requireAdmin, requireScanner, async (req, res) => {
+    try {
+        const kind = String(req.body?.kind || '').toLowerCase();
+        const name = String(req.body?.name || kind).trim().toLowerCase();
+        if (!['sonarr', 'radarr', 'lidarr'].includes(kind)) {
+            return res.status(400).json({ error: 'Invalid trigger type' });
+        }
+
+        const config = await loadFile(CONFIG_PATH, {});
+        const scanner = normalizeScannerConfig(config.scanner, getDefaultScannerConfig());
+        const trigger = findTriggerByName(scanner, name);
+        if (!trigger || trigger.kind !== kind) {
+            return res.status(400).json({ error: `Save the ${kind} trigger before testing it.` });
+        }
+
+        // Use the first rewrite source as a realistic synthetic Arr path when it
+        // is a plain path; otherwise fall back to a harmless fixture path.
+        const firstFrom = String(trigger.rewrite?.[0]?.from || '');
+        const plainRewriteRoot = firstFrom
+            .replace(/^\^/, '')
+            .replace(/\$$/, '')
+            .replace(/\\\//g, '/');
+        const sourceRoot = /^[a-zA-Z]:[\\/]|^\//.test(plainRewriteRoot)
+            && !/[\[\]()+*?{}|]/.test(plainRewriteRoot)
+            ? plainRewriteRoot.replace(/\/+$/, '')
+            : `/scanner-test/${kind}`;
+
+        const event = kind === 'sonarr'
+            ? {
+                eventType: 'Download',
+                series: { title: 'Scanner Test Series', path: sourceRoot },
+                episodeFile: { relativePath: 'Season 01/Scanner Test.mkv' },
+            }
+            : kind === 'radarr'
+                ? {
+                    eventType: 'Download',
+                    movie: { title: 'Scanner Test Movie', folderPath: sourceRoot },
+                    movieFile: { relativePath: 'Scanner Test.mkv' },
+                }
+                : {
+                    eventType: 'Download',
+                    artist: { name: 'Scanner Test Artist', path: sourceRoot },
+                    album: { title: 'Scanner Test Album' },
+                    trackFiles: [{ path: `${sourceRoot}/Scanner Test Album/01 - Scanner Test.flac`, quality: 'FLAC' }],
+                };
+
+        const paths = kind === 'sonarr'
+            ? pathsFromSonarrEvent(event)
+            : kind === 'radarr'
+                ? pathsFromRadarrEvent(event)
+                : pathsFromLidarrEvent(event);
+        const scans = buildScansFromPaths(paths, {
+            priority: trigger.priority,
+            source: `${kind}:${trigger.name}`,
+            rewrite: trigger.rewrite,
+            ...classifyArrEvent(kind, event),
+        });
+        if (!scans.length) {
+            return res.status(400).json({ error: 'Synthetic event produced no scan paths.' });
+        }
+
+        const targets = buildTargets(scannerPortalConfig(config), scanner);
+        const targetResults = [];
+        for (const target of targets) {
+            try {
+                await target.available();
+                targetResults.push({ type: target.type, ok: true });
+            } catch (e) {
+                targetResults.push({ type: target.type, ok: false, error: e?.message || String(e) });
+            }
+        }
+
+        const failedTargets = targetResults.filter((target) => !target.ok);
+        res.json({
+            ok: failedTargets.length === 0 && targetResults.length > 0,
+            trigger: { kind, name: trigger.name, parsedPaths: paths, rewrittenPaths: scans.map((scan) => scan.folder) },
+            targets: targetResults,
+            queued: false,
+        });
+    } catch (e) {
+        res.status(500).json({ error: e?.message || 'Trigger test failed' });
     }
 });
 

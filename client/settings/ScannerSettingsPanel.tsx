@@ -175,6 +175,8 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
     const [importing, setImporting] = useState(false);
     const [importSummary, setImportSummary] = useState<string | null>(null);
     const [showAuthPassword, setShowAuthPassword] = useState(false);
+    const [testingTrigger, setTestingTrigger] = useState<string | null>(null);
+    const [triggerTestResults, setTriggerTestResults] = useState<Record<string, { ok: boolean; message: string }>>({});
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const update = (patch: Partial<ScannerSettings>) => onChange({ ...scanner, ...patch });
@@ -189,6 +191,52 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
         const list = [...(scanner.targets[kind] || [])];
         list[index] = { ...list[index], ...patch };
         update({ targets: { ...scanner.targets, [kind]: list } });
+    };
+
+    const testTrigger = async (
+        kind: 'sonarr' | 'radarr' | 'lidarr',
+        trigger: ScannerTrigger,
+        index: number,
+    ) => {
+        const key = `${kind}-${index}`;
+        setTestingTrigger(key);
+        setTriggerTestResults((current) => {
+            const next = { ...current };
+            delete next[key];
+            return next;
+        });
+        try {
+            const result = await apiFetch('/api/scanner/test-trigger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kind, name: trigger.name || kind }),
+            });
+            const targets = Array.isArray(result?.targets) ? result.targets : [];
+            const failed = targets.filter((target: any) => !target?.ok);
+            const parsedPath = result?.trigger?.parsedPaths?.[0] || '';
+            const rewrittenPath = result?.trigger?.rewrittenPaths?.[0] || parsedPath;
+            const pathSummary = parsedPath && rewrittenPath !== parsedPath
+                ? `${parsedPath} → ${rewrittenPath}`
+                : rewrittenPath;
+            const targetSummary = targets.length
+                ? targets.map((target: any) => `${String(target.type || 'target').toUpperCase()} ${target.ok ? 'reachable' : 'failed'}`).join(' · ')
+                : 'No enabled targets';
+            const ok = !!result?.ok && failed.length === 0;
+            const message = `${ok ? 'Passed' : 'Parser passed, target check failed'} · ${targetSummary}${pathSummary ? ` · ${pathSummary}` : ''}`;
+            setTriggerTestResults((current) => ({ ...current, [key]: { ok, message } }));
+            addToast?.(
+                ok
+                    ? `${TRIGGER_META[kind].title} trigger test passed`
+                    : `${TRIGGER_META[kind].title} parser passed but a target failed`,
+                ok ? 'success' : 'error',
+            );
+        } catch (e: any) {
+            const message = e?.message || 'Trigger test failed';
+            setTriggerTestResults((current) => ({ ...current, [key]: { ok: false, message } }));
+            addToast?.(message, 'error');
+        } finally {
+            setTestingTrigger(null);
+        }
     };
 
     const summarizeImport = (imported: ScannerSettings) => {
@@ -444,6 +492,35 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                                     disabled={!enabled}
                                     onChange={(rewrite) => updateTrigger(kind, i, { rewrite })}
                                 />
+                                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                                    <p className="text-[11px] text-muted">
+                                        Safe synthetic test — validates parsing, saved rewrites, and target reachability without queueing a scan.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        className="btn-secondary inline-flex items-center gap-2 px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                                        disabled={!enabled || testingTrigger !== null}
+                                        onClick={() => void testTrigger(kind, trig, i)}
+                                    >
+                                        {testingTrigger === `${kind}-${i}` ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="w-3.5 h-3.5" />
+                                        )}
+                                        Test trigger
+                                    </button>
+                                </div>
+                                {triggerTestResults[`${kind}-${i}`] ? (
+                                    <div
+                                        className={`rounded-lg border px-3 py-2 text-xs font-medium break-all ${
+                                            triggerTestResults[`${kind}-${i}`].ok
+                                                ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200'
+                                                : 'border-red-400/20 bg-red-500/10 text-red-200'
+                                        }`}
+                                    >
+                                        {triggerTestResults[`${kind}-${i}`].message}
+                                    </div>
+                                ) : null}
                             </div>
                         ))}
                     </SectionCard>
