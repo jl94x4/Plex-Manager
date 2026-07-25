@@ -10261,8 +10261,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     >
                         <div
                             ref={mobileNavBarRef}
-                            className="pointer-events-auto w-screen nav-shell border-t border-border shadow-[0_-8px_24px_rgba(0,0,0,0.35)]"
-                            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+                            className="pointer-events-auto inset-x-0 w-screen nav-shell border-t border-border shadow-[0_-8px_24px_rgba(0,0,0,0.35)] relative"
                         >
                             <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
                                 {(() => {
@@ -10301,6 +10300,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     );
                                 })()}
                             </div>
+                            {/* Bleed: extend nav background below 100dvh into gesture-bar area on Android Firefox */}
+                            <div className="absolute left-0 right-0 w-full nav-shell" style={{ top: '100%', height: '200px', borderTop: 'none' }} aria-hidden="true" />
                         </div>
                     </div>
 
