@@ -16,6 +16,8 @@ Task labels adapt to the selected media player:
 | Maintenance index | Build media/request index | Same |
 | Rolling backup | Create config backups | Same |
 
+Media Automation is managed from its own admin page and is not listed as a **Settings → Background Tasks** task in v1. Jobs arrive from manual enqueue or Sonarr/Radarr/Lidarr webhooks; the worker uses durable lease/heartbeat recovery inside the portal process. See [Native Media Automation](/features/media-automation). This task list does not imply a scheduled filesystem scan.
+
 ## Diagnostics
 
 The Settings System diagnostics page uses the same media-aware task list. A Jellyfin portal is not expected to pass Plex-only checks, and Plex-only jobs are hidden where appropriate.

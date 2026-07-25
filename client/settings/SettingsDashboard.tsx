@@ -25,6 +25,7 @@ import {
     Shield,
     ScrollText,
     Plus,
+    Cpu,
 } from 'lucide-react';
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -59,6 +60,11 @@ import {
 } from './settingsIndex';
 import { SettingsSearchPanel } from './SettingsSearchPanel';
 import { UPGRADER_PRESET_SELECT_OPTIONS } from '../upgrader/presets';
+import { MediaAutomationSettings } from '../media-automation/MediaAutomationSettings';
+import {
+    DEFAULT_MEDIA_AUTOMATION_SETTINGS,
+    type MediaAutomationSettingsConfig,
+} from '../media-automation/types';
 
 const normalizeArrInstancesFromSettings = (settings: Record<string, any> = {}): ArrInstance[] => {
     if (Array.isArray(settings.arrInstances) && settings.arrInstances.length > 0) {
@@ -161,6 +167,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
     upgrader: Wand2,
     collexions: Layers,
     scanner: Activity,
+    'media-automation': Cpu,
     system: Settings,
     contact: Phone,
     broadcast: Radio,
@@ -460,6 +467,9 @@ export const SettingsDashboard: React.FC = () => {
     const [collexionsEnabled, setCollexionsEnabled] = useState(false);
     const [scannerEnabled, setScannerEnabled] = useState(false);
     const [scannerHomeWidgetEnabled, setScannerHomeWidgetEnabled] = useState(false);
+    const [mediaAutomationEnabled, setMediaAutomationEnabled] = useState(false);
+    const [mediaAutomationHomeWidgetEnabled, setMediaAutomationHomeWidgetEnabled] = useState(false);
+    const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
     const [scannerWebhooksVisible, setScannerWebhooksVisible] = useState(true);
     const [scannerManualPathVisible, setScannerManualPathVisible] = useState(true);
     const [scanner, setScanner] = useState<ScannerSettings>(defaultScannerSettings);
@@ -1087,6 +1097,34 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.scannerHomeWidgetEnabled !== undefined) {
                 setScannerHomeWidgetEnabled(!!initialSettings.scannerHomeWidgetEnabled);
             }
+            if (initialSettings.mediaAutomationEnabled !== undefined) {
+                setMediaAutomationEnabled(!!initialSettings.mediaAutomationEnabled);
+            }
+            if (initialSettings.mediaAutomationHomeWidgetEnabled !== undefined) {
+                setMediaAutomationHomeWidgetEnabled(!!initialSettings.mediaAutomationHomeWidgetEnabled);
+            }
+            if (initialSettings.mediaAutomation && typeof initialSettings.mediaAutomation === 'object') {
+                const saved = initialSettings.mediaAutomation;
+                setMediaAutomation({
+                    ...DEFAULT_MEDIA_AUTOMATION_SETTINGS,
+                    ...saved,
+                    enabled: initialSettings.mediaAutomationEnabled ?? saved.enabled ?? false,
+                    auth: {
+                        ...DEFAULT_MEDIA_AUTOMATION_SETTINGS.auth,
+                        ...(saved.auth || saved.webhookAuth || {}),
+                    },
+                    fallback: { ...DEFAULT_MEDIA_AUTOMATION_SETTINGS.fallback, ...(saved.fallback || {}) },
+                    concurrency: {
+                        cpu: Math.min(32, Math.max(1, Number(saved.concurrency?.cpu ?? saved.cpuConcurrency ?? saved.concurrency) || 1)),
+                        gpu: Math.min(16, Math.max(1, Number(saved.concurrency?.gpu ?? saved.gpuConcurrency) || 1)),
+                    },
+                });
+            } else {
+                setMediaAutomation({
+                    ...DEFAULT_MEDIA_AUTOMATION_SETTINGS,
+                    enabled: !!initialSettings.mediaAutomationEnabled,
+                });
+            }
             if (initialSettings.scannerWebhooksVisible !== undefined) {
                 setScannerWebhooksVisible(initialSettings.scannerWebhooksVisible !== false);
             }
@@ -1352,6 +1390,9 @@ export const SettingsDashboard: React.FC = () => {
             scannerWebhooksVisible,
             scannerManualPathVisible,
             scanner,
+            mediaAutomationEnabled,
+            mediaAutomationHomeWidgetEnabled,
+            mediaAutomation: { ...mediaAutomation, enabled: mediaAutomationEnabled },
             collexionsAutostart,
             collexionsInternalUrl,
             collexionsServiceKey,
@@ -2733,6 +2774,7 @@ export const SettingsDashboard: React.FC = () => {
                                 upgrader: upgraderEnabled,
                                 collexions: collexionsEnabled,
                                 scanner: scannerEnabled,
+                                mediaAutomation: mediaAutomationEnabled,
                                 maintenance: maintenanceExperimentalEnabled,
                             }}
                         />
@@ -3476,6 +3518,16 @@ export const SettingsDashboard: React.FC = () => {
                             onChange={setScanner}
                             sectionId={getSettingsSectionElementId('scanner')}
                             addToast={addToast}
+                        />
+                    )}
+                    {activeTab === 'media-automation' && (
+                        <MediaAutomationSettings
+                            enabled={mediaAutomationEnabled}
+                            onEnabledChange={setMediaAutomationEnabled}
+                            homeWidgetEnabled={mediaAutomationHomeWidgetEnabled}
+                            onHomeWidgetEnabledChange={setMediaAutomationHomeWidgetEnabled}
+                            config={mediaAutomation}
+                            onConfigChange={setMediaAutomation}
                         />
                     )}
                     {activeTab === 'system' && (

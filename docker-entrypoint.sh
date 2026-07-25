@@ -3,10 +3,23 @@ set -e
 
 PUID=${PUID:-1000}
 PGID=${PGID:-1000}
+CONFIG_DIR=${CONFIG_DIR:-/app/config}
+MEDIA_AUTOMATION_CONFIG_DIR=${MEDIA_AUTOMATION_CONFIG_DIR:-$CONFIG_DIR/media-automation}
+MEDIA_AUTOMATION_WORK_DIR=${MEDIA_AUTOMATION_WORK_DIR:-$MEDIA_AUTOMATION_CONFIG_DIR/work}
 
 # Unraid appdata mounts are often root-owned; fix permissions before dropping privileges.
-mkdir -p /app/config /app/backup /app/config/collexions/config /app/config/collexions/logs
-chown -R "$PUID:$PGID" /app/config /app/backup
+mkdir -p \
+  "$CONFIG_DIR" \
+  /app/backup \
+  "$CONFIG_DIR/collexions/config" \
+  "$CONFIG_DIR/collexions/logs" \
+  "$MEDIA_AUTOMATION_CONFIG_DIR" \
+  "$MEDIA_AUTOMATION_WORK_DIR"
+chown -R "$PUID:$PGID" \
+  "$CONFIG_DIR" \
+  /app/backup \
+  "$MEDIA_AUTOMATION_CONFIG_DIR" \
+  "$MEDIA_AUTOMATION_WORK_DIR"
 
 if command -v gosu >/dev/null 2>&1; then
   exec gosu "$PUID:$PGID" "$@"

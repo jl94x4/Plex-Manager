@@ -38,6 +38,7 @@ type Props = {
     renderMainGridWidget: (id: MainGridWidgetId) => React.ReactNode;
     renderPendingRequests: () => React.ReactNode;
     renderScanner?: () => React.ReactNode;
+    renderMediaAutomation?: () => React.ReactNode;
     renderBazarrTools?: () => React.ReactNode;
     renderWatchRowLeft?: () => React.ReactNode;
     renderWatchRowRight?: () => React.ReactNode;
@@ -54,6 +55,7 @@ export const UserDashboardLayout: React.FC<Props> = ({
     renderMainGridWidget,
     renderPendingRequests,
     renderScanner,
+    renderMediaAutomation,
     renderBazarrTools,
     renderWatchRowLeft,
     renderWatchRowRight,
@@ -211,6 +213,16 @@ export const UserDashboardLayout: React.FC<Props> = ({
                 if (!content) break;
                 sectionNodes.push(
                     <div key="scanner" className="relative z-[1] w-full min-w-0">
+                        {content}
+                    </div>
+                );
+                break;
+            }
+            case 'mediaAutomation': {
+                const content = renderMediaAutomation?.();
+                if (!content) break;
+                sectionNodes.push(
+                    <div key="mediaAutomation" className="relative z-[1] w-full min-w-0">
                         {content}
                     </div>
                 );

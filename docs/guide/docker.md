@@ -52,6 +52,50 @@ The portal listens on host port `2121` by default.
 | `./config` | `/app/config` | JSON settings, users, caches, and logs |
 | `./backup` | `/app/backup` | Rolling backup snapshots |
 
+Media Automation state and work metadata default to `/app/config/media-automation` and `/app/config/media-automation/work`, so the existing writable config mount covers them. `MEDIA_AUTOMATION_CONFIG_DIR` and `MEDIA_AUTOMATION_WORK_DIR` may override those container paths. No media library or GPU is exposed by default; the portal therefore continues to start on hosts without either.
+
+Add only the media roots you intend to process:
+
+```yaml
+services:
+  portal:
+    volumes:
+      - /srv/media:/media
+```
+
+Use a read-only mount for inspection and dry-runs. Copy, atomic replace, and quarantine require write access to their destination paths. Temporary encoded output is created beside its final destination; ensure `PUID`/`PGID` can access the mounted files and that the destination filesystem can hold a complete output.
+
+## Media Automation hardware
+
+The image includes FFmpeg/FFprobe plus Debian Bookworm Intel and AMD VAAPI userspace packages. Host kernel/GPU drivers are still required. CPU mode needs no device.
+
+Intel QSV/VAAPI and AMD VAAPI:
+
+```yaml
+services:
+  portal:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${VIDEO_GID:-44}"
+      - "${RENDER_GID:-109}"
+```
+
+Find the actual host IDs with `getent group video` and `getent group render`; defaults differ by distribution.
+
+NVIDIA NVENC, after installing NVIDIA Container Toolkit:
+
+```yaml
+services:
+  portal:
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: video,compute,utility
+```
+
+Keep `privileged: false`. Worker Test runs a short synthetic encode for each non-CPU adapter when the matching encoders are present, then use a controlled copy job before enabling replace mode. An explicitly selected unavailable adapter fails rather than silently falling back to CPU unless CPU fallback is enabled. See [Native Media Automation](/features/media-automation).
+
 ## Common Commands
 
 ```bash
@@ -88,6 +132,8 @@ Full product notes: [ColleXions](/features/collexions).
 
 Server Manager Portal includes an Unraid template at `unraid/server-manager-portal.xml`.
 
-The template uses `ghcr.io/jl94x4/server-manager-portal:latest` and stores app data under `/mnt/user/appdata/server-manager-portal/` by default.
+The template uses `ghcr.io/jl94x4/server-manager-portal:latest` and stores app data under `/mnt/user/appdata/server-manager-portal/` by default. It includes a writable Media Automation work path; the optional media path is empty until configured.
+
+For Intel/AMD, add `/dev/dri` as a device and add the host video/render groups. For NVIDIA, use the NVIDIA Container Toolkit/runtime. Do not enable privileged mode. On Unraid, verify path mappings and permissions before enabling any replacement action.
 
 Unraid template `Registry` must point at the package page (`https://github.com/jl94x4/Server-Manager-Portal/pkgs/container/server-manager-portal`), not bare `https://ghcr.io`, or Docker update status can show **not available**.

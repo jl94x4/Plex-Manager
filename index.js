@@ -39,6 +39,19 @@ import {
     parseAutoscanYaml,
     buildTargets,
 } from './lib/scanner/index.js';
+import {
+    buildFfmpegPlan,
+    buildRuleContext,
+    createMediaAutomation,
+    detectFfmpegCapabilities,
+    getDefaultMediaAutomationConfig,
+    listMediaFiles,
+    matchMediaRule,
+    normalizeMediaAutomationConfig,
+    probeMedia,
+    selectMediaAdapter,
+    spawnCommand,
+} from './lib/media-automation/index.js';
 
 const resolveAppVersion = () => {
     const pkgVersion = resolvePackageVersion();
@@ -170,6 +183,173 @@ const stripBasePathFromUrl = (url = '/') => {
 // the existing stored secret is preserved instead of being overwritten.
 const SECRET_MASK = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
 
+const mediaAutomationRuntimeConfig = (config = {}) => {
+    const raw = config.mediaAutomation && typeof config.mediaAutomation === 'object'
+        ? config.mediaAutomation
+        : {};
+    const outputMode = String(raw.outputMode || raw.fallback?.outputMode || 'dry-run').toLowerCase();
+    return normalizeMediaAutomationConfig({
+        ...raw,
+        enabled: !!config.mediaAutomationEnabled,
+        dryRun: outputMode === 'dry-run',
+        cpuConcurrency: raw.cpuConcurrency ?? raw.concurrency?.cpu,
+        gpuConcurrency: raw.gpuConcurrency ?? raw.concurrency?.gpu,
+        hardwareAcceleration: raw.hardwareAcceleration || raw.fallback?.hardware || 'auto',
+        outputMode,
+    }, getDefaultMediaAutomationConfig());
+};
+
+const mediaAutomationConfigForApi = (config = {}) => {
+    const runtime = mediaAutomationRuntimeConfig(config);
+    const auth = config.mediaAutomation?.auth && typeof config.mediaAutomation.auth === 'object'
+        ? config.mediaAutomation.auth
+        : {};
+    return {
+        ...runtime,
+        enabled: !!config.mediaAutomationEnabled,
+        auth: {
+            username: String(auth.username || ''),
+            password: auth.password ? SECRET_MASK : '',
+        },
+        concurrency: {
+            cpu: runtime.cpuConcurrency,
+            gpu: runtime.gpuConcurrency,
+        },
+        fallback: {
+            hardware: runtime.hardwareAcceleration,
+            outputMode: runtime.outputMode,
+        },
+    };
+};
+
+const MEDIA_AUTOMATION_RULE_FIELDS = new Set([
+    'path', 'container', 'videoCodec', 'audioCodec', 'width', 'bitrate', 'hdr',
+]);
+const MEDIA_AUTOMATION_RULE_OPERATORS = new Set([
+    'equals', 'notEquals', 'contains', 'matches', 'greaterThan', 'lessThan',
+]);
+
+const normalizeMediaAutomationRuleGroup = (value) => {
+    const source = value && typeof value === 'object' ? value : {};
+    const operator = String(source.operator || 'AND').toUpperCase() === 'OR' ? 'OR' : 'AND';
+    const conditions = (Array.isArray(source.conditions) ? source.conditions : [])
+        .slice(0, 50)
+        .map((condition) => {
+            const field = String(condition?.field || '');
+            const comparison = String(condition?.operator || 'equals');
+            if (!MEDIA_AUTOMATION_RULE_FIELDS.has(field) || !MEDIA_AUTOMATION_RULE_OPERATORS.has(comparison)) {
+                return null;
+            }
+            return {
+                id: String(condition?.id || randomUUID()),
+                field,
+                operator: comparison,
+                value: String(condition?.value ?? '').slice(0, 500),
+            };
+        })
+        .filter(Boolean);
+    return { operator, conditions };
+};
+
+const normalizeMediaAutomationStep = (value = {}) => {
+    const type = String(value.type || 'transcode').toLowerCase() === 'remux' ? 'remux' : 'transcode';
+    const videoCodec = ['h264', 'hevc', 'av1', 'copy'].includes(String(value.videoCodec || '').toLowerCase())
+        ? String(value.videoCodec).toLowerCase()
+        : 'hevc';
+    const audioCodec = ['copy', 'aac', 'ac3', 'eac3', 'libopus', 'flac'].includes(String(value.audioCodec || '').toLowerCase())
+        ? String(value.audioCodec).toLowerCase()
+        : 'copy';
+    const subtitleCodec = ['copy', 'drop', 'srt', 'webvtt'].includes(String(value.subtitleCodec || '').toLowerCase())
+        ? String(value.subtitleCodec).toLowerCase()
+        : 'copy';
+    return {
+        type,
+        container: ['mkv', 'mp4'].includes(String(value.container || '').toLowerCase())
+            ? String(value.container).toLowerCase()
+            : 'mkv',
+        videoCodec,
+        audioCodec,
+        subtitleCodec,
+        audioBitrateKbps: Math.min(1536, Math.max(32, Number(value.audioBitrateKbps) || 192)),
+        maxWidth: Math.max(0, Math.min(7680, Number(value.maxWidth) || 0)),
+        preset: String(value.preset || 'medium').slice(0, 32),
+    };
+};
+
+const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
+    const name = String(value.name || '').trim().slice(0, 120);
+    if (!name) throw Object.assign(new Error('Pipeline name is required'), { status: 400 });
+    const pipelineId = String(id || value.id || randomUUID());
+    const outputMode = ['dry-run', 'copy', 'replace'].includes(String(value.outputMode || '').toLowerCase())
+        ? String(value.outputMode).toLowerCase()
+        : 'dry-run';
+    const hardware = ['auto', 'cpu', 'nvenc', 'qsv', 'intel-vaapi', 'vaapi'].includes(String(value.hardware || '').toLowerCase())
+        ? String(value.hardware).toLowerCase()
+        : 'auto';
+    const steps = (Array.isArray(value.steps) ? value.steps : [])
+        .slice(0, 10)
+        .map(normalizeMediaAutomationStep);
+    if (!steps.length) steps.push(normalizeMediaAutomationStep());
+    const ruleGroup = normalizeMediaAutomationRuleGroup(value.rules);
+    const firstStep = steps[0];
+    const action = {
+        mode: firstStep.type,
+        videoCodec: firstStep.videoCodec,
+        audioCodec: firstStep.audioCodec,
+        subtitleCodec: firstStep.subtitleCodec,
+        audioBitrateKbps: firstStep.audioBitrateKbps,
+        maxWidth: firstStep.maxWidth,
+        preset: firstStep.preset,
+        outputExtension: `.${firstStep.container}`,
+        outputMode,
+        hardwareAcceleration: hardware,
+    };
+    return {
+        id: pipelineId,
+        name,
+        enabled: value.enabled !== false,
+        priority: Math.max(-1000, Math.min(1000, Number(value.priority) || 0)),
+        outputMode,
+        hardware,
+        rules: ruleGroup,
+        steps,
+        compiledRules: [{
+            id: `pipeline:${pipelineId}`,
+            pipelineId,
+            enabled: value.enabled !== false,
+            priority: Math.max(-1000, Math.min(1000, Number(value.priority) || 0)),
+            conditionGroup: ruleGroup,
+            then: action,
+        }],
+    };
+};
+
+const normalizeMediaAutomationLibraryInput = (value = {}, id) => {
+    const name = String(value.name || '').trim().slice(0, 120);
+    const rootPath = String(value.rootPath || '').trim();
+    if (!name) throw Object.assign(new Error('Library name is required'), { status: 400 });
+    if (!rootPath || !path.isAbsolute(rootPath)) {
+        throw Object.assign(new Error('Library root must be an absolute container path'), { status: 400 });
+    }
+    const outputPath = String(value.outputPath || '').trim();
+    const quarantinePath = String(value.quarantinePath || '').trim();
+    if (outputPath && !path.isAbsolute(outputPath)) {
+        throw Object.assign(new Error('Library output path must be absolute'), { status: 400 });
+    }
+    if (quarantinePath && !path.isAbsolute(quarantinePath)) {
+        throw Object.assign(new Error('Library quarantine path must be absolute'), { status: 400 });
+    }
+    return {
+        id: String(id || value.id || randomUUID()),
+        name,
+        rootPath,
+        outputPath,
+        quarantinePath,
+        enabled: value.enabled !== false,
+        pipelineId: value.pipelineId ? String(value.pipelineId) : null,
+    };
+};
+
 // --- Security: JWT secret must be explicitly set in the environment ---
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
@@ -239,6 +419,7 @@ const publicReadRateLimit = createRateLimiter(60 * 1000, 120);
 const speedtestRateLimit = createRateLimiter(60 * 1000, 80); // parallel duration streams need headroom
 const setupRateLimit = createRateLimiter(15 * 60 * 1000, 30);
 const scannerTriggerRateLimit = createRateLimiter(15 * 60 * 1000, 60);
+const mediaAutomationTriggerRateLimit = createRateLimiter(15 * 60 * 1000, 60);
 
 /** Strip secrets that must never leave the server in user JSON responses. */
 const sanitizeUserForApi = (user) => {
@@ -527,6 +708,12 @@ import {
     ISSUES_DIR,
     BLOCKLIST_DIR,
     WATCHLIST_DIR,
+    MEDIA_AUTOMATION_DIR,
+    MEDIA_AUTOMATION_WORK_DIR,
+    MEDIA_AUTOMATION_QUEUE_PATH,
+    MEDIA_AUTOMATION_LIBRARIES_PATH,
+    MEDIA_AUTOMATION_PIPELINES_PATH,
+    MEDIA_AUTOMATION_ACTIVITY_PATH,
     migrateConfigFiles,
 } from './lib/data-paths.js';
 import {
@@ -2718,6 +2905,8 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         collexions: !!config.collexionsEnabled && isPlexMediaServer,
         scanner: !!config.scannerEnabled,
         scannerHomeWidget: !!config.scannerEnabled && !!config.scannerHomeWidgetEnabled,
+        mediaAutomation: !!config.mediaAutomationEnabled,
+        mediaAutomationHomeWidget: !!config.mediaAutomationEnabled && !!config.mediaAutomationHomeWidgetEnabled,
         // Portal engine unlocks Discover; Seerr URL still works when using Seerr as engine.
         request: portalRequestNav || seerrRequestNav,
         requestsQueue: portalRequestNav || requestAppService.isRequestAppConfigured(config),
@@ -3081,6 +3270,9 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                     normalizeScannerConfig(config.scanner, getDefaultScannerConfig()),
                     SECRET_MASK
                 ),
+                mediaAutomationEnabled: !!config.mediaAutomationEnabled,
+                mediaAutomationHomeWidgetEnabled: !!config.mediaAutomationHomeWidgetEnabled,
+                mediaAutomation: mediaAutomationConfigForApi(config),
                 collexionsAutostart: !!config.collexionsAutostart,
                 collexionsInternalUrl: config.collexionsInternalUrl || '',
                 collexionsServiceKey: config.collexionsServiceKey ? '********' : '',
@@ -3191,6 +3383,9 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 scannerWebhooksVisible: true,
                 scannerManualPathVisible: true,
                 scanner: maskScannerConfigForApi(getDefaultScannerConfig(), SECRET_MASK),
+                mediaAutomationEnabled: false,
+                mediaAutomationHomeWidgetEnabled: false,
+                mediaAutomation: mediaAutomationConfigForApi({}),
                 collexionsAutostart: false,
                 collexionsInternalUrl: '',
                 collexionsServiceKey: '',
@@ -3227,7 +3422,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -3319,6 +3514,38 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         if (incoming === SECRET_MASK) return existing || '';
         if (incoming === '' && existing) return existing;
         return String(incoming);
+    };
+
+    const existingMediaAutomation = existingConfig.mediaAutomation && typeof existingConfig.mediaAutomation === 'object'
+        ? existingConfig.mediaAutomation
+        : {};
+    const incomingMediaAutomation = mediaAutomation && typeof mediaAutomation === 'object'
+        ? mediaAutomation
+        : existingMediaAutomation;
+    const incomingAutomationOutputMode = String(
+        incomingMediaAutomation.outputMode
+        || incomingMediaAutomation.fallback?.outputMode
+        || existingMediaAutomation.outputMode
+        || 'dry-run'
+    ).toLowerCase();
+    const nextMediaAutomationConfig = {
+        ...normalizeMediaAutomationConfig({
+            ...existingMediaAutomation,
+            ...incomingMediaAutomation,
+            dryRun: incomingAutomationOutputMode === 'dry-run',
+            cpuConcurrency: incomingMediaAutomation.cpuConcurrency ?? incomingMediaAutomation.concurrency?.cpu,
+            gpuConcurrency: incomingMediaAutomation.gpuConcurrency ?? incomingMediaAutomation.concurrency?.gpu,
+            hardwareAcceleration: incomingMediaAutomation.hardwareAcceleration
+                || incomingMediaAutomation.fallback?.hardware,
+            outputMode: incomingAutomationOutputMode,
+        }, existingMediaAutomation),
+        auth: {
+            username: String(incomingMediaAutomation.auth?.username ?? existingMediaAutomation.auth?.username ?? '').trim(),
+            password: resolveSecret(
+                incomingMediaAutomation.auth?.password,
+                existingMediaAutomation.auth?.password
+            ),
+        },
     };
 
     let nextArrInstances;
@@ -3547,6 +3774,19 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             ? !!scannerManualPathVisible
             : (existingConfig.scannerManualPathVisible !== false),
         scanner: nextScannerConfig,
+        mediaAutomationEnabled: mediaAutomationEnabled !== undefined
+            ? !!mediaAutomationEnabled
+            : !!existingConfig.mediaAutomationEnabled,
+        mediaAutomationHomeWidgetEnabled: (() => {
+            const automationOn = mediaAutomationEnabled !== undefined
+                ? !!mediaAutomationEnabled
+                : !!existingConfig.mediaAutomationEnabled;
+            if (!automationOn) return false;
+            return mediaAutomationHomeWidgetEnabled !== undefined
+                ? !!mediaAutomationHomeWidgetEnabled
+                : !!existingConfig.mediaAutomationHomeWidgetEnabled;
+        })(),
+        mediaAutomation: nextMediaAutomationConfig,
         collexionsEnabled: (() => {
             // Plex-only integration — never leave enabled for Jellyfin/Emby.
             if (normalizedMediaServerType !== 'plex') return false;
@@ -3607,6 +3847,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     lastAdminProfileFetch = 0;
     cachedArrCatalog = null;
     cachedArrCatalogAt = 0;
+    mediaAutomationCapabilitiesCache = null;
+    mediaAutomationCapabilitiesAt = 0;
+    await refreshMediaAutomationAuthCache();
     systemJobs.autoBackup.nextRun = collexionsConfig.autoBackupEnabled ? computeNextBackupRun(collexionsConfig) : null;
     log('Configuration saved successfully.');
     if (collexionsDefaultsChanged) {
@@ -8576,7 +8819,9 @@ const BACKUP_TARGETS = [
     { key: 'maintenanceMediaIndex', path: MAINTENANCE_MEDIA_INDEX_PATH },
     { key: 'maintenanceRuns', path: MAINTENANCE_RUNS_PATH },
     { key: 'maintenanceRequestIndex', path: MAINTENANCE_REQUEST_INDEX_PATH },
-    { key: 'maintenancePreferences', path: MAINTENANCE_PREFS_PATH }
+    { key: 'maintenancePreferences', path: MAINTENANCE_PREFS_PATH },
+    { key: 'mediaAutomationLibraries', path: MEDIA_AUTOMATION_LIBRARIES_PATH },
+    { key: 'mediaAutomationPipelines', path: MEDIA_AUTOMATION_PIPELINES_PATH }
 ];
 
 const getBackupEncryptionKey = () => createHash('sha256').update(String(JWT_SECRET)).digest();
@@ -17914,6 +18159,100 @@ const scannerPortalConfig = (config = {}) => ({
     plexServerUrl: String(config.plexServerUrl || '').trim() || resolveConfiguredPlexServerUrl(config),
 });
 
+let mediaAutomationPaused = false;
+let mediaAutomationCapabilitiesCache = null;
+let mediaAutomationCapabilitiesAt = 0;
+let mediaAutomationService;
+
+const getMediaAutomationServiceConfig = async () => {
+    const config = await loadFile(CONFIG_PATH, {});
+    const runtime = mediaAutomationRuntimeConfig(config);
+    const pipelines = mediaAutomationService
+        ? await mediaAutomationService.pipelines.list()
+        : [];
+    return {
+        ...runtime,
+        enabled: runtime.enabled && !mediaAutomationPaused,
+        rules: pipelines
+            .filter((pipeline) => pipeline.enabled !== false)
+            .flatMap((pipeline) => Array.isArray(pipeline.compiledRules) ? pipeline.compiledRules : []),
+    };
+};
+
+mediaAutomationService = createMediaAutomation({
+    dataDir: MEDIA_AUTOMATION_DIR,
+    queuePath: MEDIA_AUTOMATION_QUEUE_PATH,
+    getConfig: getMediaAutomationServiceConfig,
+    logger: console,
+    onActivity: async (entry) => {
+        log(`[media-automation] ${entry.message || entry.type}`);
+        const outputPath = String(entry.data?.output || '').trim();
+        if (entry.type !== 'job.completed' || !outputPath) return;
+        try {
+            const config = await loadFile(CONFIG_PATH, {});
+            if (!config.scannerEnabled) return;
+            await enqueueScans([{
+                folder: outputPath,
+                priority: 10,
+                time: new Date().toISOString(),
+                source: 'media-automation',
+                eventType: 'Processed',
+                action: 'refresh',
+                reason: 'Media Automation completed',
+                title: path.basename(outputPath),
+            }]);
+        } catch (error) {
+            log(`[media-automation] Failed to enqueue library refresh: ${error.message}`);
+        }
+    },
+});
+
+const requireMediaAutomation = async (req, res, next) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!config.mediaAutomationEnabled) {
+            return res.status(403).json({ error: 'Media Automation is disabled. Enable it in Settings first.' });
+        }
+        return next();
+    } catch {
+        return res.status(500).json({ error: 'Failed to check Media Automation feature flag.' });
+    }
+};
+
+const findMediaAutomationLibraryForPath = async (candidate) => {
+    const absolute = path.resolve(String(candidate || ''));
+    const libraries = await mediaAutomationService.libraries.list();
+    return libraries
+        .filter((library) => library.enabled !== false && library.rootPath)
+        .sort((a, b) => String(b.rootPath).length - String(a.rootPath).length)
+        .find((library) => {
+            const relative = path.relative(path.resolve(library.rootPath), absolute);
+            return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+        }) || null;
+};
+
+const enqueueMediaAutomationPath = async (candidate, { pipelineId, priority = 0 } = {}) => {
+    const library = await findMediaAutomationLibraryForPath(candidate);
+    if (!library) {
+        throw Object.assign(new Error('Path is outside every enabled Media Automation library root'), { status: 400 });
+    }
+    const stat = await fs.stat(candidate).catch(() => null);
+    if (!stat) throw Object.assign(new Error('Media path does not exist inside the portal container'), { status: 400 });
+    const paths = stat.isDirectory()
+        ? await listMediaFiles(candidate, { extensions: mediaAutomationRuntimeConfig(await loadFile(CONFIG_PATH, {})).extensions })
+        : [candidate];
+    const results = [];
+    for (const filePath of paths) {
+        const result = await mediaAutomationService.enqueuePath(filePath, {
+            libraryId: library.id,
+            pipelineId: pipelineId || library.pipelineId || undefined,
+            priority,
+        });
+        results.push(result);
+    }
+    return results;
+};
+
 const scannerTriggerAuth = createBasicAuthMiddleware({
     getCredentials: () => {
         // Sync read via cached promise is awkward; middleware loads async below.
@@ -17933,6 +18272,35 @@ const refreshScannerAuthCache = async () => {
         };
     } catch {
         scannerAuthCache = { username: '', password: '' };
+    }
+};
+
+let mediaAutomationAuthCache = { username: '', password: '' };
+const refreshMediaAutomationAuthCache = async () => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        mediaAutomationAuthCache = {
+            username: String(config.mediaAutomation?.auth?.username || ''),
+            password: String(config.mediaAutomation?.auth?.password || ''),
+        };
+    } catch {
+        mediaAutomationAuthCache = { username: '', password: '' };
+    }
+};
+const mediaAutomationTriggerAuth = createBasicAuthMiddleware({
+    getCredentials: () => mediaAutomationAuthCache,
+    realm: 'Media Automation',
+});
+const requireMediaAutomationForTriggers = async (req, res, next) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!config.mediaAutomationEnabled) {
+            return res.status(503).json({ error: 'Media Automation is disabled' });
+        }
+        await refreshMediaAutomationAuthCache();
+        return next();
+    } catch {
+        return res.status(500).json({ error: 'Media Automation unavailable' });
     }
 };
 
@@ -18077,6 +18445,102 @@ app.post('/triggers/:name', requireScannerEnabledForTriggers, scannerTriggerRate
     if (!trigger) return res.status(404).json({ error: 'Unknown trigger' });
     return handleArrTrigger(req, res, trigger.kind);
 });
+
+const handleMediaAutomationArrTrigger = async (req, res, kind) => {
+    try {
+        const event = req.body || {};
+        const eventType = String(event.eventType || event.EventType || '');
+        if (/^test$/i.test(eventType)) {
+            await mediaAutomationService.recordActivity({
+                type: 'trigger.test',
+                message: `${kind} webhook authenticated`,
+                data: { source: kind },
+            });
+            return res.json({ ok: true, test: true, queued: 0 });
+        }
+        let paths = [];
+        if (kind === 'sonarr') paths = pathsFromSonarrEvent(event);
+        else if (kind === 'radarr') paths = pathsFromRadarrEvent(event);
+        else if (kind === 'lidarr') paths = pathsFromLidarrEvent(event);
+        const portalConfig = await loadFile(CONFIG_PATH, {});
+        const scanner = normalizeScannerConfig(portalConfig.scanner, getDefaultScannerConfig());
+        const requestedTriggerName = String(req.query.trigger || req.body?.trigger || kind).toLowerCase();
+        const scannerTrigger = findTriggerByName(scanner, requestedTriggerName)
+            || (scanner.triggers?.[kind] || [])[0];
+        if (scannerTrigger?.rewrite?.length) {
+            paths = buildScansFromPaths(paths, { rewrite: scannerTrigger.rewrite }).map((scan) => scan.folder);
+        }
+        const metadata = classifyArrEvent(kind, event);
+        if (metadata.action === 'delete') {
+            return res.json({ ok: true, ignored: true, reason: 'delete events are not processed', queued: 0 });
+        }
+        const pipelineId = String(req.query.pipelineId || req.body?.pipelineId || '').trim() || undefined;
+        let queued = 0;
+        const jobs = [];
+        const errors = [];
+        for (const sourcePath of paths) {
+            try {
+                const results = await enqueueMediaAutomationPath(sourcePath, {
+                    pipelineId,
+                    priority: Number(req.body?.priority) || 0,
+                });
+                for (const result of results) {
+                    if (result.enqueued) {
+                        queued += 1;
+                        jobs.push(result.job);
+                    }
+                }
+            } catch (error) {
+                errors.push({ path: sourcePath, error: error.message });
+            }
+        }
+        await mediaAutomationService.recordActivity({
+            type: queued ? 'trigger.queued' : 'trigger.ignored',
+            message: `${kind} ${eventType || 'event'} queued ${queued} file${queued === 1 ? '' : 's'}`,
+            data: { source: kind, eventType, queued, errors },
+        });
+        return res.json({ ok: true, queued, jobs, errors });
+    } catch (error) {
+        return res.status(error.status || 500).json({ error: error.message || 'Media Automation trigger failed' });
+    }
+};
+
+app.post(
+    '/triggers/media-automation/manual',
+    requireMediaAutomationForTriggers,
+    mediaAutomationTriggerRateLimit,
+    mediaAutomationTriggerAuth,
+    async (req, res) => {
+        try {
+            const candidates = []
+                .concat(req.query.dir || [])
+                .concat(req.body?.dir || [])
+                .concat(req.body?.path ? [req.body.path] : [])
+                .flat()
+                .map((value) => String(value || '').trim())
+                .filter(Boolean);
+            if (!candidates.length) return res.status(400).json({ error: 'Provide a path or dir to process' });
+            const pipelineId = String(req.query.pipelineId || req.body?.pipelineId || '').trim() || undefined;
+            const results = [];
+            for (const candidate of candidates) {
+                results.push(...await enqueueMediaAutomationPath(candidate, { pipelineId, priority: 5 }));
+            }
+            const queued = results.filter((result) => result.enqueued).length;
+            return res.json({ ok: true, queued, jobs: results.filter((result) => result.job).map((result) => result.job) });
+        } catch (error) {
+            return res.status(error.status || 500).json({ error: error.message || 'Manual trigger failed' });
+        }
+    }
+);
+for (const kind of ['sonarr', 'radarr', 'lidarr']) {
+    app.post(
+        `/triggers/media-automation/${kind}`,
+        requireMediaAutomationForTriggers,
+        mediaAutomationTriggerRateLimit,
+        mediaAutomationTriggerAuth,
+        (req, res) => handleMediaAutomationArrTrigger(req, res, kind)
+    );
+}
 
 app.get('/api/scanner/status', requireAdmin, requireScanner, async (req, res) => {
     try {
@@ -18306,6 +18770,407 @@ app.post('/api/scanner/import-yaml', requireAdmin, async (req, res) => {
     } catch (e) {
         res.status(400).json({ error: e?.message || 'Failed to parse Autoscan YAML' });
     }
+});
+
+const loadMediaAutomationCapabilities = async ({ force = false } = {}) => {
+    if (!force && mediaAutomationCapabilitiesCache && Date.now() - mediaAutomationCapabilitiesAt < 60_000) {
+        return mediaAutomationCapabilitiesCache;
+    }
+    const config = mediaAutomationRuntimeConfig(await loadFile(CONFIG_PATH, {}));
+    const [ffmpegVersion, ffprobeVersion, detected] = await Promise.all([
+        spawnCommand(config.ffmpegPath, ['-version'], { timeoutMs: 15_000 }),
+        spawnCommand(config.ffprobePath, ['-version'], { timeoutMs: 15_000 }),
+        detectFfmpegCapabilities({
+            ffmpegPath: config.ffmpegPath,
+            vaapiDevice: config.vaapiDevice,
+            runSyntheticTests: true,
+            timeoutMs: 30_000,
+        }),
+    ]);
+    const firstLine = (value) => String(value || '').split(/\r?\n/)[0] || '';
+    const details = detected.details || {};
+    const encoders = [...new Set(
+        Object.values(details).flatMap((entry) => Array.isArray(entry?.encoders) ? entry.encoders : []),
+    )].sort();
+    mediaAutomationCapabilitiesCache = {
+        available: true,
+        ffmpeg: { available: true, version: firstLine(ffmpegVersion.stdout || ffmpegVersion.stderr) },
+        ffprobe: { available: true, version: firstLine(ffprobeVersion.stdout || ffprobeVersion.stderr) },
+        hardware: Object.entries(detected)
+            .filter(([name, available]) => name !== 'details' && available)
+            .map(([name]) => name),
+        encoders,
+        details,
+        plugins: mediaAutomationService.plugins.list().map((plugin) => ({
+            id: plugin.id,
+            type: plugin.type,
+            label: plugin.label,
+        })),
+    };
+    mediaAutomationCapabilitiesAt = Date.now();
+    return mediaAutomationCapabilitiesCache;
+};
+
+app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const status = await mediaAutomationService.status();
+        const jobs = status.jobs || [];
+        res.json({
+            ...status,
+            enabled: true,
+            paused: mediaAutomationPaused,
+            workerState: mediaAutomationPaused ? 'paused' : (status.running ? 'running' : 'stopped'),
+            activeJobs: jobs.filter((job) => job.state === 'running').length,
+            queuedJobs: jobs.filter((job) => job.state === 'queued').length,
+            completedJobs: jobs.filter((job) => job.state === 'succeeded').length,
+            failedJobs: jobs.filter((job) => job.state === 'failed').length,
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to load Media Automation status' });
+    }
+});
+
+app.get('/api/media-automation/capabilities', requireAdmin, async (req, res) => {
+    try {
+        res.json(await loadMediaAutomationCapabilities({ force: String(req.query.refresh || '') === '1' }));
+    } catch (error) {
+        res.status(503).json({
+            available: false,
+            ffmpeg: { available: false },
+            ffprobe: { available: false },
+            hardware: [],
+            error: error.message || 'FFmpeg capability detection failed',
+        });
+    }
+});
+
+app.post('/api/media-automation/worker/test', requireAdmin, async (req, res) => {
+    try {
+        const capabilities = await loadMediaAutomationCapabilities({ force: true });
+        res.json({ ok: true, ...capabilities });
+    } catch (error) {
+        res.status(503).json({ ok: false, error: error.message || 'Worker test failed' });
+    }
+});
+
+app.post('/api/media-automation/control', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const action = String(req.body?.action || '').toLowerCase();
+        if (action === 'pause' || action === 'stop') {
+            mediaAutomationPaused = true;
+            mediaAutomationService.stop();
+        } else if (action === 'resume' || action === 'start') {
+            mediaAutomationPaused = false;
+            await mediaAutomationService.start();
+        } else if (action === 'process') {
+            await mediaAutomationService.scheduler.processNow();
+        } else {
+            return res.status(400).json({ error: 'Action must be pause, resume, or process' });
+        }
+        await mediaAutomationService.recordActivity({
+            type: `worker.${action}`,
+            message: `Worker ${action} requested`,
+            data: { actor: req.user?.username || req.user?.email || 'admin' },
+        });
+        await appendAuditLog(`media_automation_${action}`, req.user, null);
+        res.json({ ok: true, action, status: await mediaAutomationService.status() });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Worker control failed' });
+    }
+});
+
+app.get('/api/media-automation/jobs', requireAdmin, requireMediaAutomation, async (req, res) => {
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+    const jobs = await mediaAutomationService.listJobs();
+    res.json({ jobs: jobs.slice(0, limit) });
+});
+
+app.get('/api/media-automation/jobs/:id', requireAdmin, requireMediaAutomation, async (req, res) => {
+    const job = await mediaAutomationService.getJob(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    res.json({ job });
+});
+
+app.get('/api/media-automation/jobs/:id/logs', requireAdmin, requireMediaAutomation, async (req, res) => {
+    const job = await mediaAutomationService.getJob(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+    const entries = await mediaAutomationService.listActivity({
+        jobId: req.params.id,
+        limit: Math.min(500, Math.max(1, Number(req.query.limit) || 100)),
+    });
+    res.json({ entries });
+});
+
+app.post('/api/media-automation/jobs/:id/cancel', requireAdmin, requireMediaAutomation, async (req, res) => {
+    const job = await mediaAutomationService.cancelJob(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found or already finished' });
+    await appendAuditLog('media_automation_job_cancelled', req.user, null, { jobId: req.params.id });
+    res.json({ ok: true, job });
+});
+
+app.post('/api/media-automation/jobs/:id/retry', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const job = await mediaAutomationService.retryJob(req.params.id, { resetAttempts: true });
+        if (!job) return res.status(404).json({ error: 'Job not found' });
+        await appendAuditLog('media_automation_job_retried', req.user, null, { jobId: req.params.id });
+        res.json({ ok: true, job });
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Job cannot be retried' });
+    }
+});
+
+app.get('/api/media-automation/activity', requireAdmin, requireMediaAutomation, async (req, res) => {
+    const entries = await mediaAutomationService.listActivity({
+        limit: Math.min(500, Math.max(1, Number(req.query.limit) || 100)),
+    });
+    res.json({
+        activity: entries.map((entry) => ({
+            ...entry,
+            createdAt: entry.at,
+            status: entry.type.endsWith('.failed') ? 'failed' : (entry.type.endsWith('.completed') ? 'completed' : 'info'),
+        })),
+    });
+});
+
+app.post('/api/media-automation/enqueue', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const sourcePath = String(req.body?.path || '').trim();
+        if (!sourcePath) return res.status(400).json({ error: 'Path is required' });
+        const pipelineId = String(req.body?.pipelineId || '').trim() || undefined;
+        const results = await enqueueMediaAutomationPath(sourcePath, { pipelineId, priority: 10 });
+        const jobs = results.filter((result) => result.job).map((result) => result.job);
+        await appendAuditLog('media_automation_job_enqueued', req.user, null, {
+            path: sourcePath,
+            pipelineId: pipelineId || null,
+            count: jobs.length,
+        });
+        res.status(202).json({ ok: true, queued: jobs.length, jobs, results });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Failed to enqueue media' });
+    }
+});
+
+app.get('/api/media-automation/libraries', requireAdmin, requireMediaAutomation, async (req, res) => {
+    res.json({ libraries: await mediaAutomationService.libraries.list() });
+});
+
+app.post('/api/media-automation/libraries', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const library = await mediaAutomationService.libraries.create(normalizeMediaAutomationLibraryInput(req.body));
+        await appendAuditLog('media_automation_library_created', req.user, null, { libraryId: library.id, name: library.name });
+        res.status(201).json({ library });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Failed to create library' });
+    }
+});
+
+app.put('/api/media-automation/libraries/:id', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const existing = await mediaAutomationService.libraries.get(req.params.id);
+        if (!existing) return res.status(404).json({ error: 'Library not found' });
+        const library = await mediaAutomationService.libraries.update(
+            req.params.id,
+            normalizeMediaAutomationLibraryInput({ ...existing, ...req.body }, req.params.id)
+        );
+        await appendAuditLog('media_automation_library_updated', req.user, null, { libraryId: library.id, name: library.name });
+        res.json({ library });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Failed to update library' });
+    }
+});
+
+app.delete('/api/media-automation/libraries/:id', requireAdmin, requireMediaAutomation, async (req, res) => {
+    const removed = await mediaAutomationService.libraries.remove(req.params.id);
+    if (!removed) return res.status(404).json({ error: 'Library not found' });
+    await appendAuditLog('media_automation_library_deleted', req.user, null, { libraryId: req.params.id });
+    res.json({ ok: true });
+});
+
+app.post('/api/media-automation/libraries/:id/test', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const library = await mediaAutomationService.libraries.get(req.params.id);
+        if (!library) return res.status(404).json({ error: 'Library not found' });
+        const stat = await fs.stat(library.rootPath);
+        if (!stat.isDirectory()) throw new Error('Library root is not a directory');
+        await fs.access(library.rootPath);
+        res.json({ ok: true, rootPath: await fs.realpath(library.rootPath) });
+    } catch (error) {
+        res.status(400).json({ ok: false, error: error.message || 'Library test failed' });
+    }
+});
+
+app.get('/api/media-automation/pipelines', requireAdmin, requireMediaAutomation, async (req, res) => {
+    const pipelines = await mediaAutomationService.pipelines.list();
+    res.json({
+        pipelines: pipelines.map(({ compiledRules, ...pipeline }) => pipeline),
+    });
+});
+
+app.post('/api/media-automation/pipelines', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const pipeline = await mediaAutomationService.pipelines.create(normalizeMediaAutomationPipelineInput(req.body));
+        await appendAuditLog('media_automation_pipeline_created', req.user, null, { pipelineId: pipeline.id, name: pipeline.name });
+        const { compiledRules, ...safe } = pipeline;
+        res.status(201).json({ pipeline: safe });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Failed to create pipeline' });
+    }
+});
+
+app.put('/api/media-automation/pipelines/:id', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const existing = await mediaAutomationService.pipelines.get(req.params.id);
+        if (!existing) return res.status(404).json({ error: 'Pipeline not found' });
+        const pipeline = await mediaAutomationService.pipelines.update(
+            req.params.id,
+            normalizeMediaAutomationPipelineInput({ ...existing, ...req.body }, req.params.id)
+        );
+        await appendAuditLog('media_automation_pipeline_updated', req.user, null, { pipelineId: pipeline.id, name: pipeline.name });
+        const { compiledRules, ...safe } = pipeline;
+        res.json({ pipeline: safe });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Failed to update pipeline' });
+    }
+});
+
+app.post('/api/media-automation/pipelines/:id/preview', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const pipeline = await mediaAutomationService.pipelines.get(req.params.id);
+        if (!pipeline) return res.status(404).json({ error: 'Pipeline not found' });
+        const sourcePath = String(req.body?.path || '').trim();
+        if (!sourcePath) return res.status(400).json({ error: 'A test file path is required' });
+        const library = await findMediaAutomationLibraryForPath(sourcePath);
+        if (!library) return res.status(400).json({ error: 'Test path is outside enabled library roots' });
+        const runtime = mediaAutomationRuntimeConfig(await loadFile(CONFIG_PATH, {}));
+        const probe = await probeMedia(sourcePath, { ffprobePath: runtime.ffprobePath });
+        const context = buildRuleContext({
+            filePath: sourcePath,
+            libraryRoot: library.rootPath,
+            probe,
+        });
+        const rule = (pipeline.compiledRules || []).find((entry) => matchMediaRule(entry, context)) || null;
+        if (!rule) {
+            return res.json({
+                ok: true,
+                matched: false,
+                reason: 'no-matching-rule',
+                path: sourcePath,
+                libraryId: library.id,
+            });
+        }
+        const capabilities = await loadMediaAutomationCapabilities();
+        const steps = Array.isArray(pipeline.steps) && pipeline.steps.length
+            ? pipeline.steps
+            : [{ type: rule.then?.mode || 'remux' }];
+        const plans = steps.map((step, index) => {
+            const mode = String(step.type || step.mode || 'remux').toLowerCase();
+            const hardware = mode === 'transcode'
+                ? (pipeline.hardware || runtime.hardwareAcceleration || 'auto')
+                : 'cpu';
+            let adapter;
+            try {
+                adapter = selectMediaAdapter(
+                    hardware,
+                    {
+                        ...Object.fromEntries((capabilities.hardware || []).map((name) => [name, true])),
+                        details: capabilities.details || {},
+                    },
+                    String(step.videoCodec || rule.then?.videoCodec || 'h264').toLowerCase(),
+                );
+            } catch (error) {
+                if (!runtime.allowCpuFallback || hardware === 'cpu') throw error;
+                adapter = selectMediaAdapter('cpu', {
+                    ...Object.fromEntries((capabilities.hardware || []).map((name) => [name, true])),
+                    details: capabilities.details || {},
+                }, String(step.videoCodec || 'h264').toLowerCase());
+            }
+            return buildFfmpegPlan({
+                inputPath: sourcePath,
+                outputPath: path.join(
+                    path.dirname(sourcePath),
+                    `.preview-step-${index + 1}.${step.container || 'mkv'}`,
+                ),
+                rule: {
+                    then: {
+                        ...(rule.then || {}),
+                        ...step,
+                        mode,
+                        outputMode: 'dry-run',
+                    },
+                },
+                adapter,
+                capabilities: {
+                    details: capabilities.details || {},
+                },
+                vaapiDevice: runtime.vaapiDevice,
+            });
+        });
+        res.json({
+            ok: true,
+            matched: true,
+            dryRun: true,
+            path: sourcePath,
+            libraryId: library.id,
+            pipelineId: pipeline.id,
+            ruleId: rule.id,
+            probe: {
+                format: probe.format?.format_name,
+                duration: probe.format?.duration,
+                videoCodec: probe.streams?.find((stream) => stream.codec_type === 'video')?.codec_name,
+                audioCodec: probe.streams?.find((stream) => stream.codec_type === 'audio')?.codec_name,
+            },
+            plans: plans.map((plan) => ({
+                mode: plan.mode,
+                adapter: plan.adapter,
+                adapterLabel: plan.adapterLabel,
+                args: plan.args,
+            })),
+        });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Pipeline preview failed' });
+    }
+});
+
+app.post('/api/media-automation/pipelines/:id/test', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const pipeline = await mediaAutomationService.pipelines.get(req.params.id);
+        if (!pipeline) return res.status(404).json({ error: 'Pipeline not found' });
+        const sourcePath = String(req.body?.path || '').trim();
+        if (!sourcePath) return res.status(400).json({ error: 'A test file path is required' });
+        const library = await findMediaAutomationLibraryForPath(sourcePath);
+        if (!library) return res.status(400).json({ error: 'Test path is outside enabled library roots' });
+        const testPipeline = {
+            ...pipeline,
+            compiledRules: (pipeline.compiledRules || []).map((rule) => ({
+                ...rule,
+                then: { ...(rule.then || {}), outputMode: 'dry-run' },
+            })),
+        };
+        const result = await mediaAutomationService.enqueuePath(sourcePath, {
+            libraryId: library.id,
+            pipeline: testPipeline,
+            priority: 100,
+        });
+        if (!result.enqueued) return res.status(400).json({ error: 'Test file does not match the pipeline rules' });
+        await appendAuditLog('media_automation_pipeline_tested', req.user, null, {
+            pipelineId: pipeline.id,
+            jobId: result.job.id,
+        });
+        res.status(202).json({ ok: true, queued: true, job: result.job, dryRun: true });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Pipeline test failed' });
+    }
+});
+
+app.delete('/api/media-automation/pipelines/:id', requireAdmin, requireMediaAutomation, async (req, res) => {
+    const libraries = await mediaAutomationService.libraries.list();
+    if (libraries.some((library) => String(library.pipelineId || '') === String(req.params.id))) {
+        return res.status(409).json({ error: 'Pipeline is assigned to a library and cannot be deleted' });
+    }
+    const removed = await mediaAutomationService.pipelines.remove(req.params.id);
+    if (!removed) return res.status(404).json({ error: 'Pipeline not found' });
+    await appendAuditLog('media_automation_pipeline_deleted', req.user, null, { pipelineId: req.params.id });
+    res.json({ ok: true });
 });
 
 app.use('/api/upgrader', requireAdmin, requireUpgrader);
@@ -19789,6 +20654,12 @@ app.listen(PORT, BIND_HOST, async () => {
     startDiscoveryAvailabilityCacheBackgroundTask();
     startScannerWorker(async () => scannerPortalConfig(await loadFile(CONFIG_PATH, {})));
     void refreshScannerAuthCache();
+    try {
+        await mediaAutomationService.start();
+        await refreshMediaAutomationAuthCache();
+    } catch (error) {
+        log(`[media-automation] Worker startup failed: ${error.message}`);
+    }
     systemJobs.maintenanceIndex.nextRun = new Date(Date.now() + (20 * 1000)).toISOString();
     setTimeout(async () => {
         try {

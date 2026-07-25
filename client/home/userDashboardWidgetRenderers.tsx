@@ -29,6 +29,7 @@ import { ANALYTICS_PERIOD_OPTIONS } from '../shared/analyticsPeriodOptions';
 import { PendingRequestsHomeWidget } from '../requests/PendingRequestsHomeWidget';
 import { CollexionsHomeWidget } from '../collexions/CollexionsHomeWidget';
 import { ScannerHomeWidget } from '../scanner/ScannerHomeWidget';
+import { MediaAutomationHomeWidget } from '../media-automation/MediaAutomationHomeWidget';
 
 type PosterCardProps = {
     item: { title: string; thumb?: string; plexUrl: string; tags?: string[]; year?: number | string; parentTitle?: string };
@@ -66,6 +67,7 @@ export type UserDashboardWidgetDeps = {
     onViewLogs?: () => void;
     onViewCollexions?: () => void;
     onViewScanner?: () => void;
+    onViewMediaAutomation?: () => void;
     onViewRequests?: (reviewId?: number) => void;
     onPendingRequestsChange?: () => void;
     setToast: (toast: { id: number; message: string; type: 'success' | 'error' }) => void;
@@ -631,6 +633,15 @@ export const createScannerSectionRenderer = (deps: UserDashboardWidgetDeps) => {
         if (!sessionInfo?.session?.isAdmin) return null;
         if (!sessionInfo?.navFeatures?.scannerHomeWidget) return null;
         return <ScannerHomeWidget onOpen={onViewScanner} />;
+    };
+};
+
+export const createMediaAutomationSectionRenderer = (deps: UserDashboardWidgetDeps) => {
+    const { sessionInfo, onViewMediaAutomation } = deps;
+    return (): React.ReactNode => {
+        if (!sessionInfo?.session?.isAdmin) return null;
+        if (!sessionInfo?.navFeatures?.mediaAutomationHomeWidget) return null;
+        return <MediaAutomationHomeWidget onOpen={onViewMediaAutomation} />;
     };
 };
 

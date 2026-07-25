@@ -1,4 +1,4 @@
-export type DashboardSectionId = 'wrapUp' | 'mainGrid' | 'pendingRequests' | 'watchRow' | 'scanner' | 'recentlyAdded' | 'bazarrTools';
+export type DashboardSectionId = 'wrapUp' | 'mainGrid' | 'pendingRequests' | 'watchRow' | 'scanner' | 'mediaAutomation' | 'recentlyAdded' | 'bazarrTools';
 
 export type MainGridWidgetId =
     | 'adminBadge'
@@ -37,6 +37,7 @@ export const DASHBOARD_SECTION_LABELS: Record<DashboardSectionId, string> = {
     pendingRequests: 'Pending Requests',
     watchRow: 'Recently / Most Watched',
     scanner: 'Scanner',
+    mediaAutomation: 'Media Automation',
     recentlyAdded: 'Recently Added rows',
     bazarrTools: 'Bazarr Subtitle Tools',
 };
@@ -63,7 +64,7 @@ export const RECENTLY_ADDED_WIDGET_META: Record<RecentlyAddedWidgetId, string> =
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     version: 1,
-    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'recentlyAdded', 'bazarrTools'],
+    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'],
     mainGridOrder: [
         'adminBadge',
         'quickActions',
@@ -85,7 +86,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     topWatchedRows: 2,
 };
 
-const ALL_SECTIONS: DashboardSectionId[] = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'recentlyAdded', 'bazarrTools'];
+const ALL_SECTIONS: DashboardSectionId[] = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'];
 const ALL_MAIN_GRID: MainGridWidgetId[] = Object.keys(MAIN_GRID_WIDGET_META) as MainGridWidgetId[];
 const ALL_RECENTLY_ADDED: RecentlyAddedWidgetId[] = ['recentMovies', 'recentShows', 'recentMusic'];
 const ALL_WIDGETS: DashboardWidgetId[] = [...ALL_MAIN_GRID, ...ALL_RECENTLY_ADDED];
@@ -153,6 +154,13 @@ const migrateDashboardSections = (sections: DashboardSectionId[]): DashboardSect
         const ra = next.indexOf('recentlyAdded');
         if (si >= 0 && ra >= 0 && si > ra) placeScannerBeforeRecentlyAdded();
     }
+    if (!next.includes('mediaAutomation')) {
+        const scannerIndex = next.indexOf('scanner');
+        const recentlyAddedIndex = next.indexOf('recentlyAdded');
+        const insertAt = scannerIndex >= 0 ? scannerIndex + 1 : recentlyAddedIndex;
+        if (insertAt >= 0) next.splice(insertAt, 0, 'mediaAutomation');
+        else next.push('mediaAutomation');
+    }
     if (!next.includes('bazarrTools')) next.push('bazarrTools');
     return next;
 };
@@ -180,6 +188,7 @@ export type DashboardLayoutContext = {
     requestsQueueEnabled?: boolean;
     collexionsEnabled?: boolean;
     scannerHomeWidgetEnabled?: boolean;
+    mediaAutomationHomeWidgetEnabled?: boolean;
     mediaServerType?: string;
 };
 
@@ -221,6 +230,7 @@ export const isDashboardSectionAvailable = (id: DashboardSectionId, ctx: Dashboa
     if (id === 'pendingRequests') return !!ctx.isAdmin;
     if (id === 'bazarrTools') return !!ctx.isAdmin;
     if (id === 'scanner') return !!ctx.isAdmin && !!ctx.scannerHomeWidgetEnabled;
+    if (id === 'mediaAutomation') return !!ctx.isAdmin && !!ctx.mediaAutomationHomeWidgetEnabled;
     return true;
 };
 
@@ -271,6 +281,11 @@ export const SECTION_PREVIEW_META: Record<
     scanner: {
         shortLabel: 'Scanner',
         description: 'Full-width library refresh status',
+        previewClass: 'h-14',
+    },
+    mediaAutomation: {
+        shortLabel: 'Media Automation',
+        description: 'Native processing queue and worker status',
         previewClass: 'h-14',
     },
     recentlyAdded: {

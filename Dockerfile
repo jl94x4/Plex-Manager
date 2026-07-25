@@ -38,8 +38,26 @@ ENV FORCE_SECURE_COOKIES=false
 ENV COLLEXIONS_APP_DIR=/app/collexions
 ENV COLLEXIONS_EMBEDDED_PORT=15755
 
+# ffmpeg supplies both ffmpeg and ffprobe. Mesa provides AMD VAAPI; the Intel
+# media driver is installed only on architectures where Bookworm publishes it.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gosu python3 python3-venv python3-pip \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        gosu \
+        libva2 \
+        mesa-va-drivers \
+        python3 \
+        python3-pip \
+        python3-venv \
+        vainfo \
+    && if apt-cache show intel-media-va-driver >/dev/null 2>&1; then \
+        apt-get install -y --no-install-recommends intel-media-va-driver; \
+    fi \
+    && if apt-cache show i965-va-driver >/dev/null 2>&1; then \
+        apt-get install -y --no-install-recommends i965-va-driver; \
+    fi \
+    && ffmpeg -version \
+    && ffprobe -version \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
@@ -64,7 +82,7 @@ RUN python3 -m venv /opt/collexions-venv \
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-RUN mkdir -p config backup \
+RUN mkdir -p config/media-automation/work backup \
     && chown -R node:node /app
 
 EXPOSE 2121

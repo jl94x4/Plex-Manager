@@ -9619,7 +9619,7 @@ export const MaintenanceDashboard: React.FC = () => {
 
 interface NavigationProps {
     currentRoute: string;
-    onNavigate: (route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'requests' | 'discovery' | 'about') => void;
+    onNavigate: (route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'requests' | 'discovery' | 'about') => void;
     onLogout: () => void;
     isAdmin: boolean;
     serverName: string;
@@ -9828,6 +9828,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'upgrader': { label: 'Upgrader', icon: ArrowUpCircle, route: 'upgrader', adminOnly: true },
         'collexions': { label: 'ColleXions', icon: Layers, route: 'collexions', adminOnly: true },
         'scanner': { label: 'Scanner', icon: Radar, route: 'scanner', adminOnly: true },
+        'media-automation': { label: 'Media Automation', icon: Cpu, route: 'media-automation', adminOnly: true },
         'requests': { label: 'Requests', icon: ClipboardList, route: 'requests', adminOnly: true },
         'request': { label: 'Discover & Request', icon: Sparkles, route: 'discovery', adminOnly: false },
         'about': { label: 'About', icon: Info, route: 'about', adminOnly: false },

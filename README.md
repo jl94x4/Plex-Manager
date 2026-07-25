@@ -92,6 +92,7 @@ A comprehensive control panel for the server owner:
 - **Pending Requests Widget** - Surface open portal requests on the home dashboard with quick review actions, fanart-backed cards, and a count badge in the sidebar
 - **Library Maintenance** - Scan libraries for missing or empty media, manage exclusions, and run cleanup tasks from the Maintenance page
 - **Library Upgrader (Plex / Jellyfin)** — Find non-HEVC titles, browse a poster grid with codec/HDR badges, drill into show episodes, open Plex/Jellyfin or Sonarr/Radarr deep links, snooze titles, and optionally switch ARR quality profiles with search triggers (dry-run preview, bulk select, history tab, rate limits). Enable in **Settings → Library Upgrader**.
+- **Native Media Automation** — Run opt-in FFmpeg/FFprobe jobs from manual, Sonarr, Radarr, or Lidarr selections. CPU, NVENC, QSV, Intel VAAPI, and AMD VAAPI adapters are included; dry-run, copy, atomic replace, and quarantine workflows protect source media. See the [feature guide](docs/features/media-automation.md).
 - **Collexions (admin)** — Automated Plex collection pinning. UI lives in the portal; the Python worker is **bundled in the portal image**. Enable in **Settings → Collexions** (no second container).
 
 ---
@@ -416,6 +417,16 @@ On first startup, any legacy JSON files still in the project root are automatica
 - View logs: `docker compose logs -f portal`
 - Update: `git pull && docker compose up -d --build`
 
+### Native Media Automation (optional)
+
+The image includes FFmpeg/FFprobe and Debian Bookworm Intel/AMD VAAPI userspace packages. CPU mode requires no GPU. The default Compose service remains unprivileged and does not mount media or GPU devices, so it starts normally on hosts without them.
+
+Mount only the required media roots (read/write for copy, replace, or quarantine). For Intel QSV/VAAPI or AMD VAAPI, pass `/dev/dri` and add the host `video`/`render` group IDs. For NVIDIA NVENC, install NVIDIA Container Toolkit and uncomment the runtime/environment example in `docker-compose.yml`. Keep `privileged: false`.
+
+Worker Test runs a short synthetic encode for each non-CPU adapter when matching encoders are present. Still validate real NVENC/QSV/VAAPI jobs with a controlled copy after changing drivers or mappings. An explicitly selected unavailable mode fails instead of silently falling back unless CPU fallback is enabled. Begin with dry-run, then copy mode. Atomic replace requires the final temporary output to share a filesystem with its destination, and quarantine requires writable space for the original.
+
+Version 1 accepts manual plus Sonarr/Radarr/Lidarr webhook jobs, uses only the built-in native executor, and does not expose a plugin API or promise scheduled filesystem discovery. Full setup and safety notes: [Native Media Automation](docs/features/media-automation.md).
+
 ### Collexions (bundled)
 
 Collexions is built into the portal image. No second container is required.
@@ -518,6 +529,8 @@ The template uses `ghcr.io/jl94x4/server-manager-portal:latest` by default.
 | `PORT` | No | Listen port inside the container (default `2121`) |
 | `BIND_HOST` | No | Bind address (default `0.0.0.0`) |
 | `CONFIG_DIR` | No | Runtime data directory (default `/app/config` in Docker) |
+| `MEDIA_AUTOMATION_CONFIG_DIR` | No | Media Automation state (default `<CONFIG_DIR>/media-automation`) |
+| `MEDIA_AUTOMATION_WORK_DIR` | No | Media Automation work metadata (default `<MEDIA_AUTOMATION_CONFIG_DIR>/work`) |
 | `PUBLIC_BASE_URL` | Optional | Bootstrap public HTTPS URL for reverse-proxy / subpath hosting. After first login, set **Settings → Portal UI → Public Base URL** — invite emails and shareable links prefer that UI value. Include a subpath when needed, e.g. `https://media.example.com/portal` |
 | `BASE_PATH` | No | URL prefix when hosted under a subpath (e.g. `/portal`). Leave empty for root hosting |
 | `FORCE_SECURE_COOKIES` | Recommended | Set `true` when behind HTTPS |

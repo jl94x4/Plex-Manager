@@ -16,6 +16,7 @@ Server Portal combines user onboarding, access management, analytics, requests, 
 | ColleXions | Admin Plex collection automation (bundled worker) |
 | Scanner | Admin library refresh from ARR webhooks / manual paths |
 | Upgrader | Library quality upgrades via Sonarr / Radarr |
+| Media Automation | Native FFmpeg jobs from manual or Sonarr/Radarr/Lidarr webhooks |
 | Cleaner | Library maintenance rules and candidates |
 | Status | Public / admin service status |
 | Users / Settings | Access management and configuration |
@@ -60,6 +61,14 @@ Server Portal connects to the surrounding media stack: Plex, Jellyfin, Emby, Tau
 
 See [Integrations](/guide/integrations) for the full matrix.
 
+## Native Media Automation
+
+Admins can inspect and process selected media with the FFmpeg/FFprobe tools bundled in the Docker image. Version 1 supports manual and Sonarr/Radarr sources, with CPU, NVIDIA NVENC, Intel QSV/VAAPI, and AMD VAAPI encoder reporting.
+
+The feature is opt-in and safety-first: begin with dry-run or copy mode, provide an explicit writable media mount for output actions, and configure quarantine before atomic replacement. Version 1 uses only the built-in native executor and does not expose a plugin API.
+
+See [Native Media Automation](/features/media-automation) for deployment, hardware, and replacement safety requirements.
+
 ## Themes
 
 Users can choose among built-in dark themes, while admins can set the default theme and branding.
@@ -72,5 +81,6 @@ Users can choose among built-in dark themes, while admins can set the default th
 - [ColleXions](/features/collexions)
 - [Scanner](/features/scanner)
 - [Upgrader](/features/upgrader)
+- [Media Automation](/features/media-automation)
 - [Cleaner](/features/cleaner)
 - [Admin Dashboard](/features/admin)
