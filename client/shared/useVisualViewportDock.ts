@@ -56,7 +56,7 @@ export function useVisualViewportDock({
                     // Scrolled (toolbar typically collapsed) or viewports agree → fill the
                     // layout viewport so we don't leave a dead gap under the nav.
                     top = 0;
-                    height = layoutH;
+                    height = Math.max(layoutH, visualBottom);
                 }
             }
 
