@@ -869,7 +869,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             <button type="button" className={buttonClass} disabled={pipeline.id === undefined || busy !== null} onClick={() => { if (pipeline.id !== undefined && window.confirm(`Delete pipeline "${pipeline.name}"?`)) runAction(`delete-pipeline-${pipeline.id}`, () => mediaAutomationApi.deletePipeline(pipeline.id!), 'Pipeline deleted.'); }}><Trash2 className="h-4 w-4 text-red-300" /></button>
                                         </div>
                                     </div>
-                                    <div className="mt-4 flex flex-wrap gap-2">{(pipeline.steps || []).map((step, index) => <span key={`${step.type}-${index}`} className="rounded-md border border-border bg-background/40 px-2 py-1 text-xs font-semibold text-muted">{index + 1}. {step.type}{step.videoCodec ? ` · ${step.videoCodec}` : ''}</span>)}</div>
+                                    <div className="mt-4 flex flex-wrap gap-2">{(pipeline.steps || []).map((step, index) => (
+                                        <span key={`${step.type}-${index}`} className="rounded-md border border-border bg-background/40 px-2 py-1 text-xs font-semibold text-muted">
+                                            {index + 1}. {step.type}
+                                            {step.videoCodec ? ` · ${step.videoCodec}` : ''}
+                                            {step.videoBitrateKbps ? ` · ${step.videoBitrateKbps}kbps` : (step.crf != null ? ` · CRF ${step.crf}` : '')}
+                                        </span>
+                                    ))}</div>
                                     <p className="mt-4 rounded-lg bg-background/40 p-3 text-xs text-muted">
                                         {normalizeRules(pipeline.rules).conditions.length} rule condition{normalizeRules(pipeline.rules).conditions.length === 1 ? '' : 's'} joined with {normalizeRules(pipeline.rules).operator}
                                     </p>
@@ -1246,9 +1252,34 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     <input className={fieldClass} value={step.audioCodec || ''} onChange={(event) => updateStep({ audioCodec: event.target.value })} placeholder="Audio codec (copy)" />
                                                     <input className={fieldClass} value={step.subtitleCodec || ''} onChange={(event) => updateStep({ subtitleCodec: event.target.value })} placeholder="Subtitle codec (copy/drop)" />
                                                     <input className={fieldClass} value={step.preset || ''} onChange={(event) => updateStep({ preset: event.target.value })} placeholder="Speed preset (medium/slow/fast)" />
-                                                    <input className={fieldClass} type="number" min={0} max={51} value={step.crf ?? ''} onChange={(event) => updateStep({ crf: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="Quality CRF/CQ (18 high · 23 bal · 28 saver)" />
+                                                    <input
+                                                        className={fieldClass}
+                                                        type="number"
+                                                        min={100}
+                                                        max={100000}
+                                                        value={step.videoBitrateKbps || ''}
+                                                        onChange={(event) => updateStep({
+                                                            videoBitrateKbps: event.target.value === '' ? undefined : Number(event.target.value),
+                                                        })}
+                                                        placeholder="Video bitrate kbps (e.g. 1500) — overrides CRF"
+                                                    />
+                                                    <input
+                                                        className={fieldClass}
+                                                        type="number"
+                                                        min={0}
+                                                        max={51}
+                                                        value={step.crf ?? ''}
+                                                        onChange={(event) => updateStep({ crf: event.target.value === '' ? undefined : Number(event.target.value) })}
+                                                        placeholder="Quality CRF/CQ (ignored if video bitrate set)"
+                                                        disabled={!!step.videoBitrateKbps}
+                                                    />
                                                     <input className={fieldClass} type="number" min={32} max={1536} value={step.audioBitrateKbps || ''} onChange={(event) => updateStep({ audioBitrateKbps: event.target.value ? Number(event.target.value) : undefined })} placeholder="Audio bitrate kbps" />
                                                     <input className={fieldClass} type="number" min={2} value={step.maxWidth || ''} onChange={(event) => updateStep({ maxWidth: event.target.value ? Number(event.target.value) : undefined })} placeholder="Maximum width" />
+                                                    {!!step.videoBitrateKbps && (
+                                                        <p className="sm:col-span-2 text-xs text-muted">
+                                                            Fixed video bitrate mode: FFmpeg uses `-b:v {step.videoBitrateKbps}k` (predictable size). Keep audio/subs with codec <span className="font-semibold text-text">copy</span>.
+                                                        </p>
+                                                    )}
                                                 </>}
                                                 {(step.type === 'audio-normalize' || step.type === 'audio-stereo') && (
                                                     <input className={fieldClass} type="number" min={32} max={1536} value={step.audioBitrateKbps || ''} onChange={(event) => updateStep({ audioBitrateKbps: event.target.value ? Number(event.target.value) : undefined })} placeholder="Audio bitrate kbps (AAC)" />

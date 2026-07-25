@@ -191,9 +191,11 @@ export type MediaAutomationStep = {
     audioCodec?: string;
     subtitleCodec?: string;
     audioBitrateKbps?: number;
+    /** Fixed video bitrate in kbps. When set (>0), overrides CRF/CQ for ABR-style sizing. */
+    videoBitrateKbps?: number;
     maxWidth?: number;
     preset?: string;
-    /** Quality: CRF/CQ/QP style 0–51 (lower = higher quality / larger files). */
+    /** Quality: CRF/CQ/QP style 0–51 (lower = higher quality / larger files). Ignored when videoBitrateKbps is set. */
     crf?: number;
     /** Move destination template, e.g. `{dir}/archive/{basename}` */
     destination?: string;
@@ -323,6 +325,28 @@ const h264SkipRule = (): MediaAutomationRules => ({
 
 /** Unmanic-inspired pipeline seeds (quality profiles + common remux/compat flows). */
 export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string; pipeline: MediaAutomationPipeline }> = [
+    {
+        id: 'hevc-1500k-keep-streams',
+        label: 'HEVC 1500kbps (keep A/V)',
+        detail: 'Fixed 1500 kbps video bitrate — predictable file size. Copies audio and subtitles unchanged.',
+        pipeline: {
+            name: 'HEVC 1500kbps keep streams',
+            enabled: true,
+            priority: 58,
+            outputMode: 'dry-run',
+            hardware: 'auto',
+            rules: hevcSkipRule(),
+            steps: [{
+                type: 'transcode',
+                container: 'mkv',
+                videoCodec: 'hevc',
+                audioCodec: 'copy',
+                subtitleCodec: 'copy',
+                preset: 'medium',
+                videoBitrateKbps: 1500,
+            }],
+        },
+    },
     {
         id: 'high-quality-hevc',
         label: 'High quality HEVC',

@@ -313,6 +313,12 @@ const normalizeMediaAutomationStep = (value = {}) => {
         audioCodec,
         subtitleCodec,
         audioBitrateKbps: Math.min(1536, Math.max(32, Number(value.audioBitrateKbps) || 192)),
+        // 0 = quality mode (CRF/CQ). >0 = fixed video bitrate (kbps).
+        videoBitrateKbps: (() => {
+            const number = Number(value.videoBitrateKbps);
+            if (!Number.isFinite(number) || number <= 0) return 0;
+            return Math.min(100000, Math.max(100, Math.round(number)));
+        })(),
         maxWidth: Math.max(0, Math.min(7680, Number(value.maxWidth) || 0)),
         preset: String(value.preset || 'medium').slice(0, 32),
         crf: Math.min(51, Math.max(0, Number.isFinite(Number(value.crf)) ? Math.round(Number(value.crf)) : 20)),
@@ -348,6 +354,7 @@ const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
         audioCodec: firstStep.audioCodec,
         subtitleCodec: firstStep.subtitleCodec,
         audioBitrateKbps: firstStep.audioBitrateKbps,
+        videoBitrateKbps: firstStep.videoBitrateKbps,
         maxWidth: firstStep.maxWidth,
         preset: firstStep.preset,
         crf: firstStep.crf,
