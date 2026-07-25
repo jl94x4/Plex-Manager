@@ -1,80 +1,110 @@
 import { useEffect, type RefObject } from 'react';
 
 type DockOptions = {
-    /** Bottom bar that should stay flush with the visible viewport bottom. */
-    barRef: RefObject<HTMLElement | null>;
-    /** Optional overlay that should fill the space above the bar. */
+    /** Full-height mobile shell that ends at the visible viewport bottom. */
+    shellRef: RefObject<HTMLElement | null>;
+    /** Optional overlay that should fill the space above the bottom bar. */
     overlayRef?: RefObject<HTMLElement | null>;
-    /** Re-run when this changes (e.g. overlay mounts). */
+    /** Bottom bar height used to size the More overlay. */
+    barRef?: RefObject<HTMLElement | null>;
     enabled?: boolean;
-    /** Extra dependency so remounts/open overlays re-bind. */
     syncKey?: unknown;
 };
 
 /**
- * Pin fixed bottom chrome to the *visual* viewport.
- * Mobile Firefox/Chrome collapse their toolbars without moving layout-viewport
- * `bottom: 0` elements, which leaves a dead gap under the nav.
+ * Keep mobile bottom chrome flush with the visible viewport on Firefox Android.
+ *
+ * Chrome already does the right thing with `position:fixed; bottom:0`. Firefox leaves
+ * a dead gap when its bottom toolbar collapses. Fix: size a fixed flex shell to the
+ * visible height and put the nav in normal flow at the shell bottom (`justify-end`)
+ * so it isn't stuck on Firefox's layout-viewport fixed layer.
  */
-export function useVisualViewportDock({ barRef, overlayRef, enabled = true, syncKey }: DockOptions) {
+export function useVisualViewportDock({
+    shellRef,
+    overlayRef,
+    barRef,
+    enabled = true,
+    syncKey,
+}: DockOptions) {
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return;
 
-        const sync = () => {
-            const bar = barRef.current;
-            if (!bar) return;
+        let raf = 0;
+
+        const syncNow = () => {
+            const shell = shellRef.current;
+            if (!shell) return;
 
             const vv = window.visualViewport;
-            if (!vv) {
-                bar.style.top = 'auto';
-                bar.style.bottom = '0px';
-                bar.style.height = '';
-                const overlay = overlayRef?.current;
-                if (overlay) {
-                    overlay.style.top = '0px';
-                    overlay.style.bottom = `${bar.offsetHeight}px`;
-                    overlay.style.height = '';
+            const layoutH = window.innerHeight;
+            let height = layoutH;
+            let top = 0;
+
+            if (vv) {
+                const visualBottom = vv.offsetTop + vv.height;
+                const overlayGap = layoutH - visualBottom;
+                // Pinch-zoom / visual pan — follow the visual viewport exactly.
+                if (vv.offsetTop > 1 || Math.abs(vv.scale - 1) > 0.01) {
+                    top = vv.offsetTop;
+                    height = vv.height;
+                } else if (overlayGap > 24 && window.scrollY < 8) {
+                    // At top of page with a large layout-vs-visual gap → bottom toolbar is
+                    // overlaying; size the shell to the visual viewport so the nav sits above it.
+                    top = 0;
+                    height = Math.max(1, visualBottom);
+                } else {
+                    // Scrolled (toolbar typically collapsed) or viewports agree → fill the
+                    // layout viewport so we don't leave a dead gap under the nav.
+                    top = 0;
+                    height = layoutH;
                 }
-                return;
             }
 
-            const barHeight = bar.offsetHeight;
-            const visualBottom = vv.offsetTop + vv.height;
-            bar.style.bottom = 'auto';
-            bar.style.top = `${Math.round(visualBottom - barHeight)}px`;
-            bar.style.left = '0px';
-            bar.style.right = '0px';
+            shell.style.top = `${Math.round(top)}px`;
+            shell.style.height = `${Math.round(height)}px`;
+            shell.style.bottom = 'auto';
+            document.documentElement.style.setProperty('--mobile-shell-height', `${Math.round(height)}px`);
 
             const overlay = overlayRef?.current;
+            const bar = barRef?.current;
             if (overlay) {
-                overlay.style.top = `${Math.round(vv.offsetTop)}px`;
+                const barHeight = bar?.offsetHeight ?? 64;
+                overlay.style.top = `${Math.round(top)}px`;
+                overlay.style.height = `${Math.round(Math.max(0, height - barHeight))}px`;
                 overlay.style.bottom = 'auto';
-                overlay.style.height = `${Math.round(Math.max(0, visualBottom - vv.offsetTop - barHeight))}px`;
-                overlay.style.left = '0px';
-                overlay.style.right = '0px';
             }
         };
 
-        sync();
-        // Overlay mounts a frame later when opened — sync again next frame.
-        const raf = window.requestAnimationFrame(sync);
+        const schedule = () => {
+            if (raf) return;
+            raf = window.requestAnimationFrame(() => {
+                raf = 0;
+                syncNow();
+            });
+        };
 
-        const vv = window.visualViewport;
-        vv?.addEventListener('resize', sync);
-        vv?.addEventListener('scroll', sync);
-        window.addEventListener('resize', sync);
-        window.addEventListener('orientationchange', sync);
+        syncNow();
+        schedule();
 
-        const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null;
-        if (barRef.current) ro?.observe(barRef.current);
+        window.addEventListener('resize', schedule);
+        window.addEventListener('orientationchange', schedule);
+        window.addEventListener('scroll', schedule, { passive: true });
+        window.visualViewport?.addEventListener('resize', schedule);
+        window.visualViewport?.addEventListener('scroll', schedule);
+
+        const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(schedule) : null;
+        if (shellRef.current) ro?.observe(shellRef.current);
+        if (barRef?.current) ro?.observe(barRef.current);
 
         return () => {
-            window.cancelAnimationFrame(raf);
-            vv?.removeEventListener('resize', sync);
-            vv?.removeEventListener('scroll', sync);
-            window.removeEventListener('resize', sync);
-            window.removeEventListener('orientationchange', sync);
+            if (raf) window.cancelAnimationFrame(raf);
+            window.removeEventListener('resize', schedule);
+            window.removeEventListener('orientationchange', schedule);
+            window.removeEventListener('scroll', schedule);
+            window.visualViewport?.removeEventListener('resize', schedule);
+            window.visualViewport?.removeEventListener('scroll', schedule);
             ro?.disconnect();
+            document.documentElement.style.removeProperty('--mobile-shell-height');
         };
-    }, [barRef, overlayRef, enabled, syncKey]);
+    }, [shellRef, overlayRef, barRef, enabled, syncKey]);
 }

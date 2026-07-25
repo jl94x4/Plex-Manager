@@ -9663,9 +9663,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const [mobileThemeOpen, setMobileThemeOpen] = useState(false);
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+    const mobileNavShellRef = useRef<HTMLDivElement>(null);
     const mobileNavBarRef = useRef<HTMLDivElement>(null);
     const mobileMoreOverlayRef = useRef<HTMLDivElement>(null);
     useVisualViewportDock({
+        shellRef: mobileNavShellRef,
         barRef: mobileNavBarRef,
         overlayRef: mobileMoreOverlayRef,
         syncKey: mobileMoreOpen,
@@ -10255,59 +10257,64 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 </div>
             )}
 
-            {/* Mobile bottom nav + More: portal to body + visualViewport dock so the bar
-                tracks Firefox/Chrome toolbar show/hide instead of leaving a dead gap. */}
+            {/* Mobile bottom nav: in-flow at the bottom of a viewport-sized shell so Firefox
+                can't leave a fixed-layer gap when its toolbar collapses (Chrome already OK). */}
             {typeof document !== 'undefined' && ReactDOM.createPortal(
                 <>
                     <div
-                        ref={mobileNavBarRef}
-                        className="md:hidden fixed inset-x-0 z-[330] border-t border-border bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom,0px)]"
-                        style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }}
+                        ref={mobileNavShellRef}
+                        className="md:hidden fixed inset-x-0 top-0 z-[330] flex flex-col justify-end pointer-events-none"
+                        style={{ height: 'var(--mobile-shell-height, 100dvh)' }}
                     >
-                        <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
-                            {(() => {
-                                const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                                const showMore = normalizedNavOrder.length > maxPrimary;
-                                const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
-                                return (
-                                    <>
-                                        {primary.map((key) => {
-                                            const item = navItemsConfig[key];
-                                            if (!item) return null;
-                                            const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
-                                            return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
-                                        })}
-                                        {showMore && (
-                                            <button
-                                                type="button"
-                                                aria-label="More menu"
-                                                aria-expanded={mobileMoreOpen}
-                                                className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 cursor-pointer ${
-                                                    mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
-                                                }`}
-                                                onClick={() => setMobileMoreOpen((open) => !open)}
-                                            >
-                                                <span className="relative shrink-0">
-                                                    <MoreHorizontal className="w-5 h-5" />
-                                                </span>
-                                                <span className="w-full truncate leading-tight px-0.5">More</span>
-                                                {mobileMoreOpen && (
-                                                    <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-plex shadow-[0_0_5px_rgba(229,160,13,0.8)]" />
-                                                )}
-                                            </button>
-                                        )}
-                                    </>
-                                );
-                            })()}
+                        <div
+                            ref={mobileNavBarRef}
+                            className="pointer-events-auto w-full border-t border-border bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom,0px)]"
+                        >
+                            <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
+                                {(() => {
+                                    const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
+                                    const showMore = normalizedNavOrder.length > maxPrimary;
+                                    const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
+                                    return (
+                                        <>
+                                            {primary.map((key) => {
+                                                const item = navItemsConfig[key];
+                                                if (!item) return null;
+                                                const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                                                const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                                return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
+                                            })}
+                                            {showMore && (
+                                                <button
+                                                    type="button"
+                                                    aria-label="More menu"
+                                                    aria-expanded={mobileMoreOpen}
+                                                    className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 cursor-pointer ${
+                                                        mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
+                                                    }`}
+                                                    onClick={() => setMobileMoreOpen((open) => !open)}
+                                                >
+                                                    <span className="relative shrink-0">
+                                                        <MoreHorizontal className="w-5 h-5" />
+                                                    </span>
+                                                    <span className="w-full truncate leading-tight px-0.5">More</span>
+                                                    {mobileMoreOpen && (
+                                                        <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-plex shadow-[0_0_5px_rgba(229,160,13,0.8)]" />
+                                                    )}
+                                                </button>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                            </div>
                         </div>
                     </div>
 
                     {mobileMoreOpen && (
                         <div
                             ref={mobileMoreOverlayRef}
-                            className="md:hidden fixed left-0 right-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end"
-                            style={{ position: 'fixed', top: 0, bottom: '4rem' }}
+                            className="md:hidden fixed left-0 right-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end pointer-events-auto"
+                            style={{ top: 0, height: 'calc(var(--mobile-shell-height, 100dvh) - 4rem)' }}
                             onClick={() => setMobileMoreOpen(false)}
                         >
                             <div
