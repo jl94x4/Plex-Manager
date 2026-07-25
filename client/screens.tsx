@@ -34,7 +34,6 @@ import { DiscoverGridSizeSelect } from './discovery/DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './discovery/useDiscoverGridSize';
 import { DiscoverLocaleSelect } from './discovery/i18n/DiscoverLocaleSelect';
 import { filterNavOrder, ensureCompleteNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
-import { useVisualViewportDock } from './shared/useVisualViewportDock';
 import {
     STATUS_PERIODS,
     barsForPeriod,
@@ -9663,9 +9662,6 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const [mobileThemeOpen, setMobileThemeOpen] = useState(false);
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
-    const mobileNavShellRef = useRef<HTMLDivElement>(null);
-    const mobileNavBarRef = useRef<HTMLDivElement>(null);
-    const mobileMoreOverlayRef = useRef<HTMLDivElement>(null);
     const [profileOpen, setProfileOpen] = useState(false);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
@@ -10251,123 +10247,103 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 </div>
             )}
 
-            {/* Mobile bottom nav: in-flow at the bottom of a viewport-sized shell so Firefox
-                can't leave a fixed-layer gap when its toolbar collapses (Chrome already OK). */}
-            {typeof document !== 'undefined' && ReactDOM.createPortal(
-                <>
-                    <div
-                        className="md:hidden fixed inset-x-0 top-0 z-[330] flex flex-col justify-end pointer-events-none"
-                        style={{ height: '100dvh' }}
-                    >
-                        <div
-                            ref={mobileNavBarRef}
-                            className="pointer-events-auto inset-x-0 w-screen nav-shell border-t border-border shadow-[0_-8px_24px_rgba(0,0,0,0.35)] relative"
-                        >
-                            <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
-                                {(() => {
-                                    const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                                    const showMore = normalizedNavOrder.length > maxPrimary;
-                                    const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
-                                    return (
-                                        <>
-                                            {primary.map((key) => {
-                                                const item = navItemsConfig[key];
-                                                if (!item) return null;
-                                                const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                                const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
-                                                return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
-                                            })}
-                                            {showMore && (
-                                                <button
-                                                    type="button"
-                                                    aria-label="More menu"
-                                                    aria-expanded={mobileMoreOpen}
-                                                    className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 cursor-pointer ${
-                                                        mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
-                                                    }`}
-                                                    onClick={() => setMobileMoreOpen((open) => !open)}
-                                                >
-                                                    <span className="relative shrink-0">
-                                                        <MoreHorizontal className="w-5 h-5" />
-                                                    </span>
-                                                    <span className="w-full truncate leading-tight px-0.5">More</span>
-                                                    {mobileMoreOpen && (
-                                                        <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-plex shadow-[0_0_5px_rgba(229,160,13,0.8)]" />
-                                                    )}
-                                                </button>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-                            </div>
-                            {/* Bleed: extend nav background below 100dvh into gesture-bar area on Android Firefox */}
-                            <div className="absolute left-0 right-0 w-full nav-shell" style={{ top: '100%', height: '200px', borderTop: 'none' }} aria-hidden="true" />
-                        </div>
-                    </div>
-
-                    {mobileMoreOpen && (
-                        <div
-                            ref={mobileMoreOverlayRef}
-                            className="md:hidden fixed left-0 right-0 top-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end pointer-events-auto"
-                            style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
-                            onClick={() => setMobileMoreOpen(false)}
-                        >
-                            <div
-                                role="dialog"
-                                aria-modal="true"
-                                aria-label="More menu"
-                                className="bg-card border-t border-border rounded-t-2xl animate-slide-up shadow-2xl max-h-[min(70dvh,calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px)))] overflow-y-auto"
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <div className="flex items-center justify-between p-4 border-b border-white/5 sticky top-0 bg-card z-10">
-                                    <h3 className="font-bold text-text">More Menu</h3>
+            {/* Mobile Bottom Nav — same fixed bottom:0 approach as main (works in PWA + Firefox). */}
+            <div className="md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom)]">
+                <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
+                    {(() => {
+                        const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
+                        const showMore = normalizedNavOrder.length > maxPrimary;
+                        const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
+                        return (
+                            <>
+                                {primary.map((key) => {
+                                    const item = navItemsConfig[key];
+                                    if (!item) return null;
+                                    const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                                    const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                    return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
+                                })}
+                                {showMore && (
                                     <button
                                         type="button"
-                                        className="text-muted hover:text-text p-1 bg-white/5 rounded-full"
-                                        onClick={() => setMobileMoreOpen(false)}
-                                        aria-label="Close more menu"
+                                        aria-label="More menu"
+                                        aria-expanded={mobileMoreOpen}
+                                        className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 cursor-pointer ${
+                                            mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
+                                        }`}
+                                        onClick={() => setMobileMoreOpen((open) => !open)}
                                     >
-                                        <X className="w-5 h-5" />
+                                        <span className="relative shrink-0">
+                                            <MoreHorizontal className="w-5 h-5" />
+                                        </span>
+                                        <span className="w-full truncate leading-tight px-0.5">More</span>
+                                        {mobileMoreOpen && (
+                                            <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-plex shadow-[0_0_5px_rgba(229,160,13,0.8)]" />
+                                        )}
                                     </button>
-                                </div>
-                                <div className="p-5 grid grid-cols-4 gap-4">
-                                    {(() => {
-                                        const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                                        const secondary = normalizedNavOrder.length > maxPrimary ? normalizedNavOrder.slice(maxPrimary) : [];
-                                        return secondary.map((key) => {
-                                            const item = navItemsConfig[key];
-                                            if (!item) return null;
-                                            const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
-                                            const handleActivate = () => {
-                                                setMobileMoreOpen(false);
-                                                if (item.href) window.open(item.href, '_blank');
-                                                else if (item.onClick) item.onClick({ preventDefault: () => {} });
-                                                else if (item.route) onNavigate(item.route as any);
-                                            };
-                                            const badgeCount = getNavBadgeCount(key);
-                                            return (
-                                                <button key={key} type="button" onClick={handleActivate} className="flex flex-col items-center gap-2 relative bg-transparent border-0">
-                                                    <div className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors ${isCurrent ? 'bg-plex text-background shadow-[0_0_15px_rgba(229,160,13,0.35)]' : 'bg-background/50 text-text hover:bg-white/10 border border-white/5'}`}>
-                                                        <item.icon className="w-6 h-6" />
-                                                    </div>
-                                                    {badgeCount > 0 && (
-                                                        <span className="absolute -top-1 right-1 min-w-[18px] h-4.5 px-1 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
-                                                            {badgeCount > 9 ? '9+' : badgeCount}
-                                                        </span>
-                                                    )}
-                                                    <span className={`text-[10px] text-center w-full truncate px-1 ${isCurrent ? 'text-plex font-bold' : 'text-muted'}`}>{labelOverride}</span>
-                                                </button>
-                                            );
-                                        });
-                                    })()}
-                                </div>
-                                <div className="pb-4" />
-                            </div>
+                                )}
+                            </>
+                        );
+                    })()}
+                </div>
+            </div>
+
+            {/* Mobile More Drawer */}
+            {mobileMoreOpen && (
+                <div
+                    className="md:hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end"
+                    onClick={() => setMobileMoreOpen(false)}
+                >
+                    <div
+                        className="bg-card border-t border-border rounded-t-2xl animate-slide-up"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between p-4 border-b border-white/5">
+                            <h3 className="font-bold text-text">More Menu</h3>
+                            <button
+                                type="button"
+                                className="text-muted hover:text-text p-1 bg-white/5 rounded-full"
+                                onClick={() => setMobileMoreOpen(false)}
+                                aria-label="Close more menu"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
                         </div>
-                    )}
-                </>,
-                document.body,
+                        <div className="p-5 grid grid-cols-4 gap-4">
+                            {(() => {
+                                const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
+                                const secondary = normalizedNavOrder.length > maxPrimary ? normalizedNavOrder.slice(maxPrimary) : [];
+                                return secondary.map((key) => {
+                                    const item = navItemsConfig[key];
+                                    if (!item) return null;
+                                    const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                                    const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                    const handleActivate = () => {
+                                        setMobileMoreOpen(false);
+                                        if (item.href) window.open(item.href, '_blank');
+                                        else if (item.onClick) item.onClick({ preventDefault: () => {} });
+                                        else if (item.route) onNavigate(item.route as any);
+                                    };
+                                    const badgeCount = getNavBadgeCount(key);
+                                    return (
+                                        <button key={key} type="button" onClick={handleActivate} className="flex flex-col items-center gap-2 relative bg-transparent border-0">
+                                            <div className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors ${isCurrent ? 'bg-plex text-background shadow-[0_0_15px_rgba(229,160,13,0.35)]' : 'bg-background/50 text-text hover:bg-white/10 border border-white/5'}`}>
+                                                <item.icon className="w-6 h-6" />
+                                            </div>
+                                            {badgeCount > 0 && (
+                                                <span className="absolute -top-1 right-1 min-w-[18px] h-4.5 px-1 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
+                                                    {badgeCount > 9 ? '9+' : badgeCount}
+                                                </span>
+                                            )}
+                                            <span className={`text-[10px] text-center w-full truncate px-1 ${isCurrent ? 'text-plex font-bold' : 'text-muted'}`}>{labelOverride}</span>
+                                        </button>
+                                    );
+                                });
+                            })()}
+                        </div>
+                        <div className="pb-[calc(env(safe-area-inset-bottom)+1rem)]" />
+                    </div>
+                </div>
             )}
         </>
     );
