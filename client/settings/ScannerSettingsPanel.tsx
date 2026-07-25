@@ -72,7 +72,15 @@ const RewriteEditor: React.FC<{
     rules: RewriteRule[];
     onChange: (rules: RewriteRule[]) => void;
     disabled?: boolean;
-}> = ({ rules, onChange, disabled }) => (
+    fromLabel?: string;
+    toLabel?: string;
+}> = ({
+    rules,
+    onChange,
+    disabled,
+    fromLabel = 'Source path',
+    toLabel = 'Destination path',
+}) => (
     <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
             <label className="text-xs font-semibold text-muted uppercase tracking-wider">Path Rewrites</label>
@@ -91,29 +99,39 @@ const RewriteEditor: React.FC<{
         ) : (
             <div className="space-y-2">
                 {(rules || []).map((rule, i) => (
-                    <div key={i} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                        <input
-                            className={FIELD}
-                            placeholder="From (regexp)"
-                            value={rule.from}
-                            disabled={disabled}
-                            onChange={(e) => {
-                                const next = [...rules];
-                                next[i] = { ...next[i], from: e.target.value };
-                                onChange(next);
-                            }}
-                        />
-                        <input
-                            className={FIELD}
-                            placeholder="To"
-                            value={rule.to}
-                            disabled={disabled}
-                            onChange={(e) => {
-                                const next = [...rules];
-                                next[i] = { ...next[i], to: e.target.value };
-                                onChange(next);
-                            }}
-                        />
+                    <div key={i} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-2 items-end">
+                        <div>
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted block mb-1.5">
+                                {fromLabel}
+                            </label>
+                            <input
+                                className={FIELD}
+                                placeholder={fromLabel}
+                                value={rule.from}
+                                disabled={disabled}
+                                onChange={(e) => {
+                                    const next = [...rules];
+                                    next[i] = { ...next[i], from: e.target.value };
+                                    onChange(next);
+                                }}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold uppercase tracking-wider text-muted block mb-1.5">
+                                {toLabel}
+                            </label>
+                            <input
+                                className={FIELD}
+                                placeholder={toLabel}
+                                value={rule.to}
+                                disabled={disabled}
+                                onChange={(e) => {
+                                    const next = [...rules];
+                                    next[i] = { ...next[i], to: e.target.value };
+                                    onChange(next);
+                                }}
+                            />
+                        </div>
                         <button
                             type="button"
                             className="inline-flex items-center justify-center h-10 w-10 rounded-lg border border-border/60 text-red-300 hover:bg-red-500/10 disabled:opacity-50"
@@ -490,6 +508,8 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                                 <RewriteEditor
                                     rules={trig.rewrite || []}
                                     disabled={!enabled}
+                                    fromLabel={`${TRIGGER_META[kind].title} path`}
+                                    toLabel="Scanner path"
                                     onChange={(rewrite) => updateTrigger(kind, i, { rewrite })}
                                 />
                                 <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
@@ -594,6 +614,8 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                                 <RewriteEditor
                                     rules={tgt.rewrite || []}
                                     disabled={!enabled || !tgt.enabled}
+                                    fromLabel="Scanner path"
+                                    toLabel={`${TARGET_META[kind].title} path`}
                                     onChange={(rewrite) => updateTarget(kind, i, { rewrite })}
                                 />
                             </div>
