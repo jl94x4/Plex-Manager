@@ -167,7 +167,15 @@ export const ScannerDashboard: React.FC = () => {
         return () => window.clearInterval(id);
     }, [refresh]);
 
-    const configuredSources = status?.configuredSources || [];
+    const configuredSources = useMemo(() => {
+        const configured = status?.configuredSources || [];
+        const observed = log
+            .map((entry) => sourceAppKey(entry.source))
+            .filter((source): source is 'sonarr' | 'radarr' | 'lidarr' => (
+                source === 'sonarr' || source === 'radarr' || source === 'lidarr'
+            ));
+        return [...new Set([...configured, ...observed])];
+    }, [status?.configuredSources, log]);
     const activitySourceOptions = useMemo(() => [
         { value: 'all', label: 'All configured apps' },
         ...configuredSources.map((source) => ({
