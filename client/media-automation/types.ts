@@ -67,6 +67,7 @@ export type MediaAutomationJobProgress = {
     etaSeconds?: number | null;
     speed?: number | string | null;
     fps?: number | null;
+    durationSeconds?: number | null;
     step?: number;
     stepCount?: number;
     command?: string;

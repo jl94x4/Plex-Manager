@@ -61,6 +61,38 @@ const jobProgressPercent = (job: MediaAutomationJob) => {
     return null;
 };
 
+const formatDurationSeconds = (value?: number | null) => {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds) || seconds < 0) return null;
+    const total = Math.round(seconds);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${secs}s`;
+    return `${secs}s`;
+};
+
+const jobProgressMeta = (job: MediaAutomationJob | null | undefined) => {
+    if (!job?.progress || typeof job.progress !== 'object') {
+        return { etaLabel: null as string | null, speedLabel: null as string | null, elapsedLabel: null as string | null, fpsLabel: null as string | null };
+    }
+    const progress = job.progress;
+    const etaLabel = formatDurationSeconds(progress.etaSeconds);
+    const speed = Number(progress.speed);
+    const speedLabel = Number.isFinite(speed) && speed > 0 ? `${speed.toFixed(2)}x` : null;
+    const elapsed = Number(progress.outTimeUs) >= 0 ? Number(progress.outTimeUs) / 1_000_000 : null;
+    const duration = Number(progress.durationSeconds);
+    const elapsedLabel = elapsed != null && Number.isFinite(elapsed)
+        ? (Number.isFinite(duration) && duration > 0
+            ? `${formatDurationSeconds(elapsed)} / ${formatDurationSeconds(duration)}`
+            : formatDurationSeconds(elapsed))
+        : null;
+    const fps = Number(progress.fps);
+    const fpsLabel = Number.isFinite(fps) && fps > 0 ? `${Math.round(fps)} fps` : null;
+    return { etaLabel, speedLabel, elapsedLabel, fpsLabel };
+};
+
 const jobPlans = (job: MediaAutomationJob | null | undefined): MediaAutomationPlan[] => {
     if (!job?.plan) return [];
     return Array.isArray(job.plan) ? job.plan : [job.plan];
@@ -271,9 +303,19 @@ export const MediaAutomationDashboard: React.FC = () => {
 
     useEffect(() => { load(); }, [load]);
     useEffect(() => {
-        const timer = window.setInterval(() => { load(true); }, 15000);
+        const hasActive = jobs.some((job) => {
+            const state = jobStateValue(job);
+            return ['running', 'processing', 'active', 'probing', 'planning', 'planned', 'verifying', 'committing'].includes(state)
+                || ['running', 'processing', 'active'].includes(String(job.phase || '').toLowerCase());
+        });
+        const timer = window.setInterval(() => { load(true); }, hasActive ? 2000 : 15000);
         return () => window.clearInterval(timer);
-    }, [load]);
+    }, [load, jobs]);
+    useEffect(() => {
+        if (selectedJobId == null) return;
+        const latest = jobs.find((job) => String(job.id) === String(selectedJobId));
+        if (latest) setSelectedJob(latest);
+    }, [jobs, selectedJobId]);
 
     const runAction = async (key: string, task: () => Promise<unknown>, success: string) => {
         setBusy(key);
@@ -773,8 +815,10 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     ? 'dry-run'
                                     : (job.phase || job.state || job.status);
                                 const percent = jobProgressPercent(job);
+                                const progressMeta = jobProgressMeta(job);
                                 const errorText = jobErrorText(job.error);
                                 const canCancel = isCancellableJob(job);
+                                const isActive = canCancel && ['running', 'processing', 'active', 'probing', 'planning', 'planned', 'verifying', 'committing'].includes(String(job.phase || state).toLowerCase());
                                 const canRetry = ['failed', 'cancelled', 'canceled', 'error'].includes(state);
                                 const canSkip = state === 'queued';
                                 const selected = selectedJobIds.has(String(jobId));
@@ -796,10 +840,19 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         <span className="text-xs text-muted">#{jobId}</span>
                                                         {job.lane && <span className="text-xs uppercase text-muted">{job.lane}</span>}
                                                         {job.priority != null && <span className="text-xs text-muted">P{job.priority}</span>}
-                                                        {percent != null && <span className="text-xs text-muted">{Math.round(percent)}%</span>}
+                                                        {percent != null && <span className="text-xs font-semibold text-plex">{Math.round(percent)}%</span>}
+                                                        {progressMeta.etaLabel && <span className="text-xs text-amber-300">ETA {progressMeta.etaLabel}</span>}
+                                                        {progressMeta.speedLabel && <span className="text-xs text-muted">{progressMeta.speedLabel}</span>}
+                                                        {progressMeta.fpsLabel && <span className="text-xs text-muted">{progressMeta.fpsLabel}</span>}
                                                     </div>
                                                     <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
                                                     <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.createdAt)}</p>
+                                                    {progressMeta.elapsedLabel && (
+                                                        <p className="mt-1 text-xs text-muted">Encoded {progressMeta.elapsedLabel}</p>
+                                                    )}
+                                                    {isActive && percent == null && (
+                                                        <p className="mt-1 text-xs text-amber-300">Encoding started — waiting for first FFmpeg progress update…</p>
+                                                    )}
                                                     {dryRunJob && ['completed', 'succeeded', 'success'].includes(state) && (
                                                         <p className="mt-1 text-xs text-amber-300">{jobDryRunReason(job)}</p>
                                                     )}
@@ -815,8 +868,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 {canCancel && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`cancel-${jobId}`, () => mediaAutomationApi.cancelJob(jobId), 'Job cancelled.')}><X className="h-4 w-4" /> Cancel</button>}
                                             </div>
                                         </div>
-                                        {percent != null && (
-                                            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-background"><div className="h-full rounded-full bg-plex transition-all" style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>
+                                        {(percent != null || isActive) && (
+                                            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-background">
+                                                <div
+                                                    className={`h-full rounded-full bg-plex transition-all ${percent == null ? 'animate-pulse w-1/5' : ''}`}
+                                                    style={percent == null ? undefined : { width: `${Math.max(2, Math.min(100, percent))}%` }}
+                                                />
+                                            </div>
                                         )}
                                     </article>
                                 );
@@ -1031,6 +1089,31 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
                                                 {jobDryRunReason(selectedJob) || 'Dry-run completed: the worker only planned FFmpeg steps. No media was rewritten.'}
                                             </p>
+                                        )}
+                                        {selectedJob && (jobProgressPercent(selectedJob) != null || jobProgressMeta(selectedJob).etaLabel || jobProgressMeta(selectedJob).elapsedLabel) && (
+                                            <div className="rounded-xl border border-plex/30 bg-plex/10 p-4 space-y-3">
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                    <h3 className="font-bold text-text">Progress</h3>
+                                                    <div className="flex flex-wrap gap-3 text-xs text-muted">
+                                                        {jobProgressPercent(selectedJob) != null && (
+                                                            <span className="font-semibold text-plex">{Math.round(jobProgressPercent(selectedJob)!)}%</span>
+                                                        )}
+                                                        {jobProgressMeta(selectedJob).etaLabel && (
+                                                            <span className="text-amber-300">ETA {jobProgressMeta(selectedJob).etaLabel}</span>
+                                                        )}
+                                                        {jobProgressMeta(selectedJob).speedLabel && <span>{jobProgressMeta(selectedJob).speedLabel}</span>}
+                                                        {jobProgressMeta(selectedJob).fpsLabel && <span>{jobProgressMeta(selectedJob).fpsLabel}</span>}
+                                                    </div>
+                                                </div>
+                                                {jobProgressMeta(selectedJob).elapsedLabel && (
+                                                    <p className="text-xs text-muted">Encoded {jobProgressMeta(selectedJob).elapsedLabel}</p>
+                                                )}
+                                                {jobProgressPercent(selectedJob) != null && (
+                                                    <div className="h-2 overflow-hidden rounded-full bg-background">
+                                                        <div className="h-full rounded-full bg-plex transition-all" style={{ width: `${Math.max(2, Math.min(100, jobProgressPercent(selectedJob)!))}%` }} />
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
                                         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                                             <div><dt className="text-muted">Pipeline</dt><dd className="mt-1 text-text">{selectedJob?.pipelineName || selectedJob?.pipelineId || 'Automatic'}</dd></div>
