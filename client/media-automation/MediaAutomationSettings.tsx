@@ -92,10 +92,18 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                                 id="media-automation-cpu-concurrency"
                                 className={`${fieldClass} mt-2`}
                                 type="number"
-                                min={1}
+                                min={0}
                                 max={32}
                                 value={config.concurrency.cpu}
-                                onChange={(event) => update({ concurrency: { ...config.concurrency, cpu: Math.min(32, Math.max(1, Number(event.target.value) || 1)) } })}
+                                onChange={(event) => {
+                                    const next = Number(event.target.value);
+                                    update({
+                                        concurrency: {
+                                            ...config.concurrency,
+                                            cpu: Number.isFinite(next) ? Math.min(32, Math.max(0, Math.round(next))) : 0,
+                                        },
+                                    });
+                                }}
                             />
                         </label>
                         <label className="block text-xs uppercase tracking-wide font-bold text-muted" htmlFor="media-automation-gpu-concurrency">
@@ -104,14 +112,22 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                                 id="media-automation-gpu-concurrency"
                                 className={`${fieldClass} mt-2`}
                                 type="number"
-                                min={1}
+                                min={0}
                                 max={16}
                                 value={config.concurrency.gpu}
-                                onChange={(event) => update({ concurrency: { ...config.concurrency, gpu: Math.min(16, Math.max(1, Number(event.target.value) || 1)) } })}
+                                onChange={(event) => {
+                                    const next = Number(event.target.value);
+                                    update({
+                                        concurrency: {
+                                            ...config.concurrency,
+                                            gpu: Number.isFinite(next) ? Math.min(16, Math.max(0, Math.round(next))) : 0,
+                                        },
+                                    });
+                                }}
                             />
                         </label>
                     </div>
-                    <p className="text-xs text-muted">CPU and hardware-accelerated queues are limited independently.</p>
+                    <p className="text-xs text-muted">CPU and GPU queues are limited independently. Set a lane to 0 to pause new jobs on that lane.</p>
                 </div>
 
                 <div className="glass-card-sm p-5 space-y-4">

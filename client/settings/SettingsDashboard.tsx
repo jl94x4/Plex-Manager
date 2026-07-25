@@ -1123,8 +1123,14 @@ export const SettingsDashboard: React.FC = () => {
                     outputMode: fallback.outputMode,
                     hardwareAcceleration: fallback.hardware,
                     concurrency: {
-                        cpu: Math.min(32, Math.max(1, Number(saved.concurrency?.cpu ?? saved.cpuConcurrency ?? saved.concurrency) || 1)),
-                        gpu: Math.min(16, Math.max(1, Number(saved.concurrency?.gpu ?? saved.gpuConcurrency) || 1)),
+                        cpu: (() => {
+                            const next = Number(saved.concurrency?.cpu ?? saved.cpuConcurrency ?? saved.concurrency);
+                            return Number.isFinite(next) ? Math.min(32, Math.max(0, Math.round(next))) : 1;
+                        })(),
+                        gpu: (() => {
+                            const next = Number(saved.concurrency?.gpu ?? saved.gpuConcurrency);
+                            return Number.isFinite(next) ? Math.min(16, Math.max(0, Math.round(next))) : 1;
+                        })(),
                     },
                     libraryScanEnabled: saved.libraryScanEnabled !== false,
                     libraryScanIntervalMinutes: Math.min(
