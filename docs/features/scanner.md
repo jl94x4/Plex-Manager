@@ -16,8 +16,9 @@
 3. Turn **Enable Scanner** on (if not already).
 4. Optionally turn on **Show Home Widget** for a queue/activity card on Home (admins).
 5. Optionally turn off **Show ARR Webhooks on Scanner Page** if you don’t want the webhook URL helper block on the Scanner page.
-6. Review webhook username/password and rewrites, then Save Settings.
-7. Open **Scanner** in the nav.
+6. Optionally turn off **Show Manual Path on Scanner Page** if you only use ARR webhooks (when shown, it can still be collapsed on the page).
+7. Review webhook username/password and rewrites, then Save Settings.
+8. Open **Scanner** in the nav.
 
 ## Manual scan
 
@@ -40,7 +41,6 @@ For each *arr app:
 - Webhooks use **HTTP Basic Auth**, not portal login cookies.
 - Plex scans use the **token and server URL from Settings → Plex** (no separate Scanner token).
 - The **direct Plex server URL** is required (e.g. `http://192.168.x.x:32400`). plex.tv login alone is not enough — without it you will see “no enabled scanner targets”.
-- Leave **Verify path exists** off unless the portal container can see your media paths.
 - Queue and activity logs live under `config/scanner/`.
 - Recent activity shows **why** a refresh ran (import, upgrade, file delete, rename, manual) when the ARR webhook includes that event type.
 

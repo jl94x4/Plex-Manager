@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ArrowUpCircle,
+    ChevronDown,
     Clock3,
     Copy,
     FileMinus2,
@@ -25,11 +26,11 @@ import { ScannerSourceBadge } from './ScannerSourceBadge';
 type ScannerStatus = {
     enabled: boolean;
     minimumAge: string;
-    verifyPathExists: boolean;
     remaining: number;
     processed: number;
     targetCount: number;
     showWebhooks?: boolean;
+    showManualPath?: boolean;
     webhookPaths: {
         manual: string;
         sonarr: string[];
@@ -64,6 +65,16 @@ type QueueItem = {
     title?: string;
     quality?: string;
     isUpgrade?: boolean;
+};
+
+const MANUAL_PATH_COLLAPSED_KEY = 'scanner-manual-path-collapsed';
+
+const readManualPathCollapsed = () => {
+    try {
+        return localStorage.getItem(MANUAL_PATH_COLLAPSED_KEY) === '1';
+    } catch {
+        return false;
+    }
 };
 
 const ActionIcon: React.FC<{ action?: string; className?: string }> = ({ action, className }) => {
@@ -106,6 +117,19 @@ export const ScannerDashboard: React.FC = () => {
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [manualCollapsed, setManualCollapsed] = useState(readManualPathCollapsed);
+
+    const toggleManualPath = () => {
+        setManualCollapsed((prev) => {
+            const next = !prev;
+            try {
+                localStorage.setItem(MANUAL_PATH_COLLAPSED_KEY, next ? '1' : '0');
+            } catch {
+                // ignore
+            }
+            return next;
+        });
+    };
 
     const refresh = useCallback(async () => {
         try {
@@ -198,35 +222,56 @@ export const ScannerDashboard: React.FC = () => {
                 </div>
             </div>
 
-            <form onSubmit={submitPath} className="glass-card p-4 md:p-5 shadow-xl space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                    <div>
-                        <h2 className="text-sm font-bold uppercase tracking-wider text-muted">Manual path</h2>
-                        <p className="text-xs text-muted/80 mt-0.5">Add a folder now — processed after the minimum age.</p>
+            {status?.showManualPath !== false ? (
+            <div className="glass-card p-4 md:p-5 shadow-xl space-y-3">
+                <button
+                    type="button"
+                    onClick={toggleManualPath}
+                    className="w-full flex items-start justify-between gap-3 text-left group"
+                    aria-expanded={!manualCollapsed}
+                >
+                    <div className="min-w-0">
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-muted group-hover:text-sky-200 transition-colors">
+                            Manual path
+                        </h2>
+                        <p className="text-xs text-muted/80 mt-0.5">
+                            {manualCollapsed
+                                ? 'Hidden — click to queue a folder manually.'
+                                : 'Add a folder now — processed after the minimum age.'}
+                        </p>
                     </div>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                        type="text"
-                        value={path}
-                        onChange={(e) => setPath(e.target.value)}
-                        placeholder="Path to scan e.g. /mnt/unionfs/Media/Movies/Movie Name (year)"
-                        className="flex-1 rounded-xl bg-background/70 border border-white/10 px-4 py-3 text-text placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-sky-400/30"
-                    />
-                    <button
-                        type="submit"
-                        disabled={busy || !path.trim()}
-                        className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-sky-400 text-black font-bold disabled:opacity-50 hover:bg-sky-300 transition-colors"
-                    >
-                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                        Submit
-                    </button>
-                </div>
-                <div className="rounded-xl bg-sky-500/10 border border-sky-400/20 text-sky-100/95 text-sm px-4 py-3 leading-relaxed">
-                    Submit adds the path to the scan queue
-                    {status?.minimumAge ? <> · waits <code className="text-sky-200">{status.minimumAge}</code> before targets are called</> : null}.
-                </div>
-            </form>
+                    <span className="inline-flex items-center gap-1.5 shrink-0 mt-0.5 px-2.5 py-1.5 rounded-lg border border-white/10 text-xs font-semibold text-muted group-hover:text-text group-hover:bg-white/5 transition-colors">
+                        {manualCollapsed ? 'Show' : 'Hide'}
+                        <ChevronDown className={`w-4 h-4 transition-transform ${manualCollapsed ? '' : 'rotate-180'}`} />
+                    </span>
+                </button>
+                {!manualCollapsed ? (
+                    <form onSubmit={submitPath} className="space-y-3">
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                                type="text"
+                                value={path}
+                                onChange={(e) => setPath(e.target.value)}
+                                placeholder="Path to scan e.g. /mnt/unionfs/Media/Movies/Movie Name (year)"
+                                className="flex-1 rounded-xl bg-background/70 border border-white/10 px-4 py-3 text-text placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-sky-400/30"
+                            />
+                            <button
+                                type="submit"
+                                disabled={busy || !path.trim()}
+                                className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-sky-400 text-black font-bold disabled:opacity-50 hover:bg-sky-300 transition-colors"
+                            >
+                                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                                Submit
+                            </button>
+                        </div>
+                        <div className="rounded-xl bg-sky-500/10 border border-sky-400/20 text-sky-100/95 text-sm px-4 py-3 leading-relaxed">
+                            Submit adds the path to the scan queue
+                            {status?.minimumAge ? <> · waits <code className="text-sky-200">{status.minimumAge}</code> before targets are called</> : null}.
+                        </div>
+                    </form>
+                ) : null}
+            </div>
+            ) : null}
 
             {(message || error) && (
                 <div className={`rounded-xl px-4 py-3 text-sm border ${error ? 'bg-red-500/10 text-red-200 border-red-400/20' : 'bg-emerald-500/10 text-emerald-100 border-emerald-400/20'}`}>

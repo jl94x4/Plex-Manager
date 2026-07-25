@@ -461,6 +461,7 @@ export const SettingsDashboard: React.FC = () => {
     const [scannerEnabled, setScannerEnabled] = useState(false);
     const [scannerHomeWidgetEnabled, setScannerHomeWidgetEnabled] = useState(false);
     const [scannerWebhooksVisible, setScannerWebhooksVisible] = useState(true);
+    const [scannerManualPathVisible, setScannerManualPathVisible] = useState(true);
     const [scanner, setScanner] = useState<ScannerSettings>(defaultScannerSettings);
     const [collexionsAutostart, setCollexionsAutostart] = useState(false);
     const [collexionsInternalUrl, setCollexionsInternalUrl] = useState('');
@@ -1089,6 +1090,9 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.scannerWebhooksVisible !== undefined) {
                 setScannerWebhooksVisible(initialSettings.scannerWebhooksVisible !== false);
             }
+            if (initialSettings.scannerManualPathVisible !== undefined) {
+                setScannerManualPathVisible(initialSettings.scannerManualPathVisible !== false);
+            }
             if (initialSettings.scanner && typeof initialSettings.scanner === 'object') {
                 setScanner({ ...defaultScannerSettings(), ...initialSettings.scanner });
             }
@@ -1346,6 +1350,7 @@ export const SettingsDashboard: React.FC = () => {
             scannerEnabled,
             scannerHomeWidgetEnabled,
             scannerWebhooksVisible,
+            scannerManualPathVisible,
             scanner,
             collexionsAutostart,
             collexionsInternalUrl,
@@ -3465,6 +3470,8 @@ export const SettingsDashboard: React.FC = () => {
                             onHomeWidgetEnabledChange={setScannerHomeWidgetEnabled}
                             webhooksVisible={scannerWebhooksVisible}
                             onWebhooksVisibleChange={setScannerWebhooksVisible}
+                            manualPathVisible={scannerManualPathVisible}
+                            onManualPathVisibleChange={setScannerManualPathVisible}
                             scanner={scanner}
                             onChange={setScanner}
                             sectionId={getSettingsSectionElementId('scanner')}

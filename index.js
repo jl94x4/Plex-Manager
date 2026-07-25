@@ -2968,6 +2968,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 scannerEnabled: !!config.scannerEnabled,
                 scannerHomeWidgetEnabled: !!config.scannerHomeWidgetEnabled,
                 scannerWebhooksVisible: config.scannerWebhooksVisible !== false,
+                scannerManualPathVisible: config.scannerManualPathVisible !== false,
                 scanner: maskScannerConfigForApi(
                     normalizeScannerConfig(config.scanner, getDefaultScannerConfig()),
                     SECRET_MASK
@@ -3080,6 +3081,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 scannerEnabled: false,
                 scannerHomeWidgetEnabled: false,
                 scannerWebhooksVisible: true,
+                scannerManualPathVisible: true,
                 scanner: maskScannerConfigForApi(getDefaultScannerConfig(), SECRET_MASK),
                 collexionsAutostart: false,
                 collexionsInternalUrl: '',
@@ -3117,7 +3119,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scanner, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -3366,6 +3368,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         scannerWebhooksVisible: scannerWebhooksVisible !== undefined
             ? !!scannerWebhooksVisible
             : (existingConfig.scannerWebhooksVisible !== false),
+        scannerManualPathVisible: scannerManualPathVisible !== undefined
+            ? !!scannerManualPathVisible
+            : (existingConfig.scannerManualPathVisible !== false),
         scanner: resolveScannerSecrets(
             scanner !== undefined ? scanner : existingConfig.scanner,
             existingConfig.scanner || getDefaultScannerConfig(),
@@ -17856,11 +17861,11 @@ app.get('/api/scanner/status', requireAdmin, requireScanner, async (req, res) =>
         res.json({
             enabled: true,
             minimumAge: scanner.minimumAge,
-            verifyPathExists: !!scanner.verifyPathExists,
             remaining: stats.remaining,
             processed: stats.processed,
             targetCount: targets.length,
             showWebhooks: config.scannerWebhooksVisible !== false,
+            showManualPath: config.scannerManualPathVisible !== false,
             lastActivity: last
                 ? {
                     at: last.at,

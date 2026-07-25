@@ -149,6 +149,8 @@ type Props = {
     onHomeWidgetEnabledChange: (v: boolean) => void;
     webhooksVisible: boolean;
     onWebhooksVisibleChange: (v: boolean) => void;
+    manualPathVisible: boolean;
+    onManualPathVisibleChange: (v: boolean) => void;
     scanner: ScannerSettings;
     onChange: (next: ScannerSettings) => void;
     sectionId: string;
@@ -162,6 +164,8 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
     onHomeWidgetEnabledChange,
     webhooksVisible,
     onWebhooksVisibleChange,
+    manualPathVisible,
+    onManualPathVisibleChange,
     scanner,
     onChange,
     sectionId,
@@ -338,29 +342,25 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                         border={false}
                         className="!py-0"
                     />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                        <div>
-                            <label className="font-semibold text-sm block mb-2 text-text">Minimum Age</label>
-                            <input
-                                className={FIELD}
-                                value={scanner.minimumAge}
-                                disabled={!enabled}
-                                onChange={(e) => update({ minimumAge: e.target.value })}
-                                placeholder="1m"
-                            />
-                            <p className="text-[11px] text-muted mt-1.5">Examples: 30s, 1m, 5m. Scans wait this long before targets are called.</p>
-                        </div>
-                        <div className="flex items-end">
-                            <SettingsToggleRow
-                                title="Verify Path Exists"
-                                hint={<SettingHint>Only process queue items when the portal can see the folder on disk. Leave off if media is not mounted in the portal container.</SettingHint>}
-                                checked={!!scanner.verifyPathExists}
-                                onChange={(v) => update({ verifyPathExists: v })}
-                                disabled={!enabled}
-                                border={false}
-                                className="!py-0 w-full"
-                            />
-                        </div>
+                    <SettingsToggleRow
+                        title="Show Manual Path on Scanner Page"
+                        hint={<SettingHint>When off, the manual path box is hidden on the Scanner page. When on, users can still collapse it there and that preference is remembered.</SettingHint>}
+                        checked={!!manualPathVisible && enabled}
+                        onChange={onManualPathVisibleChange}
+                        disabled={!enabled}
+                        border={false}
+                        className="!py-0"
+                    />
+                    <div className="pt-2 max-w-md">
+                        <label className="font-semibold text-sm block mb-2 text-text">Minimum Age</label>
+                        <input
+                            className={FIELD}
+                            value={scanner.minimumAge}
+                            disabled={!enabled}
+                            onChange={(e) => update({ minimumAge: e.target.value })}
+                            placeholder="1m"
+                        />
+                        <p className="text-[11px] text-muted mt-1.5">Examples: 30s, 1m, 5m. Scans wait this long before targets are called.</p>
                     </div>
                 </SectionCard>
 
