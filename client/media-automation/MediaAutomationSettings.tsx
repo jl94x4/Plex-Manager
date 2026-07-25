@@ -225,8 +225,8 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     </div>
                     <SettingsToggleRow
                         title="Watch library folders"
-                        description="Enqueue new or changed media files as they appear under enabled library roots."
-                        checked={config.libraryWatchEnabled !== false}
+                        description="Realtime enqueue for new/changed files. Keep OFF for large or remote Unraid mounts (can stall the portal). Prefer Scan now or ARR webhooks. Also requires Docker env MEDIA_AUTOMATION_ENABLE_WATCH=1."
+                        checked={config.libraryWatchEnabled === true}
                         onChange={(libraryWatchEnabled) => update({ libraryWatchEnabled })}
                         border={false}
                     />

@@ -263,7 +263,7 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     fallback: { hardware: 'cpu', outputMode: 'dry-run' },
     libraryScanEnabled: true,
     libraryScanIntervalMinutes: 360,
-    libraryWatchEnabled: true,
+    libraryWatchEnabled: false,
     libraryWatchDebounceMs: 5000,
     customCommandAllowlist: ['ffmpeg', 'ffprobe'],
 };

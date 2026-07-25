@@ -1123,7 +1123,7 @@ export const SettingsDashboard: React.FC = () => {
                         10080,
                         Math.max(15, Number(saved.libraryScanIntervalMinutes) || DEFAULT_MEDIA_AUTOMATION_SETTINGS.libraryScanIntervalMinutes),
                     ),
-                    libraryWatchEnabled: saved.libraryWatchEnabled !== false,
+                    libraryWatchEnabled: saved.libraryWatchEnabled === true,
                     libraryWatchDebounceMs: Math.min(
                         120000,
                         Math.max(500, Number(saved.libraryWatchDebounceMs) || DEFAULT_MEDIA_AUTOMATION_SETTINGS.libraryWatchDebounceMs),

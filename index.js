@@ -185,11 +185,16 @@ const stripBasePathFromUrl = (url = '/') => {
 // the existing stored secret is preserved instead of being overwritten.
 const SECRET_MASK = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
 
+const mediaAutomationWatchOptIn = () => String(process.env.MEDIA_AUTOMATION_ENABLE_WATCH || '').trim() === '1';
+
 const mediaAutomationRuntimeConfig = (config = {}) => {
     const raw = config.mediaAutomation && typeof config.mediaAutomation === 'object'
         ? config.mediaAutomation
         : {};
     const outputMode = String(raw.outputMode || raw.fallback?.outputMode || 'dry-run').toLowerCase();
+    // Recursive watches on large Unraid/remote mounts can wedge the whole portal.
+    // Require explicit env opt-in before the filesystem watcher may start.
+    const libraryWatchEnabled = mediaAutomationWatchOptIn() && raw.libraryWatchEnabled === true;
     return normalizeMediaAutomationConfig({
         ...raw,
         enabled: !!config.mediaAutomationEnabled,
@@ -198,6 +203,7 @@ const mediaAutomationRuntimeConfig = (config = {}) => {
         gpuConcurrency: raw.gpuConcurrency ?? raw.concurrency?.gpu,
         hardwareAcceleration: raw.hardwareAcceleration || raw.fallback?.hardware || 'auto',
         outputMode,
+        libraryWatchEnabled,
     }, getDefaultMediaAutomationConfig());
 };
 
@@ -3896,10 +3902,13 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     await refreshMediaAutomationAuthCache();
     try {
         if (collexionsConfig.mediaAutomationEnabled && !mediaAutomationPaused) {
-            await mediaAutomationService.start();
-            await mediaAutomationService.reloadLibraries();
+            void mediaAutomationService.start()
+                .then(() => mediaAutomationService.reloadLibraries())
+                .catch((error) => log(`[media-automation] Failed to reload after settings save: ${error.message}`));
         } else {
-            await mediaAutomationService.stop();
+            void mediaAutomationService.stop().catch((error) => {
+                log(`[media-automation] Failed to stop after settings save: ${error.message}`);
+            });
         }
     } catch (error) {
         log(`[media-automation] Failed to reload after settings save: ${error.message}`);
@@ -19149,12 +19158,18 @@ app.get('/api/media-automation/libraries', requireAdmin, requireMediaAutomation,
     res.json({ libraries: await mediaAutomationService.libraries.list() });
 });
 
+const reloadMediaAutomationLibrariesInBackground = () => {
+    void mediaAutomationService.reloadLibraries().catch((error) => {
+        log(`[media-automation] background library reload failed: ${error.message}`);
+    });
+};
+
 app.post('/api/media-automation/libraries', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
         const library = await mediaAutomationService.libraries.create(normalizeMediaAutomationLibraryInput(req.body));
-        await mediaAutomationService.reloadLibraries();
         await appendAuditLog('media_automation_library_created', req.user, null, { libraryId: library.id, name: library.name });
         res.status(201).json({ library });
+        reloadMediaAutomationLibrariesInBackground();
     } catch (error) {
         res.status(error.status || 400).json({ error: error.message || 'Failed to create library' });
     }
@@ -19168,9 +19183,9 @@ app.put('/api/media-automation/libraries/:id', requireAdmin, requireMediaAutomat
             req.params.id,
             normalizeMediaAutomationLibraryInput({ ...existing, ...req.body }, req.params.id)
         );
-        await mediaAutomationService.reloadLibraries();
         await appendAuditLog('media_automation_library_updated', req.user, null, { libraryId: library.id, name: library.name });
         res.json({ library });
+        reloadMediaAutomationLibrariesInBackground();
     } catch (error) {
         res.status(error.status || 400).json({ error: error.message || 'Failed to update library' });
     }
@@ -19179,9 +19194,9 @@ app.put('/api/media-automation/libraries/:id', requireAdmin, requireMediaAutomat
 app.delete('/api/media-automation/libraries/:id', requireAdmin, requireMediaAutomation, async (req, res) => {
     const removed = await mediaAutomationService.libraries.remove(req.params.id);
     if (!removed) return res.status(404).json({ error: 'Library not found' });
-    await mediaAutomationService.reloadLibraries();
     await appendAuditLog('media_automation_library_deleted', req.user, null, { libraryId: req.params.id });
     res.json({ ok: true });
+    reloadMediaAutomationLibrariesInBackground();
 });
 
 app.post('/api/media-automation/libraries/:id/test', requireAdmin, requireMediaAutomation, async (req, res) => {
@@ -20868,11 +20883,12 @@ app.listen(PORT, BIND_HOST, async () => {
     startDiscoveryAvailabilityCacheBackgroundTask();
     startScannerWorker(async () => scannerPortalConfig(await loadFile(CONFIG_PATH, {})));
     void refreshScannerAuthCache();
-    try {
-        await mediaAutomationService.start();
-        await refreshMediaAutomationAuthCache();
-    } catch (error) {
-        log(`[media-automation] Worker startup failed: ${error.message}`);
+    // Never block portal boot on Media Automation (watcher/scans can hang on big mounts).
+    void mediaAutomationService.start()
+        .then(() => refreshMediaAutomationAuthCache())
+        .catch((error) => log(`[media-automation] Worker startup failed: ${error.message}`));
+    if (!mediaAutomationWatchOptIn()) {
+        log('[media-automation] Filesystem watcher disabled unless MEDIA_AUTOMATION_ENABLE_WATCH=1');
     }
     systemJobs.maintenanceIndex.nextRun = new Date(Date.now() + (20 * 1000)).toISOString();
     setTimeout(async () => {
