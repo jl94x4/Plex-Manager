@@ -10292,12 +10292,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     return ReactDOM.createPortal(
                         <div
                             ref={firefoxNavBarRef}
-                            className="md:hidden fixed left-0 right-0 w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom,0px)]"
+                            className="md:hidden fixed left-0 w-screen max-w-none nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom,0px)]"
                             style={{ bottom: 0 }}
                         >
                             {navInner}
                             <div
-                                className="absolute left-0 right-0 w-full nav-shell pointer-events-none"
+                                className="absolute left-0 w-screen max-w-none nav-shell pointer-events-none"
                                 style={{ top: '100%', height: 120, borderTop: 'none' }}
                                 aria-hidden="true"
                             />

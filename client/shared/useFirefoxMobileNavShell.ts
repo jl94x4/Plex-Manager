@@ -45,20 +45,37 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
 
             const vv = window.visualViewport;
             const barH = Math.max(bar.offsetHeight || 0, 56);
-            const top = Math.round(
-                vv
-                    ? vv.offsetTop + vv.height - barH
-                    : window.innerHeight - barH
-            );
+            const layoutBottom = window.innerHeight;
+            let dockBottom = layoutBottom;
+
+            if (vv) {
+                const visualBottom = vv.offsetTop + vv.height;
+                const coveredByToolbar = layoutBottom - visualBottom;
+                const isZoomedOrPanned = vv.offsetTop > 1 || Math.abs(vv.scale - 1) > 0.01;
+
+                if (isZoomedOrPanned) {
+                    dockBottom = visualBottom;
+                } else if (coveredByToolbar > 24) {
+                    // Toolbar is visible over the page: keep the bar above it.
+                    dockBottom = visualBottom;
+                } else {
+                    // Toolbar is collapsed: extend to Firefox's layout viewport so
+                    // the gesture area is painted instead of leaving a bottom gap.
+                    dockBottom = Math.max(layoutBottom, visualBottom);
+                }
+            }
+
+            const top = Math.round(dockBottom - barH);
 
             if (top === lastTop) return;
             lastTop = top;
 
             bar.style.position = 'fixed';
             bar.style.left = '0px';
-            bar.style.right = '0px';
-            bar.style.width = '100%';
-            bar.style.maxWidth = '100%';
+            bar.style.right = 'auto';
+            // 100% excludes Firefox's visible scrollbar gutter; 100vw does not.
+            bar.style.width = '100vw';
+            bar.style.maxWidth = 'none';
             bar.style.margin = '0';
             bar.style.bottom = 'auto';
             bar.style.top = `${top}px`;
