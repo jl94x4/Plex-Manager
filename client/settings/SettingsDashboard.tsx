@@ -1605,7 +1605,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 <button
                                                     key={tab.id}
                                                     onClick={() => navigateToSetting({ id: tab.id, tabId: tab.id as SettingsTabId, label: tab.label, group: group.title, keywords: tab.keywords || [] })}
-                                                    className={`w-full text-left px-2 py-1 rounded-md text-[13.5px] leading-snug font-medium transition-all flex items-center gap-2 ${activeTab === tab.id
+                                                    className={`w-full text-left px-2 py-1 rounded-md text-sm leading-snug font-medium transition-all flex items-center gap-2 ${activeTab === tab.id
                                                         ? 'nav-item-active'
                                                         : 'text-muted hover:text-text hover:bg-white/5'
                                                         }`}
