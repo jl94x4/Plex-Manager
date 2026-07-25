@@ -23,6 +23,7 @@ import { CustomSelect } from '../shared/ui';
 import {
     formatScannerWhen,
     scannerActionStyles,
+    sourceAppIconUrl,
     sourceAppKey,
 } from './eventMeta';
 import { ScannerSourceBadge } from './ScannerSourceBadge';
@@ -172,6 +173,15 @@ export const ScannerDashboard: React.FC = () => {
         ...configuredSources.map((source) => ({
             value: source,
             label: SOURCE_LABELS[source] || source,
+            icon: sourceAppIconUrl(source) ? (
+                <img
+                    src={sourceAppIconUrl(source) || ''}
+                    alt=""
+                    className="w-4 h-4 shrink-0 object-contain"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                />
+            ) : undefined,
         })),
     ], [configuredSources]);
     const filteredLog = useMemo(
