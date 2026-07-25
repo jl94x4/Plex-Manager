@@ -455,8 +455,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <section className={`${cardClass} p-5`}>
                             <h2 className="mb-5 font-bold text-text">Capabilities</h2>
                             <div className="space-y-3 text-sm">
-                                <div className="flex items-center justify-between rounded-lg bg-background/40 p-3"><span className="text-muted">FFmpeg</span><span className="font-bold text-text">{typeof capabilities.ffmpeg === 'object' ? (capabilities.ffmpeg.available === false ? 'Unavailable' : capabilities.ffmpeg.version || 'Available') : capabilities.ffmpeg ? 'Available' : 'Unknown'}</span></div>
-                                <div className="flex items-center justify-between rounded-lg bg-background/40 p-3"><span className="text-muted">FFprobe</span><span className="font-bold text-text">{typeof capabilities.ffprobe === 'object' ? (capabilities.ffprobe.available === false ? 'Unavailable' : capabilities.ffprobe.version || 'Available') : capabilities.ffprobe ? 'Available' : 'Unknown'}</span></div>
+                                <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">FFmpeg</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffmpeg === 'object' ? (capabilities.ffmpeg.available === false ? 'Unavailable' : capabilities.ffmpeg.version || 'Available') : capabilities.ffmpeg ? 'Available' : 'Unknown'}</p></div>
+                                <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">FFprobe</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffprobe === 'object' ? (capabilities.ffprobe.available === false ? 'Unavailable' : capabilities.ffprobe.version || 'Available') : capabilities.ffprobe ? 'Available' : 'Unknown'}</p></div>
                                 <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">Hardware</p><p className="mt-2 font-semibold text-text">{capabilities.hardware?.length ? capabilities.hardware.join(', ') : 'No hardware data reported'}</p></div>
                                 <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">Encoders</p><p className="mt-2 line-clamp-3 font-semibold text-text">{capabilities.encoders?.length ? capabilities.encoders.join(', ') : 'No encoder data reported'}</p></div>
                             </div>
@@ -558,11 +558,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <h2 className="font-bold text-text">Presets</h2>
-                                <p className="mt-1 text-xs text-muted">Seed a pipeline from a common Unmanic-style template, then edit rules and hardware.</p>
+                                <p className="mt-1 text-xs text-muted">Seed from Unmanic-style quality profiles (high / balanced / space saver / archive), remux, and compatibility templates — then tweak rules and hardware.</p>
                             </div>
                             <button type="button" className={primaryButtonClass} onClick={() => { setPreviewPath(''); setPreviewResult(null); setPipelineDraft(emptyPipeline()); }}><Plus className="h-4 w-4" /> New pipeline</button>
                         </div>
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                             {PIPELINE_PRESETS.map((preset) => (
                                 <button
                                     key={preset.id}
@@ -876,7 +876,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     <input className={fieldClass} value={step.videoCodec || ''} onChange={(event) => updateStep({ videoCodec: event.target.value })} placeholder="Video codec (hevc)" />
                                                     <input className={fieldClass} value={step.audioCodec || ''} onChange={(event) => updateStep({ audioCodec: event.target.value })} placeholder="Audio codec (copy)" />
                                                     <input className={fieldClass} value={step.subtitleCodec || ''} onChange={(event) => updateStep({ subtitleCodec: event.target.value })} placeholder="Subtitle codec (copy/drop)" />
-                                                    <input className={fieldClass} value={step.preset || ''} onChange={(event) => updateStep({ preset: event.target.value })} placeholder="Preset (medium)" />
+                                                    <input className={fieldClass} value={step.preset || ''} onChange={(event) => updateStep({ preset: event.target.value })} placeholder="Speed preset (medium/slow/fast)" />
+                                                    <input className={fieldClass} type="number" min={0} max={51} value={step.crf ?? ''} onChange={(event) => updateStep({ crf: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="Quality CRF/CQ (18 high · 23 bal · 28 saver)" />
                                                     <input className={fieldClass} type="number" min={32} max={1536} value={step.audioBitrateKbps || ''} onChange={(event) => updateStep({ audioBitrateKbps: event.target.value ? Number(event.target.value) : undefined })} placeholder="Audio bitrate kbps" />
                                                     <input className={fieldClass} type="number" min={2} value={step.maxWidth || ''} onChange={(event) => updateStep({ maxWidth: event.target.value ? Number(event.target.value) : undefined })} placeholder="Maximum width" />
                                                 </>}

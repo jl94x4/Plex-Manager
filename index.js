@@ -273,6 +273,7 @@ const normalizeMediaAutomationStep = (value = {}) => {
         audioBitrateKbps: Math.min(1536, Math.max(32, Number(value.audioBitrateKbps) || 192)),
         maxWidth: Math.max(0, Math.min(7680, Number(value.maxWidth) || 0)),
         preset: String(value.preset || 'medium').slice(0, 32),
+        crf: Math.min(51, Math.max(0, Number.isFinite(Number(value.crf)) ? Math.round(Number(value.crf)) : 20)),
     };
 };
 
@@ -300,6 +301,7 @@ const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
         audioBitrateKbps: firstStep.audioBitrateKbps,
         maxWidth: firstStep.maxWidth,
         preset: firstStep.preset,
+        crf: firstStep.crf,
         outputExtension: `.${firstStep.container}`,
         outputMode,
         hardwareAcceleration: hardware,

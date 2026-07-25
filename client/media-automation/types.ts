@@ -168,6 +168,8 @@ export type MediaAutomationStep = {
     audioBitrateKbps?: number;
     maxWidth?: number;
     preset?: string;
+    /** Quality: CRF/CQ/QP style 0–51 (lower = higher quality / larger files). */
+    crf?: number;
 };
 
 export type MediaAutomationRuleCondition = {
@@ -252,37 +254,184 @@ export const emptyPipeline = (): MediaAutomationPipeline => ({
     steps: [{ type: 'transcode', container: 'mkv', videoCodec: 'hevc', audioCodec: 'copy', preset: 'medium' }],
 });
 
+const hevcSkipRule = (): MediaAutomationRules => ({
+    operator: 'AND',
+    conditions: [{
+        id: 'condition-hevc',
+        field: 'videoCodec',
+        operator: 'notEquals',
+        value: 'hevc',
+    }],
+});
+
+const h264SkipRule = (): MediaAutomationRules => ({
+    operator: 'AND',
+    conditions: [{
+        id: 'condition-h264',
+        field: 'videoCodec',
+        operator: 'notEquals',
+        value: 'h264',
+    }],
+});
+
+/** Unmanic-inspired pipeline seeds (quality profiles + common remux/compat flows). */
 export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string; pipeline: MediaAutomationPipeline }> = [
     {
-        id: 'hevc-mkv',
-        label: 'HEVC MKV',
-        detail: 'Transcode to HEVC/MKV when the source is not already HEVC.',
+        id: 'high-quality-hevc',
+        label: 'High quality HEVC',
+        detail: 'HEVC CRF 18 / slow — near-transparent quality, larger files (Unmanic high-quality style).',
         pipeline: {
-            name: 'HEVC MKV',
+            name: 'High quality HEVC',
+            enabled: true,
+            priority: 60,
+            outputMode: 'dry-run',
+            hardware: 'auto',
+            rules: hevcSkipRule(),
+            steps: [{ type: 'transcode', container: 'mkv', videoCodec: 'hevc', audioCodec: 'copy', subtitleCodec: 'copy', preset: 'slow', crf: 18 }],
+        },
+    },
+    {
+        id: 'balanced-hevc',
+        label: 'Balanced HEVC',
+        detail: 'HEVC CRF 23 / medium — good quality-to-size default for most libraries.',
+        pipeline: {
+            name: 'Balanced HEVC',
             enabled: true,
             priority: 50,
             outputMode: 'dry-run',
             hardware: 'auto',
+            rules: hevcSkipRule(),
+            steps: [{ type: 'transcode', container: 'mkv', videoCodec: 'hevc', audioCodec: 'copy', subtitleCodec: 'copy', preset: 'medium', crf: 23 }],
+        },
+    },
+    {
+        id: 'space-saver-hevc',
+        label: 'Space saver HEVC',
+        detail: 'HEVC CRF 28 / fast, AAC 96k — shrink libraries while staying watchable.',
+        pipeline: {
+            name: 'Space saver HEVC',
+            enabled: true,
+            priority: 55,
+            outputMode: 'dry-run',
+            hardware: 'auto',
+            rules: hevcSkipRule(),
+            steps: [{
+                type: 'transcode',
+                container: 'mkv',
+                videoCodec: 'hevc',
+                audioCodec: 'aac',
+                audioBitrateKbps: 96,
+                subtitleCodec: 'copy',
+                preset: 'fast',
+                crf: 28,
+            }],
+        },
+    },
+    {
+        id: 'low-quality-hevc',
+        label: 'Low quality / archive',
+        detail: 'HEVC CRF 32 / veryfast, capped 1280px — aggressive archive / storage reclaim.',
+        pipeline: {
+            name: 'Low quality archive',
+            enabled: true,
+            priority: 45,
+            outputMode: 'dry-run',
+            hardware: 'auto',
+            rules: hevcSkipRule(),
+            steps: [{
+                type: 'transcode',
+                container: 'mkv',
+                videoCodec: 'hevc',
+                audioCodec: 'aac',
+                audioBitrateKbps: 96,
+                subtitleCodec: 'copy',
+                preset: 'veryfast',
+                crf: 32,
+                maxWidth: 1280,
+            }],
+        },
+    },
+    {
+        id: 'hevc-1080p',
+        label: 'HEVC 1080p',
+        detail: 'Downscale above 1080p to 1920px wide, then HEVC CRF 23.',
+        pipeline: {
+            name: 'HEVC 1080p',
+            enabled: true,
+            priority: 52,
+            outputMode: 'dry-run',
+            hardware: 'auto',
             rules: {
-                operator: 'AND',
-                conditions: [{
-                    id: 'condition-hevc',
-                    field: 'videoCodec',
-                    operator: 'notEquals',
-                    value: 'hevc',
-                }],
+                operator: 'OR',
+                conditions: [
+                    { id: 'c-codec', field: 'videoCodec', operator: 'notEquals', value: 'hevc' },
+                    { id: 'c-width', field: 'width', operator: 'greaterThan', value: '1920' },
+                ],
             },
-            steps: [{ type: 'transcode', container: 'mkv', videoCodec: 'hevc', audioCodec: 'copy', subtitleCodec: 'copy', preset: 'medium' }],
+            steps: [{
+                type: 'transcode',
+                container: 'mkv',
+                videoCodec: 'hevc',
+                audioCodec: 'copy',
+                subtitleCodec: 'copy',
+                preset: 'medium',
+                crf: 23,
+                maxWidth: 1920,
+            }],
+        },
+    },
+    {
+        id: 'hevc-720p',
+        label: 'HEVC 720p space saver',
+        detail: 'Cap at 1280px + HEVC CRF 28 — common TV / mobile space-saver profile.',
+        pipeline: {
+            name: 'HEVC 720p space saver',
+            enabled: true,
+            priority: 48,
+            outputMode: 'dry-run',
+            hardware: 'auto',
+            rules: {
+                operator: 'OR',
+                conditions: [
+                    { id: 'c-codec', field: 'videoCodec', operator: 'notEquals', value: 'hevc' },
+                    { id: 'c-width', field: 'width', operator: 'greaterThan', value: '1280' },
+                ],
+            },
+            steps: [{
+                type: 'transcode',
+                container: 'mkv',
+                videoCodec: 'hevc',
+                audioCodec: 'aac',
+                audioBitrateKbps: 128,
+                subtitleCodec: 'copy',
+                preset: 'fast',
+                crf: 28,
+                maxWidth: 1280,
+            }],
+        },
+    },
+    {
+        id: 'h264-compat',
+        label: 'H.264 compatibility',
+        detail: 'H.264 CRF 20 / medium — broad device compatibility when HEVC is not wanted.',
+        pipeline: {
+            name: 'H.264 compatibility',
+            enabled: true,
+            priority: 40,
+            outputMode: 'dry-run',
+            hardware: 'auto',
+            rules: h264SkipRule(),
+            steps: [{ type: 'transcode', container: 'mkv', videoCodec: 'h264', audioCodec: 'aac', audioBitrateKbps: 192, subtitleCodec: 'copy', preset: 'medium', crf: 20 }],
         },
     },
     {
         id: 'remux-mkv',
         label: 'Remux to MKV',
-        detail: 'Copy streams into an MKV container without re-encoding.',
+        detail: 'Copy streams into MKV without re-encoding (container cleanup only).',
         pipeline: {
             name: 'Remux to MKV',
             enabled: true,
-            priority: 40,
+            priority: 35,
             outputMode: 'dry-run',
             hardware: 'cpu',
             rules: {
@@ -298,9 +447,53 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         },
     },
     {
+        id: 'remux-mp4',
+        label: 'Remux to MP4',
+        detail: 'Copy streams into MP4 when the source is not already MP4.',
+        pipeline: {
+            name: 'Remux to MP4',
+            enabled: true,
+            priority: 34,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: {
+                operator: 'AND',
+                conditions: [{
+                    id: 'condition-mp4',
+                    field: 'container',
+                    operator: 'notEquals',
+                    value: 'mp4,mov,m4v',
+                }],
+            },
+            steps: [{ type: 'remux', container: 'mp4' }],
+        },
+    },
+    {
+        id: 'aac-audio-normalize',
+        label: 'AAC stereo normalize',
+        detail: 'Keep video, re-encode audio to AAC 192k — useful after remux/transcode cleanup.',
+        pipeline: {
+            name: 'AAC stereo normalize',
+            enabled: true,
+            priority: 30,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: {
+                operator: 'AND',
+                conditions: [{
+                    id: 'condition-audio',
+                    field: 'audioCodec',
+                    operator: 'notEquals',
+                    value: 'aac',
+                }],
+            },
+            steps: [{ type: 'transcode', container: 'mkv', videoCodec: 'copy', audioCodec: 'aac', audioBitrateKbps: 192, subtitleCodec: 'copy', preset: 'medium', crf: 23 }],
+        },
+    },
+    {
         id: 'dry-run-probe',
         label: 'Dry-run probe',
-        detail: 'Match everything and plan a dry-run so you can validate rules safely.',
+        detail: 'Match everything and plan only — safest way to validate rules and hardware.',
         pipeline: {
             name: 'Dry-run probe',
             enabled: true,
