@@ -34,6 +34,7 @@ import { DiscoverGridSizeSelect } from './discovery/DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './discovery/useDiscoverGridSize';
 import { DiscoverLocaleSelect } from './discovery/i18n/DiscoverLocaleSelect';
 import { filterNavOrder, ensureCompleteNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
+import { useVisualViewportDock } from './shared/useVisualViewportDock';
 import {
     STATUS_PERIODS,
     barsForPeriod,
@@ -9662,6 +9663,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const [mobileThemeOpen, setMobileThemeOpen] = useState(false);
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+    const mobileNavBarRef = useRef<HTMLDivElement>(null);
+    const mobileMoreOverlayRef = useRef<HTMLDivElement>(null);
+    useVisualViewportDock({
+        barRef: mobileNavBarRef,
+        overlayRef: mobileMoreOverlayRef,
+        syncKey: mobileMoreOpen,
+    });
     const [profileOpen, setProfileOpen] = useState(false);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
@@ -10247,12 +10255,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 </div>
             )}
 
-            {/* Mobile bottom nav + More: portal to body so position:fixed tracks the viewport
-                (address bar hide/show) and page content can't paint through a translucent bar. */}
+            {/* Mobile bottom nav + More: portal to body + visualViewport dock so the bar
+                tracks Firefox/Chrome toolbar show/hide instead of leaving a dead gap. */}
             {typeof document !== 'undefined' && ReactDOM.createPortal(
                 <>
                     <div
-                        className="md:hidden fixed inset-x-0 bottom-0 z-[330] border-t border-border bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom,0px)]"
+                        ref={mobileNavBarRef}
+                        className="md:hidden fixed inset-x-0 z-[330] border-t border-border bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom,0px)]"
                         style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }}
                     >
                         <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
@@ -10296,8 +10305,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                     {mobileMoreOpen && (
                         <div
-                            className="md:hidden fixed top-0 left-0 right-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end bottom-[calc(4rem+env(safe-area-inset-bottom,0px))]"
-                            style={{ position: 'fixed' }}
+                            ref={mobileMoreOverlayRef}
+                            className="md:hidden fixed left-0 right-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end"
+                            style={{ position: 'fixed', top: 0, bottom: '4rem' }}
                             onClick={() => setMobileMoreOpen(false)}
                         >
                             <div
