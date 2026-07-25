@@ -10261,7 +10261,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     >
                         <div
                             ref={mobileNavBarRef}
-                            className="pointer-events-auto w-full border-t border-border bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom,0px)]"
+                            className="pointer-events-auto w-screen nav-shell border-t border-border shadow-[0_-8px_24px_rgba(0,0,0,0.35)]"
+                            style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
                         >
                             <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
                                 {(() => {
