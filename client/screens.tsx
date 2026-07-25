@@ -9666,12 +9666,6 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const mobileNavShellRef = useRef<HTMLDivElement>(null);
     const mobileNavBarRef = useRef<HTMLDivElement>(null);
     const mobileMoreOverlayRef = useRef<HTMLDivElement>(null);
-    useVisualViewportDock({
-        shellRef: mobileNavShellRef,
-        barRef: mobileNavBarRef,
-        overlayRef: mobileMoreOverlayRef,
-        syncKey: mobileMoreOpen,
-    });
     const [profileOpen, setProfileOpen] = useState(false);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
@@ -10262,8 +10256,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             {typeof document !== 'undefined' && ReactDOM.createPortal(
                 <>
                     <div
-                        ref={mobileNavShellRef}
-                        className="md:hidden fixed inset-x-0 bottom-0 z-[330] pointer-events-none"
+                        className="md:hidden fixed inset-x-0 top-0 z-[330] flex flex-col justify-end pointer-events-none"
+                        style={{ height: '100dvh' }}
                     >
                         <div
                             ref={mobileNavBarRef}
@@ -10312,8 +10306,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     {mobileMoreOpen && (
                         <div
                             ref={mobileMoreOverlayRef}
-                            className="md:hidden fixed left-0 right-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end pointer-events-auto"
-                            style={{ top: 0, height: 'calc(var(--mobile-shell-height, 100dvh) - 4rem)' }}
+                            className="md:hidden fixed left-0 right-0 top-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end pointer-events-auto"
+                            style={{ bottom: 'calc(4rem + env(safe-area-inset-bottom, 0px))' }}
                             onClick={() => setMobileMoreOpen(false)}
                         >
                             <div
