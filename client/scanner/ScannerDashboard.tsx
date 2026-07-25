@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     ArrowUpCircle,
     ChevronDown,
@@ -19,9 +19,11 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
+import { CustomSelect } from '../shared/ui';
 import {
     formatScannerWhen,
     scannerActionStyles,
+    sourceAppKey,
 } from './eventMeta';
 import { ScannerSourceBadge } from './ScannerSourceBadge';
 
@@ -31,6 +33,7 @@ type ScannerStatus = {
     remaining: number;
     processed: number;
     targetCount: number;
+    configuredSources?: Array<'sonarr' | 'radarr' | 'lidarr'>;
     showWebhooks?: boolean;
     showManualPath?: boolean;
     webhookPaths: {
@@ -71,6 +74,11 @@ type QueueItem = {
 
 const MANUAL_PATH_COLLAPSED_KEY = 'scanner-manual-path-collapsed';
 const ACTIVITY_PAGE_SIZE = 5;
+const SOURCE_LABELS: Record<string, string> = {
+    sonarr: 'Sonarr',
+    radarr: 'Radarr',
+    lidarr: 'Lidarr',
+};
 
 const readManualPathCollapsed = () => {
     try {
@@ -122,6 +130,7 @@ export const ScannerDashboard: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [manualCollapsed, setManualCollapsed] = useState(readManualPathCollapsed);
     const [activityPage, setActivityPage] = useState(0);
+    const [activitySource, setActivitySource] = useState('all');
 
     const toggleManualPath = () => {
         setManualCollapsed((prev) => {
@@ -157,12 +166,39 @@ export const ScannerDashboard: React.FC = () => {
         return () => window.clearInterval(id);
     }, [refresh]);
 
-    const activityTotalPages = Math.max(1, Math.ceil(log.length / ACTIVITY_PAGE_SIZE) || 1);
+    const configuredSources = status?.configuredSources || [];
+    const activitySourceOptions = useMemo(() => [
+        { value: 'all', label: 'All configured apps' },
+        ...configuredSources.map((source) => ({
+            value: source,
+            label: SOURCE_LABELS[source] || source,
+        })),
+    ], [configuredSources]);
+    const filteredLog = useMemo(
+        () => activitySource === 'all'
+            ? log
+            : log.filter((entry) => sourceAppKey(entry.source) === activitySource),
+        [activitySource, log],
+    );
+    const activityTotalPages = Math.max(1, Math.ceil(filteredLog.length / ACTIVITY_PAGE_SIZE) || 1);
     const activitySafePage = Math.min(activityPage, activityTotalPages - 1);
-    const activityPageEntries = log.slice(
+    const activityPageEntries = filteredLog.slice(
         activitySafePage * ACTIVITY_PAGE_SIZE,
         activitySafePage * ACTIVITY_PAGE_SIZE + ACTIVITY_PAGE_SIZE,
     );
+
+    useEffect(() => {
+        if (
+            activitySource !== 'all'
+            && !configuredSources.includes(activitySource as 'sonarr' | 'radarr' | 'lidarr')
+        ) {
+            setActivitySource('all');
+        }
+    }, [activitySource, configuredSources]);
+
+    useEffect(() => {
+        setActivityPage(0);
+    }, [activitySource]);
 
     useEffect(() => {
         if (activityPage > activityTotalPages - 1) {
@@ -410,18 +446,32 @@ export const ScannerDashboard: React.FC = () => {
                 </section>
 
                 <section className="glass-card p-4 md:p-5 shadow-xl space-y-4 min-h-[16rem]">
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <h2 className="text-lg font-bold text-text tracking-tight">Recent activity</h2>
                             <p className="text-xs text-muted mt-0.5">Why each refresh ran, and how it finished.</p>
                         </div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border border-emerald-400/25 bg-emerald-500/10 text-emerald-200">
-                            {log.length} events
-                        </span>
+                        <div className="flex items-center gap-2">
+                            {configuredSources.length > 0 ? (
+                                <CustomSelect
+                                    id="scanner-activity-source"
+                                    value={activitySource}
+                                    onChange={setActivitySource}
+                                    options={activitySourceOptions}
+                                    compact
+                                    className="w-44"
+                                />
+                            ) : null}
+                            <span className="whitespace-nowrap text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border border-emerald-400/25 bg-emerald-500/10 text-emerald-200">
+                                {filteredLog.length} events
+                            </span>
+                        </div>
                     </div>
-                    {log.length === 0 ? (
+                    {filteredLog.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center">
-                            <p className="text-sm text-muted">No scans processed yet.</p>
+                            <p className="text-sm text-muted">
+                                {log.length === 0 ? 'No scans processed yet.' : `No ${SOURCE_LABELS[activitySource] || activitySource} activity found.`}
+                            </p>
                         </div>
                     ) : (
                         <>
@@ -472,10 +522,10 @@ export const ScannerDashboard: React.FC = () => {
                                 );
                             })}
                         </ul>
-                        {log.length > ACTIVITY_PAGE_SIZE ? (
+                        {filteredLog.length > ACTIVITY_PAGE_SIZE ? (
                             <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                                 <p className="text-xs text-muted">
-                                    Showing {activitySafePage * ACTIVITY_PAGE_SIZE + 1}–{Math.min(log.length, (activitySafePage + 1) * ACTIVITY_PAGE_SIZE)} of {log.length}
+                                    Showing {activitySafePage * ACTIVITY_PAGE_SIZE + 1}–{Math.min(filteredLog.length, (activitySafePage + 1) * ACTIVITY_PAGE_SIZE)} of {filteredLog.length}
                                 </p>
                                 <div className="flex items-center gap-2">
                                     <button

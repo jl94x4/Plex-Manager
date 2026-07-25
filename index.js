@@ -18053,12 +18053,19 @@ app.get('/api/scanner/status', requireAdmin, requireScanner, async (req, res) =>
         const logPayload = await listLog(1);
         const last = Array.isArray(logPayload.entries) && logPayload.entries[0] ? logPayload.entries[0] : null;
         const targets = buildTargets(scannerPortalConfig(config), scanner);
+        const configuredSources = [...new Set(
+            getArrInstances(config, { enabledOnly: true })
+                .filter(isArrInstanceReady)
+                .map((instance) => String(instance.type || '').toLowerCase())
+                .filter((type) => ['sonarr', 'radarr', 'lidarr'].includes(type))
+        )];
         res.json({
             enabled: true,
             minimumAge: scanner.minimumAge,
             remaining: stats.remaining,
             processed: stats.processed,
             targetCount: targets.length,
+            configuredSources,
             showWebhooks: config.scannerWebhooksVisible !== false,
             showManualPath: config.scannerManualPathVisible !== false,
             lastActivity: last
