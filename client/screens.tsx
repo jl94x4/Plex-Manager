@@ -10263,8 +10263,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 <>
                     <div
                         ref={mobileNavShellRef}
-                        className="md:hidden fixed inset-x-0 top-0 z-[330] flex flex-col justify-end pointer-events-none"
-                        style={{ height: 'var(--mobile-shell-height, 100dvh)' }}
+                        className="md:hidden fixed inset-x-0 bottom-0 z-[330] pointer-events-none"
                     >
                         <div
                             ref={mobileNavBarRef}

@@ -60,9 +60,9 @@ export function useVisualViewportDock({
                 }
             }
 
-            shell.style.top = `${Math.round(top)}px`;
-            shell.style.height = `${Math.round(height)}px`;
-            shell.style.bottom = 'auto';
+            // shell.style.top = `${Math.round(top)}px`;
+            // shell.style.height = `${Math.round(height)}px`;
+            // shell.style.bottom = 'auto';
             document.documentElement.style.setProperty('--mobile-shell-height', `${Math.round(height)}px`);
 
             const overlay = overlayRef?.current;
