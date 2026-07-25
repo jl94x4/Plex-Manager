@@ -9861,12 +9861,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         const badgeCount = options.badgeCount || 0;
         const baseClass = options.mobile
             ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
-            : `flex items-center gap-3 px-3 py-2.5 no-underline rounded-lg transition-all text-[14px] font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
+            : `flex items-center gap-2.5 px-3 py-2 no-underline rounded-lg transition-all text-[13px] font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
 
         if (item.href) {
             return (
-                <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : 'flex items-center gap-3 px-3 py-2.5 text-muted no-underline rounded-lg transition-all text-[14px] font-medium hover:bg-white/5 hover:text-text'}>
-                    <Icon className="w-5 h-5 flex-shrink-0" /> {label}
+                <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : 'flex items-center gap-2.5 px-3 py-2 text-muted no-underline rounded-lg transition-all text-[13px] font-medium hover:bg-white/5 hover:text-text'}>
+                    <Icon className="w-[18px] h-[18px] flex-shrink-0" /> {label}
                 </a>
             );
         }
@@ -9885,7 +9885,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 onClick={handleActivate}
             >
                 <span className="relative shrink-0">
-                    <Icon className="w-5 h-5" />
+                    <Icon className={options.mobile ? 'w-5 h-5' : 'w-[18px] h-[18px]'} />
                     {badgeCount > 0 && options.mobile && (
                         <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none">
                             {badgeCount > 9 ? '9+' : badgeCount}
@@ -9896,7 +9896,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     <span className="flex items-center gap-2 flex-1 min-w-0">
                         <span className="truncate">{label}</span>
                         {badgeCount > 0 && (
-                            <span className="ml-auto min-w-[1.25rem] h-5 px-1.5 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center shrink-0">
+                            <span className="ml-auto min-w-[1.15rem] h-[18px] px-1.5 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center shrink-0">
                                 {badgeCount > 99 ? '99+' : badgeCount}
                             </span>
                         )}
@@ -9910,13 +9910,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     };
 
     const renderServerIdentity = (placement: 'top' | 'bottom') => (
-        <div className={`flex flex-col items-center w-full shrink-0 ${placement === 'top' ? 'pb-3 mb-3 border-b' : 'pt-3 mt-3 border-t'} border-white/10 group cursor-default`}>
-            <div className={`relative mb-2.5 ${customLogoUrl ? 'w-28 flex items-center justify-center' : ''}`}>
+        <div className={`flex flex-col items-center w-full shrink-0 ${placement === 'top' ? 'pb-2 mb-2 border-b' : 'pt-2 mt-2 border-t'} border-white/10 group cursor-default`}>
+            <div className={`relative mb-2 ${customLogoUrl ? 'w-24 flex items-center justify-center' : ''}`}>
                 {customLogoUrl ? (
                     <img
                         src={serverIcon}
                         alt="Server Logo"
-                        className="max-w-28 max-h-24 object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)] group-hover:scale-105 transition-transform duration-700 ease-out"
+                        className="max-w-24 max-h-20 object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)] group-hover:scale-105 transition-transform duration-700 ease-out"
                         onError={(e) => {
                             (e.target as HTMLImageElement).src = logoUrl();
                         }}
@@ -9925,7 +9925,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     <>
                         <div className="absolute inset-0 bg-plex blur-[25px] opacity-20 group-hover:opacity-40 transition-opacity duration-700 rounded-full"></div>
                         <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-plex via-amber-300 to-orange-600 opacity-60 group-hover:opacity-100 group-hover:rotate-180 transition-all duration-1000 ease-out"></div>
-                        <div className="relative w-24 h-24 rounded-full p-[3px] shadow-2xl bg-card">
+                        <div className="relative w-20 h-20 rounded-full p-[3px] shadow-2xl bg-card">
                             <div className="w-full h-full rounded-full overflow-hidden bg-background">
                                 <img
                                     src={serverIcon}
@@ -9942,10 +9942,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             </div>
 
             <div className="flex flex-col items-center text-center px-2">
-                <h2 className="text-xl font-black text-text tracking-tight leading-tight line-clamp-2">
+                <h2 className="text-lg font-black text-text tracking-tight leading-tight line-clamp-2">
                     {serverName}
                 </h2>
-                <div className="mt-1.5 flex items-center gap-2">
+                <div className="mt-1 flex items-center gap-2">
                     <div className="h-px w-6 bg-gradient-to-r from-transparent to-plex/50"></div>
                     <span className="text-[10px] uppercase tracking-[0.3em] text-plex font-bold">
                         Portal
@@ -10037,10 +10037,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
 
             {/* Desktop Sidebar */}
-            <div className="hidden md:flex flex-col w-72 nav-shell border-r px-5 py-4 sticky top-0 self-start h-dvh shadow-2xl overflow-hidden">
+            <div className="hidden md:flex flex-col w-72 nav-shell border-r px-5 py-3 sticky top-0 self-start h-dvh shadow-2xl overflow-hidden">
                 {sidebarIdentityPosition === 'top' && renderServerIdentity('top')}
 
-                <div className="flex flex-col justify-start gap-2 min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1 custom-scrollbar">
+                <div className="flex flex-col justify-start gap-1.5 min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-0.5 custom-scrollbar">
                     {normalizedNavOrder.map((key) => {
                         const item = navItemsConfig[key];
                         if (!item) return null;
@@ -10053,16 +10053,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 {sidebarIdentityPosition !== 'top' && renderServerIdentity('bottom')}
 
-                <div className="mt-3 pt-3 border-t border-white/10 shrink-0">
+                <div className="mt-2 pt-2 border-t border-white/10 shrink-0">
                     <button
                         type="button"
                         onClick={() => setProfileOpen(true)}
-                        className="w-full flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-all p-2.5 text-left"
+                        className="w-full flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-all p-2 text-left"
                     >
                         <img
                             src={profileIcon}
                             alt=""
-                            className="w-9 h-9 flex-shrink-0 rounded-full object-cover bg-background/60 border border-white/10"
+                            className="w-8 h-8 flex-shrink-0 rounded-full object-cover bg-background/60 border border-white/10"
                             onError={(e) => {
                                 (e.target as HTMLImageElement).src = logoUrl();
                             }}
@@ -10073,7 +10073,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         </div>
                         <Palette className="w-4 h-4 text-plex flex-shrink-0" />
                     </button>
-                    <div className="mt-1.5 flex flex-col items-center gap-0.5">
+                    <div className="mt-1 flex flex-col items-center gap-0.5">
                         {appVersion && (
                             <div className="text-[10px] text-white/50 font-mono tracking-wider opacity-80 hover:opacity-100 transition-opacity">
                                 {appVersion}
