@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Copy, Download, FileUp, Loader2, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Download, Eye, EyeOff, FileUp, Loader2, Plus, RefreshCw, Trash2, Upload } from 'lucide-react';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 import { apiFetch } from '../shared/api';
@@ -174,6 +174,7 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
     const [yamlText, setYamlText] = useState('');
     const [importing, setImporting] = useState(false);
     const [importSummary, setImportSummary] = useState<string | null>(null);
+    const [showAuthPassword, setShowAuthPassword] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const update = (patch: Partial<ScannerSettings>) => onChange({ ...scanner, ...patch });
@@ -381,14 +382,26 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                         </div>
                         <div>
                             <label className="font-semibold text-sm block mb-2 text-text">Password</label>
-                            <input
-                                type="password"
-                                className={FIELD}
-                                value={scanner.authPassword}
-                                disabled={!enabled}
-                                onChange={(e) => update({ authPassword: e.target.value })}
-                                autoComplete="new-password"
-                            />
+                            <div className="relative">
+                                <input
+                                    type={showAuthPassword ? 'text' : 'password'}
+                                    className={`${FIELD} pr-11`}
+                                    value={scanner.authPassword}
+                                    disabled={!enabled}
+                                    onChange={(e) => update({ authPassword: e.target.value })}
+                                    autoComplete="new-password"
+                                />
+                                <button
+                                    type="button"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted hover:text-text hover:bg-white/5 disabled:opacity-40 bg-transparent border-0 cursor-pointer"
+                                    disabled={!enabled}
+                                    onClick={() => setShowAuthPassword((v) => !v)}
+                                    aria-label={showAuthPassword ? 'Hide password' : 'Show password'}
+                                    title={showAuthPassword ? 'Hide password' : 'Show password'}
+                                >
+                                    {showAuthPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </SectionCard>
