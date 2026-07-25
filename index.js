@@ -17984,6 +17984,17 @@ const handleArrTrigger = async (req, res, kind) => {
 
         if (!paths.length) {
             log(`[scanner] ${kind} ${eventType || 'event'} produced no paths`);
+            const meta = classifyArrEvent(kind, event);
+            await appendLog({
+                ok: false,
+                folder: 'Webhook received — no scan queued',
+                source: `${kind}:${trigger.name}`,
+                eventType: eventType || 'Unknown',
+                action: meta.action || 'ignored',
+                reason: 'No media paths',
+                title: meta.title || `${kind.charAt(0).toUpperCase()}${kind.slice(1)} webhook`,
+                error: `${eventType || 'Unknown'} webhook contained no usable media paths.`,
+            }, { countProcessed: false });
             return res.status(200).json({ ok: true, queued: 0 });
         }
 
@@ -17998,6 +18009,18 @@ const handleArrTrigger = async (req, res, kind) => {
         return res.status(200).json({ ok: true, queued: scans.length, folders: scans.map((s) => s.folder) });
     } catch (e) {
         log(`[scanner] ${kind} trigger failed: ${e?.message || e}`);
+        const failedEvent = req.body || {};
+        const failedEventType = String(failedEvent.eventType || failedEvent.EventType || 'Unknown');
+        await appendLog({
+            ok: false,
+            folder: 'Webhook received — parser failed',
+            source: `${kind}:${String(req.params.name || kind).toLowerCase()}`,
+            eventType: failedEventType,
+            action: 'error',
+            reason: 'Webhook rejected',
+            title: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} webhook`,
+            error: e?.message || String(e),
+        }, { countProcessed: false }).catch(() => {});
         const status = e?.status || 500;
         return res.status(status).json({ error: e?.message || 'Trigger failed' });
     }

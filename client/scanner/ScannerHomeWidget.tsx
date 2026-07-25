@@ -60,9 +60,8 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
     const lastStyle = scannerActionStyles(last?.action || last?.reason, last?.isUpgrade);
 
     return (
-        <div className="glass-card p-4 md:p-5 shadow-xl w-full overflow-hidden relative">
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-sky-500/10 via-transparent to-plex/10" />
-            <div className="relative flex flex-col gap-4">
+        <div className="glass-card p-4 md:p-5 shadow-xl w-full overflow-hidden">
+            <div className="flex flex-col gap-4">
                 <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-6">
                     <div className="flex items-center justify-between gap-3 lg:min-w-[14rem] shrink-0">
                         <div className="flex items-center gap-3 min-w-0">
