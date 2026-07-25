@@ -734,9 +734,18 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     </div>
                                     {!capabilities.hardware?.includes('qsv') && !capabilities.hardware?.includes('intel-vaapi') && (
                                         <p className="mt-2 text-xs text-amber-200/90">
-                                            Intel QSV/VAAPI off — map Unraid <span className="font-mono text-plex">/dev/dri</span> into the container, then run Test worker.
+                                            Intel QSV/VAAPI off — map Unraid <span className="font-mono text-plex">/dev/dri</span> into the container, rebuild/pull the latest image (DRI group fix), then run Test worker.
                                         </p>
                                     )}
+                                    {(['qsv', 'intel-vaapi', 'vaapi', 'nvenc'] as const).map((id) => {
+                                        const detailError = capabilities.details?.[id]?.error;
+                                        if (!detailError || capabilities.hardware?.includes(id)) return null;
+                                        return (
+                                            <p key={`${id}-error`} className="mt-2 break-words text-xs text-red-300/90">
+                                                <span className="font-semibold uppercase">{id}</span>: {detailError}
+                                            </p>
+                                        );
+                                    })}
                                 </div>
                                 <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">Encoders</p><p className="mt-2 line-clamp-3 font-semibold text-text">{capabilities.encoders?.length ? capabilities.encoders.join(', ') : 'No encoder data reported'}</p></div>
                             </div>

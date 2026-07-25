@@ -19210,6 +19210,9 @@ app.get('/api/media-automation/browse', requireAdmin, requireMediaAutomation, as
             roots,
             includeFiles,
             extensions: extensions.length ? extensions : (includeFiles ? runtime.extensions : []),
+            limit: req.query.limit,
+            offset: req.query.offset,
+            query: String(req.query.q || req.query.query || '').trim(),
         });
         res.json({
             ok: true,

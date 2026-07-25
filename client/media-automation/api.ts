@@ -25,6 +25,11 @@ export type MediaAutomationBrowseResult = {
     root?: string | null;
     roots?: string[];
     entries?: MediaAutomationBrowseEntry[];
+    total?: number;
+    offset?: number;
+    limit?: number;
+    hasMore?: boolean;
+    query?: string;
     message?: string;
     error?: string;
 };
@@ -63,11 +68,20 @@ export const mediaAutomationApi = {
         await apiFetch(`${ROOT}/activity?limit=${limit}`),
         ['activity', 'events', 'items', 'results'],
     ),
-    browse: (path = '', options: { files?: boolean; extensions?: string[] } = {}) => {
+    browse: (path = '', options: {
+        files?: boolean;
+        extensions?: string[];
+        limit?: number;
+        offset?: number;
+        q?: string;
+    } = {}) => {
         const params = new URLSearchParams();
         if (path) params.set('path', path);
         if (options.files) params.set('files', '1');
         if (options.extensions?.length) params.set('extensions', options.extensions.join(','));
+        if (Number.isFinite(options.limit)) params.set('limit', String(options.limit));
+        if (Number.isFinite(options.offset) && Number(options.offset) > 0) params.set('offset', String(options.offset));
+        if (options.q) params.set('q', options.q);
         const query = params.toString();
         return apiFetch(`${ROOT}/browse${query ? `?${query}` : ''}`) as Promise<MediaAutomationBrowseResult>;
     },

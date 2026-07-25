@@ -38,8 +38,11 @@ ENV FORCE_SECURE_COOKIES=false
 ENV COLLEXIONS_APP_DIR=/app/collexions
 ENV COLLEXIONS_EMBEDDED_PORT=15755
 
-# ffmpeg supplies both ffmpeg and ffprobe. Mesa provides AMD VAAPI; the Intel
-# media driver is installed only on architectures where Bookworm publishes it.
+# ffmpeg supplies both ffmpeg and ffprobe. Mesa provides AMD VAAPI; Intel media /
+# QSV runtime libs are installed when Bookworm publishes them for the arch.
+# util-linux provides setpriv so the entrypoint can attach /dev/dri GIDs after
+# dropping to PUID:PGID (required for render node access on Unraid).
+# Optional: set LIBVA_DRIVER_NAME=iHD (Intel) or radeonsi (AMD) if auto-detect fails.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \
@@ -49,12 +52,22 @@ RUN apt-get update \
         python3 \
         python3-pip \
         python3-venv \
+        util-linux \
         vainfo \
     && if apt-cache show intel-media-va-driver >/dev/null 2>&1; then \
         apt-get install -y --no-install-recommends intel-media-va-driver; \
     fi \
     && if apt-cache show i965-va-driver >/dev/null 2>&1; then \
         apt-get install -y --no-install-recommends i965-va-driver; \
+    fi \
+    && if apt-cache show libmfx1 >/dev/null 2>&1; then \
+        apt-get install -y --no-install-recommends libmfx1; \
+    fi \
+    && if apt-cache show libvpl2 >/dev/null 2>&1; then \
+        apt-get install -y --no-install-recommends libvpl2; \
+    fi \
+    && if apt-cache show libmfx-gen1.2 >/dev/null 2>&1; then \
+        apt-get install -y --no-install-recommends libmfx-gen1.2; \
     fi \
     && ffmpeg -version \
     && ffprobe -version \

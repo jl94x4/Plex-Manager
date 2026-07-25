@@ -134,7 +134,7 @@ Server Manager Portal includes an Unraid template at `unraid/server-manager-port
 
 The template uses `ghcr.io/jl94x4/server-manager-portal:latest` and stores app data under `/mnt/user/appdata/server-manager-portal/` by default. It includes a writable Media Automation work path; the optional media path is empty until configured.
 
-For Intel/AMD, add `/dev/dri` as a device and add the host video/render groups. For NVIDIA, use the NVIDIA Container Toolkit/runtime. Do not enable privileged mode.
+For Intel/AMD, add `/dev/dri` as a device (the entrypoint attaches those device GIDs for `PUID`). For NVIDIA, use the NVIDIA Container Toolkit/runtime. Do not enable privileged mode.
 
 On Unraid, the template includes optional Media Root / TV / Movies / Music path fields plus Intel `/dev/dri` and NVIDIA variables. For NVENC: install the Nvidia Driver plugin, set `NVIDIA_VISIBLE_DEVICES`, and add `--runtime=nvidia` to Extra Parameters. Verify path mappings and permissions before enabling any replacement action. Use `:nightly` while testing Media Automation.
 

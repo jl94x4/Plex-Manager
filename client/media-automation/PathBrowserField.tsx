@@ -1,10 +1,27 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, FileVideo, Folder, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
-import { mediaAutomationApi, type MediaAutomationBrowseResult } from './api';
+import { mediaAutomationApi, type MediaAutomationBrowseEntry, type MediaAutomationBrowseResult } from './api';
 
 const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-white/[0.04] px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/50 hover:bg-plex/10 disabled:pointer-events-none disabled:opacity-40';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-lg bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover disabled:pointer-events-none disabled:opacity-40';
+
+const PAGE_SIZE = 400;
+
+const normalizePathKey = (value: string) => String(value || '')
+    .trim()
+    .replace(/[/\\]+$/, '')
+    .replace(/\\/g, '/')
+    .toLowerCase();
+
+const browseTargetFromValue = (raw: string, pickFiles: boolean) => {
+    const start = String(raw || '').trim();
+    if (!start) return '';
+    if (pickFiles && /\.[a-z0-9]+$/i.test(start)) {
+        return start.replace(/[/\\][^/\\]+$/, '');
+    }
+    return start;
+};
 
 type Props = {
     label?: string;
@@ -32,49 +49,133 @@ export const PathBrowserField: React.FC<Props> = ({
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [listing, setListing] = useState<MediaAutomationBrowseResult | null>(null);
+    const [entries, setEntries] = useState<MediaAutomationBrowseEntry[]>([]);
     const [cursor, setCursor] = useState('');
+    const [filter, setFilter] = useState('');
+    const [filterDraft, setFilterDraft] = useState('');
+    const filterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const valueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const requestId = useRef(0);
+    const cursorRef = useRef('');
+    const valueRef = useRef(value);
+    const openRef = useRef(open);
     const pickFiles = mode === 'file';
 
-    const load = useCallback(async (nextPath = '') => {
+    useEffect(() => {
+        cursorRef.current = cursor;
+    }, [cursor]);
+
+    useEffect(() => {
+        valueRef.current = value;
+    }, [value]);
+
+    useEffect(() => {
+        openRef.current = open;
+    }, [open]);
+
+    const load = useCallback(async (nextPath = '', {
+        append = false,
+        offset = 0,
+        q = filter,
+        softFailure = false,
+        resetFilter = false,
+    }: {
+        append?: boolean;
+        offset?: number;
+        q?: string;
+        softFailure?: boolean;
+        resetFilter?: boolean;
+    } = {}) => {
+        const id = ++requestId.current;
         setBusy(true);
-        setError('');
+        if (!softFailure) setError('');
+        if (resetFilter) {
+            setFilter('');
+            setFilterDraft('');
+        }
         try {
             const result = await mediaAutomationApi.browse(nextPath, {
                 files: pickFiles,
                 extensions,
+                limit: PAGE_SIZE,
+                offset,
+                q: q || undefined,
             });
+            if (id !== requestId.current) return;
             setListing(result);
             setCursor(result.path || '');
-            if (result.message && !result.roots?.length) setError(result.message);
+            setEntries((current) => (append ? [...current, ...(result.entries || [])] : (result.entries || [])));
+            setError(result.message && !result.roots?.length ? result.message : '');
         } catch (err) {
-            if (nextPath) {
+            if (id !== requestId.current) return;
+            const message = err instanceof Error ? err.message : 'Failed to browse';
+            if (softFailure) {
+                // Keep the current listing while the typed path is incomplete / missing.
+                setError(message);
+                return;
+            }
+            if (nextPath && !append) {
                 try {
                     const fallback = await mediaAutomationApi.browse('', { files: pickFiles, extensions });
+                    if (id !== requestId.current) return;
                     setListing(fallback);
                     setCursor('');
-                    setError(err instanceof Error ? err.message : 'Path not browsable — pick a mount root');
+                    setEntries(fallback.entries || []);
+                    setError('Path not browsable — pick a mount root');
                     return;
                 } catch {
                     // fall through
                 }
             }
-            setError(err instanceof Error ? err.message : 'Failed to browse');
+            setError(message);
         } finally {
-            setBusy(false);
+            if (id === requestId.current) setBusy(false);
         }
-    }, [extensions, pickFiles]);
+    }, [extensions, filter, pickFiles]);
 
+    // Initial listing when the browser panel opens.
     useEffect(() => {
         if (!open) return;
-        const start = value.trim();
-        // If current value is a file, open its parent directory.
-        const initial = pickFiles && start && /\.[a-z0-9]+$/i.test(start)
-            ? start.replace(/[/\\][^/\\]+$/, '')
-            : start;
-        void load(initial);
-        // Intentionally only when the browser is opened.
+        const target = browseTargetFromValue(valueRef.current, pickFiles);
+        setEntries([]);
+        void load(target, { q: '', resetFilter: true });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
+
+    // Typing/pasting into the path field while open navigates the listing.
+    // Depends on value only (open via ref) so click-navigation does not bounce back.
+    useEffect(() => {
+        if (!openRef.current) return;
+        if (valueTimer.current) clearTimeout(valueTimer.current);
+
+        const target = browseTargetFromValue(value, pickFiles);
+        if (normalizePathKey(target) === normalizePathKey(cursorRef.current)) return;
+
+        valueTimer.current = setTimeout(() => {
+            if (!openRef.current) return;
+            setEntries([]);
+            void load(target, { q: '', softFailure: true, resetFilter: true });
+        }, 350);
+
+        return () => {
+            if (valueTimer.current) clearTimeout(valueTimer.current);
+        };
+    }, [value, pickFiles, load]);
+
+    useEffect(() => () => {
+        if (filterTimer.current) clearTimeout(filterTimer.current);
+        if (valueTimer.current) clearTimeout(valueTimer.current);
+    }, []);
+
+    const applyFilter = (next: string) => {
+        setFilterDraft(next);
+        if (filterTimer.current) clearTimeout(filterTimer.current);
+        filterTimer.current = setTimeout(() => {
+            setFilter(next);
+            setEntries([]);
+            void load(cursorRef.current || '', { q: next, offset: 0 });
+        }, 250);
+    };
 
     const crumbs = (() => {
         if (!listing?.path || !listing.root) return [] as string[];
@@ -95,6 +196,14 @@ export const PathBrowserField: React.FC<Props> = ({
         onChange(next);
         setOpen(false);
     };
+
+    const navigate = (nextPath: string) => {
+        setEntries([]);
+        void load(nextPath, { q: '', resetFilter: true });
+    };
+
+    const total = listing?.total ?? entries.length;
+    const hasMore = !!listing?.hasMore;
 
     return (
         <div className="space-y-2">
@@ -125,11 +234,19 @@ export const PathBrowserField: React.FC<Props> = ({
                             type="button"
                             className={buttonClass}
                             disabled={busy || !listing?.parent}
-                            onClick={() => listing?.parent && void load(listing.parent)}
+                            onClick={() => listing?.parent && navigate(listing.parent)}
                         >
                             <ChevronLeft className="h-4 w-4" /> Up
                         </button>
-                        <button type="button" className={buttonClass} disabled={busy} onClick={() => void load(cursor || '')}>
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={busy}
+                            onClick={() => {
+                                setEntries([]);
+                                void load(cursor || '', { q: filter });
+                            }}
+                        >
                             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
                         </button>
                         {!pickFiles && (
@@ -156,13 +273,22 @@ export const PathBrowserField: React.FC<Props> = ({
                                     <button
                                         type="button"
                                         className="rounded px-1.5 py-0.5 font-mono hover:bg-plex/15 hover:text-plex"
-                                        onClick={() => void load(crumb)}
+                                        onClick={() => navigate(crumb)}
                                     >
                                         {index === 0 ? crumb : crumb.split(/[/\\]/).filter(Boolean).pop()}
                                     </button>
                                 </React.Fragment>
                             ))}
                         </div>
+                    )}
+                    {!!listing?.path && (
+                        <input
+                            className={fieldClass}
+                            value={filterDraft}
+                            onChange={(event) => applyFilter(event.target.value)}
+                            placeholder={pickFiles ? 'Filter files…' : 'Filter folders…'}
+                            aria-label="Filter browse entries"
+                        />
                     )}
                     {!listing?.path && (listing?.roots?.length || 0) > 0 && (
                         <p className="text-xs text-muted">
@@ -177,15 +303,17 @@ export const PathBrowserField: React.FC<Props> = ({
                         </p>
                     )}
                     <div className="max-h-64 overflow-y-auto rounded-lg border border-border/60 bg-card/40 custom-scrollbar">
-                        {busy && !listing ? (
+                        {busy && entries.length === 0 ? (
                             <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-plex" /></div>
-                        ) : (listing?.entries || []).length === 0 ? (
+                        ) : entries.length === 0 ? (
                             <p className="p-4 text-sm text-muted">
-                                {error || (pickFiles ? 'No media files in this folder.' : 'No folders here.')}
+                                {error || (filter
+                                    ? 'No matches for that filter.'
+                                    : (pickFiles ? 'No media files in this folder.' : 'No folders here.'))}
                             </p>
                         ) : (
                             <ul className="divide-y divide-border/50">
-                                {(listing?.entries || []).map((entry) => {
+                                {entries.map((entry) => {
                                     const isFile = entry.type === 'file';
                                     return (
                                         <li key={entry.path}>
@@ -194,7 +322,7 @@ export const PathBrowserField: React.FC<Props> = ({
                                                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-text transition hover:bg-plex/10"
                                                 onClick={() => {
                                                     if (isFile) selectPath(entry.path);
-                                                    else void load(entry.path);
+                                                    else navigate(entry.path);
                                                 }}
                                             >
                                                 {isFile
@@ -209,8 +337,31 @@ export const PathBrowserField: React.FC<Props> = ({
                             </ul>
                         )}
                     </div>
+                    {!!listing?.path && total > 0 && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                            <p>
+                                Showing {entries.length} of {total}
+                                {filter ? ` matching “${filter}”` : ''}
+                            </p>
+                            {hasMore && (
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy}
+                                    onClick={() => void load(cursor || '', {
+                                        append: true,
+                                        offset: entries.length,
+                                        q: filter,
+                                    })}
+                                >
+                                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                    Load more
+                                </button>
+                            )}
+                        </div>
+                    )}
                     {cursor && <p className="break-all font-mono text-[11px] text-muted">Folder: {cursor}</p>}
-                    {error && listing?.roots?.length ? <p className="text-xs text-amber-200">{error}</p> : null}
+                    {error ? <p className="text-xs text-amber-200">{error}</p> : null}
                 </div>
             )}
         </div>

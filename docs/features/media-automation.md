@@ -80,13 +80,14 @@ The image includes FFmpeg/FFprobe, `vainfo`, Mesa VAAPI userspace, and Intel VAA
 
 CPU mode is the portable default. No device or privileged mode is needed.
 
-For Intel QSV/VAAPI or AMD VAAPI, pass `/dev/dri` and add the host's `video` and `render` group IDs:
+For Intel QSV/VAAPI or AMD VAAPI, pass `/dev/dri`. The image entrypoint attaches the render-node GIDs after dropping to `PUID`/`PGID`, so Unraid templates usually only need the device map. Compose users can still add host `video`/`render` groups explicitly:
 
 ```yaml
 services:
   portal:
     devices:
       - /dev/dri:/dev/dri
+    # Optional if the entrypoint cannot resolve device GIDs:
     group_add:
       - "44"  # host video GID; verify locally
       - "109" # host render GID; verify locally

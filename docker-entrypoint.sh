@@ -21,6 +21,31 @@ chown -R "$PUID:$PGID" \
   "$MEDIA_AUTOMATION_CONFIG_DIR" \
   "$MEDIA_AUTOMATION_WORK_DIR"
 
+# Collect GIDs from /dev/dri so QSV/VAAPI work after dropping to PUID:PGID.
+# renderD* is commonly root:render mode 660 — gosu alone does not keep those groups.
+collect_dri_gids() {
+  if [ ! -d /dev/dri ]; then
+    return 0
+  fi
+  for device in /dev/dri/*; do
+    [ -e "$device" ] || continue
+    gid=$(stat -c '%g' "$device" 2>/dev/null) || continue
+    case " $gids " in
+      *" $gid "*) ;;
+      *) gids="${gids:+$gids }$gid" ;;
+    esac
+  done
+}
+
+gids="$PGID"
+collect_dri_gids
+
+# Prefer setpriv so we can attach /dev/dri GIDs as supplementary groups.
+if command -v setpriv >/dev/null 2>&1; then
+  groups_csv=$(echo "$gids" | tr ' ' ',')
+  exec setpriv --reuid="$PUID" --regid="$PGID" --clear-groups --groups="$groups_csv" -- "$@"
+fi
+
 if command -v gosu >/dev/null 2>&1; then
   exec gosu "$PUID:$PGID" "$@"
 fi

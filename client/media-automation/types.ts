@@ -57,6 +57,7 @@ export type MediaAutomationCapabilities = {
     ffprobe?: boolean | { available?: boolean; version?: string };
     hardware?: string[];
     encoders?: string[];
+    details?: Record<string, { label?: string; encoders?: string[]; error?: string; syntheticTested?: boolean }>;
     error?: string;
     [key: string]: unknown;
 };
