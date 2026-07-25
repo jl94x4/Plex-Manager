@@ -1,7 +1,8 @@
 import { useEffect, type RefObject } from 'react';
 
 type Options = {
-    shellRef: RefObject<HTMLElement | null>;
+    /** The bottom nav bar element (not a full-viewport shell). */
+    barRef: RefObject<HTMLElement | null>;
     enabled: boolean;
 };
 
@@ -13,27 +14,56 @@ export const isFirefoxMobileClient = () => {
 };
 
 /**
- * Firefox Android leaves `position:fixed; bottom:0` stranded when the toolbar
- * collapses. Size a full-viewport flex shell from `window.innerHeight` (updated on
- * resize/scroll) and put the nav in normal flow at the bottom. Chrome keeps
- * plain CSS fixed bottom and must not use this path.
+ * Firefox Android leaves `position:fixed; bottom:0` stranded when the dynamic
+ * toolbar shows/hides. Pin the bar so its bottom edge matches the *visual*
+ * viewport bottom (layout-viewport coordinates).
+ *
+ * Chrome / Chromium PWA must not use this path — plain CSS `bottom:0` is correct there.
  */
-export function useFirefoxMobileNavShell({ shellRef, enabled }: Options) {
+export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return;
 
         let raf = 0;
+        let lastTop = Number.NaN;
+
+        const clearInline = (bar: HTMLElement) => {
+            bar.style.position = '';
+            bar.style.left = '';
+            bar.style.right = '';
+            bar.style.width = '';
+            bar.style.maxWidth = '';
+            bar.style.margin = '';
+            bar.style.bottom = '';
+            bar.style.top = '';
+            bar.style.transform = '';
+        };
+
         const sync = () => {
-            const shell = shellRef.current;
-            if (!shell) return;
-            const h = Math.round(window.innerHeight);
-            shell.style.top = '0px';
-            shell.style.left = '0px';
-            shell.style.right = '0px';
-            shell.style.bottom = 'auto';
-            shell.style.height = `${h}px`;
-            shell.style.width = '100%';
-            shell.style.position = 'fixed';
+            const bar = barRef.current;
+            if (!bar) return;
+
+            const vv = window.visualViewport;
+            const barH = Math.max(bar.offsetHeight || 0, 56);
+            const top = Math.round(
+                vv
+                    ? vv.offsetTop + vv.height - barH
+                    : window.innerHeight - barH
+            );
+
+            if (top === lastTop) return;
+            lastTop = top;
+
+            bar.style.position = 'fixed';
+            bar.style.left = '0px';
+            bar.style.right = '0px';
+            bar.style.width = '100%';
+            bar.style.maxWidth = '100%';
+            bar.style.margin = '0';
+            bar.style.bottom = 'auto';
+            bar.style.top = `${top}px`;
+            // Own compositor layer — reduces paint gaps during toolbar animation.
+            bar.style.transform = 'translateZ(0)';
         };
 
         const schedule = () => {
@@ -44,12 +74,23 @@ export function useFirefoxMobileNavShell({ shellRef, enabled }: Options) {
             });
         };
 
+        lastTop = Number.NaN;
         sync();
+        schedule();
+
         window.addEventListener('resize', schedule);
         window.addEventListener('orientationchange', schedule);
         window.addEventListener('scroll', schedule, { passive: true });
         window.visualViewport?.addEventListener('resize', schedule);
         window.visualViewport?.addEventListener('scroll', schedule);
+
+        const ro = typeof ResizeObserver !== 'undefined'
+            ? new ResizeObserver(() => {
+                lastTop = Number.NaN;
+                schedule();
+            })
+            : null;
+        if (barRef.current) ro?.observe(barRef.current);
 
         return () => {
             if (raf) window.cancelAnimationFrame(raf);
@@ -58,16 +99,8 @@ export function useFirefoxMobileNavShell({ shellRef, enabled }: Options) {
             window.removeEventListener('scroll', schedule);
             window.visualViewport?.removeEventListener('resize', schedule);
             window.visualViewport?.removeEventListener('scroll', schedule);
-            const shell = shellRef.current;
-            if (shell) {
-                shell.style.top = '';
-                shell.style.left = '';
-                shell.style.right = '';
-                shell.style.bottom = '';
-                shell.style.height = '';
-                shell.style.width = '';
-                shell.style.position = '';
-            }
+            ro?.disconnect();
+            if (barRef.current) clearInline(barRef.current);
         };
-    }, [shellRef, enabled]);
+    }, [barRef, enabled]);
 }

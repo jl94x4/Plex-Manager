@@ -9664,8 +9664,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [mobileThemeOpen, setMobileThemeOpen] = useState(false);
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
     const [firefoxMobileNav] = useState(() => isFirefoxMobileClient());
-    const firefoxNavShellRef = useRef<HTMLDivElement>(null);
-    useFirefoxMobileNavShell({ shellRef: firefoxNavShellRef, enabled: firefoxMobileNav });
+    const firefoxNavBarRef = useRef<HTMLDivElement>(null);
+    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav });
     const [profileOpen, setProfileOpen] = useState(false);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
@@ -10249,87 +10249,73 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             )}
 
             {/* Mobile Bottom Nav
-                Chrome / PWA Chromium: plain fixed bottom:0 (matches main).
-                Firefox mobile: viewport-height flex shell so the bar tracks toolbar show/hide. */}
-            {firefoxMobileNav ? (
-                <div
-                    ref={firefoxNavShellRef}
-                    className="md:hidden fixed inset-x-0 top-0 z-[310] flex flex-col justify-end pointer-events-none"
-                    style={{ height: typeof window !== 'undefined' ? window.innerHeight : '100vh' }}
-                >
-                    <div className="pointer-events-auto w-full nav-shell border-t pb-[env(safe-area-inset-bottom)]">
-                        <div className="flex items-center justify-between w-full h-16 px-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
-                            {(() => {
-                                const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                                const showMore = normalizedNavOrder.length > maxPrimary;
-                                const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
-                                return (
-                                    <>
-                                        {primary.map((key) => {
-                                            const item = navItemsConfig[key];
-                                            if (!item) return null;
-                                            const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
-                                            return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
-                                        })}
-                                        {showMore && (
-                                            <button
-                                                type="button"
-                                                className={`relative flex flex-col items-center justify-center gap-1 h-full flex-1 min-w-[4.25rem] px-1 text-center text-[0.65rem] transition-colors bg-transparent border-0 ${
-                                                    mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
-                                                }`}
-                                                onClick={() => setMobileMoreOpen((open) => !open)}
-                                            >
-                                                <span className="relative shrink-0">
-                                                    <MoreHorizontal className="w-5 h-5" />
-                                                </span>
-                                                <span>More</span>
-                                            </button>
-                                        )}
-                                    </>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                <div className="md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom)]">
+                Chrome / PWA Chromium: plain fixed bottom:0 (do not change).
+                Firefox mobile: dock bar to visualViewport bottom (Firefox-only hook). */}
+            {(() => {
+                const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
+                const showMore = normalizedNavOrder.length > maxPrimary;
+                const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
+                const navButtons = (
+                    <>
+                        {primary.map((key) => {
+                            const item = navItemsConfig[key];
+                            if (!item) return null;
+                            const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                            return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
+                        })}
+                        {showMore && (
+                            <button
+                                type="button"
+                                className={`relative flex flex-col items-center justify-center gap-1 h-full flex-1 min-w-[4.25rem] px-1 text-center text-[0.65rem] transition-colors bg-transparent border-0 ${
+                                    mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
+                                }`}
+                                onClick={() => setMobileMoreOpen((open) => !open)}
+                            >
+                                <span className="relative shrink-0">
+                                    <MoreHorizontal className="w-5 h-5" />
+                                </span>
+                                <span>More</span>
+                            </button>
+                        )}
+                    </>
+                );
+                const navInner = (
                     <div className="flex items-center justify-between w-full h-16 px-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
-                        {(() => {
-                            const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                            const showMore = normalizedNavOrder.length > maxPrimary;
-                            const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
-                            return (
-                                <>
-                                    {primary.map((key) => {
-                                        const item = navItemsConfig[key];
-                                        if (!item) return null;
-                                        const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                        const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
-                                        return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
-                                    })}
-                                    {showMore && (
-                                        <button
-                                            type="button"
-                                            className="relative flex flex-col items-center justify-center gap-1 h-full flex-1 min-w-[4.25rem] px-1 text-center text-[0.65rem] transition-colors text-muted hover:text-text bg-transparent border-0"
-                                            onClick={() => setMobileMoreOpen(true)}
-                                        >
-                                            <span className="relative shrink-0">
-                                                <MoreHorizontal className="w-5 h-5" />
-                                            </span>
-                                            <span>More</span>
-                                        </button>
-                                    )}
-                                </>
-                            );
-                        })()}
+                        {navButtons}
                     </div>
-                </div>
-            )}
+                );
 
-            {/* Mobile More Drawer */}
+                if (firefoxMobileNav && typeof document !== 'undefined') {
+                    // Portal to body so no ancestor creates a fixed containing block.
+                    // Hook sets top from visualViewport; bleed fills any gesture-bar gap.
+                    return ReactDOM.createPortal(
+                        <div
+                            ref={firefoxNavBarRef}
+                            className="md:hidden fixed left-0 right-0 w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom,0px)]"
+                            style={{ bottom: 0 }}
+                        >
+                            {navInner}
+                            <div
+                                className="absolute left-0 right-0 w-full nav-shell pointer-events-none"
+                                style={{ top: '100%', height: 120, borderTop: 'none' }}
+                                aria-hidden="true"
+                            />
+                        </div>,
+                        document.body
+                    );
+                }
+
+                return (
+                    <div className="md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom)]">
+                        {navInner}
+                    </div>
+                );
+            })()}
+
+            {/* Mobile More Drawer — above bottom nav (incl. Firefox body-portaled bar) */}
             {mobileMoreOpen && (
-                <div className="md:hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setMobileMoreOpen(false)}>
+                <div className="md:hidden fixed inset-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setMobileMoreOpen(false)}>
                     <div className="bg-card border-t border-border rounded-t-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between p-4 border-b border-white/5">
                             <h3 className="font-bold text-text">More Menu</h3>
