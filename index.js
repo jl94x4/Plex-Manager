@@ -14,6 +14,7 @@ import compression from 'compression';
 import { execSync } from 'child_process';
 import fsSync from 'fs';
 import net from 'net';
+import dns from 'dns/promises';
 import { makeCircularPwaIconPng } from './lib/circular-icon.js';
 import { resolvePackageVersion } from './lib/resolve-package-version.js';
 import {
@@ -21,6 +22,7 @@ import {
     normalizeScannerConfig,
     maskScannerConfigForApi,
     resolveScannerSecrets,
+    sanitizeScannerTargetUrls,
     findTriggerByName,
     enqueueScans,
     getQueueStats,
@@ -235,6 +237,15 @@ const jellyfinQuickConnectPollRateLimit = createRateLimiter(5 * 60 * 1000, 140);
 const publicReadRateLimit = createRateLimiter(60 * 1000, 120);
 const speedtestRateLimit = createRateLimiter(60 * 1000, 80); // parallel duration streams need headroom
 const setupRateLimit = createRateLimiter(15 * 60 * 1000, 30);
+const scannerTriggerRateLimit = createRateLimiter(15 * 60 * 1000, 60);
+
+/** Strip secrets that must never leave the server in user JSON responses. */
+const sanitizeUserForApi = (user) => {
+    if (!user || typeof user !== 'object') return user;
+    const { plexAuthToken, ...safe } = user;
+    return safe;
+};
+const sanitizeUsersForApi = (users) => (Array.isArray(users) ? users.map(sanitizeUserForApi) : users);
 
 const isLoopbackAddress = (ip = '') => {
     const normalizedIp = String(ip || '').replace('::ffff:', '').toLowerCase();
@@ -252,23 +263,117 @@ const hasValidSetupToken = (req) => {
 // attacker could spoof to impersonate localhost during the unconfigured window.
 const canRunInitialSetup = (req) => hasValidSetupToken(req) || isLoopbackAddress(getSocketPeerIp(req));
 
+const normalizeHostnameForIpCheck = (hostname = '') => {
+    let host = String(hostname || '').trim().toLowerCase();
+    if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+    const zone = host.indexOf('%');
+    if (zone !== -1) host = host.slice(0, zone);
+    return host;
+};
+
 const isPrivateIp = (host) => {
-    if (!net.isIP(host)) return false;
-    if (host === '127.0.0.1' || host === '::1') return true;
-    if (host.startsWith('10.') || host.startsWith('192.168.')) return true;
-    if (host.startsWith('169.254.')) return true;
-    if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return true;
-    if (/^fc|^fd/i.test(host.replace(':', ''))) return true;
+    const h = normalizeHostnameForIpCheck(host);
+    if (!h) return false;
+    if (h === '0.0.0.0' || h === '::' || h === '::0') return true;
+    if (h.startsWith('::ffff:')) return isPrivateIp(h.slice('::ffff:'.length));
+    if (!net.isIP(h)) return false;
+    if (net.isIPv4(h)) {
+        if (h === '127.0.0.1' || h.startsWith('127.')) return true;
+        if (h.startsWith('10.') || h.startsWith('192.168.') || h.startsWith('169.254.')) return true;
+        if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(h)) return true;
+        return false;
+    }
+    // IPv6: loopback, ULA (fc00::/7), link-local (fe80::/10)
+    if (h === '::1') return true;
+    if (/^f[cd]/i.test(h)) return true;
+    if (/^fe[89ab]/i.test(h)) return true;
     return false;
 };
 
+const isLoopbackHostName = (hostname = '') => {
+    const host = normalizeHostnameForIpCheck(hostname);
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.startsWith('127.');
+};
+
 const isBlockedHostName = (hostname = '') => {
-    const host = String(hostname || '').trim().toLowerCase();
+    const host = normalizeHostnameForIpCheck(hostname);
     if (!host) return true;
     if (host === 'localhost' || host.endsWith('.localhost')) return true;
     if (host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan')) return true;
     if (isPrivateIp(host)) return true;
     return false;
+};
+
+/** DNS rebinding guard: require resolved addresses stay non-private when policy forbids LAN. */
+const assertResolvedAddressesAllowed = async (hostname, { allowPrivate = false } = {}) => {
+    const host = normalizeHostnameForIpCheck(hostname);
+    if (!host) throw new Error('Invalid host');
+    if (net.isIP(host)) {
+        if (!allowPrivate && isPrivateIp(host)) {
+            throw new Error('Private or local network hosts are not allowed. Set ALLOW_PRIVATE_INTEGRATION_URLS=true in your environment to allow LAN/private URLs.');
+        }
+        return;
+    }
+    let addresses;
+    try {
+        addresses = await dns.lookup(host, { all: true, verbatim: true });
+    } catch {
+        throw new Error(`Unable to resolve host: ${host}`);
+    }
+    if (!Array.isArray(addresses) || !addresses.length) {
+        throw new Error(`Unable to resolve host: ${host}`);
+    }
+    if (allowPrivate) return;
+    for (const entry of addresses) {
+        const address = entry?.address || entry;
+        if (isPrivateIp(address) || isBlockedHostName(address)) {
+            throw new Error('Host resolves to a private or local network address. Set ALLOW_PRIVATE_INTEGRATION_URLS=true to allow LAN/private URLs.');
+        }
+    }
+};
+
+const assertHttpUrlAllowed = async (rawUrl, { allowPrivate = false } = {}) => {
+    const normalized = normalizeExternalBaseUrl(rawUrl, { allowPrivate, allowHttp: true });
+    const parsed = new URL(normalized);
+    await assertResolvedAddressesAllowed(parsed.hostname, { allowPrivate });
+    return normalized;
+};
+
+/** Fetch Arr poster/screenshot remotes without SSRF into private networks. */
+const resolveSafeArrRemoteImageUrl = async (remoteUrl, arrBase) => {
+    if (!remoteUrl) return null;
+    const raw = String(remoteUrl).trim();
+    let absolute;
+    if (/^https?:\/\//i.test(raw)) {
+        absolute = raw;
+    } else {
+        const base = String(arrBase || '').replace(/\/+$/, '');
+        if (!base) return null;
+        absolute = `${base}${raw.startsWith('/') ? '' : '/'}${raw}`;
+    }
+    let parsed;
+    try {
+        parsed = new URL(absolute);
+    } catch {
+        return null;
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    parsed.hash = '';
+    parsed.username = '';
+    parsed.password = '';
+
+    let arrHost = '';
+    try {
+        arrHost = normalizeHostnameForIpCheck(new URL(arrBase).hostname);
+    } catch {
+        arrHost = '';
+    }
+    const host = normalizeHostnameForIpCheck(parsed.hostname);
+    if (arrHost && host === arrHost) return parsed.toString();
+
+    // Third-party art CDNs must not resolve into RFC1918 / loopback.
+    await assertResolvedAddressesAllowed(host, { allowPrivate: false });
+    return parsed.toString();
 };
 
 const normalizeExternalBaseUrl = (rawUrl, { allowPrivate = false, allowHttp = true } = {}) => {
@@ -1928,18 +2033,20 @@ const checkAndRevoke = async (config) => {
 const sanitizeBroadcastHtml = (html) => {
     if (!html || typeof html !== 'string') return '';
     return html
-        .replace(/<script[\s\S]*?<\/script\s*>/gi, '')
-        .replace(/<iframe[\s\S]*?<\/iframe\s*>/gi, '')
-        .replace(/<object[\s\S]*?<\/object\s*>/gi, '')
-        .replace(/<embed[^>]*>/gi, '')
-        .replace(/<form[\s\S]*?<\/form\s*>/gi, '')
-        .replace(/<input[^>]*>/gi, '')
-        .replace(/<link[^>]*>/gi, '')
-        .replace(/<meta[^>]*>/gi, '')
-        .replace(/<base[^>]*>/gi, '')
-        .replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '') // strip event handlers
-        .replace(/\shref\s*=\s*["']?\s*javascript\s*:[^"'\s>]*/gi, ' href="#"')  // block javascript: URIs in href
-        .replace(/\ssrc\s*=\s*["']?\s*javascript\s*:[^"'\s>]*/gi, '');  // block javascript: URIs in src
+        .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
+        .replace(/<iframe\b[\s\S]*?<\/iframe\s*>/gi, '')
+        .replace(/<object\b[\s\S]*?<\/object\s*>/gi, '')
+        .replace(/<embed\b[^>]*>/gi, '')
+        .replace(/<form\b[\s\S]*?<\/form\s*>/gi, '')
+        .replace(/<(input|textarea|button|select)\b[^>]*>/gi, '')
+        .replace(/<link\b[^>]*>/gi, '')
+        .replace(/<meta\b[^>]*>/gi, '')
+        .replace(/<base\b[^>]*>/gi, '')
+        .replace(/<(svg|math)\b[\s\S]*?<\/\1\s*>/gi, '')
+        .replace(/<(svg|math)\b[^>]*\/?>/gi, '')
+        // Event handlers including compact forms like <svg/onload=...>
+        .replace(/\bon\w+\s*=/gi, ' data-removed=')
+        .replace(/(href|src|xlink:href|action|formaction)\s*=\s*(["']?)\s*(javascript|vbscript|data)\s*:/gi, ' $1=$2#');
 };
 
 // --- API Routes ---
@@ -2035,7 +2142,7 @@ app.post('/api/users/broadcast/test', requireAdmin, async (req, res) => {
         }
 
         log(`Sending test broadcast email to ${adminEmail}...`);
-        await sendEmail(config, adminEmail, subject, body);
+        await sendEmail(config, adminEmail, subject, sanitizeBroadcastHtml(body));
         res.json({ message: `Test email sent successfully to ${adminEmail}` });
     } catch (error) {
         log(`Error sending test broadcast: ${error.message}`);
@@ -2506,7 +2613,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             await appendAuditLog(optOutNewsletter ? 'newsletter_opt_out' : 'newsletter_opt_in', req.user, req.user);
         }
 
-        res.json({ success: true, user: users[userIndex] });
+        res.json({ success: true, user: sanitizeUserForApi(users[userIndex]) });
     } catch (e) {
         log(`Error updating preferences: ${e.message}`);
         res.status(500).json({ error: 'Failed to update preferences' });
@@ -2618,7 +2725,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
 
     res.json({
         session: { ...sessionPublic, thumb: sessionThumb, isAdmin },
-        account: localUser || null,
+        account: localUser ? sanitizeUserForApi(localUser) : null,
         serverName,
         adminThumb,
         mediaServerType: config.mediaServerType || 'plex',
@@ -3179,6 +3286,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     let safeRequestAppFetchUrl = '';
     let safeJellyfinUrl = '';
     let safeGotifyUrl = '';
+    const newlySubmittedIntegrationUrls = [];
     const resolveConfigIntegrationUrl = (incoming, existing) => {
         const existingValue = typeof existing === 'string' ? existing : '';
         // Keep existing URL as-is when caller did not change the value.
@@ -3186,7 +3294,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         if (incoming === undefined || incoming === null) return existingValue;
         const incomingValue = String(incoming).trim();
         if (incomingValue === String(existingValue || '').trim()) return existingValue;
-        return sanitizeIntegrationUrl(incomingValue);
+        const normalized = sanitizeIntegrationUrl(incomingValue);
+        if (normalized) newlySubmittedIntegrationUrls.push(normalized);
+        return normalized;
     };
     try {
         safeSonarrUrl = resolveConfigIntegrationUrl(sonarrUrl, existingConfig.sonarrUrl || '');
@@ -3202,10 +3312,11 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     }
 
     // Secrets are returned to the UI as SECRET_MASK. If the UI sends the mask
-    // back unchanged, keep the existing stored value rather than overwriting it.
+    // back unchanged, or clears the field (blank), keep the existing stored value.
     const resolveSecret = (incoming, existing) => {
         if (incoming === undefined || incoming === null) return existing || '';
         if (incoming === SECRET_MASK) return existing || '';
+        if (incoming === '' && existing) return existing;
         return String(incoming);
     };
 
@@ -3218,6 +3329,69 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         );
     } catch (e) {
         return res.status(400).json({ error: e.message });
+    }
+
+    let nextDownloadClients;
+    try {
+        nextDownloadClients = normalizeDownloadClients(downloadClients, existingConfig.downloadClients, {
+            resolveSecret,
+            resolveConfigIntegrationUrl,
+            secretMask: SECRET_MASK,
+        });
+    } catch (e) {
+        return res.status(400).json({ error: e.message });
+    }
+
+    let nextScannerConfig = resolveScannerSecrets(
+        scanner !== undefined ? scanner : existingConfig.scanner,
+        existingConfig.scanner || getDefaultScannerConfig(),
+        SECRET_MASK
+    );
+    try {
+        nextScannerConfig = sanitizeScannerTargetUrls(
+            nextScannerConfig,
+            (raw) => {
+                const normalized = sanitizeIntegrationUrl(raw);
+                if (normalized) newlySubmittedIntegrationUrls.push(normalized);
+                return normalized;
+            },
+            existingConfig.scanner || getDefaultScannerConfig()
+        );
+    } catch (e) {
+        return res.status(400).json({ error: `Invalid scanner target URL: ${e.message}` });
+    }
+
+    let nextCollexionsInternalUrl = existingConfig.collexionsInternalUrl || '';
+    if (collexionsInternalUrl !== undefined) {
+        const incoming = String(collexionsInternalUrl || '').trim();
+        if (!incoming) {
+            nextCollexionsInternalUrl = '';
+        } else {
+            try {
+                const normalized = normalizeExternalBaseUrl(incoming, { allowPrivate: true, allowHttp: true });
+                const host = new URL(normalized).hostname;
+                if (!isLoopbackHostName(host) && !ALLOW_PRIVATE_INTEGRATION_URLS) {
+                    nextCollexionsInternalUrl = existingConfig.collexionsInternalUrl || '';
+                } else {
+                    nextCollexionsInternalUrl = normalized;
+                    if (!isLoopbackHostName(host) && incoming !== String(existingConfig.collexionsInternalUrl || '').trim()) {
+                        newlySubmittedIntegrationUrls.push(normalized);
+                    }
+                }
+            } catch {
+                nextCollexionsInternalUrl = existingConfig.collexionsInternalUrl || '';
+            }
+        }
+    }
+
+    try {
+        for (const url of newlySubmittedIntegrationUrls) {
+            await assertResolvedAddressesAllowed(new URL(url).hostname, {
+                allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+            });
+        }
+    } catch (e) {
+        return res.status(400).json({ error: `Invalid integration URL: ${e.message}` });
     }
 
     const configDraft = {
@@ -3254,7 +3428,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         contactWhatsApp: contactWhatsApp || '',
         contactEmail: contactEmail || '',
         arrInstances: nextArrInstances,
-        downloadClients: normalizeDownloadClients(downloadClients, existingConfig.downloadClients, { resolveSecret, resolveConfigIntegrationUrl, secretMask: SECRET_MASK }),
+        downloadClients: nextDownloadClients,
         tautulliUrl: safeTautulliUrl,
         tautulliApiKey: resolveSecret(tautulliApiKey, existingConfig.tautulliApiKey),
         jellystatUrl: safeJellystatUrl,
@@ -3371,11 +3545,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         scannerManualPathVisible: scannerManualPathVisible !== undefined
             ? !!scannerManualPathVisible
             : (existingConfig.scannerManualPathVisible !== false),
-        scanner: resolveScannerSecrets(
-            scanner !== undefined ? scanner : existingConfig.scanner,
-            existingConfig.scanner || getDefaultScannerConfig(),
-            SECRET_MASK
-        ),
+        scanner: nextScannerConfig,
         collexionsEnabled: (() => {
             // Plex-only integration — never leave enabled for Jellyfin/Emby.
             if (normalizedMediaServerType !== 'plex') return false;
@@ -3387,17 +3557,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             if (!enabled) return false;
             return collexionsAutostart !== undefined ? !!collexionsAutostart : !!existingConfig.collexionsAutostart;
         })(),
-        collexionsInternalUrl: (() => {
-            if (collexionsInternalUrl === undefined) return existingConfig.collexionsInternalUrl || '';
-            const incoming = String(collexionsInternalUrl || '').trim();
-            if (!incoming) return '';
-            try {
-                // Localhost / private is expected for the bundled worker.
-                return normalizeExternalBaseUrl(incoming, { allowPrivate: true, allowHttp: true });
-            } catch {
-                return existingConfig.collexionsInternalUrl || '';
-            }
-        })(),
+        collexionsInternalUrl: nextCollexionsInternalUrl,
         collexionsServiceKey: (() => {
             if (collexionsServiceKey === undefined) return existingConfig.collexionsServiceKey || '';
             const incoming = String(collexionsServiceKey || '').trim();
@@ -3912,7 +4072,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
 
         if (type === 'jellyfin' || type === 'emby') {
             const label = type === 'emby' ? 'Emby' : 'Jellyfin';
-            const url = resolveIntegrationUrlForFetch(resolveTestCredential(jellyfinUrl, stored.jellyfinUrl));
+            const url = resolveIntegrationUrlForTest(jellyfinUrl, stored.jellyfinUrl);
             const apiKey = resolveTestCredential(jellyfinApiKey, stored.jellyfinApiKey);
             if (!url || !apiKey) return res.status(400).json({ error: `${label} URL and API key are required.` });
             const infoRes = await fetchWithTimeout(`${url}/System/Info`, {
@@ -4000,7 +4160,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
         }
 
         if (type === 'jellystat') {
-            const url = resolveIntegrationUrlForFetch(resolveTestCredential(jellystatUrl, stored.jellystatUrl));
+            const url = resolveIntegrationUrlForTest(jellystatUrl, stored.jellystatUrl);
             const apiKey = resolveTestCredential(jellystatApiKey, stored.jellystatApiKey);
             if (!url || !apiKey) return res.status(400).json({ error: 'Jellystat URL and API key are required.' });
             const statsRes = await fetchWithTimeout(`${url}/stats/getViewsByLibraryType?days=30`, {
@@ -8165,7 +8325,7 @@ app.post('/api/invites/:code/claim', authRateLimit, async (req, res) => {
         const token = jwt.sign(sessionUser, JWT_SECRET, { expiresIn: '7d' });
         setSessionCookie(req, res, token);
 
-        res.json({ success: true, user: newUser });
+        res.json({ success: true, user: sanitizeUserForApi(newUser) });
     } catch (e) {
         log(`Error claiming invite: ${e.message}`);
         res.status(500).json({ error: 'Failed to claim invite. Please try again later.' });
@@ -8179,7 +8339,7 @@ app.get('/api/users', requireAdmin, async (req, res) => {
     if (changed) {
         await saveFile(USERS_PATH, withLastLogin);
     }
-    res.json(withLastLogin);
+    res.json(sanitizeUsersForApi(withLastLogin));
 });
 
 app.get('/api/deleted-users', requireAdmin, async (req, res) => {
@@ -8699,7 +8859,7 @@ app.put('/api/users/:id', requireAdmin, async (req, res) => {
         }
     }
 
-    res.json(users[userIndex]);
+    res.json(sanitizeUserForApi(users[userIndex]));
 });
 
 const applyBulkAction = (user, action, customDate) => {
@@ -8801,7 +8961,7 @@ app.post('/api/users/:id/revoke', requireAdmin, async (req, res) => {
         user.plexAccessStatus = 'revoked';
         await saveFile(USERS_PATH, users);
         await appendAuditLog('plex_access_revoked', req.user, user);
-        res.json(user);
+        res.json(sanitizeUserForApi(user));
     } else {
         res.status(500).json({ error: 'Failed to revoke access via Plex API.' });
     }
@@ -8859,7 +9019,7 @@ app.post('/api/users/request-invite', requireAuth, async (req, res) => {
 
         // Optional: send welcome email here
 
-        res.json({ message: 'Invite sent successfully', user: newUser });
+        res.json({ message: 'Invite sent successfully', user: sanitizeUserForApi(newUser) });
     } catch (e) {
         log('Error requesting invite: ' + e.message);
         res.status(500).json({ error: 'Failed to request invite.' });
@@ -8899,7 +9059,7 @@ app.post('/api/users/relink', requireAuth, requireMember, async (req, res) => {
         await saveFile(USERS_PATH, users);
         await appendAuditLog('relink_invite_sent', req.user, user);
 
-        res.json({ message: 'Account re-linked successfully.', user });
+        res.json({ message: 'Account re-linked successfully.', user: sanitizeUserForApi(user) });
     } catch (e) {
         log('Error re-linking account: ' + e.message);
         res.status(500).json({ error: 'Failed to re-link account.' });
@@ -9357,7 +9517,13 @@ app.post('/api/status/config', requireAuth, requireAdmin, async (req, res) => {
             let normalizedUrl = '';
             if (service.url) {
                 try {
-                    normalizedUrl = normalizeExternalBaseUrl(service.url, { allowPrivate: true, allowHttp: true });
+                    normalizedUrl = normalizeExternalBaseUrl(service.url, {
+                        allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+                        allowHttp: true,
+                    });
+                    await assertResolvedAddressesAllowed(new URL(normalizedUrl).hostname, {
+                        allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+                    });
                 } catch (e) {
                     return res.status(400).json({ error: `Invalid service URL for "${service.name || service.id || 'unknown'}": ${e.message}` });
                 }
@@ -12657,13 +12823,20 @@ async function performSingleProbe(service) {
         }
     }
 
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
         const rawUrl = service.url;
         if (!rawUrl) return resolve({ status: 'offline', latency: 0, httpCode: 0 });
 
         let targetUrl = rawUrl;
         try {
+            // Already-configured status targets are trusted admin input (often LAN).
             targetUrl = normalizeExternalBaseUrl(rawUrl, { allowPrivate: true, allowHttp: true });
+            const host = new URL(targetUrl).hostname;
+            const normalizedHost = normalizeHostnameForIpCheck(host);
+            // DNS rebinding guard: public DNS names must not resolve into private/LAN space.
+            if (!net.isIP(normalizedHost) && !isLoopbackHostName(host) && !isBlockedHostName(host)) {
+                await assertResolvedAddressesAllowed(host, { allowPrivate: false });
+            }
         } catch (e) {
             return resolve({ status: 'offline', latency: 0, httpCode: 0 });
         }
@@ -17521,6 +17694,15 @@ const requireCollexions = async (req, res, next) => {
     }
 };
 
+const sanitizeCollexionsProxyBase = (rawUrl) => {
+    const normalized = normalizeExternalBaseUrl(rawUrl, { allowPrivate: true, allowHttp: true });
+    const host = new URL(normalized).hostname;
+    if (!isLoopbackHostName(host) && !ALLOW_PRIVATE_INTEGRATION_URLS) {
+        throw new Error('Collexions internal URL must be loopback unless ALLOW_PRIVATE_INTEGRATION_URLS=true');
+    }
+    return normalized.replace(/\/+$/, '');
+};
+
 /** Portal-side Collexions health (works even when worker is down). Before catch-all proxy. */
 app.get('/api/collexions/health', requireAdmin, async (req, res) => {
     try {
@@ -17528,7 +17710,12 @@ app.get('/api/collexions/health', requireAdmin, async (req, res) => {
         const enabled = !!config.collexionsEnabled;
         const autostart = !!config.collexionsAutostart;
         const embedded = getCollexionsEmbeddedStatus();
-        const base = String(config.collexionsInternalUrl || '').replace(/\/+$/, '');
+        let base = '';
+        try {
+            base = config.collexionsInternalUrl ? sanitizeCollexionsProxyBase(config.collexionsInternalUrl) : '';
+        } catch {
+            base = '';
+        }
         const serviceKey = String(config.collexionsServiceKey || process.env.COLLEXIONS_SERVICE_KEY || '').trim();
         const issues = [];
 
@@ -17538,6 +17725,9 @@ app.get('/api/collexions/health', requireAdmin, async (req, res) => {
         if (!enabled) issues.push('Collexions is disabled in Settings.');
         if (enabled && !base) issues.push('Internal URL is not configured.');
         if (enabled && !serviceKey) issues.push('Service key is missing.');
+        if (enabled && config.collexionsInternalUrl && !base) {
+            issues.push('Internal URL is blocked (non-loopback requires ALLOW_PRIVATE_INTEGRATION_URLS=true).');
+        }
 
         let worker = { ok: false, reachable: false, error: null, detail: null };
         if (enabled && base && serviceKey) {
@@ -17612,7 +17802,12 @@ app.get('/api/collexions/portal-defaults', requireAdmin, requireCollexions, asyn
 app.all('/api/collexions/*', requireAdmin, requireCollexions, async (req, res) => {
     try {
         const config = req.collexionsConfig || await loadFile(CONFIG_PATH, {});
-        const base = String(config.collexionsInternalUrl || '').replace(/\/+$/, '');
+        let base = '';
+        try {
+            base = sanitizeCollexionsProxyBase(config.collexionsInternalUrl || '');
+        } catch (e) {
+            return res.status(503).json({ error: e.message || 'Collexions internal URL is not allowed.' });
+        }
         const serviceKey = String(config.collexionsServiceKey || process.env.COLLEXIONS_SERVICE_KEY || '').trim();
         if (!base) {
             return res.status(503).json({ error: 'Collexions internal URL is not configured.' });
@@ -17799,7 +17994,7 @@ const handleArrTrigger = async (req, res, kind) => {
 };
 
 // Autoscan-compatible webhook endpoints (Basic Auth — not portal JWT).
-app.post('/triggers/manual', requireScannerEnabledForTriggers, scannerTriggerAuth, async (req, res) => {
+app.post('/triggers/manual', requireScannerEnabledForTriggers, scannerTriggerRateLimit, scannerTriggerAuth, async (req, res) => {
     try {
         const dirs = []
             .concat(req.query.dir || [])
@@ -17830,7 +18025,7 @@ app.post('/triggers/manual', requireScannerEnabledForTriggers, scannerTriggerAut
     }
 });
 
-app.get('/triggers/manual', requireScannerEnabledForTriggers, scannerTriggerAuth, (req, res) => {
+app.get('/triggers/manual', requireScannerEnabledForTriggers, scannerTriggerRateLimit, scannerTriggerAuth, (req, res) => {
     // Browser-friendly hint; primary UI is /scanner in the portal.
     res.type('html').send(`<!doctype html><html><head><meta charset="utf-8"><title>Scanner manual trigger</title></head>
 <body style="font-family:system-ui;max-width:40rem;margin:2rem auto;padding:0 1rem">
@@ -17839,10 +18034,10 @@ app.get('/triggers/manual', requireScannerEnabledForTriggers, scannerTriggerAuth
 </body></html>`);
 });
 
-app.post('/triggers/sonarr', requireScannerEnabledForTriggers, scannerTriggerAuth, (req, res) => handleArrTrigger(req, res, 'sonarr'));
-app.post('/triggers/radarr', requireScannerEnabledForTriggers, scannerTriggerAuth, (req, res) => handleArrTrigger(req, res, 'radarr'));
-app.post('/triggers/lidarr', requireScannerEnabledForTriggers, scannerTriggerAuth, (req, res) => handleArrTrigger(req, res, 'lidarr'));
-app.post('/triggers/:name', requireScannerEnabledForTriggers, scannerTriggerAuth, async (req, res) => {
+app.post('/triggers/sonarr', requireScannerEnabledForTriggers, scannerTriggerRateLimit, scannerTriggerAuth, (req, res) => handleArrTrigger(req, res, 'sonarr'));
+app.post('/triggers/radarr', requireScannerEnabledForTriggers, scannerTriggerRateLimit, scannerTriggerAuth, (req, res) => handleArrTrigger(req, res, 'radarr'));
+app.post('/triggers/lidarr', requireScannerEnabledForTriggers, scannerTriggerRateLimit, scannerTriggerAuth, (req, res) => handleArrTrigger(req, res, 'lidarr'));
+app.post('/triggers/:name', requireScannerEnabledForTriggers, scannerTriggerRateLimit, scannerTriggerAuth, async (req, res) => {
     const config = await loadFile(CONFIG_PATH, {});
     const scanner = normalizeScannerConfig(config.scanner, getDefaultScannerConfig());
     const trigger = findTriggerByName(scanner, req.params.name);
@@ -18247,7 +18442,10 @@ app.get('/api/upgrader/arr-cover', requireAdmin, async (req, res) => {
                 || (entity?.images || []).find((img) => img.coverType === 'fanart');
             const remoteUrl = posterImage?.remoteUrl || posterImage?.url || null;
             if (remoteUrl) {
-                imageRes = await fetch(remoteUrl.startsWith('http') ? remoteUrl : `${base}${remoteUrl.startsWith('/') ? '' : '/'}${remoteUrl}`);
+                const safeRemote = await resolveSafeArrRemoteImageUrl(remoteUrl, base).catch(() => null);
+                if (safeRemote) {
+                    imageRes = await fetch(safeRemote);
+                }
             }
         }
 
@@ -18302,7 +18500,9 @@ app.get('/api/upgrader/arr-episode-image', requireAdmin, async (req, res) => {
         const remoteUrl = screenshot?.remoteUrl || screenshot?.url || null;
         if (!remoteUrl) return res.status(404).send('No screenshot found');
 
-        const imageRes = await fetch(remoteUrl.startsWith('http') ? remoteUrl : `${base}${remoteUrl.startsWith('/') ? '' : '/'}${remoteUrl}`, { headers });
+        const safeRemote = await resolveSafeArrRemoteImageUrl(remoteUrl, base).catch(() => null);
+        if (!safeRemote) return res.status(404).send('Cover not found');
+        const imageRes = await fetch(safeRemote, { headers });
         if (!imageRes?.ok) return res.status(imageRes?.status || 404).send('Cover not found');
 
         const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
