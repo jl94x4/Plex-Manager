@@ -355,6 +355,13 @@ const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
         outputMode,
         hardwareAcceleration: hardware,
     };
+    const samplePathRaw = String(value.samplePath || value.testPath || '').trim();
+    const samplePath = samplePathRaw
+        && path.isAbsolute(samplePathRaw)
+        && !samplePathRaw.includes('\0')
+        && samplePathRaw.length <= 1000
+        ? samplePathRaw
+        : '';
     return {
         id: pipelineId,
         name,
@@ -362,6 +369,7 @@ const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
         priority: Math.max(-1000, Math.min(1000, Number(value.priority) || 0)),
         outputMode,
         hardware,
+        samplePath,
         rules: ruleGroup,
         steps,
         compiledRules: [{

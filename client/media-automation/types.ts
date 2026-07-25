@@ -229,6 +229,8 @@ export type MediaAutomationPipeline = {
     priority: number;
     outputMode: OutputMode;
     hardware: HardwareMode;
+    /** Saved sample media path for preview / one-click queue (container path). */
+    samplePath?: string;
     rules: MediaAutomationRules;
     steps: MediaAutomationStep[];
     [key: string]: unknown;
@@ -286,6 +288,7 @@ export const emptyPipeline = (): MediaAutomationPipeline => ({
     priority: 50,
     outputMode: 'dry-run',
     hardware: 'auto',
+    samplePath: '',
     rules: {
         operator: 'AND',
         conditions: [{

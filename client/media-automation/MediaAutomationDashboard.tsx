@@ -113,6 +113,10 @@ const isTerminalJob = (job: MediaAutomationJob) => (
     ['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'success'].includes(jobStateValue(job))
 );
 const isCancellableJob = (job: MediaAutomationJob) => !isTerminalJob(job);
+const pathBasename = (value: string) => {
+    const parts = value.replace(/\\/g, '/').split('/').filter(Boolean);
+    return parts[parts.length - 1] || value;
+};
 
 const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 const cardClass = 'rounded-2xl border border-border/70 bg-card/70 shadow-xl backdrop-blur-md';
@@ -219,7 +223,6 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [enqueuePipelineId, setEnqueuePipelineId] = useState('');
     const [libraryDraft, setLibraryDraft] = useState<MediaAutomationLibrary | null>(null);
     const [pipelineDraft, setPipelineDraft] = useState<MediaAutomationPipeline | null>(null);
-    const [previewPath, setPreviewPath] = useState('');
     const [previewResult, setPreviewResult] = useState<MediaAutomationPipelinePreview | null>(null);
     const [previewBusy, setPreviewBusy] = useState(false);
     const [savingEditor, setSavingEditor] = useState(false);
@@ -409,22 +412,62 @@ export const MediaAutomationDashboard: React.FC = () => {
         return `${(bytes / (1024 ** 3)).toFixed(2)} GB`;
     };
 
+    const openPipelineEditor = (pipeline?: MediaAutomationPipeline) => {
+        setPreviewResult(null);
+        if (!pipeline) {
+            setPipelineDraft(emptyPipeline());
+            return;
+        }
+        setPipelineDraft({
+            ...emptyPipeline(),
+            ...pipeline,
+            samplePath: String(pipeline.samplePath || ''),
+            rules: normalizeRules(pipeline.rules),
+            steps: Array.isArray(pipeline.steps) ? pipeline.steps : [],
+        });
+    };
+
     const runPipelinePreview = async () => {
-        if (!pipelineDraft?.id || !previewPath.trim()) {
-            toast('Save the pipeline first, then provide a test file path.', 'error');
+        const samplePath = String(pipelineDraft?.samplePath || '').trim();
+        if (!pipelineDraft?.id || !samplePath) {
+            toast('Save the pipeline with a sample file path first.', 'error');
             return;
         }
         setPreviewBusy(true);
         setPreviewResult(null);
         try {
-            const result = await mediaAutomationApi.previewPipeline(pipelineDraft.id, previewPath.trim());
+            const result = await mediaAutomationApi.previewPipeline(pipelineDraft.id, samplePath);
             setPreviewResult(result);
-            toast(result.matched ? 'Pipeline matched the test file.' : 'Pipeline did not match the test file.');
+            toast(result.matched ? 'Pipeline matched the sample file.' : 'Pipeline did not match the sample file.');
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Pipeline preview failed', 'error');
         } finally {
             setPreviewBusy(false);
         }
+    };
+
+    const queuePipelineSample = async (
+        pipeline: MediaAutomationPipeline,
+        { dryRun = false }: { dryRun?: boolean } = {},
+    ) => {
+        const samplePath = String(pipeline.samplePath || '').trim();
+        if (!pipeline.id || !samplePath) {
+            toast('Save a sample file on this pipeline first.', 'error');
+            return;
+        }
+        if (dryRun) {
+            await runAction(
+                `test-pipeline-${pipeline.id}`,
+                () => mediaAutomationApi.testPipeline(pipeline.id!, samplePath),
+                'Dry-run job queued.',
+            );
+            return;
+        }
+        await runAction(
+            `queue-sample-${pipeline.id}`,
+            () => mediaAutomationApi.enqueue(samplePath, pipeline.id),
+            `Queued ${pathBasename(samplePath)} with ${pipeline.name}.`,
+        );
     };
 
     const tabs: Array<{ id: MediaAutomationTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
@@ -588,12 +631,34 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 placeholder="/media/Movies/example.mkv"
                                 hint="Use container paths under your library root (e.g. /media/...), not Unraid /mnt/remotes/… paths."
                             />
-                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-                                <CustomSelect value={enqueuePipelineId} onChange={setEnqueuePipelineId} options={[{ value: '', label: 'Automatic pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]} />
+                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
+                                <CustomSelect
+                                    value={enqueuePipelineId}
+                                    onChange={(value) => {
+                                        setEnqueuePipelineId(value);
+                                        const match = pipelines.find((pipeline) => String(pipeline.id ?? '') === value);
+                                        const sample = String(match?.samplePath || '').trim();
+                                        if (sample) setEnqueuePath(sample);
+                                    }}
+                                    options={[{ value: '', label: 'Automatic pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
+                                />
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null || !enqueuePipelineId || !pipelines.some((pipeline) => String(pipeline.id ?? '') === enqueuePipelineId && String(pipeline.samplePath || '').trim())}
+                                    onClick={() => {
+                                        const match = pipelines.find((pipeline) => String(pipeline.id ?? '') === enqueuePipelineId);
+                                        if (match) void queuePipelineSample(match);
+                                    }}
+                                >
+                                    {busy?.startsWith('queue-sample-') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                                    Queue sample
+                                </button>
                                 <button type="button" className={primaryButtonClass} disabled={!enqueuePath.trim() || busy !== null} onClick={() => runAction('enqueue', () => mediaAutomationApi.enqueue(enqueuePath.trim(), enqueuePipelineId || undefined), 'Path added to queue.').then(() => setEnqueuePath(''))}>
                                     {busy === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Enqueue
                                 </button>
                             </div>
+                            <p className="text-xs text-muted">Pick a pipeline with a saved sample file to auto-fill the path, or use Queue sample for one click.</p>
                         </div>
                     </section>
                     <section className={`${cardClass} p-5`}>
@@ -769,7 +834,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <h2 className="font-bold text-text">Presets</h2>
                                 <p className="mt-1 text-xs text-muted">Seed from Unmanic-style quality profiles (high / balanced / space saver / archive), remux, and compatibility templates — then tweak rules and hardware.</p>
                             </div>
-                            <button type="button" className={primaryButtonClass} onClick={() => { setPreviewPath(''); setPreviewResult(null); setPipelineDraft(emptyPipeline()); }}><Plus className="h-4 w-4" /> New pipeline</button>
+                            <button type="button" className={primaryButtonClass} onClick={() => openPipelineEditor()}><Plus className="h-4 w-4" /> New pipeline</button>
                         </div>
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                             {PIPELINE_PRESETS.map((preset) => (
@@ -777,16 +842,12 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     key={preset.id}
                                     type="button"
                                     className="rounded-xl border border-border bg-background/30 p-4 text-left transition hover:border-plex/50 hover:bg-plex/10"
-                                    onClick={() => {
-                                        setPreviewPath('');
-                                        setPreviewResult(null);
-                                        setPipelineDraft({
-                                            ...emptyPipeline(),
-                                            ...preset.pipeline,
-                                            rules: normalizeRules(preset.pipeline.rules),
-                                            steps: [...preset.pipeline.steps],
-                                        });
-                                    }}
+                                    onClick={() => openPipelineEditor({
+                                        ...emptyPipeline(),
+                                        ...preset.pipeline,
+                                        rules: normalizeRules(preset.pipeline.rules),
+                                        steps: [...preset.pipeline.steps],
+                                    })}
                                 >
                                     <p className="font-bold text-text">{preset.label}</p>
                                     <p className="mt-1 text-xs text-muted">{preset.detail}</p>
@@ -794,15 +855,17 @@ export const MediaAutomationDashboard: React.FC = () => {
                             ))}
                         </div>
                     </section>
-                    <div className="flex justify-end md:hidden"><button type="button" className={primaryButtonClass} onClick={() => { setPreviewPath(''); setPreviewResult(null); setPipelineDraft(emptyPipeline()); }}><Plus className="h-4 w-4" /> New pipeline</button></div>
+                    <div className="flex justify-end md:hidden"><button type="button" className={primaryButtonClass} onClick={() => openPipelineEditor()}><Plus className="h-4 w-4" /> New pipeline</button></div>
                     {pipelines.length === 0 ? <EmptyState icon={Layers3} title="No pipelines configured" detail="Create a pipeline to define matching rules and transcode or remux behavior." /> : (
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                            {pipelines.map((pipeline) => (
+                            {pipelines.map((pipeline) => {
+                                const samplePath = String(pipeline.samplePath || '').trim();
+                                return (
                                 <article key={String(pipeline.id ?? pipeline.name)} className={`${cardClass} p-5`}>
                                     <div className="flex items-start justify-between gap-3">
                                         <div><div className="flex items-center gap-2"><h3 className="font-bold text-text">{pipeline.name}</h3><StatusPill value={pipeline.enabled ? 'enabled' : 'disabled'} /></div><p className="mt-2 text-xs text-muted">Priority {pipeline.priority ?? 50} · {pipeline.outputMode || 'dry-run'} · {pipeline.hardware || 'auto'}</p></div>
                                         <div className="flex gap-1">
-                                            <button type="button" className={buttonClass} onClick={() => { setPreviewPath(''); setPreviewResult(null); setPipelineDraft({ ...emptyPipeline(), ...pipeline, rules: normalizeRules(pipeline.rules), steps: Array.isArray(pipeline.steps) ? pipeline.steps : [] }); }}><Pencil className="h-4 w-4" /></button>
+                                            <button type="button" className={buttonClass} onClick={() => openPipelineEditor(pipeline)}><Pencil className="h-4 w-4" /></button>
                                             <button type="button" className={buttonClass} disabled={pipeline.id === undefined || busy !== null} onClick={() => { if (pipeline.id !== undefined && window.confirm(`Delete pipeline "${pipeline.name}"?`)) runAction(`delete-pipeline-${pipeline.id}`, () => mediaAutomationApi.deletePipeline(pipeline.id!), 'Pipeline deleted.'); }}><Trash2 className="h-4 w-4 text-red-300" /></button>
                                         </div>
                                     </div>
@@ -810,8 +873,36 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     <p className="mt-4 rounded-lg bg-background/40 p-3 text-xs text-muted">
                                         {normalizeRules(pipeline.rules).conditions.length} rule condition{normalizeRules(pipeline.rules).conditions.length === 1 ? '' : 's'} joined with {normalizeRules(pipeline.rules).operator}
                                     </p>
+                                    {samplePath ? (
+                                        <div className="mt-3 space-y-2 rounded-lg border border-border/70 bg-background/30 p-3">
+                                            <p className="truncate font-mono text-[11px] text-plex" title={samplePath}>{samplePath}</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                <button
+                                                    type="button"
+                                                    className={primaryButtonClass}
+                                                    disabled={busy !== null || pipeline.id === undefined}
+                                                    onClick={() => void queuePipelineSample(pipeline)}
+                                                >
+                                                    {busy === `queue-sample-${pipeline.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                                                    Queue sample
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null || pipeline.id === undefined}
+                                                    onClick={() => void queuePipelineSample(pipeline, { dryRun: true })}
+                                                >
+                                                    {busy === `test-pipeline-${pipeline.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                                    Dry-run
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="mt-3 text-xs text-muted">No sample file saved yet — edit the pipeline and set one for one-click queueing.</p>
+                                    )}
                                 </article>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
@@ -1227,28 +1318,38 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </div>
                         <div className="rounded-xl border border-border bg-background/30 p-4 space-y-3">
                             <div>
-                                <h3 className="font-bold text-text">Rule preview</h3>
-                                <p className="mt-1 text-xs text-muted">Probe a file and preview the planned FFmpeg steps without replacing media. Save the pipeline before previewing. Browse uses container paths under your library mount.</p>
+                                <h3 className="font-bold text-text">Sample file</h3>
+                                <p className="mt-1 text-xs text-muted">
+                                    Saved with this pipeline for preview and one-click queueing. Browse uses container paths under your library mount.
+                                </p>
                             </div>
                             <PathBrowserField
-                                label="Test file"
+                                label="Sample file (saved)"
                                 mode="file"
-                                value={previewPath}
-                                onChange={setPreviewPath}
+                                value={String(pipelineDraft.samplePath || '')}
+                                onChange={(samplePath) => setPipelineDraft({ ...pipelineDraft, samplePath })}
                                 placeholder="/media/Movies/example.mkv"
-                                hint="Example for your setup: /media/Movies/Her Private Hell (2026)/….mkv — not /mnt/remotes/…"
+                                hint="Saved when you click Save above. Example: /media/Movies/Her Private Hell (2026)/….mkv — not /mnt/remotes/…"
                             />
                             <div className="flex flex-wrap gap-3">
-                                <button type="button" className={buttonClass} disabled={previewBusy || !pipelineDraft.id} onClick={runPipelinePreview}>
+                                <button type="button" className={buttonClass} disabled={previewBusy || !pipelineDraft.id || !String(pipelineDraft.samplePath || '').trim()} onClick={runPipelinePreview}>
                                     {previewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Preview
                                 </button>
                                 <button
                                     type="button"
                                     className={buttonClass}
-                                    disabled={previewBusy || busy !== null || !pipelineDraft.id || !previewPath.trim()}
-                                    onClick={() => runAction(`test-pipeline-${pipelineDraft.id}`, () => mediaAutomationApi.testPipeline(pipelineDraft.id!, previewPath.trim()), 'Dry-run job queued.')}
+                                    disabled={previewBusy || busy !== null || !pipelineDraft.id || !String(pipelineDraft.samplePath || '').trim()}
+                                    onClick={() => void queuePipelineSample(pipelineDraft, { dryRun: true })}
                                 >
                                     {busy === `test-pipeline-${pipelineDraft.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Queue dry-run
+                                </button>
+                                <button
+                                    type="button"
+                                    className={primaryButtonClass}
+                                    disabled={previewBusy || busy !== null || !pipelineDraft.id || !String(pipelineDraft.samplePath || '').trim()}
+                                    onClick={() => void queuePipelineSample(pipelineDraft)}
+                                >
+                                    {busy === `queue-sample-${pipelineDraft.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Queue sample
                                 </button>
                             </div>
                             {previewResult && (
