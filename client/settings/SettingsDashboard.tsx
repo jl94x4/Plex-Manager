@@ -1105,6 +1105,12 @@ export const SettingsDashboard: React.FC = () => {
             }
             if (initialSettings.mediaAutomation && typeof initialSettings.mediaAutomation === 'object') {
                 const saved = initialSettings.mediaAutomation;
+                const fallback = {
+                    ...DEFAULT_MEDIA_AUTOMATION_SETTINGS.fallback,
+                    ...(saved.fallback || {}),
+                    outputMode: (saved.fallback?.outputMode || saved.outputMode || DEFAULT_MEDIA_AUTOMATION_SETTINGS.fallback.outputMode) as typeof DEFAULT_MEDIA_AUTOMATION_SETTINGS.fallback.outputMode,
+                    hardware: (saved.fallback?.hardware || saved.hardwareAcceleration || DEFAULT_MEDIA_AUTOMATION_SETTINGS.fallback.hardware) as typeof DEFAULT_MEDIA_AUTOMATION_SETTINGS.fallback.hardware,
+                };
                 setMediaAutomation({
                     ...DEFAULT_MEDIA_AUTOMATION_SETTINGS,
                     ...saved,
@@ -1113,7 +1119,9 @@ export const SettingsDashboard: React.FC = () => {
                         ...DEFAULT_MEDIA_AUTOMATION_SETTINGS.auth,
                         ...(saved.auth || saved.webhookAuth || {}),
                     },
-                    fallback: { ...DEFAULT_MEDIA_AUTOMATION_SETTINGS.fallback, ...(saved.fallback || {}) },
+                    fallback,
+                    outputMode: fallback.outputMode,
+                    hardwareAcceleration: fallback.hardware,
                     concurrency: {
                         cpu: Math.min(32, Math.max(1, Number(saved.concurrency?.cpu ?? saved.cpuConcurrency ?? saved.concurrency) || 1)),
                         gpu: Math.min(16, Math.max(1, Number(saved.concurrency?.gpu ?? saved.gpuConcurrency) || 1)),
@@ -1405,7 +1413,16 @@ export const SettingsDashboard: React.FC = () => {
             scanner,
             mediaAutomationEnabled,
             mediaAutomationHomeWidgetEnabled,
-            mediaAutomation: { ...mediaAutomation, enabled: mediaAutomationEnabled },
+            mediaAutomation: {
+                ...mediaAutomation,
+                enabled: mediaAutomationEnabled,
+                outputMode: mediaAutomation.fallback?.outputMode || mediaAutomation.outputMode || 'dry-run',
+                hardwareAcceleration: mediaAutomation.fallback?.hardware || mediaAutomation.hardwareAcceleration || 'cpu',
+                fallback: {
+                    hardware: mediaAutomation.fallback?.hardware || 'cpu',
+                    outputMode: mediaAutomation.fallback?.outputMode || 'dry-run',
+                },
+            },
             collexionsAutostart,
             collexionsInternalUrl,
             collexionsServiceKey,

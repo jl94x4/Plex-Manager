@@ -191,7 +191,8 @@ const mediaAutomationRuntimeConfig = (config = {}) => {
     const raw = config.mediaAutomation && typeof config.mediaAutomation === 'object'
         ? config.mediaAutomation
         : {};
-    const outputMode = String(raw.outputMode || raw.fallback?.outputMode || 'dry-run').toLowerCase();
+    // Settings UI writes Safe fallback to fallback.outputMode — prefer that over a stale top-level value.
+    const outputMode = String(raw.fallback?.outputMode || raw.outputMode || 'dry-run').toLowerCase();
     // Recursive watches on large Unraid/remote mounts can wedge the whole portal.
     // Require explicit env opt-in before the filesystem watcher may start.
     const libraryWatchEnabled = mediaAutomationWatchOptIn() && raw.libraryWatchEnabled === true;
@@ -201,7 +202,7 @@ const mediaAutomationRuntimeConfig = (config = {}) => {
         dryRun: outputMode === 'dry-run',
         cpuConcurrency: raw.cpuConcurrency ?? raw.concurrency?.cpu,
         gpuConcurrency: raw.gpuConcurrency ?? raw.concurrency?.gpu,
-        hardwareAcceleration: raw.hardwareAcceleration || raw.fallback?.hardware || 'auto',
+        hardwareAcceleration: raw.fallback?.hardware || raw.hardwareAcceleration || 'auto',
         outputMode,
         libraryWatchEnabled,
     }, getDefaultMediaAutomationConfig());
@@ -3573,10 +3574,18 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         ? mediaAutomation
         : existingMediaAutomation;
     const incomingAutomationOutputMode = String(
-        incomingMediaAutomation.outputMode
-        || incomingMediaAutomation.fallback?.outputMode
+        incomingMediaAutomation.fallback?.outputMode
+        || incomingMediaAutomation.outputMode
+        || existingMediaAutomation.fallback?.outputMode
         || existingMediaAutomation.outputMode
         || 'dry-run'
+    ).toLowerCase();
+    const incomingAutomationHardware = String(
+        incomingMediaAutomation.fallback?.hardware
+        || incomingMediaAutomation.hardwareAcceleration
+        || existingMediaAutomation.fallback?.hardware
+        || existingMediaAutomation.hardwareAcceleration
+        || 'auto'
     ).toLowerCase();
     const nextMediaAutomationConfig = {
         ...normalizeMediaAutomationConfig({
@@ -3585,10 +3594,14 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             dryRun: incomingAutomationOutputMode === 'dry-run',
             cpuConcurrency: incomingMediaAutomation.cpuConcurrency ?? incomingMediaAutomation.concurrency?.cpu,
             gpuConcurrency: incomingMediaAutomation.gpuConcurrency ?? incomingMediaAutomation.concurrency?.gpu,
-            hardwareAcceleration: incomingMediaAutomation.hardwareAcceleration
-                || incomingMediaAutomation.fallback?.hardware,
+            hardwareAcceleration: incomingAutomationHardware,
             outputMode: incomingAutomationOutputMode,
         }, existingMediaAutomation),
+        // Keep fallback + top-level in sync so Safe fallback changes actually stick.
+        fallback: {
+            hardware: incomingAutomationHardware,
+            outputMode: incomingAutomationOutputMode,
+        },
         auth: {
             username: String(incomingMediaAutomation.auth?.username ?? existingMediaAutomation.auth?.username ?? '').trim(),
             password: resolveSecret(
@@ -19141,7 +19154,17 @@ app.get('/api/media-automation/browse', requireAdmin, requireMediaAutomation, as
             .filter(Boolean);
         const roots = await collectBrowseRoots({ extraRoots });
         const requested = String(req.query.path || '').trim();
-        const listing = await listBrowseDirectory(requested, { roots, includeFiles: false });
+        const includeFiles = ['1', 'true', 'yes'].includes(String(req.query.files || '').toLowerCase());
+        const runtime = mediaAutomationRuntimeConfig(await loadFile(CONFIG_PATH, {}));
+        const extensions = String(req.query.extensions || '')
+            .split(',')
+            .map((entry) => entry.trim())
+            .filter(Boolean);
+        const listing = await listBrowseDirectory(requested, {
+            roots,
+            includeFiles,
+            extensions: extensions.length ? extensions : (includeFiles ? runtime.extensions : []),
+        });
         res.json({
             ok: true,
             ...listing,

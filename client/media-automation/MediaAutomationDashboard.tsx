@@ -80,6 +80,28 @@ const jobLiveCommand = (job: MediaAutomationJob | null | undefined) => {
     return '';
 };
 
+const jobIsDryRun = (job: MediaAutomationJob | null | undefined) => {
+    if (!job) return false;
+    if (job.result && typeof job.result === 'object' && job.result.dryRun === true) return true;
+    const pipeline = job.metadata?.pipeline;
+    if (pipeline && typeof pipeline === 'object' && (pipeline as { outputMode?: string }).outputMode === 'dry-run') {
+        return true;
+    }
+    return false;
+};
+
+const jobDryRunReason = (job: MediaAutomationJob | null | undefined) => {
+    if (!jobIsDryRun(job) || !job?.result || typeof job.result !== 'object') return '';
+    const reason = String(job.result.dryRunReason || '');
+    if (reason === 'global-safe-fallback') {
+        return 'Blocked by Settings → Media Automation → Safe fallback (Dry run). Change that to Copy or Replace, save, then re-queue.';
+    }
+    if (reason === 'pipeline-output-mode') {
+        return 'Pipeline output mode is still Dry run. Edit the pipeline, set Copy or Replace, save, then re-queue.';
+    }
+    return 'Planned only — FFmpeg was not run and no files were written.';
+};
+
 const jobErrorText = (error: MediaAutomationJob['error']) => {
     if (!error) return '';
     if (typeof error === 'string') return error;
@@ -121,6 +143,9 @@ const normalizeRules = (value: unknown): MediaAutomationRules => {
 };
 const statusTone = (status?: string) => {
     const value = String(status || '').toLowerCase();
+    if (['dry-run', 'dry run', 'planned'].some((key) => value.includes(key))) {
+        return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
+    }
     if (['completed', 'succeeded', 'ready', 'running', 'online', 'healthy', 'success', 'processing', 'committing', 'verifying'].some((key) => value.includes(key))) {
         return 'border-green-500/30 bg-green-500/10 text-green-300';
     }
@@ -499,20 +524,46 @@ export const MediaAutomationDashboard: React.FC = () => {
 
             {tab === 'queue' && (
                 <div className="space-y-5">
+                    {(status.dryRun || status.outputMode === 'dry-run') && (
+                        <div className="flex gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+                            <div>
+                                <p className="font-bold text-amber-50">Global dry-run is still ON — jobs will not rewrite media</p>
+                                <p className="mt-1 text-xs text-amber-100/90">
+                                    Settings → Media Automation → Safe fallback must be Copy or Replace (then Save). Changing only the pipeline is not enough while this override is active.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                     <section className={`${cardClass} p-5`}>
                         <h2 className="mb-4 font-bold text-text">Enqueue a path</h2>
-                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem_auto]">
-                            <input className={fieldClass} value={enqueuePath} onChange={(event) => setEnqueuePath(event.target.value)} placeholder="/media/movies/example.mkv" />
-                            <CustomSelect value={enqueuePipelineId} onChange={setEnqueuePipelineId} options={[{ value: '', label: 'Automatic pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]} />
-                            <button type="button" className={primaryButtonClass} disabled={!enqueuePath.trim() || busy !== null} onClick={() => runAction('enqueue', () => mediaAutomationApi.enqueue(enqueuePath.trim(), enqueuePipelineId || undefined), 'Path added to queue.').then(() => setEnqueuePath(''))}>
-                                {busy === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Enqueue
-                            </button>
+                        <div className="space-y-3">
+                            <PathBrowserField
+                                label="Media file"
+                                mode="file"
+                                value={enqueuePath}
+                                onChange={setEnqueuePath}
+                                placeholder="/media/Movies/example.mkv"
+                                hint="Use container paths under your library root (e.g. /media/...), not Unraid /mnt/remotes/… paths."
+                            />
+                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                                <CustomSelect value={enqueuePipelineId} onChange={setEnqueuePipelineId} options={[{ value: '', label: 'Automatic pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]} />
+                                <button type="button" className={primaryButtonClass} disabled={!enqueuePath.trim() || busy !== null} onClick={() => runAction('enqueue', () => mediaAutomationApi.enqueue(enqueuePath.trim(), enqueuePipelineId || undefined), 'Path added to queue.').then(() => setEnqueuePath(''))}>
+                                    {busy === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Enqueue
+                                </button>
+                            </div>
                         </div>
                     </section>
                     <section className={`${cardClass} p-5`}>
                         <h2 className="mb-4 font-bold text-text">Test candidate (no enqueue)</h2>
-                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-                            <input className={fieldClass} value={pendingPath} onChange={(event) => setPendingPath(event.target.value)} placeholder="/media/movies/example.mkv" />
+                        <div className="space-y-3">
+                            <PathBrowserField
+                                label="Media file"
+                                mode="file"
+                                value={pendingPath}
+                                onChange={setPendingPath}
+                                placeholder="/media/Movies/example.mkv"
+                            />
                             <button
                                 type="button"
                                 className={buttonClass}
@@ -546,7 +597,10 @@ export const MediaAutomationDashboard: React.FC = () => {
                             {jobs.map((job) => {
                                 const jobId = job.id;
                                 const state = String(job.state || job.status || '').toLowerCase();
-                                const jobState = job.phase || job.state || job.status;
+                                const dryRunJob = jobIsDryRun(job);
+                                const jobState = dryRunJob && ['completed', 'succeeded', 'success'].includes(state)
+                                    ? 'dry-run'
+                                    : (job.phase || job.state || job.status);
                                 const percent = jobProgressPercent(job);
                                 const errorText = jobErrorText(job.error);
                                 const canCancel = !['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'success'].includes(state);
@@ -565,6 +619,9 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 </div>
                                                 <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
                                                 <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.createdAt)}</p>
+                                                {dryRunJob && ['completed', 'succeeded', 'success'].includes(state) && (
+                                                    <p className="mt-1 text-xs text-amber-300">{jobDryRunReason(job)}</p>
+                                                )}
                                                 {jobLiveCommand(job) && (
                                                     <p className="mt-1 truncate font-mono text-[11px] text-muted" title={jobLiveCommand(job)}>{jobLiveCommand(job)}</p>
                                                 )}
@@ -723,28 +780,44 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 ) : (
                                     <>
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <StatusPill value={selectedJob?.phase || selectedJob?.state || selectedJob?.status} />
+                                            <StatusPill
+                                                value={
+                                                    jobIsDryRun(selectedJob)
+                                                    && ['completed', 'succeeded', 'success'].includes(String(selectedJob?.state || selectedJob?.status || '').toLowerCase())
+                                                        ? 'dry-run'
+                                                        : (selectedJob?.phase || selectedJob?.state || selectedJob?.status)
+                                                }
+                                            />
                                             {selectedJob?.lane && <span className="text-xs uppercase text-muted">{selectedJob.lane}</span>}
                                             {selectedJob?.priority != null && (
                                                 <label className="flex items-center gap-2 text-xs text-muted">
                                                     Priority
-                                                    <input
-                                                        className="w-20 rounded border border-border bg-background px-2 py-1 text-text"
-                                                        type="number"
-                                                        min={0}
-                                                        max={999}
-                                                        defaultValue={selectedJob.priority}
-                                                        onBlur={(event) => {
-                                                            const priority = Math.max(0, Math.min(999, Number(event.target.value) || 0));
-                                                            if (selectedJobId == null) return;
-                                                            void runAction(`priority-${selectedJobId}`, () => mediaAutomationApi.setPriority(selectedJobId, priority), 'Priority updated.')
-                                                                .then(() => openJobDetail(selectedJobId));
-                                                        }}
-                                                    />
+                                                    {['queued', 'running'].includes(String(selectedJob.state || selectedJob.status || '').toLowerCase()) ? (
+                                                        <input
+                                                            className="w-20 rounded border border-border bg-background px-2 py-1 text-text"
+                                                            type="number"
+                                                            min={0}
+                                                            max={999}
+                                                            defaultValue={selectedJob.priority}
+                                                            onBlur={(event) => {
+                                                                const priority = Math.max(0, Math.min(999, Number(event.target.value) || 0));
+                                                                if (selectedJobId == null) return;
+                                                                void runAction(`priority-${selectedJobId}`, () => mediaAutomationApi.setPriority(selectedJobId, priority), 'Priority updated.')
+                                                                    .then(() => openJobDetail(selectedJobId));
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-text">P{selectedJob.priority}</span>
+                                                    )}
                                                 </label>
                                             )}
                                         </div>
                                         <p className="break-all font-semibold text-text">{selectedJob?.path || selectedJob?.sourcePath || 'Path not reported'}</p>
+                                        {jobIsDryRun(selectedJob) && (
+                                            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+                                                {jobDryRunReason(selectedJob) || 'Dry-run completed: the worker only planned FFmpeg steps. No media was rewritten.'}
+                                            </p>
+                                        )}
                                         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                                             <div><dt className="text-muted">Pipeline</dt><dd className="mt-1 text-text">{selectedJob?.pipelineName || selectedJob?.pipelineId || 'Automatic'}</dd></div>
                                             <div><dt className="text-muted">Attempts</dt><dd className="mt-1 text-text">{asText(selectedJob?.attempts)} / {asText(selectedJob?.maxAttempts)}</dd></div>
@@ -754,7 +827,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         {jobErrorText(selectedJob?.error) && <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{jobErrorText(selectedJob?.error)}</p>}
                                         {jobLiveCommand(selectedJob) && (
                                             <div className="rounded-xl border border-plex/30 bg-plex/10 p-4">
-                                                <h3 className="font-bold text-text">Live command</h3>
+                                                <h3 className="font-bold text-text">{jobIsDryRun(selectedJob) ? 'Planned command (not executed)' : 'Live command'}</h3>
                                                 <p className="mt-2 break-all font-mono text-[11px] text-muted">{jobLiveCommand(selectedJob)}</p>
                                             </div>
                                         )}
@@ -1038,10 +1111,17 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <div className="rounded-xl border border-border bg-background/30 p-4 space-y-3">
                             <div>
                                 <h3 className="font-bold text-text">Rule preview</h3>
-                                <p className="mt-1 text-xs text-muted">Probe a file and preview the planned FFmpeg steps without replacing media. Save the pipeline before previewing.</p>
+                                <p className="mt-1 text-xs text-muted">Probe a file and preview the planned FFmpeg steps without replacing media. Save the pipeline before previewing. Browse uses container paths under your library mount.</p>
                             </div>
-                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-                                <input className={fieldClass} value={previewPath} onChange={(event) => setPreviewPath(event.target.value)} placeholder="/media/movies/example.mkv" />
+                            <PathBrowserField
+                                label="Test file"
+                                mode="file"
+                                value={previewPath}
+                                onChange={setPreviewPath}
+                                placeholder="/media/Movies/example.mkv"
+                                hint="Example for your setup: /media/Movies/Her Private Hell (2026)/….mkv — not /mnt/remotes/…"
+                            />
+                            <div className="flex flex-wrap gap-3">
                                 <button type="button" className={buttonClass} disabled={previewBusy || !pipelineDraft.id} onClick={runPipelinePreview}>
                                     {previewBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Preview
                                 </button>

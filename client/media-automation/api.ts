@@ -63,9 +63,14 @@ export const mediaAutomationApi = {
         await apiFetch(`${ROOT}/activity?limit=${limit}`),
         ['activity', 'events', 'items', 'results'],
     ),
-    browse: (path = '') => apiFetch(
-        `${ROOT}/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`,
-    ) as Promise<MediaAutomationBrowseResult>,
+    browse: (path = '', options: { files?: boolean; extensions?: string[] } = {}) => {
+        const params = new URLSearchParams();
+        if (path) params.set('path', path);
+        if (options.files) params.set('files', '1');
+        if (options.extensions?.length) params.set('extensions', options.extensions.join(','));
+        const query = params.toString();
+        return apiFetch(`${ROOT}/browse${query ? `?${query}` : ''}`) as Promise<MediaAutomationBrowseResult>;
+    },
     libraries: async () => asList<MediaAutomationLibrary>(
         await apiFetch(`${ROOT}/libraries`),
         ['libraries', 'items', 'results'],

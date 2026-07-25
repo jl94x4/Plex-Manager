@@ -248,6 +248,9 @@ export type MediaAutomationSettingsConfig = {
         hardware: HardwareMode;
         outputMode: OutputMode;
     };
+    /** Mirrored from Safe fallback so saves do not keep a stale top-level dry-run. */
+    outputMode?: OutputMode;
+    hardwareAcceleration?: HardwareMode;
     libraryScanEnabled: boolean;
     libraryScanIntervalMinutes: number;
     libraryWatchEnabled: boolean;

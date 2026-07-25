@@ -121,7 +121,10 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     </div>
                     <CustomSelect
                         value={config.fallback.hardware}
-                        onChange={(hardware) => update({ fallback: { ...config.fallback, hardware: hardware as HardwareMode } })}
+                        onChange={(hardware) => update({
+                            hardwareAcceleration: hardware as HardwareMode,
+                            fallback: { ...config.fallback, hardware: hardware as HardwareMode },
+                        })}
                         options={[
                             { value: 'cpu', label: 'CPU' },
                             { value: 'auto', label: 'Auto detect' },
@@ -133,7 +136,10 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     />
                     <CustomSelect
                         value={config.fallback.outputMode}
-                        onChange={(outputMode) => update({ fallback: { ...config.fallback, outputMode: outputMode as OutputMode } })}
+                        onChange={(outputMode) => update({
+                            outputMode: outputMode as OutputMode,
+                            fallback: { ...config.fallback, outputMode: outputMode as OutputMode },
+                        })}
                         options={[
                             { value: 'dry-run', label: 'Dry run (safest)' },
                             { value: 'copy', label: 'Copy beside source' },

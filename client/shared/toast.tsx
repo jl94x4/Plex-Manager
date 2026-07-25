@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { ToastMessage } from './types';
 
 export const MAX_VISIBLE_TOASTS = 3;
@@ -30,13 +31,20 @@ export const Toast: React.FC<{ message: string; type: 'success' | 'error'; onDis
     );
 };
 
-export const ToastContainer: React.FC<{ toasts: ToastMessage[]; setToasts: React.Dispatch<React.SetStateAction<ToastMessage[]>> }> = ({ toasts, setToasts }) => (
-    <div className="fixed z-[2000] flex flex-col-reverse gap-1.5 w-[min(18rem,calc(100vw-2rem))] bottom-5 left-1/2 -translate-x-1/2 md:bottom-auto md:left-auto md:translate-x-0 md:top-4 md:right-4">
-        {toasts.map(toast => (
-            <Toast key={toast.id} {...toast} onDismiss={() => setToasts(t => t.filter(item => item.id !== toast.id))} />
-        ))}
-    </div>
-);
+/** Portaled to body above modal overlays (z-1200+) so toasts stay readable. */
+export const ToastContainer: React.FC<{ toasts: ToastMessage[]; setToasts: React.Dispatch<React.SetStateAction<ToastMessage[]>> }> = ({ toasts, setToasts }) => {
+    if (typeof document === 'undefined' || toasts.length === 0) return null;
+    return createPortal(
+        <div className="pointer-events-none fixed z-[5000] flex flex-col-reverse gap-1.5 w-[min(18rem,calc(100vw-2rem))] bottom-5 left-1/2 -translate-x-1/2 md:bottom-auto md:left-auto md:translate-x-0 md:top-4 md:right-4">
+            {toasts.map(toast => (
+                <div key={toast.id} className="pointer-events-auto">
+                    <Toast {...toast} onDismiss={() => setToasts(t => t.filter(item => item.id !== toast.id))} />
+                </div>
+            ))}
+        </div>,
+        document.body,
+    );
+};
 
 export const Loader: React.FC<{ isLoading: boolean; isCinematic?: boolean }> = ({ isLoading, isCinematic }) => {
     if (!isLoading) return null;
