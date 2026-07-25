@@ -11,7 +11,15 @@ Media Automation accepts jobs from:
 - filesystem watchers on enabled library roots (debounced create/change events);
 - Sonarr, Radarr, and Lidarr webhooks at `/triggers/media-automation/{sonarr|radarr|lidarr|manual}` when Basic Auth is configured.
 
-The dashboard includes Overview metrics (with a global dry-run banner when Safe fallback is Dry run), worker/scan/watch health, queue job detail with planned steps, live command text, and activity logs, pipeline presets, and activity filters. Library path fields include a live folder browser over container mounts (`/media`, `/movies`, `/tv`, …).
+The dashboard includes Overview metrics (with a global dry-run banner when Safe fallback is Dry run), worker/scan/watch health, queue job detail with planned steps, live command text, and activity logs, pipeline presets, and activity filters. Library path fields include a live folder browser over container mounts (`/media`, `/movies`, `/tv`, `/completed`, `/quarantine`, …).
+
+### Quick start (Unraid)
+
+1. Map paths on the **Server Manager Portal** container (not Unmanic): e.g. host media → `/media`, completed → `/completed`, quarantine → `/quarantine`.
+2. Settings → Media Automation → enable, leave Safe fallback on **Dry run**, Save.
+3. Media Automation → Libraries → New library using **container** paths (Browse): root `/media` or `/media/movies`, output `/completed`, quarantine `/quarantine`.
+4. Add or pick a pipeline preset → Preview / Queue dry-run → Scan now.
+5. Only after dry-runs look right, change pipeline (and later global fallback) to Copy, then Replace.
 
 It does not replace Plex/Jellyfin transcoding and does **not** install third-party Unmanic plugins. Processing uses the built-in native FFmpeg executor and first-party steps:
 

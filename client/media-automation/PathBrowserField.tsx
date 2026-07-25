@@ -142,7 +142,18 @@ export const PathBrowserField: React.FC<Props> = ({
                         </div>
                     )}
                     {!listing?.path && (listing?.roots?.length || 0) > 0 && (
-                        <p className="text-xs text-muted">Select a mounted root to browse:</p>
+                        <p className="text-xs text-muted">
+                            Select a mounted root to browse. These are paths inside the portal container
+                            (e.g. <code className="text-plex">/media</code>, <code className="text-plex">/completed</code>)
+                            — not Unraid host paths like <code className="text-plex">/mnt/…</code>.
+                        </p>
+                    )}
+                    {!listing?.path && !(listing?.roots?.length) && !busy && (
+                        <p className="text-xs text-amber-200">
+                            No mounts found. In Unraid → Docker → Server Manager Portal → Edit, add path mappings
+                            (Host → Container), then Apply / restart. Typical: media → <code className="text-plex">/media</code>,
+                            completed → <code className="text-plex">/completed</code>, quarantine → <code className="text-plex">/quarantine</code>.
+                        </p>
                     )}
                     <div className="max-h-56 overflow-y-auto rounded-lg border border-border/60 bg-card/40 custom-scrollbar">
                         {busy && !listing ? (
