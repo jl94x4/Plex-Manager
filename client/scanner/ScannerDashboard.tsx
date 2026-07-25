@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
     ArrowUpCircle,
     ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     Clock3,
     Copy,
     FileMinus2,
@@ -68,6 +70,7 @@ type QueueItem = {
 };
 
 const MANUAL_PATH_COLLAPSED_KEY = 'scanner-manual-path-collapsed';
+const ACTIVITY_PAGE_SIZE = 5;
 
 const readManualPathCollapsed = () => {
     try {
@@ -118,6 +121,7 @@ export const ScannerDashboard: React.FC = () => {
     const [message, setMessage] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [manualCollapsed, setManualCollapsed] = useState(readManualPathCollapsed);
+    const [activityPage, setActivityPage] = useState(0);
 
     const toggleManualPath = () => {
         setManualCollapsed((prev) => {
@@ -152,6 +156,19 @@ export const ScannerDashboard: React.FC = () => {
         const id = window.setInterval(() => { void refresh(); }, 8000);
         return () => window.clearInterval(id);
     }, [refresh]);
+
+    const activityTotalPages = Math.max(1, Math.ceil(log.length / ACTIVITY_PAGE_SIZE) || 1);
+    const activitySafePage = Math.min(activityPage, activityTotalPages - 1);
+    const activityPageEntries = log.slice(
+        activitySafePage * ACTIVITY_PAGE_SIZE,
+        activitySafePage * ACTIVITY_PAGE_SIZE + ACTIVITY_PAGE_SIZE,
+    );
+
+    useEffect(() => {
+        if (activityPage > activityTotalPages - 1) {
+            setActivityPage(Math.max(0, activityTotalPages - 1));
+        }
+    }, [activityPage, activityTotalPages]);
 
     const submitPath = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -407,13 +424,15 @@ export const ScannerDashboard: React.FC = () => {
                             <p className="text-sm text-muted">No scans processed yet.</p>
                         </div>
                     ) : (
+                        <>
                         <ul className="space-y-2.5">
-                            {log.map((entry, i) => {
+                            {activityPageEntries.map((entry, i) => {
                                 const style = scannerActionStyles(entry.action || entry.reason, entry.isUpgrade);
                                 const targets = Array.isArray(entry.results) ? entry.results : [];
+                                const globalIndex = activitySafePage * ACTIVITY_PAGE_SIZE + i;
                                 return (
                                     <li
-                                        key={`${entry.at}-${i}`}
+                                        key={`${entry.at}-${globalIndex}`}
                                         className="rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent px-3.5 py-3"
                                     >
                                         <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -453,6 +472,37 @@ export const ScannerDashboard: React.FC = () => {
                                 );
                             })}
                         </ul>
+                        {log.length > ACTIVITY_PAGE_SIZE ? (
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                <p className="text-xs text-muted">
+                                    Showing {activitySafePage * ACTIVITY_PAGE_SIZE + 1}–{Math.min(log.length, (activitySafePage + 1) * ACTIVITY_PAGE_SIZE)} of {log.length}
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/10 text-xs font-semibold text-muted hover:text-text hover:bg-white/5 disabled:opacity-40 transition-colors"
+                                        disabled={activitySafePage <= 0}
+                                        onClick={() => setActivityPage((p) => Math.max(0, p - 1))}
+                                    >
+                                        <ChevronLeft className="w-3.5 h-3.5" />
+                                        Prev
+                                    </button>
+                                    <span className="text-xs font-semibold text-muted tabular-nums">
+                                        {activitySafePage + 1} / {activityTotalPages}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/10 text-xs font-semibold text-muted hover:text-text hover:bg-white/5 disabled:opacity-40 transition-colors"
+                                        disabled={activitySafePage >= activityTotalPages - 1}
+                                        onClick={() => setActivityPage((p) => Math.min(activityTotalPages - 1, p + 1))}
+                                    >
+                                        Next
+                                        <ChevronRight className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        ) : null}
+                        </>
                     )}
                 </section>
             </div>
