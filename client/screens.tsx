@@ -34,6 +34,7 @@ import { DiscoverGridSizeSelect } from './discovery/DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './discovery/useDiscoverGridSize';
 import { DiscoverLocaleSelect } from './discovery/i18n/DiscoverLocaleSelect';
 import { filterNavOrder, ensureCompleteNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
+import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import {
     STATUS_PERIODS,
     barsForPeriod,
@@ -9662,6 +9663,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const [mobileThemeOpen, setMobileThemeOpen] = useState(false);
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+    const [firefoxMobileNav] = useState(() => isFirefoxMobileClient());
+    const firefoxNavShellRef = useRef<HTMLDivElement>(null);
+    useFirefoxMobileNavShell({ shellRef: firefoxNavShellRef, enabled: firefoxMobileNav });
     const [profileOpen, setProfileOpen] = useState(false);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
@@ -9855,14 +9859,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         const label = options.compactLabel || item.label;
         const badgeCount = options.badgeCount || 0;
         const baseClass = options.mobile
-            ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
+            ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
             : `flex items-center gap-3 px-3 py-2.5 no-underline rounded-lg transition-all text-[14px] font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
 
         if (item.href) {
             return (
                 <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : 'flex items-center gap-3 px-3 py-2.5 text-muted no-underline rounded-lg transition-all text-[14px] font-medium hover:bg-white/5 hover:text-text'}>
-                    <Icon className="w-5 h-5 flex-shrink-0" />
-                    {options.mobile ? <span className="w-full truncate leading-tight">{label}</span> : label}
+                    <Icon className="w-5 h-5 flex-shrink-0" /> {label}
                 </a>
             );
         }
@@ -9883,14 +9886,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 <span className="relative shrink-0">
                     <Icon className="w-5 h-5" />
                     {badgeCount > 0 && options.mobile && (
-                        <span className="absolute -top-1 left-full -translate-x-1/2 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none pointer-events-none">
+                        <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none">
                             {badgeCount > 9 ? '9+' : badgeCount}
                         </span>
                     )}
                 </span>
-                {options.mobile ? (
-                    <span className="w-full truncate leading-tight px-0.5">{label}</span>
-                ) : (
+                {options.mobile ? label : (
                     <span className="flex items-center gap-2 flex-1 min-w-0">
                         <span className="truncate">{label}</span>
                         {badgeCount > 0 && (
@@ -10247,73 +10248,98 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 </div>
             )}
 
-            {/* Mobile Bottom Nav — same fixed bottom:0 approach as main (works in PWA + Firefox). */}
-            <div className="md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom)]">
-                <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
-                    {(() => {
-                        const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                        const showMore = normalizedNavOrder.length > maxPrimary;
-                        const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
-                        return (
-                            <>
-                                {primary.map((key) => {
-                                    const item = navItemsConfig[key];
-                                    if (!item) return null;
-                                    const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                    const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
-                                    return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
-                                })}
-                                {showMore && (
-                                    <button
-                                        type="button"
-                                        aria-label="More menu"
-                                        aria-expanded={mobileMoreOpen}
-                                        className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 cursor-pointer ${
-                                            mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
-                                        }`}
-                                        onClick={() => setMobileMoreOpen((open) => !open)}
-                                    >
-                                        <span className="relative shrink-0">
-                                            <MoreHorizontal className="w-5 h-5" />
-                                        </span>
-                                        <span className="w-full truncate leading-tight px-0.5">More</span>
-                                        {mobileMoreOpen && (
-                                            <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-plex shadow-[0_0_5px_rgba(229,160,13,0.8)]" />
+            {/* Mobile Bottom Nav
+                Chrome / PWA Chromium: plain fixed bottom:0 (matches main).
+                Firefox mobile: viewport-height flex shell so the bar tracks toolbar show/hide. */}
+            {firefoxMobileNav ? (
+                <div
+                    ref={firefoxNavShellRef}
+                    className="md:hidden fixed inset-x-0 top-0 z-[310] flex flex-col justify-end pointer-events-none"
+                    style={{ height: typeof window !== 'undefined' ? window.innerHeight : '100vh' }}
+                >
+                    <div className="pointer-events-auto w-full nav-shell border-t pb-[env(safe-area-inset-bottom)]">
+                        <div className="flex items-center justify-between w-full h-16 px-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
+                            {(() => {
+                                const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
+                                const showMore = normalizedNavOrder.length > maxPrimary;
+                                const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
+                                return (
+                                    <>
+                                        {primary.map((key) => {
+                                            const item = navItemsConfig[key];
+                                            if (!item) return null;
+                                            const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                            return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
+                                        })}
+                                        {showMore && (
+                                            <button
+                                                type="button"
+                                                className={`relative flex flex-col items-center justify-center gap-1 h-full flex-1 min-w-[4.25rem] px-1 text-center text-[0.65rem] transition-colors bg-transparent border-0 ${
+                                                    mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
+                                                }`}
+                                                onClick={() => setMobileMoreOpen((open) => !open)}
+                                            >
+                                                <span className="relative shrink-0">
+                                                    <MoreHorizontal className="w-5 h-5" />
+                                                </span>
+                                                <span>More</span>
+                                            </button>
                                         )}
-                                    </button>
-                                )}
-                            </>
-                        );
-                    })()}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
                 </div>
-            </div>
+            ) : (
+                <div className="md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom)]">
+                    <div className="flex items-center justify-between w-full h-16 px-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
+                        {(() => {
+                            const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
+                            const showMore = normalizedNavOrder.length > maxPrimary;
+                            const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
+                            return (
+                                <>
+                                    {primary.map((key) => {
+                                        const item = navItemsConfig[key];
+                                        if (!item) return null;
+                                        const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                                        const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                        return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
+                                    })}
+                                    {showMore && (
+                                        <button
+                                            type="button"
+                                            className="relative flex flex-col items-center justify-center gap-1 h-full flex-1 min-w-[4.25rem] px-1 text-center text-[0.65rem] transition-colors text-muted hover:text-text bg-transparent border-0"
+                                            onClick={() => setMobileMoreOpen(true)}
+                                        >
+                                            <span className="relative shrink-0">
+                                                <MoreHorizontal className="w-5 h-5" />
+                                            </span>
+                                            <span>More</span>
+                                        </button>
+                                    )}
+                                </>
+                            );
+                        })()}
+                    </div>
+                </div>
+            )}
 
             {/* Mobile More Drawer */}
             {mobileMoreOpen && (
-                <div
-                    className="md:hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end"
-                    onClick={() => setMobileMoreOpen(false)}
-                >
-                    <div
-                        className="bg-card border-t border-border rounded-t-2xl animate-slide-up"
-                        onClick={(e) => e.stopPropagation()}
-                    >
+                <div className="md:hidden fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setMobileMoreOpen(false)}>
+                    <div className="bg-card border-t border-border rounded-t-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between p-4 border-b border-white/5">
                             <h3 className="font-bold text-text">More Menu</h3>
-                            <button
-                                type="button"
-                                className="text-muted hover:text-text p-1 bg-white/5 rounded-full"
-                                onClick={() => setMobileMoreOpen(false)}
-                                aria-label="Close more menu"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
+                            <button className="text-muted hover:text-text p-1 bg-white/5 rounded-full" onClick={() => setMobileMoreOpen(false)}><X className="w-5 h-5" /></button>
                         </div>
                         <div className="p-5 grid grid-cols-4 gap-4">
                             {(() => {
                                 const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
                                 const secondary = normalizedNavOrder.length > maxPrimary ? normalizedNavOrder.slice(maxPrimary) : [];
-                                return secondary.map((key) => {
+                                return secondary.map(key => {
                                     const item = navItemsConfig[key];
                                     if (!item) return null;
                                     const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
@@ -10326,12 +10352,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     };
                                     const badgeCount = getNavBadgeCount(key);
                                     return (
-                                        <button key={key} type="button" onClick={handleActivate} className="flex flex-col items-center gap-2 relative bg-transparent border-0">
+                                        <button key={key} onClick={handleActivate} className="flex flex-col items-center gap-2 relative bg-transparent border-0">
                                             <div className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors ${isCurrent ? 'bg-plex text-background shadow-[0_0_15px_rgba(229,160,13,0.35)]' : 'bg-background/50 text-text hover:bg-white/10 border border-white/5'}`}>
                                                 <item.icon className="w-6 h-6" />
                                             </div>
                                             {badgeCount > 0 && (
-                                                <span className="absolute -top-1 right-1 min-w-[18px] h-4.5 px-1 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
+                                                <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 px-1 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
                                                     {badgeCount > 9 ? '9+' : badgeCount}
                                                 </span>
                                             )}
@@ -10341,7 +10367,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 });
                             })()}
                         </div>
-                        <div className="pb-[calc(env(safe-area-inset-bottom)+1rem)]" />
+                        <div className="pb-[calc(env(safe-area-inset-bottom)+1rem)]"></div>
                     </div>
                 </div>
             )}
