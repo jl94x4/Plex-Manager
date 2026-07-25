@@ -77,12 +77,26 @@ Start with dry-run and a small test library.
 
 Jobs reject paths outside configured roots and reject symbolic-link sources. Durable queue state uses lease/heartbeat recovery so crash-stale running jobs return to the queue. Deduplication keys combine path, source fingerprint, and pipeline so unchanged files are not reprocessed while an active job exists.
 
+## Unraid template
+
+The Community Applications / Unraid template exposes:
+
+| Template field | Purpose |
+| --- | --- |
+| Media Root / TV / Movies / Music / Downloads | Optional host→container path mounts for Media Automation |
+| Media Library Extra 1/2 | Additional roots; change the container path to match your layout |
+| GPU Devices (Intel/AMD) | Pass `/dev/dri` for QSV/VAAPI |
+| NVIDIA Visible Devices | GPU UUID or `all` (requires Nvidia Driver plugin) |
+| Extra Parameters | For NVIDIA, add `--runtime=nvidia` in Advanced View |
+
+Container paths must match Sonarr/Radarr/Lidarr paths (or use rewrite rules). Leave GPU and media Host Paths empty for CPU-only / no Media Automation. Image tags: `:latest`, `:beta`, `:nightly`.
+
 ## Docker checklist
 
-1. Rebuild or pull an image containing FFmpeg.
+1. Rebuild or pull an image containing FFmpeg (`:nightly` while testing this feature).
 2. Leave CPU selected for the first test.
 3. Mount `/app/config` and the required media roots; state/work metadata remains under the config mount.
-4. Align `PUID`/`PGID`; add device groups only for Intel/AMD.
+4. Align `PUID`/`PGID`; pass `/dev/dri` or NVIDIA runtime only when using a GPU.
 5. Configure ARR-to-container path mappings and Media Automation webhook Basic Auth.
 6. Run **Test worker** so synthetic hardware probes refresh capability badges.
 7. Use pipeline **Preview** / dry-run, then copy mode, before considering atomic replace and quarantine.

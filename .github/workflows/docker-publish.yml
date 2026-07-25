@@ -80,6 +80,9 @@ jobs:
             refs/heads/testing)
               TAGS+=("${IMAGE}:testing")
               ;;
+            refs/heads/nightly)
+              TAGS+=("${IMAGE}:nightly")
+              ;;
             refs/tags/v*)
               VERSION="${GITHUB_REF#refs/tags/}"
               TAGS+=("${IMAGE}:${VERSION}" "${IMAGE}:latest")

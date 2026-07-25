@@ -134,6 +134,8 @@ Server Manager Portal includes an Unraid template at `unraid/server-manager-port
 
 The template uses `ghcr.io/jl94x4/server-manager-portal:latest` and stores app data under `/mnt/user/appdata/server-manager-portal/` by default. It includes a writable Media Automation work path; the optional media path is empty until configured.
 
-For Intel/AMD, add `/dev/dri` as a device and add the host video/render groups. For NVIDIA, use the NVIDIA Container Toolkit/runtime. Do not enable privileged mode. On Unraid, verify path mappings and permissions before enabling any replacement action.
+For Intel/AMD, add `/dev/dri` as a device and add the host video/render groups. For NVIDIA, use the NVIDIA Container Toolkit/runtime. Do not enable privileged mode.
+
+On Unraid, the template includes optional Media Root / TV / Movies / Music path fields plus Intel `/dev/dri` and NVIDIA variables. For NVENC: install the Nvidia Driver plugin, set `NVIDIA_VISIBLE_DEVICES`, and add `--runtime=nvidia` to Extra Parameters. Verify path mappings and permissions before enabling any replacement action. Use `:nightly` while testing Media Automation.
 
 Unraid template `Registry` must point at the package page (`https://github.com/jl94x4/Server-Manager-Portal/pkgs/container/server-manager-portal`), not bare `https://ghcr.io`, or Docker update status can show **not available**.
