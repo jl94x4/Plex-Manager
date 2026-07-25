@@ -206,6 +206,70 @@ const StatusPill: React.FC<{ value?: string }> = ({ value }) => (
     </span>
 );
 
+const jobHardwareInfo = (job: MediaAutomationJob | null | undefined) => {
+    if (!job) return null;
+    const plans = jobPlans(job);
+    const planAdapter = plans.map((plan) => plan.adapter).find(Boolean) || null;
+    const planLabel = plans.map((plan) => plan.adapterLabel).find(Boolean) || null;
+    const progress = job.progress && typeof job.progress === 'object' ? job.progress : null;
+    const result = job.result && typeof job.result === 'object' ? job.result : null;
+    const adapter = String(progress?.adapter || result?.adapter || planAdapter || '').toLowerCase() || null;
+    const fallbackMeta = result?.hardwareFallback && typeof result.hardwareFallback === 'object'
+        ? result.hardwareFallback as { requested?: string }
+        : null;
+    const fallback = !!(progress?.hardwareFallback || fallbackMeta);
+    const requested = String(progress?.requestedHardware || fallbackMeta?.requested || '').toLowerCase();
+    if (adapter) {
+        const labels: Record<string, string> = {
+            cpu: fallback ? 'CPU fallback' : 'CPU',
+            nvenc: 'NVENC',
+            qsv: 'Intel QSV',
+            'intel-vaapi': 'Intel VAAPI',
+            vaapi: 'AMD VAAPI',
+        };
+        return {
+            adapter,
+            label: String(progress?.adapterLabel || result?.adapterLabel || planLabel || labels[adapter] || adapter.toUpperCase()),
+            fallback,
+            requested: requested || null,
+            pending: false,
+            isGpu: adapter !== 'cpu',
+        };
+    }
+    const lane = String(job.lane || '').toLowerCase();
+    if (lane === 'gpu') {
+        return { adapter: null, label: 'GPU lane', fallback: false, requested: null, pending: true, isGpu: true };
+    }
+    if (lane === 'cpu') {
+        return { adapter: 'cpu', label: 'CPU', fallback: false, requested: null, pending: true, isGpu: false };
+    }
+    return null;
+};
+
+const HardwareBadge: React.FC<{ job: MediaAutomationJob }> = ({ job }) => {
+    const info = jobHardwareInfo(job);
+    if (!info) return null;
+    const tone = info.fallback
+        ? 'border-amber-500/40 bg-amber-500/15 text-amber-200'
+        : info.isGpu
+            ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+            : 'border-sky-500/40 bg-sky-500/15 text-sky-200';
+    const title = info.fallback
+        ? `Requested ${info.requested || 'GPU'} but fell back to CPU`
+        : info.pending
+            ? `${info.label} — encoder chosen when the job starts`
+            : `Using ${info.label}`;
+    return (
+        <span
+            title={title}
+            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${tone}`}
+        >
+            <Cpu className="h-3 w-3" />
+            {info.label}
+        </span>
+    );
+};
+
 const EmptyState: React.FC<{ icon: React.ComponentType<{ className?: string }>; title: string; detail: string }> = ({ icon: Icon, title, detail }) => (
     <div className={`${cardClass} flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center`}>
         <Icon className="mb-3 h-9 w-9 text-plex/70" />
@@ -641,7 +705,39 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <div className="space-y-3 text-sm">
                                 <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">FFmpeg</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffmpeg === 'object' ? (capabilities.ffmpeg.available === false ? 'Unavailable' : capabilities.ffmpeg.version || 'Available') : capabilities.ffmpeg ? 'Available' : 'Unknown'}</p></div>
                                 <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">FFprobe</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffprobe === 'object' ? (capabilities.ffprobe.available === false ? 'Unavailable' : capabilities.ffprobe.version || 'Available') : capabilities.ffprobe ? 'Available' : 'Unknown'}</p></div>
-                                <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">Hardware</p><p className="mt-2 font-semibold text-text">{capabilities.hardware?.length ? capabilities.hardware.join(', ') : 'No hardware data reported'}</p></div>
+                                <div className="rounded-lg bg-background/40 p-3">
+                                    <p className="text-muted">Hardware adapters</p>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {[
+                                            ['cpu', 'CPU'],
+                                            ['qsv', 'Intel QSV'],
+                                            ['intel-vaapi', 'Intel VAAPI'],
+                                            ['nvenc', 'NVENC'],
+                                            ['vaapi', 'AMD VAAPI'],
+                                        ].map(([id, label]) => {
+                                            const available = Array.isArray(capabilities.hardware)
+                                                ? capabilities.hardware.map(String).includes(id)
+                                                : id === 'cpu';
+                                            return (
+                                                <span
+                                                    key={id}
+                                                    className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                                                        available
+                                                            ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
+                                                            : 'border-border bg-white/5 text-muted'
+                                                    }`}
+                                                >
+                                                    {label}{available ? '' : ' · off'}
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                    {!capabilities.hardware?.includes('qsv') && !capabilities.hardware?.includes('intel-vaapi') && (
+                                        <p className="mt-2 text-xs text-amber-200/90">
+                                            Intel QSV/VAAPI off — map Unraid <span className="font-mono text-plex">/dev/dri</span> into the container, then run Test worker.
+                                        </p>
+                                    )}
+                                </div>
                                 <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">Encoders</p><p className="mt-2 line-clamp-3 font-semibold text-text">{capabilities.encoders?.length ? capabilities.encoders.join(', ') : 'No encoder data reported'}</p></div>
                             </div>
                         </section>
@@ -837,14 +933,19 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 <div className="min-w-0">
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <StatusPill value={jobState} />
+                                                        <HardwareBadge job={job} />
                                                         <span className="text-xs text-muted">#{jobId}</span>
-                                                        {job.lane && <span className="text-xs uppercase text-muted">{job.lane}</span>}
                                                         {job.priority != null && <span className="text-xs text-muted">P{job.priority}</span>}
                                                         {percent != null && <span className="text-xs font-semibold text-plex">{Math.round(percent)}%</span>}
                                                         {progressMeta.etaLabel && <span className="text-xs text-amber-300">ETA {progressMeta.etaLabel}</span>}
                                                         {progressMeta.speedLabel && <span className="text-xs text-muted">{progressMeta.speedLabel}</span>}
                                                         {progressMeta.fpsLabel && <span className="text-xs text-muted">{progressMeta.fpsLabel}</span>}
                                                     </div>
+                                                    {jobHardwareInfo(job)?.fallback && (
+                                                        <p className="mt-1 text-xs text-amber-300">
+                                                            Hardware fell back to CPU{jobHardwareInfo(job)?.requested ? ` (wanted ${jobHardwareInfo(job)?.requested})` : ''}. Check /dev/dri and Capabilities after Test worker.
+                                                        </p>
+                                                    )}
                                                     <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
                                                     <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.createdAt)}</p>
                                                     {progressMeta.elapsedLabel && (
@@ -1060,7 +1161,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         : (selectedJob?.phase || selectedJob?.state || selectedJob?.status)
                                                 }
                                             />
-                                            {selectedJob?.lane && <span className="text-xs uppercase text-muted">{selectedJob.lane}</span>}
+                                            {selectedJob && <HardwareBadge job={selectedJob} />}
                                             {selectedJob?.priority != null && (
                                                 <label className="flex items-center gap-2 text-xs text-muted">
                                                     Priority

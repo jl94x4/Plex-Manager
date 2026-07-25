@@ -72,6 +72,10 @@ export type MediaAutomationJobProgress = {
     stepCount?: number;
     command?: string;
     currentCommand?: string;
+    adapter?: string | null;
+    adapterLabel?: string | null;
+    hardwareFallback?: boolean;
+    requestedHardware?: string | null;
 };
 
 export type MediaAutomationPlan = {
