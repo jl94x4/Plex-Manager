@@ -30,7 +30,7 @@ export const DEFAULT_NAV_ORDER = [
 ] as const;
 
 /** Mobile bottom bar shows this many items before the "More" overflow menu. */
-export const MOBILE_NAV_PRIMARY_SLOTS = 7;
+export const MOBILE_NAV_PRIMARY_SLOTS = 5;
 
 /** Labels must match the sidebar (`Navigation` in screens.tsx). */
 export const NAV_ITEM_LABELS: Record<string, string> = {

@@ -4372,11 +4372,11 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                             )}
                         </div>
 
-                        <div className="grid grid-cols-3 sm:flex sm:flex-row bg-background p-1 rounded-lg border border-border overflow-x-auto custom-scrollbar w-full xl:w-auto">
+                        <div className="grid grid-cols-3 gap-1 bg-background p-1 rounded-lg border border-border w-full xl:w-auto sm:flex sm:flex-row sm:gap-0 sm:overflow-x-auto sm:custom-scrollbar">
                             {(['all', 'active', 'trial', 'expiring', 'expired', 'revoked'] as const).map((status) => (
                                 <button
                                     key={status}
-                                    className={`col-span-1 px-2 sm:px-4 py-2 rounded-md font-medium transition-all text-xs sm:text-sm text-center ${statusFilter === status ? 'bg-plex text-background shadow-md font-bold' : 'text-muted hover:bg-white/5 hover:text-text'}`}
+                                    className={`w-full sm:w-auto min-w-0 px-2 sm:px-4 py-2 rounded-md font-medium transition-all text-xs sm:text-sm text-center truncate ${statusFilter === status ? 'bg-plex text-background shadow-md font-bold' : 'text-muted hover:bg-white/5 hover:text-text'}`}
                                     onClick={() => setStatusFilter(status)}
                                 >
                                     {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -9855,13 +9855,14 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         const label = options.compactLabel || item.label;
         const badgeCount = options.badgeCount || 0;
         const baseClass = options.mobile
-            ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
+            ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors overflow-hidden ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
             : `flex items-center gap-3 px-3 py-2.5 no-underline rounded-lg transition-all text-[14px] font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
 
         if (item.href) {
             return (
                 <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : 'flex items-center gap-3 px-3 py-2.5 text-muted no-underline rounded-lg transition-all text-[14px] font-medium hover:bg-white/5 hover:text-text'}>
-                    <Icon className="w-5 h-5 flex-shrink-0" /> {label}
+                    <Icon className="w-5 h-5 flex-shrink-0" />
+                    {options.mobile ? <span className="w-full truncate leading-tight">{label}</span> : label}
                 </a>
             );
         }
@@ -9880,14 +9881,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 onClick={handleActivate}
             >
                 <span className="relative shrink-0">
-                    <Icon className={options.mobile ? 'w-5 h-5' : 'w-5 h-5'} />
+                    <Icon className="w-5 h-5" />
                     {badgeCount > 0 && options.mobile && (
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none">
+                        <span className="absolute -top-1 left-full -translate-x-1/2 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none pointer-events-none">
                             {badgeCount > 9 ? '9+' : badgeCount}
                         </span>
                     )}
                 </span>
-                {options.mobile ? label : (
+                {options.mobile ? (
+                    <span className="w-full truncate leading-tight px-0.5">{label}</span>
+                ) : (
                     <span className="flex items-center gap-2 flex-1 min-w-0">
                         <span className="truncate">{label}</span>
                         {badgeCount > 0 && (
@@ -10265,7 +10268,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                         type="button"
                                         aria-label="More menu"
                                         aria-expanded={mobileMoreOpen}
-                                        className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 cursor-pointer ${
+                                        className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 cursor-pointer overflow-hidden ${
                                             mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
                                         }`}
                                         onClick={() => setMobileMoreOpen((open) => !open)}
@@ -10273,7 +10276,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                         <span className="relative shrink-0">
                                             <MoreHorizontal className="w-5 h-5" />
                                         </span>
-                                        <span>More</span>
+                                        <span className="w-full truncate leading-tight px-0.5">More</span>
                                         {mobileMoreOpen && (
                                             <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-plex shadow-[0_0_5px_rgba(229,160,13,0.8)]" />
                                         )}
