@@ -384,17 +384,20 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                             <label className="font-semibold text-sm block mb-2 text-text">Password</label>
                             <div className="relative">
                                 <input
+                                    key={showAuthPassword ? 'scanner-auth-visible' : 'scanner-auth-hidden'}
                                     type={showAuthPassword ? 'text' : 'password'}
                                     className={`${FIELD} pr-11`}
                                     value={scanner.authPassword}
                                     disabled={!enabled}
                                     onChange={(e) => update({ authPassword: e.target.value })}
-                                    autoComplete="new-password"
+                                    autoComplete="off"
+                                    spellCheck={false}
                                 />
                                 <button
                                     type="button"
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted hover:text-text hover:bg-white/5 disabled:opacity-40 bg-transparent border-0 cursor-pointer"
+                                    className="absolute inset-y-0 right-0 z-10 flex items-center px-3 rounded-r-lg text-muted hover:text-text hover:bg-white/5 disabled:opacity-40 bg-transparent border-0 cursor-pointer"
                                     disabled={!enabled}
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => setShowAuthPassword((v) => !v)}
                                     aria-label={showAuthPassword ? 'Hide password' : 'Show password'}
                                     title={showAuthPassword ? 'Hide password' : 'Show password'}
