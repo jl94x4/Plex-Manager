@@ -3850,6 +3850,16 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     mediaAutomationCapabilitiesCache = null;
     mediaAutomationCapabilitiesAt = 0;
     await refreshMediaAutomationAuthCache();
+    try {
+        if (collexionsConfig.mediaAutomationEnabled && !mediaAutomationPaused) {
+            await mediaAutomationService.start();
+            await mediaAutomationService.reloadLibraries();
+        } else {
+            await mediaAutomationService.stop();
+        }
+    } catch (error) {
+        log(`[media-automation] Failed to reload after settings save: ${error.message}`);
+    }
     systemJobs.autoBackup.nextRun = collexionsConfig.autoBackupEnabled ? computeNextBackupRun(collexionsConfig) : null;
     log('Configuration saved successfully.');
     if (collexionsDefaultsChanged) {
@@ -18815,6 +18825,18 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
     try {
         const status = await mediaAutomationService.status();
         const jobs = status.jobs || [];
+        const dayAgo = Date.now() - 86_400_000;
+        const finishedRecent = jobs.filter((job) => {
+            const finished = Date.parse(job.finishedAt || job.updatedAt || 0);
+            return Number.isFinite(finished) && finished >= dayAgo
+                && ['succeeded', 'failed', 'cancelled'].includes(job.state);
+        });
+        const succeededRecent = finishedRecent.filter((job) => job.state === 'succeeded');
+        const failedRecent = finishedRecent.filter((job) => job.state === 'failed');
+        const sumResultBytes = (key) => finishedRecent.reduce((sum, job) => {
+            const value = Number(job.result?.[key] ?? job.metadata?.[key] ?? 0);
+            return sum + (Number.isFinite(value) ? value : 0);
+        }, 0);
         res.json({
             ...status,
             enabled: true,
@@ -18824,6 +18846,16 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
             queuedJobs: jobs.filter((job) => job.state === 'queued').length,
             completedJobs: jobs.filter((job) => job.state === 'succeeded').length,
             failedJobs: jobs.filter((job) => job.state === 'failed').length,
+            metrics: {
+                processed24h: succeededRecent.length,
+                failed24h: failedRecent.length,
+                cancelled24h: finishedRecent.filter((job) => job.state === 'cancelled').length,
+                successRate24h: finishedRecent.length
+                    ? Math.round((succeededRecent.length / finishedRecent.length) * 100)
+                    : null,
+                bytesIn24h: sumResultBytes('sourceBytes') || sumResultBytes('inputBytes'),
+                bytesOut24h: sumResultBytes('outputBytes'),
+            },
         });
     } catch (error) {
         res.status(500).json({ error: error.message || 'Failed to load Media Automation status' });
@@ -18858,14 +18890,21 @@ app.post('/api/media-automation/control', requireAdmin, requireMediaAutomation, 
         const action = String(req.body?.action || '').toLowerCase();
         if (action === 'pause' || action === 'stop') {
             mediaAutomationPaused = true;
-            mediaAutomationService.stop();
+            await mediaAutomationService.stop();
         } else if (action === 'resume' || action === 'start') {
             mediaAutomationPaused = false;
             await mediaAutomationService.start();
         } else if (action === 'process') {
             await mediaAutomationService.scheduler.processNow();
+        } else if (action === 'scan' || action === 'scannow') {
+            const result = await mediaAutomationService.scanNow();
+            await appendAuditLog('media_automation_scan', req.user, null, result || {});
+            return res.json({ ok: true, action: 'scan', result, status: await mediaAutomationService.status() });
+        } else if (action === 'reload') {
+            const watch = await mediaAutomationService.reloadLibraries();
+            return res.json({ ok: true, action: 'reload', watch, status: await mediaAutomationService.status() });
         } else {
-            return res.status(400).json({ error: 'Action must be pause, resume, or process' });
+            return res.status(400).json({ error: 'Action must be pause, resume, process, scan, or reload' });
         }
         await mediaAutomationService.recordActivity({
             type: `worker.${action}`,
@@ -18876,6 +18915,66 @@ app.post('/api/media-automation/control', requireAdmin, requireMediaAutomation, 
         res.json({ ok: true, action, status: await mediaAutomationService.status() });
     } catch (error) {
         res.status(500).json({ error: error.message || 'Worker control failed' });
+    }
+});
+
+app.post('/api/media-automation/scan', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const result = await mediaAutomationService.scanNow();
+        await appendAuditLog('media_automation_scan', req.user, null, result || {});
+        res.json({ ok: true, result, status: await mediaAutomationService.status() });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Library scan failed' });
+    }
+});
+
+app.post('/api/media-automation/pending/test', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const sourcePath = String(req.body?.path || '').trim();
+        if (!sourcePath) return res.status(400).json({ error: 'A file path is required' });
+        const library = await findMediaAutomationLibraryForPath(sourcePath);
+        if (!library) return res.status(400).json({ error: 'Path is outside enabled library roots' });
+        const runtime = mediaAutomationRuntimeConfig(await loadFile(CONFIG_PATH, {}));
+        const probe = await probeMedia(sourcePath, { ffprobePath: runtime.ffprobePath });
+        const context = buildRuleContext({
+            filePath: sourcePath,
+            libraryRoot: library.rootPath,
+            probe,
+        });
+        const pipelines = await mediaAutomationService.pipelines.list();
+        const candidates = pipelines
+            .filter((pipeline) => pipeline.enabled !== false)
+            .filter((pipeline) => !library.pipelineId || String(pipeline.id) === String(library.pipelineId))
+            .sort((a, b) => Number(b.priority || 0) - Number(a.priority || 0));
+        let matchedPipeline = null;
+        let matchedRule = null;
+        for (const pipeline of candidates) {
+            const rule = (pipeline.compiledRules || []).find((entry) => matchMediaRule(entry, context)) || null;
+            if (rule) {
+                matchedPipeline = pipeline;
+                matchedRule = rule;
+                break;
+            }
+        }
+        res.json({
+            ok: true,
+            matched: !!matchedRule,
+            enqueued: false,
+            path: sourcePath,
+            libraryId: library.id,
+            pipelineId: matchedPipeline?.id || null,
+            pipelineName: matchedPipeline?.name || null,
+            ruleId: matchedRule?.id || null,
+            reason: matchedRule ? 'matched' : 'no-matching-rule',
+            probe: {
+                format: probe.format?.format_name,
+                duration: probe.format?.duration,
+                videoCodec: probe.streams?.find((stream) => stream.codec_type === 'video')?.codec_name,
+                audioCodec: probe.streams?.find((stream) => stream.codec_type === 'audio')?.codec_name,
+            },
+        });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Pending test failed' });
     }
 });
 
@@ -18906,6 +19005,37 @@ app.post('/api/media-automation/jobs/:id/cancel', requireAdmin, requireMediaAuto
     if (!job) return res.status(404).json({ error: 'Job not found or already finished' });
     await appendAuditLog('media_automation_job_cancelled', req.user, null, { jobId: req.params.id });
     res.json({ ok: true, job });
+});
+
+app.post('/api/media-automation/jobs/:id/skip', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const reason = String(req.body?.reason || 'skipped').trim() || 'skipped';
+        const job = await mediaAutomationService.skipJob(req.params.id, reason);
+        if (!job) return res.status(404).json({ error: 'Job not found or already finished' });
+        await mediaAutomationService.recordActivity({
+            type: 'job.skipped',
+            jobId: job.id,
+            message: `Skipped ${path.basename(job.sourcePath || '')}`,
+            data: { reason },
+        });
+        await appendAuditLog('media_automation_job_skipped', req.user, null, { jobId: req.params.id, reason });
+        res.json({ ok: true, job });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Failed to skip job' });
+    }
+});
+
+app.post('/api/media-automation/jobs/:id/priority', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const job = await mediaAutomationService.setJobPriority(req.params.id, req.body?.priority);
+        await appendAuditLog('media_automation_job_priority', req.user, null, {
+            jobId: req.params.id,
+            priority: job.priority,
+        });
+        res.json({ ok: true, job });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Failed to update job priority' });
+    }
 });
 
 app.post('/api/media-automation/jobs/:id/retry', requireAdmin, requireMediaAutomation, async (req, res) => {
@@ -18957,6 +19087,7 @@ app.get('/api/media-automation/libraries', requireAdmin, requireMediaAutomation,
 app.post('/api/media-automation/libraries', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
         const library = await mediaAutomationService.libraries.create(normalizeMediaAutomationLibraryInput(req.body));
+        await mediaAutomationService.reloadLibraries();
         await appendAuditLog('media_automation_library_created', req.user, null, { libraryId: library.id, name: library.name });
         res.status(201).json({ library });
     } catch (error) {
@@ -18972,6 +19103,7 @@ app.put('/api/media-automation/libraries/:id', requireAdmin, requireMediaAutomat
             req.params.id,
             normalizeMediaAutomationLibraryInput({ ...existing, ...req.body }, req.params.id)
         );
+        await mediaAutomationService.reloadLibraries();
         await appendAuditLog('media_automation_library_updated', req.user, null, { libraryId: library.id, name: library.name });
         res.json({ library });
     } catch (error) {
@@ -18982,6 +19114,7 @@ app.put('/api/media-automation/libraries/:id', requireAdmin, requireMediaAutomat
 app.delete('/api/media-automation/libraries/:id', requireAdmin, requireMediaAutomation, async (req, res) => {
     const removed = await mediaAutomationService.libraries.remove(req.params.id);
     if (!removed) return res.status(404).json({ error: 'Library not found' });
+    await mediaAutomationService.reloadLibraries();
     await appendAuditLog('media_automation_library_deleted', req.user, null, { libraryId: req.params.id });
     res.json({ ok: true });
 });

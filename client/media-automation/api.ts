@@ -4,6 +4,7 @@ import type {
     MediaAutomationCapabilities,
     MediaAutomationJob,
     MediaAutomationLibrary,
+    MediaAutomationPendingTest,
     MediaAutomationPipeline,
     MediaAutomationPipelinePreview,
     MediaAutomationStatus,
@@ -33,6 +34,14 @@ export const mediaAutomationApi = {
         await apiFetch(`${ROOT}/jobs?limit=${limit}`),
         ['jobs', 'items', 'results'],
     ),
+    getJob: async (id: string | number) => {
+        const response = await apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}`) as { job?: MediaAutomationJob };
+        return response.job || null;
+    },
+    jobLogs: async (id: string | number, limit = 100) => asList<MediaAutomationActivity>(
+        await apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/logs?limit=${limit}`),
+        ['entries', 'logs', 'activity', 'items'],
+    ),
     activity: async (limit = 100) => asList<MediaAutomationActivity>(
         await apiFetch(`${ROOT}/activity?limit=${limit}`),
         ['activity', 'events', 'items', 'results'],
@@ -48,7 +57,11 @@ export const mediaAutomationApi = {
     enqueue: (path: string, pipelineId?: string | number) => apiFetch(`${ROOT}/enqueue`, json({ path, pipelineId })),
     testWorker: () => apiFetch(`${ROOT}/worker/test`, json({})),
     control: (action: string) => apiFetch(`${ROOT}/control`, json({ action })),
+    scanNow: () => apiFetch(`${ROOT}/scan`, json({})),
+    testPending: (path: string) => apiFetch(`${ROOT}/pending/test`, json({ path })) as Promise<MediaAutomationPendingTest>,
     cancelJob: (id: string | number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/cancel`, json({})),
+    skipJob: (id: string | number, reason = 'skipped') => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/skip`, json({ reason })),
+    setPriority: (id: string | number, priority: number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/priority`, json({ priority })),
     retryJob: (id: string | number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/retry`, json({})),
     createLibrary: (library: MediaAutomationLibrary) => apiFetch(`${ROOT}/libraries`, json(library)),
     updateLibrary: (id: string | number, library: MediaAutomationLibrary) => apiFetch(`${ROOT}/libraries/${encodeURIComponent(id)}`, {

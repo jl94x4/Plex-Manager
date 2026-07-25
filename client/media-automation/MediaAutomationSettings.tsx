@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, Gauge, ShieldCheck } from 'lucide-react';
+import { Cpu, FolderSearch, Gauge, Radar, ShieldCheck } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import type { HardwareMode, MediaAutomationSettingsConfig, OutputMode } from './types';
 
@@ -23,13 +23,14 @@ export const MediaAutomationSettings: React.FC<Props> = ({
     onConfigChange,
 }) => {
     const update = (patch: Partial<MediaAutomationSettingsConfig>) => onConfigChange({ ...config, ...patch });
+    const globalDryRun = config.fallback.outputMode === 'dry-run';
 
     return (
         <div className="mb-8 animate-fade-in space-y-6">
             <div>
                 <h3 className="text-xl font-bold text-plex mb-2 border-b border-border pb-2">Media Automation</h3>
                 <p className="text-sm text-muted max-w-3xl">
-                    Configure the native FFmpeg worker, safe fallbacks, and dashboard visibility. Keep dry-run enabled while validating new pipelines.
+                    Configure the native FFmpeg worker, library scan/watch discovery, safe fallbacks, and dashboard visibility.
                 </p>
             </div>
 
@@ -76,7 +77,7 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                         autoComplete="new-password"
                         onChange={(event) => update({ auth: { ...config.auth, password: event.target.value } })}
                     />
-                    <p className="text-xs text-muted">Used by Sonarr, Radarr, and Lidarr webhook callers via HTTP Basic Auth at <code className="text-plex">/triggers/media-automation/*</code>. Path rewrites can reuse Scanner trigger rewrite rules when ARR and container paths differ.</p>
+                    <p className="text-xs text-muted">Used by Sonarr, Radarr, and Lidarr webhook callers via HTTP Basic Auth at <code className="text-plex">/triggers/media-automation/*</code>.</p>
                 </div>
 
                 <div className="glass-card-sm p-5 space-y-4">
@@ -139,11 +140,75 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                             { value: 'replace', label: 'Replace source' },
                         ]}
                     />
+                    {globalDryRun && (
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                            Global fallback is Dry run — every job is forced to dry-run regardless of pipeline output mode until you change this.
+                        </div>
+                    )}
+                </div>
+            </section>
+
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="glass-card-sm p-5 space-y-4">
+                    <div className="flex items-center gap-2">
+                        <FolderSearch className="w-5 h-5 text-plex" />
+                        <h4 className="font-bold text-text">Library scan</h4>
+                    </div>
+                    <SettingsToggleRow
+                        title="Enable scheduled library scans"
+                        description="Periodically discover media under configured library roots and enqueue matching files."
+                        checked={config.libraryScanEnabled !== false}
+                        onChange={(libraryScanEnabled) => update({ libraryScanEnabled })}
+                        border={false}
+                    />
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted" htmlFor="media-automation-scan-interval">
+                        Scan interval (minutes)
+                        <input
+                            id="media-automation-scan-interval"
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={15}
+                            max={10080}
+                            disabled={config.libraryScanEnabled === false}
+                            value={config.libraryScanIntervalMinutes}
+                            onChange={(event) => update({
+                                libraryScanIntervalMinutes: Math.min(10080, Math.max(15, Number(event.target.value) || 360)),
+                            })}
+                        />
+                    </label>
+                </div>
+                <div className="glass-card-sm p-5 space-y-4">
+                    <div className="flex items-center gap-2">
+                        <Radar className="w-5 h-5 text-plex" />
+                        <h4 className="font-bold text-text">Filesystem watcher</h4>
+                    </div>
+                    <SettingsToggleRow
+                        title="Watch library folders"
+                        description="Enqueue new or changed media files as they appear under enabled library roots."
+                        checked={config.libraryWatchEnabled !== false}
+                        onChange={(libraryWatchEnabled) => update({ libraryWatchEnabled })}
+                        border={false}
+                    />
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted" htmlFor="media-automation-watch-debounce">
+                        Watch debounce (ms)
+                        <input
+                            id="media-automation-watch-debounce"
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={500}
+                            max={120000}
+                            disabled={config.libraryWatchEnabled === false}
+                            value={config.libraryWatchDebounceMs}
+                            onChange={(event) => update({
+                                libraryWatchDebounceMs: Math.min(120000, Math.max(500, Number(event.target.value) || 5000)),
+                            })}
+                        />
+                    </label>
                 </div>
             </section>
 
             <p className="text-xs text-muted">
-                Save Settings below to apply changes. The dashboard degrades gracefully until the media automation API is installed and reachable.
+                Save Settings below to apply changes. Use Scan now on the Media Automation dashboard for an immediate library pass.
             </p>
         </div>
     );

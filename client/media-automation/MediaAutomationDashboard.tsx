@@ -9,6 +9,7 @@ import {
     CirclePlay,
     Cpu,
     FolderCog,
+    FolderSearch,
     Gauge,
     Layers3,
     ListRestart,
@@ -16,10 +17,12 @@ import {
     Pencil,
     Play,
     Plus,
+    Radar,
     RefreshCw,
     RotateCcw,
     Save,
     ServerCog,
+    SkipForward,
     Square,
     Trash2,
     X,
@@ -29,6 +32,7 @@ import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { mediaAutomationApi } from './api';
 import {
+    PIPELINE_PRESETS,
     emptyLibrary,
     emptyPipeline,
     type HardwareMode,
@@ -36,6 +40,7 @@ import {
     type MediaAutomationCapabilities,
     type MediaAutomationJob,
     type MediaAutomationLibrary,
+    type MediaAutomationPendingTest,
     type MediaAutomationPipeline,
     type MediaAutomationPipelinePreview,
     type MediaAutomationRuleCondition,
@@ -166,6 +171,13 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [previewResult, setPreviewResult] = useState<MediaAutomationPipelinePreview | null>(null);
     const [previewBusy, setPreviewBusy] = useState(false);
     const [savingEditor, setSavingEditor] = useState(false);
+    const [selectedJobId, setSelectedJobId] = useState<string | number | null>(null);
+    const [selectedJob, setSelectedJob] = useState<MediaAutomationJob | null>(null);
+    const [jobLogs, setJobLogs] = useState<MediaAutomationActivity[]>([]);
+    const [jobDetailBusy, setJobDetailBusy] = useState(false);
+    const [pendingPath, setPendingPath] = useState('');
+    const [pendingResult, setPendingResult] = useState<MediaAutomationPendingTest | null>(null);
+    const [activityFilter, setActivityFilter] = useState<'all' | 'job' | 'scan' | 'watch'>('all');
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
@@ -270,6 +282,45 @@ export const MediaAutomationDashboard: React.FC = () => {
         return counts;
     }, [jobs]);
 
+    const filteredActivity = useMemo(() => {
+        if (activityFilter === 'all') return activity;
+        return activity.filter((entry) => {
+            const type = String(entry.type || entry.action || '').toLowerCase();
+            if (activityFilter === 'job') return type.startsWith('job.') || type.includes('worker.');
+            if (activityFilter === 'scan') return type.includes('library.scan') || type.includes('scan');
+            if (activityFilter === 'watch') return type.includes('library.watch') || type.includes('watch');
+            return true;
+        });
+    }, [activity, activityFilter]);
+
+    const openJobDetail = async (jobId: string | number) => {
+        setSelectedJobId(jobId);
+        setJobDetailBusy(true);
+        try {
+            const [job, logs] = await Promise.all([
+                mediaAutomationApi.getJob(jobId),
+                mediaAutomationApi.jobLogs(jobId),
+            ]);
+            setSelectedJob(job || jobs.find((entry) => String(entry.id) === String(jobId)) || null);
+            setJobLogs(logs);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to load job details', 'error');
+            setSelectedJob(jobs.find((entry) => String(entry.id) === String(jobId)) || null);
+            setJobLogs([]);
+        } finally {
+            setJobDetailBusy(false);
+        }
+    };
+
+    const formatBytes = (value?: number) => {
+        const bytes = Number(value || 0);
+        if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+        if (bytes < 1024 ** 3) return `${(bytes / (1024 ** 2)).toFixed(1)} MB`;
+        return `${(bytes / (1024 ** 3)).toFixed(2)} GB`;
+    };
+
     const runPipelinePreview = async () => {
         if (!pipelineDraft?.id || !previewPath.trim()) {
             toast('Save the pipeline first, then provide a test file path.', 'error');
@@ -355,6 +406,19 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </div>
                         ))}
                     </div>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        {[
+                            ['Processed 24h', status.metrics?.processed24h ?? 0, 'text-green-300'],
+                            ['Failed 24h', status.metrics?.failed24h ?? 0, 'text-red-300'],
+                            ['Success rate 24h', status.metrics?.successRate24h == null ? '—' : `${status.metrics.successRate24h}%`, 'text-plex'],
+                            ['Bytes out 24h', formatBytes(status.metrics?.bytesOut24h), 'text-blue-300'],
+                        ].map(([label, value, color]) => (
+                            <div key={String(label)} className={`${cardClass} p-4 sm:p-5`}>
+                                <p className="text-xs font-bold uppercase tracking-wide text-muted">{label}</p>
+                                <p className={`mt-2 text-2xl font-black ${color}`}>{asText(value, '0')}</p>
+                            </div>
+                        ))}
+                    </div>
                     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
                         <section className={`${cardClass} p-5`}>
                             <div className="mb-5 flex items-center justify-between">
@@ -373,14 +437,19 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     </button>
                                 ))}
                             </div>
-                            <button type="button" className={`${buttonClass} mt-3 w-full`} disabled={busy !== null} onClick={() => runAction('worker-test', mediaAutomationApi.testWorker, 'Worker test completed.')}>
-                                {busy === 'worker-test' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Test worker
-                            </button>
+                            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction('scan-now', mediaAutomationApi.scanNow, 'Library scan completed.')}>
+                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />} Scan now
+                                </button>
+                                <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction('worker-test', mediaAutomationApi.testWorker, 'Worker test completed.')}>
+                                    {busy === 'worker-test' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Test worker
+                                </button>
+                            </div>
                             <dl className="mt-5 grid grid-cols-1 gap-3 border-t border-border/60 pt-5 text-sm sm:grid-cols-2">
-                                <div><dt className="text-muted">Last heartbeat</dt><dd className="mt-1 font-semibold text-text">{formatTime(status.lastHeartbeat)}</dd></div>
-                                <div><dt className="text-muted">Started</dt><dd className="mt-1 font-semibold text-text">{formatTime(status.startedAt)}</dd></div>
-                                <div><dt className="text-muted">Worker version</dt><dd className="mt-1 font-semibold text-text">{asText(status.version)}</dd></div>
-                                <div><dt className="text-muted">Configured libraries</dt><dd className="mt-1 font-semibold text-text">{libraries.length}</dd></div>
+                                <div><dt className="text-muted">Last scan</dt><dd className="mt-1 font-semibold text-text">{formatTime(status.lastScanAt)}{status.lastScanResult ? ` · ${status.lastScanResult.enqueued || 0} queued` : ''}</dd></div>
+                                <div><dt className="text-muted">Periodic scan</dt><dd className="mt-1 font-semibold text-text">{status.libraryScanEnabled === false ? 'Disabled' : status.periodicScanning ? `Every ${status.libraryScanIntervalMinutes || 360}m` : 'Idle'}</dd></div>
+                                <div><dt className="text-muted">Watcher</dt><dd className="mt-1 flex items-center gap-2 font-semibold text-text"><Radar className="h-3.5 w-3.5 text-plex" />{status.libraryWatchEnabled === false ? 'Disabled' : status.watch?.watching ? `Watching ${status.watch.roots?.length || 0} root(s)` : 'Not watching'}</dd></div>
+                                <div><dt className="text-muted">Lanes</dt><dd className="mt-1 font-semibold text-text">CPU {status.lanes?.cpu?.running || 0}/{status.lanes?.cpu?.queued || 0} · GPU {status.lanes?.gpu?.running || 0}/{status.lanes?.gpu?.queued || 0}</dd></div>
                             </dl>
                         </section>
                         <section className={`${cardClass} p-5`}>
@@ -408,7 +477,39 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </button>
                         </div>
                     </section>
-                    {jobs.length === 0 ? <EmptyState icon={ListRestart} title="Queue is empty" detail="Enqueue a path above or wait for a configured library watcher to discover media." /> : (
+                    <section className={`${cardClass} p-5`}>
+                        <h2 className="mb-4 font-bold text-text">Test candidate (no enqueue)</h2>
+                        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+                            <input className={fieldClass} value={pendingPath} onChange={(event) => setPendingPath(event.target.value)} placeholder="/media/movies/example.mkv" />
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={!pendingPath.trim() || busy !== null}
+                                onClick={async () => {
+                                    setBusy('pending-test');
+                                    try {
+                                        const result = await mediaAutomationApi.testPending(pendingPath.trim());
+                                        setPendingResult(result);
+                                        toast(result.matched ? `Matched ${result.pipelineName || 'pipeline'}` : 'No matching pipeline rule');
+                                    } catch (error) {
+                                        toast(error instanceof Error ? error.message : 'Pending test failed', 'error');
+                                    } finally {
+                                        setBusy(null);
+                                    }
+                                }}
+                            >
+                                {busy === 'pending-test' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Test file
+                            </button>
+                        </div>
+                        {pendingResult && (
+                            <div className="mt-3 rounded-lg bg-background/40 p-3 text-xs text-muted">
+                                <p className="font-semibold text-text">{pendingResult.matched ? 'Would queue' : 'Would skip'} · {pendingResult.reason}</p>
+                                {pendingResult.pipelineName && <p className="mt-1">Pipeline: {pendingResult.pipelineName}</p>}
+                                {pendingResult.probe && <p className="mt-1">{asText(pendingResult.probe.format)} · {asText(pendingResult.probe.videoCodec)} / {asText(pendingResult.probe.audioCodec)}</p>}
+                            </div>
+                        )}
+                    </section>
+                    {jobs.length === 0 ? <EmptyState icon={ListRestart} title="Queue is empty" detail="Enqueue a path, run Scan now, or wait for the library watcher to discover matching media." /> : (
                         <div className="space-y-3">
                             {jobs.map((job) => {
                                 const jobId = job.id;
@@ -418,16 +519,24 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 const errorText = jobErrorText(job.error);
                                 const canCancel = !['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'success'].includes(state);
                                 const canRetry = ['failed', 'cancelled', 'canceled', 'error'].includes(state);
+                                const canSkip = state === 'queued';
                                 return (
-                                    <article key={String(jobId)} className={`${cardClass} p-4`}>
+                                    <article key={String(jobId)} className={`${cardClass} cursor-pointer p-4 transition hover:border-plex/40`} onClick={() => openJobDetail(jobId)}>
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div className="min-w-0">
-                                                <div className="flex flex-wrap items-center gap-2"><StatusPill value={jobState} /><span className="text-xs text-muted">#{jobId}</span>{percent != null && <span className="text-xs text-muted">{Math.round(percent)}%</span>}</div>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <StatusPill value={jobState} />
+                                                    <span className="text-xs text-muted">#{jobId}</span>
+                                                    {job.lane && <span className="text-xs uppercase text-muted">{job.lane}</span>}
+                                                    {job.priority != null && <span className="text-xs text-muted">P{job.priority}</span>}
+                                                    {percent != null && <span className="text-xs text-muted">{Math.round(percent)}%</span>}
+                                                </div>
                                                 <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
                                                 <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.createdAt)}</p>
                                                 {errorText && <p className="mt-2 text-xs text-red-300">{errorText}</p>}
                                             </div>
-                                            <div className="flex shrink-0 gap-2">
+                                            <div className="flex shrink-0 gap-2" onClick={(event) => event.stopPropagation()}>
+                                                {canSkip && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`skip-${jobId}`, () => mediaAutomationApi.skipJob(jobId), 'Job skipped.')}><SkipForward className="h-4 w-4" /> Skip</button>}
                                                 {canRetry && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`retry-${jobId}`, () => mediaAutomationApi.retryJob(jobId), 'Job queued for retry.')}><RotateCcw className="h-4 w-4" /> Retry</button>}
                                                 {canCancel && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`cancel-${jobId}`, () => mediaAutomationApi.cancelJob(jobId), 'Job cancelled.')}><X className="h-4 w-4" /> Cancel</button>}
                                             </div>
@@ -445,7 +554,38 @@ export const MediaAutomationDashboard: React.FC = () => {
 
             {tab === 'pipelines' && (
                 <div className="space-y-4">
-                    <div className="flex justify-end"><button type="button" className={primaryButtonClass} onClick={() => { setPreviewPath(''); setPreviewResult(null); setPipelineDraft(emptyPipeline()); }}><Plus className="h-4 w-4" /> New pipeline</button></div>
+                    <section className={`${cardClass} p-5`}>
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h2 className="font-bold text-text">Presets</h2>
+                                <p className="mt-1 text-xs text-muted">Seed a pipeline from a common Unmanic-style template, then edit rules and hardware.</p>
+                            </div>
+                            <button type="button" className={primaryButtonClass} onClick={() => { setPreviewPath(''); setPreviewResult(null); setPipelineDraft(emptyPipeline()); }}><Plus className="h-4 w-4" /> New pipeline</button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                            {PIPELINE_PRESETS.map((preset) => (
+                                <button
+                                    key={preset.id}
+                                    type="button"
+                                    className="rounded-xl border border-border bg-background/30 p-4 text-left transition hover:border-plex/50 hover:bg-plex/10"
+                                    onClick={() => {
+                                        setPreviewPath('');
+                                        setPreviewResult(null);
+                                        setPipelineDraft({
+                                            ...emptyPipeline(),
+                                            ...preset.pipeline,
+                                            rules: normalizeRules(preset.pipeline.rules),
+                                            steps: [...preset.pipeline.steps],
+                                        });
+                                    }}
+                                >
+                                    <p className="font-bold text-text">{preset.label}</p>
+                                    <p className="mt-1 text-xs text-muted">{preset.detail}</p>
+                                </button>
+                            ))}
+                        </div>
+                    </section>
+                    <div className="flex justify-end md:hidden"><button type="button" className={primaryButtonClass} onClick={() => { setPreviewPath(''); setPreviewResult(null); setPipelineDraft(emptyPipeline()); }}><Plus className="h-4 w-4" /> New pipeline</button></div>
                     {pipelines.length === 0 ? <EmptyState icon={Layers3} title="No pipelines configured" detail="Create a pipeline to define matching rules and transcode or remux behavior." /> : (
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                             {pipelines.map((pipeline) => (
@@ -500,17 +640,110 @@ export const MediaAutomationDashboard: React.FC = () => {
             )}
 
             {tab === 'activity' && (
-                activity.length === 0 ? <EmptyState icon={Activity} title="No activity recorded" detail="Worker, queue, and configuration events will appear here." /> : (
-                    <div className={`${cardClass} divide-y divide-border/60 overflow-hidden`}>
-                        {activity.map((entry, index) => (
-                            <div key={String(entry.id ?? index)} className="flex gap-3 p-4">
-                                <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${statusTone(entry.status).includes('red') ? 'bg-red-400' : statusTone(entry.status).includes('green') ? 'bg-green-400' : 'bg-plex'}`} />
-                                <div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><p className="font-semibold text-text">{entry.message || entry.action || entry.type || 'Automation event'}</p><time className="text-xs text-muted">{formatTime(entry.createdAt || entry.timestamp)}</time></div><p className="mt-1 text-xs text-muted">{entry.type || entry.action || 'activity'}{entry.jobId !== undefined ? ` · Job #${entry.jobId}` : ''}</p></div>
-                            </div>
+                <div className="space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                        {([
+                            ['all', 'All'],
+                            ['job', 'Jobs'],
+                            ['scan', 'Scans'],
+                            ['watch', 'Watcher'],
+                        ] as const).map(([id, label]) => (
+                            <button
+                                key={id}
+                                type="button"
+                                className={`${buttonClass} ${activityFilter === id ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
+                                onClick={() => setActivityFilter(id)}
+                            >
+                                {label}
+                            </button>
                         ))}
                     </div>
-                )
+                    {filteredActivity.length === 0 ? <EmptyState icon={Activity} title="No activity recorded" detail="Worker, scan, watcher, and queue events will appear here." /> : (
+                        <div className={`${cardClass} divide-y divide-border/60 overflow-hidden`}>
+                            {filteredActivity.map((entry, index) => (
+                                <div key={String(entry.id ?? index)} className="flex gap-3 p-4">
+                                    <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${statusTone(entry.status).includes('red') ? 'bg-red-400' : statusTone(entry.status).includes('green') ? 'bg-green-400' : 'bg-plex'}`} />
+                                    <div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><p className="font-semibold text-text">{entry.message || entry.action || entry.type || 'Automation event'}</p><time className="text-xs text-muted">{formatTime(entry.createdAt || entry.timestamp || entry.at)}</time></div><p className="mt-1 text-xs text-muted">{entry.type || entry.action || 'activity'}{entry.jobId !== undefined ? ` · Job #${entry.jobId}` : ''}</p></div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             )}
+
+            <ModalPortal open={selectedJobId !== null}>
+                {selectedJobId !== null && (
+                    <div className="fixed inset-0 z-[1200] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={() => { setSelectedJobId(null); setSelectedJob(null); setJobLogs([]); }}>
+                        <div className="max-h-[94dvh] w-full overflow-y-auto rounded-t-2xl border border-border bg-card shadow-2xl custom-scrollbar sm:max-w-3xl sm:rounded-2xl" onMouseDown={(event) => event.stopPropagation()}>
+                            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-4 backdrop-blur-md">
+                                <div>
+                                    <h2 className="text-lg font-bold text-text">Job detail</h2>
+                                    <p className="text-xs text-muted">#{selectedJobId}</p>
+                                </div>
+                                <button type="button" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text" onClick={() => { setSelectedJobId(null); setSelectedJob(null); setJobLogs([]); }}><X className="h-5 w-5" /></button>
+                            </div>
+                            <div className="space-y-5 p-5">
+                                {jobDetailBusy && !selectedJob ? (
+                                    <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-plex" /></div>
+                                ) : (
+                                    <>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <StatusPill value={selectedJob?.phase || selectedJob?.state || selectedJob?.status} />
+                                            {selectedJob?.lane && <span className="text-xs uppercase text-muted">{selectedJob.lane}</span>}
+                                            {selectedJob?.priority != null && (
+                                                <label className="flex items-center gap-2 text-xs text-muted">
+                                                    Priority
+                                                    <input
+                                                        className="w-20 rounded border border-border bg-background px-2 py-1 text-text"
+                                                        type="number"
+                                                        min={0}
+                                                        max={999}
+                                                        defaultValue={selectedJob.priority}
+                                                        onBlur={(event) => {
+                                                            const priority = Math.max(0, Math.min(999, Number(event.target.value) || 0));
+                                                            if (selectedJobId == null) return;
+                                                            void runAction(`priority-${selectedJobId}`, () => mediaAutomationApi.setPriority(selectedJobId, priority), 'Priority updated.')
+                                                                .then(() => openJobDetail(selectedJobId));
+                                                        }}
+                                                    />
+                                                </label>
+                                            )}
+                                        </div>
+                                        <p className="break-all font-semibold text-text">{selectedJob?.path || selectedJob?.sourcePath || 'Path not reported'}</p>
+                                        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                                            <div><dt className="text-muted">Pipeline</dt><dd className="mt-1 text-text">{selectedJob?.pipelineName || selectedJob?.pipelineId || 'Automatic'}</dd></div>
+                                            <div><dt className="text-muted">Attempts</dt><dd className="mt-1 text-text">{asText(selectedJob?.attempts)} / {asText(selectedJob?.maxAttempts)}</dd></div>
+                                            <div><dt className="text-muted">Created</dt><dd className="mt-1 text-text">{formatTime(selectedJob?.createdAt)}</dd></div>
+                                            <div><dt className="text-muted">Finished</dt><dd className="mt-1 text-text">{formatTime(selectedJob?.finishedAt || selectedJob?.completedAt)}</dd></div>
+                                        </dl>
+                                        {jobErrorText(selectedJob?.error) && <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{jobErrorText(selectedJob?.error)}</p>}
+                                        {selectedJob?.plan && (
+                                            <div className="rounded-xl border border-border bg-background/30 p-4">
+                                                <h3 className="font-bold text-text">Planned command</h3>
+                                                <p className="mt-2 text-xs text-muted">{selectedJob.plan.mode || 'plan'}{selectedJob.plan.adapterLabel ? ` · ${selectedJob.plan.adapterLabel}` : ''}</p>
+                                                <p className="mt-2 break-all font-mono text-[11px] text-muted">{Array.isArray(selectedJob.plan.args) ? selectedJob.plan.args.join(' ') : 'No args recorded yet'}</p>
+                                            </div>
+                                        )}
+                                        <div className="rounded-xl border border-border bg-background/30 p-4">
+                                            <h3 className="mb-3 font-bold text-text">Activity / logs</h3>
+                                            {jobLogs.length === 0 ? <p className="text-sm text-muted">No log entries for this job yet.</p> : (
+                                                <div className="max-h-64 space-y-2 overflow-y-auto custom-scrollbar">
+                                                    {jobLogs.map((entry, index) => (
+                                                        <div key={String(entry.id ?? index)} className="rounded-lg bg-card/60 p-2 text-xs">
+                                                            <div className="flex justify-between gap-2"><span className="font-semibold text-text">{entry.type || 'event'}</span><span className="text-muted">{formatTime(entry.createdAt || entry.timestamp || entry.at)}</span></div>
+                                                            <p className="mt-1 text-muted">{entry.message || '—'}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </ModalPortal>
 
             <ModalPortal open={libraryDraft !== null}>
                 {libraryDraft && (

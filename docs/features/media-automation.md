@@ -2,14 +2,29 @@
 
 Native Media Automation runs `ffprobe` and `ffmpeg` in the portal container to inspect and process media without a separate transcoding service. It is admin-only and opt-in.
 
-## Version 1 scope
+## Version 1.1 scope
 
-Version 1 accepts jobs from:
+Media Automation accepts jobs from:
 
-- manual admin selections in the portal;
+- manual admin selections in the portal (enqueue, pending test, pipeline preview/dry-run);
+- scheduled library scans and on-demand **Scan now**;
+- filesystem watchers on enabled library roots (debounced create/change events);
 - Sonarr, Radarr, and Lidarr webhooks at `/triggers/media-automation/{sonarr|radarr|lidarr|manual}` when Basic Auth is configured.
 
-It does not replace Plex/Jellyfin transcoding and does not load third-party plugins. Version 1 uses only the built-in native executor and step registry. Scheduled filesystem discovery and remote/sidecar workers are intentionally out of scope for v1.
+The dashboard includes Overview metrics, worker/scan/watch health, queue job detail with planned FFmpeg args and activity logs, pipeline presets, and activity filters.
+
+It does not replace Plex/Jellyfin transcoding and does **not** install third-party Unmanic plugins. Processing uses the built-in native FFmpeg executor and first-party remux/transcode steps. Remote/sidecar workers remain out of scope.
+
+### Library discovery settings
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| Library scan enabled | on | Periodic full discovery of configured library roots |
+| Scan interval (minutes) | 360 | How often periodic scans run (15–10080) |
+| Filesystem watcher | on | Enqueue new/changed media under library roots |
+| Watch debounce (ms) | 5000 | Wait for writes to settle before enqueue |
+
+**Important:** when Settings → Media Automation → Safe fallback output mode is **Dry run**, every job is forced to dry-run regardless of per-pipeline output mode.
 
 ## Required paths
 

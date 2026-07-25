@@ -1118,6 +1118,16 @@ export const SettingsDashboard: React.FC = () => {
                         cpu: Math.min(32, Math.max(1, Number(saved.concurrency?.cpu ?? saved.cpuConcurrency ?? saved.concurrency) || 1)),
                         gpu: Math.min(16, Math.max(1, Number(saved.concurrency?.gpu ?? saved.gpuConcurrency) || 1)),
                     },
+                    libraryScanEnabled: saved.libraryScanEnabled !== false,
+                    libraryScanIntervalMinutes: Math.min(
+                        10080,
+                        Math.max(15, Number(saved.libraryScanIntervalMinutes) || DEFAULT_MEDIA_AUTOMATION_SETTINGS.libraryScanIntervalMinutes),
+                    ),
+                    libraryWatchEnabled: saved.libraryWatchEnabled !== false,
+                    libraryWatchDebounceMs: Math.min(
+                        120000,
+                        Math.max(500, Number(saved.libraryWatchDebounceMs) || DEFAULT_MEDIA_AUTOMATION_SETTINGS.libraryWatchDebounceMs),
+                    ),
                 });
             } else {
                 setMediaAutomation({
