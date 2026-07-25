@@ -177,7 +177,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
 
 const SettingsTabIcon: React.FC<{ id: string }> = ({ id }) => {
     const Icon = SETTINGS_TAB_ICONS[id] || Settings;
-    return <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />;
+    return <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />;
 };
 
 const ProgramIcon: React.FC<{ app: string; label: string }> = ({ app, label }) => (
@@ -1595,7 +1595,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 <button
                                                     key={tab.id}
                                                     onClick={() => navigateToSetting({ id: tab.id, tabId: tab.id as SettingsTabId, label: tab.label, group: group.title, keywords: tab.keywords || [] })}
-                                                    className={`w-full text-left px-2 py-1 rounded-md text-[13px] leading-snug font-medium transition-all flex items-center gap-1.5 ${activeTab === tab.id
+                                                    className={`w-full text-left px-2 py-1 rounded-md text-[13.5px] leading-snug font-medium transition-all flex items-center gap-2 ${activeTab === tab.id
                                                         ? 'nav-item-active'
                                                         : 'text-muted hover:text-text hover:bg-white/5'
                                                         }`}
