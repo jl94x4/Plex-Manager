@@ -40,7 +40,7 @@ import {
     buildTargets,
 } from './lib/scanner/index.js';
 import {
-    buildFfmpegPlan,
+    buildStepPlan,
     buildRuleContext,
     createMediaAutomation,
     detectFfmpegCapabilities,
@@ -251,8 +251,13 @@ const normalizeMediaAutomationRuleGroup = (value) => {
     return { operator, conditions };
 };
 
+const MEDIA_AUTOMATION_STEP_TYPES = new Set([
+    'transcode', 'remux', 'subtitle-strip', 'subtitle-extract', 'move', 'custom-command',
+]);
+
 const normalizeMediaAutomationStep = (value = {}) => {
-    const type = String(value.type || 'transcode').toLowerCase() === 'remux' ? 'remux' : 'transcode';
+    const rawType = String(value.type || value.mode || 'transcode').toLowerCase();
+    const type = MEDIA_AUTOMATION_STEP_TYPES.has(rawType) ? rawType : 'transcode';
     const videoCodec = ['h264', 'hevc', 'av1', 'copy'].includes(String(value.videoCodec || '').toLowerCase())
         ? String(value.videoCodec).toLowerCase()
         : 'hevc';
@@ -262,6 +267,9 @@ const normalizeMediaAutomationStep = (value = {}) => {
     const subtitleCodec = ['copy', 'drop', 'srt', 'webvtt'].includes(String(value.subtitleCodec || '').toLowerCase())
         ? String(value.subtitleCodec).toLowerCase()
         : 'copy';
+    const args = Array.isArray(value.args)
+        ? value.args.map((entry) => String(entry || '').slice(0, 500)).filter(Boolean).slice(0, 64)
+        : [];
     return {
         type,
         container: ['mkv', 'mp4'].includes(String(value.container || '').toLowerCase())
@@ -274,6 +282,10 @@ const normalizeMediaAutomationStep = (value = {}) => {
         maxWidth: Math.max(0, Math.min(7680, Number(value.maxWidth) || 0)),
         preset: String(value.preset || 'medium').slice(0, 32),
         crf: Math.min(51, Math.max(0, Number.isFinite(Number(value.crf)) ? Math.round(Number(value.crf)) : 20)),
+        destination: String(value.destination || value.destinationTemplate || '').trim().slice(0, 500),
+        executable: String(value.executable || value.command || '').trim().slice(0, 260),
+        args,
+        skipMediaFinalize: !!value.skipMediaFinalize,
     };
 };
 
@@ -19197,48 +19209,59 @@ app.post('/api/media-automation/pipelines/:id/preview', requireAdmin, requireMed
         const steps = Array.isArray(pipeline.steps) && pipeline.steps.length
             ? pipeline.steps
             : [{ type: rule.then?.mode || 'remux' }];
+        const capabilityMap = {
+            ...Object.fromEntries((capabilities.hardware || []).map((name) => [name, true])),
+            details: capabilities.details || {},
+        };
+        let currentInput = sourcePath;
         const plans = steps.map((step, index) => {
             const mode = String(step.type || step.mode || 'remux').toLowerCase();
             const hardware = mode === 'transcode'
                 ? (pipeline.hardware || runtime.hardwareAcceleration || 'auto')
                 : 'cpu';
             let adapter;
-            try {
-                adapter = selectMediaAdapter(
-                    hardware,
-                    {
-                        ...Object.fromEntries((capabilities.hardware || []).map((name) => [name, true])),
-                        details: capabilities.details || {},
-                    },
-                    String(step.videoCodec || rule.then?.videoCodec || 'h264').toLowerCase(),
-                );
-            } catch (error) {
-                if (!runtime.allowCpuFallback || hardware === 'cpu') throw error;
-                adapter = selectMediaAdapter('cpu', {
-                    ...Object.fromEntries((capabilities.hardware || []).map((name) => [name, true])),
-                    details: capabilities.details || {},
-                }, String(step.videoCodec || 'h264').toLowerCase());
+            if (mode === 'transcode' || mode === 'remux' || mode === 'subtitle-strip' || mode === 'subtitle-extract') {
+                try {
+                    adapter = mode !== 'transcode' || String(step.videoCodec || '').toLowerCase() === 'copy'
+                        ? selectMediaAdapter('cpu')
+                        : selectMediaAdapter(
+                            hardware,
+                            capabilityMap,
+                            String(step.videoCodec || rule.then?.videoCodec || 'h264').toLowerCase(),
+                        );
+                } catch (error) {
+                    if (!runtime.allowCpuFallback || hardware === 'cpu') throw error;
+                    adapter = selectMediaAdapter('cpu', capabilityMap, String(step.videoCodec || 'h264').toLowerCase());
+                }
             }
-            return buildFfmpegPlan({
-                inputPath: sourcePath,
-                outputPath: path.join(
+            let outputPath = '';
+            if (mode === 'subtitle-extract') {
+                outputPath = path.join(path.dirname(currentInput), `${path.parse(currentInput).name}.srt`);
+            } else if (mode !== 'move' && mode !== 'custom-command') {
+                outputPath = path.join(
                     path.dirname(sourcePath),
                     `.preview-step-${index + 1}.${step.container || 'mkv'}`,
-                ),
-                rule: {
-                    then: {
-                        ...(rule.then || {}),
-                        ...step,
-                        mode,
-                        outputMode: 'dry-run',
-                    },
+                );
+            }
+            const plan = buildStepPlan({
+                step: {
+                    ...(rule.then || {}),
+                    ...step,
+                    mode,
+                    outputMode: 'dry-run',
                 },
+                inputPath: currentInput,
+                outputPath,
+                libraryRoot: library.rootPath,
                 adapter,
-                capabilities: {
-                    details: capabilities.details || {},
-                },
+                capabilities: capabilityMap,
                 vaapiDevice: runtime.vaapiDevice,
+                allowlist: runtime.customCommandAllowlist,
             });
+            if (!(plan.skipMediaFinalize && plan.stepType === 'subtitle-extract')) {
+                currentInput = plan.outputPath || currentInput;
+            }
+            return plan;
         });
         res.json({
             ok: true,
@@ -19255,10 +19278,14 @@ app.post('/api/media-automation/pipelines/:id/preview', requireAdmin, requireMed
                 audioCodec: probe.streams?.find((stream) => stream.codec_type === 'audio')?.codec_name,
             },
             plans: plans.map((plan) => ({
-                mode: plan.mode,
+                mode: plan.mode || plan.stepType,
+                kind: plan.kind,
                 adapter: plan.adapter,
                 adapterLabel: plan.adapterLabel,
                 args: plan.args,
+                executable: plan.executable,
+                inputPath: plan.inputPath,
+                outputPath: plan.outputPath,
             })),
         });
     } catch (error) {

@@ -45,6 +45,7 @@ import {
     type MediaAutomationPipelinePreview,
     type MediaAutomationRuleCondition,
     type MediaAutomationRules,
+    type MediaAutomationPlan,
     type MediaAutomationStatus,
     type MediaAutomationStep,
     type MediaAutomationTab,
@@ -57,6 +58,25 @@ const jobProgressPercent = (job: MediaAutomationJob) => {
         return Number(job.progress.percent);
     }
     return null;
+};
+
+const jobPlans = (job: MediaAutomationJob | null | undefined): MediaAutomationPlan[] => {
+    if (!job?.plan) return [];
+    return Array.isArray(job.plan) ? job.plan : [job.plan];
+};
+
+const jobLiveCommand = (job: MediaAutomationJob | null | undefined) => {
+    if (!job) return '';
+    if (job.progress && typeof job.progress === 'object') {
+        return String(job.progress.currentCommand || job.progress.command || '');
+    }
+    const plans = jobPlans(job);
+    const first = plans[0];
+    if (!first) return '';
+    if (Array.isArray(first.args) && first.args.length) {
+        return [first.executable || 'ffmpeg', ...first.args].join(' ');
+    }
+    return '';
 };
 
 const jobErrorText = (error: MediaAutomationJob['error']) => {
@@ -393,6 +413,17 @@ export const MediaAutomationDashboard: React.FC = () => {
 
             {tab === 'overview' && (
                 <div className="space-y-5">
+                    {(status.dryRun || status.outputMode === 'dry-run') && (
+                        <div className="flex gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
+                            <div>
+                                <p className="font-bold text-amber-50">Global dry-run is forcing every job</p>
+                                <p className="mt-1 text-xs text-amber-100/90">
+                                    Settings → Media Automation → Safe fallback is set to Dry run. Pipeline output modes (copy/replace) are overridden until you change that fallback and save.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         {[
                             ['Queued', status.queuedJobs ?? queueCounts.queued, 'text-amber-300'],
@@ -533,6 +564,9 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 </div>
                                                 <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
                                                 <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.createdAt)}</p>
+                                                {jobLiveCommand(job) && (
+                                                    <p className="mt-1 truncate font-mono text-[11px] text-muted" title={jobLiveCommand(job)}>{jobLiveCommand(job)}</p>
+                                                )}
                                                 {errorText && <p className="mt-2 text-xs text-red-300">{errorText}</p>}
                                             </div>
                                             <div className="flex shrink-0 gap-2" onClick={(event) => event.stopPropagation()}>
@@ -717,11 +751,25 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             <div><dt className="text-muted">Finished</dt><dd className="mt-1 text-text">{formatTime(selectedJob?.finishedAt || selectedJob?.completedAt)}</dd></div>
                                         </dl>
                                         {jobErrorText(selectedJob?.error) && <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{jobErrorText(selectedJob?.error)}</p>}
-                                        {selectedJob?.plan && (
-                                            <div className="rounded-xl border border-border bg-background/30 p-4">
-                                                <h3 className="font-bold text-text">Planned command</h3>
-                                                <p className="mt-2 text-xs text-muted">{selectedJob.plan.mode || 'plan'}{selectedJob.plan.adapterLabel ? ` · ${selectedJob.plan.adapterLabel}` : ''}</p>
-                                                <p className="mt-2 break-all font-mono text-[11px] text-muted">{Array.isArray(selectedJob.plan.args) ? selectedJob.plan.args.join(' ') : 'No args recorded yet'}</p>
+                                        {jobLiveCommand(selectedJob) && (
+                                            <div className="rounded-xl border border-plex/30 bg-plex/10 p-4">
+                                                <h3 className="font-bold text-text">Live command</h3>
+                                                <p className="mt-2 break-all font-mono text-[11px] text-muted">{jobLiveCommand(selectedJob)}</p>
+                                            </div>
+                                        )}
+                                        {jobPlans(selectedJob).length > 0 && (
+                                            <div className="rounded-xl border border-border bg-background/30 p-4 space-y-3">
+                                                <h3 className="font-bold text-text">Planned steps</h3>
+                                                {jobPlans(selectedJob).map((plan, index) => (
+                                                    <div key={index} className="rounded-lg border border-border/60 bg-card/40 p-3">
+                                                        <p className="text-xs text-muted">Step {index + 1}: {plan.mode || plan.stepType || plan.kind || 'plan'}{plan.adapterLabel ? ` · ${plan.adapterLabel}` : ''}</p>
+                                                        <p className="mt-2 break-all font-mono text-[11px] text-muted">
+                                                            {Array.isArray(plan.args) && plan.args.length
+                                                                ? [plan.executable || (plan.kind === 'ffmpeg' ? 'ffmpeg' : ''), ...plan.args].filter(Boolean).join(' ')
+                                                                : 'No args recorded yet'}
+                                                        </p>
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                         <div className="rounded-xl border border-border bg-background/30 p-4">
@@ -778,9 +826,12 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <label className="space-y-2 text-sm font-semibold text-text">Output mode<CustomSelect value={pipelineDraft.outputMode} onChange={(outputMode) => setPipelineDraft({ ...pipelineDraft, outputMode: outputMode as OutputMode })} options={[{ value: 'dry-run', label: 'Dry run' }, { value: 'copy', label: 'Copy' }, { value: 'replace', label: 'Replace' }]} /></label>
                             <label className="space-y-2 text-sm font-semibold text-text">Hardware<CustomSelect value={pipelineDraft.hardware} onChange={(hardware) => setPipelineDraft({ ...pipelineDraft, hardware: hardware as HardwareMode })} options={[{ value: 'auto', label: 'Auto' }, { value: 'cpu', label: 'CPU' }, { value: 'nvenc', label: 'NVIDIA NVENC' }, { value: 'qsv', label: 'Intel Quick Sync' }, { value: 'intel-vaapi', label: 'Intel VAAPI' }, { value: 'vaapi', label: 'AMD VAAPI' }]} /></label>
                         </div>
-                        {pipelineDraft.outputMode === 'replace' && (
+                        {(pipelineDraft.outputMode === 'replace' || pipelineDraft.outputMode === 'copy') && (
                             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-                                Replace mode atomically promotes verified output over the source. Keep dry-run or copy until path mounts, PUID/PGID, and GPU adapters are validated.
+                                {pipelineDraft.outputMode === 'replace'
+                                    ? 'Replace mode atomically promotes verified output over the source. Keep dry-run or copy until path mounts, PUID/PGID, and GPU adapters are validated.'
+                                    : 'Copy mode writes beside the source and leaves the original untouched.'}
+                                {' '}If Settings → Media Automation Safe fallback is still Dry run, this pipeline will not write until that global override is changed.
                             </div>
                         )}
                         <div>
@@ -870,8 +921,21 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 </div>
                                             </div>
                                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                                <CustomSelect value={step.type} onChange={(type) => updateStep({ type: type as MediaAutomationStep['type'] })} options={[{ value: 'transcode', label: 'Transcode' }, { value: 'remux', label: 'Remux' }]} />
-                                                <input className={fieldClass} value={step.container || ''} onChange={(event) => updateStep({ container: event.target.value })} placeholder="Container (mkv)" />
+                                                <CustomSelect
+                                                    value={step.type}
+                                                    onChange={(type) => updateStep({ type: type as MediaAutomationStep['type'] })}
+                                                    options={[
+                                                        { value: 'transcode', label: 'Transcode' },
+                                                        { value: 'remux', label: 'Remux' },
+                                                        { value: 'subtitle-strip', label: 'Strip subtitles' },
+                                                        { value: 'subtitle-extract', label: 'Extract subtitle (SRT)' },
+                                                        { value: 'move', label: 'Move / rename' },
+                                                        { value: 'custom-command', label: 'Custom command' },
+                                                    ]}
+                                                />
+                                                {(step.type === 'transcode' || step.type === 'remux' || step.type === 'subtitle-strip') && (
+                                                    <input className={fieldClass} value={step.container || ''} onChange={(event) => updateStep({ container: event.target.value })} placeholder="Container (mkv)" />
+                                                )}
                                                 {step.type === 'transcode' && <>
                                                     <input className={fieldClass} value={step.videoCodec || ''} onChange={(event) => updateStep({ videoCodec: event.target.value })} placeholder="Video codec (hevc)" />
                                                     <input className={fieldClass} value={step.audioCodec || ''} onChange={(event) => updateStep({ audioCodec: event.target.value })} placeholder="Audio codec (copy)" />
@@ -881,6 +945,35 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     <input className={fieldClass} type="number" min={32} max={1536} value={step.audioBitrateKbps || ''} onChange={(event) => updateStep({ audioBitrateKbps: event.target.value ? Number(event.target.value) : undefined })} placeholder="Audio bitrate kbps" />
                                                     <input className={fieldClass} type="number" min={2} value={step.maxWidth || ''} onChange={(event) => updateStep({ maxWidth: event.target.value ? Number(event.target.value) : undefined })} placeholder="Maximum width" />
                                                 </>}
+                                                {step.type === 'move' && (
+                                                    <input
+                                                        className={`${fieldClass} sm:col-span-2`}
+                                                        value={step.destination || ''}
+                                                        onChange={(event) => updateStep({ destination: event.target.value })}
+                                                        placeholder="Destination template — {dir}/archive/{basename}"
+                                                    />
+                                                )}
+                                                {step.type === 'custom-command' && <>
+                                                    <input className={fieldClass} value={step.executable || ''} onChange={(event) => updateStep({ executable: event.target.value })} placeholder="Executable (ffmpeg / ffprobe)" />
+                                                    <input
+                                                        className={`${fieldClass} sm:col-span-2`}
+                                                        value={(step.args || []).join(' ')}
+                                                        onChange={(event) => updateStep({
+                                                            args: event.target.value.trim()
+                                                                ? event.target.value.trim().split(/\s+/).slice(0, 64)
+                                                                : [],
+                                                        })}
+                                                        placeholder="Args (space-separated) — -i {input} -c copy {output}"
+                                                    />
+                                                    <p className="sm:col-span-2 text-xs text-muted">No shell. Allowlisted executables only (default: ffmpeg, ffprobe). Placeholders: {'{input} {output} {dir} {name} {ext} {basename} {libraryRoot}'}</p>
+                                                </>}
+                                                {(step.type === 'move' || step.type === 'subtitle-extract') && (
+                                                    <p className="sm:col-span-2 text-xs text-muted">
+                                                        {step.type === 'move'
+                                                            ? 'Move stays inside configured library roots (cross-device copy+delete if needed).'
+                                                            : 'Extract writes an .srt beside the source and leaves the media file unchanged.'}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     );

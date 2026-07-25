@@ -16,7 +16,7 @@ Task labels adapt to the selected media player:
 | Maintenance index | Build media/request index | Same |
 | Rolling backup | Create config backups | Same |
 
-Media Automation is managed from its own admin page and is not listed as a **Settings → Background Tasks** task in v1. Jobs arrive from manual enqueue or Sonarr/Radarr/Lidarr webhooks; the worker uses durable lease/heartbeat recovery inside the portal process. See [Native Media Automation](/features/media-automation). This task list does not imply a scheduled filesystem scan.
+Media Automation appears as a status row on **Settings → Background Tasks** (enabled / global dry-run) with links to its settings and dashboard. It is not a classic “Run now” cron job: the worker, library scan/watch, and ARR webhooks run inside the portal process with durable lease/heartbeat recovery. See [Native Media Automation](/features/media-automation).
 
 ## Diagnostics
 

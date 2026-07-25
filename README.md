@@ -517,7 +517,38 @@ If you prefer to install the template manually on Unraid 6+:
 5. Set **JWT Secret** and adjust appdata paths (defaults: `/mnt/user/appdata/server-manager-portal/`)
 6. Apply and open the WebUI
 
-The template uses `ghcr.io/jl94x4/server-manager-portal:latest` by default.
+The template uses `ghcr.io/jl94x4/server-manager-portal:latest` by default. Other tags: `:beta`, `:nightly`, or a pinned version such as `:1.8.0`.
+
+#### Media Automation paths and GPU (Unraid)
+
+The Unraid template includes optional fields for Native Media Automation media mounts and GPU passthrough. **New installs** see these fields in the template. **Existing containers do not pick them up automatically** when you update the image — Unraid keeps your saved Docker config, and image updates only refresh the image.
+
+To enable Media Automation on an existing install:
+
+1. Edit the container in Unraid (**Docker** → container → **Edit**).
+2. Add media mounts (or fill the template path fields if present):
+
+   | Template / mapping | Container path | Example host path |
+   | --- | --- | --- |
+   | Media Root | `/media` | `/mnt/user/media` |
+   | TV Shows | `/tv` | `/mnt/user/media/tv` |
+   | Movies | `/movies` | `/mnt/user/media/movies` |
+   | Music | `/music` | `/mnt/user/media/music` |
+
+   Container paths must match Sonarr / Radarr / Lidarr (or use Scanner / Media Automation path rewrites). Leave unused paths empty. Use **Add another Path, Port, Variable, Label or Device** if your saved template does not show the new fields yet.
+3. **Intel / AMD GPU:** add a Device with Host and Container both set to `/dev/dri`.
+4. **NVIDIA GPU:**
+   - Install the Unraid **Nvidia Driver** plugin and note your GPU UUID.
+   - Add variable `NVIDIA_VISIBLE_DEVICES` = your GPU UUID (or `all`).
+   - Keep / set `NVIDIA_DRIVER_CAPABILITIES` = `all`.
+   - Enable **Advanced View** and append `--runtime=nvidia` to **Extra Parameters**, for example:
+
+     ```text
+     --restart=unless-stopped --hostname=server-manager-portal --runtime=nvidia
+     ```
+5. Apply the container, enable Media Automation in **Settings**, and run **Test worker** before using copy/replace modes.
+
+CPU-only Media Automation needs media path mounts only — no GPU device or NVIDIA runtime. Full safety notes: [Native Media Automation](docs/features/media-automation.md).
 
 ### Environment variables
 

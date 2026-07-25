@@ -2,7 +2,7 @@
 
 Native Media Automation runs `ffprobe` and `ffmpeg` in the portal container to inspect and process media without a separate transcoding service. It is admin-only and opt-in.
 
-## Version 1.1 scope
+## Version 1.2 scope
 
 Media Automation accepts jobs from:
 
@@ -11,9 +11,19 @@ Media Automation accepts jobs from:
 - filesystem watchers on enabled library roots (debounced create/change events);
 - Sonarr, Radarr, and Lidarr webhooks at `/triggers/media-automation/{sonarr|radarr|lidarr|manual}` when Basic Auth is configured.
 
-The dashboard includes Overview metrics, worker/scan/watch health, queue job detail with planned FFmpeg args and activity logs, pipeline presets, and activity filters.
+The dashboard includes Overview metrics (with a global dry-run banner when Safe fallback is Dry run), worker/scan/watch health, queue job detail with planned steps, live command text, and activity logs, pipeline presets, and activity filters.
 
-It does not replace Plex/Jellyfin transcoding and does **not** install third-party Unmanic plugins. Processing uses the built-in native FFmpeg executor and first-party remux/transcode steps. Remote/sidecar workers remain out of scope.
+It does not replace Plex/Jellyfin transcoding and does **not** install third-party Unmanic plugins. Processing uses the built-in native FFmpeg executor and first-party steps:
+
+| Step | Purpose |
+| --- | --- |
+| Transcode / Remux | Encode or stream-copy via FFmpeg |
+| Strip subtitles | Remux with stream copy and drop subtitle streams |
+| Extract subtitle | Write the first subtitle stream as `.srt` beside the source (media unchanged) |
+| Move / rename | Move within configured library roots (`{dir}/archive/{basename}` templates) |
+| Custom command | Allowlisted executable + arg array only (no shell; default allowlist `ffmpeg`, `ffprobe`) |
+
+Remote/sidecar workers remain out of scope.
 
 ### Library discovery settings
 
@@ -34,7 +44,7 @@ It does not replace Plex/Jellyfin transcoding and does **not** install third-par
 | `/app/config/media-automation/work` | Read/write | Durable work metadata under the config mount |
 | `/media` (example) | Read-only for inspect/dry-run; read/write for actions | Media source and destination files |
 
-The media path is intentionally absent from the default Compose deployment. Mount only the library roots the feature needs. ARR paths must either match the container paths or have an explicit path mapping (Scanner-compatible rewrite rules can be reused).
+The media path is intentionally absent from the default Compose deployment. Mount only the library roots the feature needs. ARR paths must either match the container paths or use Scanner trigger rewrite rules: Media Automation webhooks reuse the same rewrite list as **Settings → Scanner** for the matching trigger name (then the first trigger for that ARR type).
 
 Temporary encoded output is created beside its final destination so promotion can use a same-filesystem rename. The destination filesystem must have enough free space for the complete encoded output plus safety margin. `PUID` and `PGID` must be able to read source files and write the config work metadata and destination directories. If copy, replace, or quarantine is enabled, a read-only media mount will correctly make the job fail.
 

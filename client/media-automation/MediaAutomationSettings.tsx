@@ -141,11 +141,27 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                         ]}
                     />
                     {globalDryRun && (
-                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-                            Global fallback is Dry run — every job is forced to dry-run regardless of pipeline output mode until you change this.
+                        <div className="rounded-lg border border-amber-500/40 bg-amber-500/15 p-3 text-xs text-amber-50">
+                            <p className="font-bold">Global dry-run override is ON</p>
+                            <p className="mt-1 text-amber-100/90">
+                                Every Media Automation job is forced to dry-run, even when a pipeline is set to Copy or Replace. Change Safe fallback to Copy or Replace and save before any real writes.
+                            </p>
                         </div>
                     )}
                 </div>
+            </section>
+
+            <section className="glass-card-sm p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                    <FolderSearch className="w-5 h-5 text-plex" />
+                    <h4 className="font-bold text-text">ARR path rewrite</h4>
+                </div>
+                <p className="text-sm text-muted">
+                    Sonarr / Radarr / Lidarr webhooks reuse the same path rewrite rules as Scanner triggers. If ARR reports a host path that differs from the container mount, map it there so Media Automation can resolve files under library roots.
+                </p>
+                <p className="text-xs text-muted">
+                    Configure under <span className="font-semibold text-text">Settings → Scanner</span> on the matching trigger (e.g. <code className="text-plex">sonarr</code> / <code className="text-plex">radarr</code>). Media Automation looks up rewrite by trigger name from the webhook query/body, then falls back to the first trigger for that ARR type.
+                </p>
             </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">

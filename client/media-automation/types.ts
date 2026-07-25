@@ -36,6 +36,8 @@ export type MediaAutomationStatus = {
     libraryScanEnabled?: boolean;
     libraryWatchEnabled?: boolean;
     libraryScanIntervalMinutes?: number;
+    outputMode?: OutputMode;
+    dryRun?: boolean;
     watch?: {
         watching?: boolean;
         pending?: number;
@@ -67,6 +69,21 @@ export type MediaAutomationJobProgress = {
     fps?: number | null;
     step?: number;
     stepCount?: number;
+    command?: string;
+    currentCommand?: string;
+};
+
+export type MediaAutomationPlan = {
+    mode?: string;
+    kind?: string;
+    stepType?: string;
+    adapter?: string | null;
+    adapterLabel?: string | null;
+    executable?: string;
+    args?: string[];
+    inputPath?: string;
+    outputPath?: string;
+    [key: string]: unknown;
 };
 
 export type MediaAutomationJob = {
@@ -83,13 +100,7 @@ export type MediaAutomationJob = {
     attempts?: number;
     maxAttempts?: number;
     progress?: number | MediaAutomationJobProgress;
-    plan?: {
-        mode?: string;
-        adapter?: string | null;
-        adapterLabel?: string | null;
-        args?: string[];
-        [key: string]: unknown;
-    } | null;
+    plan?: MediaAutomationPlan | MediaAutomationPlan[] | null;
     createdAt?: string;
     startedAt?: string;
     completedAt?: string;
@@ -159,8 +170,16 @@ export type MediaAutomationPendingTest = {
     error?: string;
 };
 
+export type MediaAutomationStepType =
+    | 'transcode'
+    | 'remux'
+    | 'subtitle-strip'
+    | 'subtitle-extract'
+    | 'move'
+    | 'custom-command';
+
 export type MediaAutomationStep = {
-    type: 'transcode' | 'remux';
+    type: MediaAutomationStepType;
     container?: string;
     videoCodec?: string;
     audioCodec?: string;
@@ -170,6 +189,13 @@ export type MediaAutomationStep = {
     preset?: string;
     /** Quality: CRF/CQ/QP style 0–51 (lower = higher quality / larger files). */
     crf?: number;
+    /** Move destination template, e.g. `{dir}/archive/{basename}` */
+    destination?: string;
+    /** Allowlisted executable basename or absolute path for custom-command */
+    executable?: string;
+    /** Arg templates for custom-command (no shell). Placeholders: {input} {output} {dir} {name} {ext} {basename} {libraryRoot} */
+    args?: string[];
+    skipMediaFinalize?: boolean;
 };
 
 export type MediaAutomationRuleCondition = {
@@ -502,6 +528,48 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
             hardware: 'cpu',
             rules: { operator: 'AND', conditions: [] },
             steps: [{ type: 'remux', container: 'mkv' }],
+        },
+    },
+    {
+        id: 'strip-subtitles',
+        label: 'Strip embedded subtitles',
+        detail: 'Remux with stream copy and drop subtitle streams.',
+        pipeline: {
+            name: 'Strip embedded subtitles',
+            enabled: true,
+            priority: 35,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: { operator: 'AND', conditions: [] },
+            steps: [{ type: 'subtitle-strip', container: 'mkv' }],
+        },
+    },
+    {
+        id: 'extract-first-subtitle',
+        label: 'Extract first subtitle (SRT)',
+        detail: 'Write the first subtitle stream beside the source as .srt (source file unchanged).',
+        pipeline: {
+            name: 'Extract first subtitle',
+            enabled: true,
+            priority: 25,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: { operator: 'AND', conditions: [] },
+            steps: [{ type: 'subtitle-extract', container: 'mkv', skipMediaFinalize: true }],
+        },
+    },
+    {
+        id: 'move-to-archive',
+        label: 'Move to archive folder',
+        detail: 'Rename/move within library roots using `{dir}/archive/{basename}`.',
+        pipeline: {
+            name: 'Move to archive',
+            enabled: true,
+            priority: 20,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: { operator: 'AND', conditions: [] },
+            steps: [{ type: 'move', destination: '{dir}/archive/{basename}' }],
         },
     },
 ];

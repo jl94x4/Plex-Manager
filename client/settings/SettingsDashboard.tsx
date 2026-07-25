@@ -3307,6 +3307,51 @@ export const SettingsDashboard: React.FC = () => {
                                         </button>
                                     </div>
                                 ))}
+                                <div className="py-4 border-b border-border/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div>
+                                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                                            <h4 className="font-bold text-lg">Media Automation</h4>
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                                                mediaAutomationEnabled
+                                                    ? 'bg-green-500/10 text-green-300 border-green-500/20'
+                                                    : 'bg-slate-500/10 text-muted border-border'
+                                            }`}>
+                                                {mediaAutomationEnabled ? 'Enabled' : 'Disabled'}
+                                            </span>
+                                            {mediaAutomation.fallback?.outputMode === 'dry-run' && mediaAutomationEnabled && (
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-200 border border-amber-500/20">
+                                                    Global dry-run
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-muted mb-2">
+                                            Native FFmpeg worker with its own queue, library scan/watch, and ARR webhooks — managed from the Media Automation page (not a classic scheduled task).
+                                        </p>
+                                        <p className="text-xs text-muted">
+                                            Configure scan/watch under Settings → Media Automation. Open the dashboard for Scan now, queue, and job commands.
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            className="px-4 py-2 rounded-md font-bold transition-all bg-white/5 text-text border border-border hover:border-plex/50"
+                                            onClick={() => setActiveTab('media-automation')}
+                                        >
+                                            Settings
+                                        </button>
+                                        {mediaAutomationEnabled && (
+                                            <button
+                                                type="button"
+                                                className="px-4 py-2 rounded-md font-bold transition-all bg-plex text-background hover:bg-plex-hover"
+                                                onClick={() => {
+                                                    window.location.assign(portalUrl('/media-automation'));
+                                                }}
+                                            >
+                                                Open dashboard
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
