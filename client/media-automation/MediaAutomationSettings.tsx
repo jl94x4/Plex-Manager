@@ -153,6 +153,31 @@ export const MediaAutomationSettings: React.FC<Props> = ({
 
             <section className="glass-card-sm p-5 space-y-3">
                 <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-plex" />
+                    <h4 className="font-bold text-text">Custom command allowlist</h4>
+                </div>
+                <p className="text-sm text-muted">
+                    Pipeline <span className="font-semibold text-text">custom-command</span> steps may only run these executable basenames or absolute paths. No shell is used.
+                </p>
+                <textarea
+                    className={`${fieldClass} min-h-28 font-mono text-xs`}
+                    value={(config.customCommandAllowlist || []).join('\n')}
+                    placeholder={'ffmpeg\nffprobe'}
+                    onChange={(event) => update({
+                        customCommandAllowlist: [...new Set(
+                            event.target.value
+                                .split(/\r?\n/)
+                                .map((entry) => entry.trim())
+                                .filter(Boolean)
+                                .slice(0, 32),
+                        )],
+                    })}
+                />
+                <p className="text-xs text-muted">One entry per line. Defaults: ffmpeg, ffprobe. Absolute paths must match exactly.</p>
+            </section>
+
+            <section className="glass-card-sm p-5 space-y-3">
+                <div className="flex items-center gap-2">
                     <FolderSearch className="w-5 h-5 text-plex" />
                     <h4 className="font-bold text-text">ARR path rewrite</h4>
                 </div>

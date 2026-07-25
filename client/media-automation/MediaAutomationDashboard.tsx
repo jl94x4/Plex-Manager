@@ -31,6 +31,7 @@ import { CustomSelect, SettingsSwitch } from '../shared/ui';
 import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { mediaAutomationApi } from './api';
+import { PathBrowserField } from './PathBrowserField';
 import {
     PIPELINE_PRESETS,
     emptyLibrary,
@@ -800,7 +801,12 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <label className="space-y-2 text-sm font-semibold text-text">Name<input className={fieldClass} value={libraryDraft.name} onChange={(event) => setLibraryDraft({ ...libraryDraft, name: event.target.value })} placeholder="Movies" /></label>
                             <div className="flex items-end pb-2"><label className="flex items-center gap-3 text-sm font-semibold text-text"><SettingsSwitch checked={libraryDraft.enabled !== false} onChange={(enabled) => setLibraryDraft({ ...libraryDraft, enabled })} /> Enabled</label></div>
                         </div>
-                        <label className="block space-y-2 text-sm font-semibold text-text">Root path<input className={fieldClass} value={libraryDraft.rootPath} onChange={(event) => setLibraryDraft({ ...libraryDraft, rootPath: event.target.value })} placeholder="/media/movies" /></label>
+                        <PathBrowserField
+                            label="Root path"
+                            value={libraryDraft.rootPath}
+                            onChange={(rootPath) => setLibraryDraft({ ...libraryDraft, rootPath })}
+                            placeholder="/media/movies"
+                        />
                         <label className="block space-y-2 text-sm font-semibold text-text">Assigned pipeline
                             <CustomSelect
                                 value={String(libraryDraft.pipelineId ?? '')}
@@ -808,8 +814,20 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 options={[{ value: '', label: 'Automatic / first matching pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
                             />
                         </label>
-                        <label className="block space-y-2 text-sm font-semibold text-text">Output path<input className={fieldClass} value={libraryDraft.outputPath} onChange={(event) => setLibraryDraft({ ...libraryDraft, outputPath: event.target.value })} placeholder="/media/processed (optional)" /></label>
-                        <label className="block space-y-2 text-sm font-semibold text-text">Quarantine path<input className={fieldClass} value={libraryDraft.quarantinePath} onChange={(event) => setLibraryDraft({ ...libraryDraft, quarantinePath: event.target.value })} placeholder="/media/quarantine (optional)" /></label>
+                        <PathBrowserField
+                            label="Output path"
+                            value={libraryDraft.outputPath || ''}
+                            onChange={(outputPath) => setLibraryDraft({ ...libraryDraft, outputPath })}
+                            placeholder="/media/processed"
+                            optional
+                        />
+                        <PathBrowserField
+                            label="Quarantine path"
+                            value={libraryDraft.quarantinePath || ''}
+                            onChange={(quarantinePath) => setLibraryDraft({ ...libraryDraft, quarantinePath })}
+                            placeholder="/media/quarantine"
+                            optional
+                        />
                     </EditorShell>
                 )}
             </ModalPortal>
@@ -929,11 +947,17 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         { value: 'remux', label: 'Remux' },
                                                         { value: 'subtitle-strip', label: 'Strip subtitles' },
                                                         { value: 'subtitle-extract', label: 'Extract subtitle (SRT)' },
+                                                        { value: 'subtitle-keep-lang', label: 'Keep subtitle languages' },
+                                                        { value: 'keep-first-audio', label: 'Keep first audio' },
+                                                        { value: 'drop-commentary', label: 'Drop commentary audio' },
+                                                        { value: 'audio-normalize', label: 'Audio loudnorm' },
+                                                        { value: 'audio-stereo', label: 'Audio stereo downmix' },
+                                                        { value: 'commercial-strip', label: 'Strip commercial chapters' },
                                                         { value: 'move', label: 'Move / rename' },
                                                         { value: 'custom-command', label: 'Custom command' },
                                                     ]}
                                                 />
-                                                {(step.type === 'transcode' || step.type === 'remux' || step.type === 'subtitle-strip') && (
+                                                {['transcode', 'remux', 'subtitle-strip', 'subtitle-keep-lang', 'keep-first-audio', 'drop-commentary', 'audio-normalize', 'audio-stereo', 'commercial-strip'].includes(step.type) && (
                                                     <input className={fieldClass} value={step.container || ''} onChange={(event) => updateStep({ container: event.target.value })} placeholder="Container (mkv)" />
                                                 )}
                                                 {step.type === 'transcode' && <>
@@ -945,6 +969,35 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     <input className={fieldClass} type="number" min={32} max={1536} value={step.audioBitrateKbps || ''} onChange={(event) => updateStep({ audioBitrateKbps: event.target.value ? Number(event.target.value) : undefined })} placeholder="Audio bitrate kbps" />
                                                     <input className={fieldClass} type="number" min={2} value={step.maxWidth || ''} onChange={(event) => updateStep({ maxWidth: event.target.value ? Number(event.target.value) : undefined })} placeholder="Maximum width" />
                                                 </>}
+                                                {(step.type === 'audio-normalize' || step.type === 'audio-stereo') && (
+                                                    <input className={fieldClass} type="number" min={32} max={1536} value={step.audioBitrateKbps || ''} onChange={(event) => updateStep({ audioBitrateKbps: event.target.value ? Number(event.target.value) : undefined })} placeholder="Audio bitrate kbps (AAC)" />
+                                                )}
+                                                {(step.type === 'subtitle-extract' || step.type === 'subtitle-keep-lang') && (
+                                                    <input
+                                                        className={`${fieldClass} sm:col-span-2`}
+                                                        value={step.subtitleLanguages || ''}
+                                                        onChange={(event) => updateStep({ subtitleLanguages: event.target.value })}
+                                                        placeholder={step.type === 'subtitle-keep-lang' ? 'Languages to keep — eng,en' : 'Preferred languages (optional) — eng,en'}
+                                                    />
+                                                )}
+                                                {step.type === 'keep-first-audio' && (
+                                                    <label className="sm:col-span-2 flex items-center gap-2 text-sm text-text">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={step.keepSubtitles !== false}
+                                                            onChange={(event) => updateStep({ keepSubtitles: event.target.checked })}
+                                                        />
+                                                        Keep subtitle streams
+                                                    </label>
+                                                )}
+                                                {step.type === 'commercial-strip' && (
+                                                    <input
+                                                        className={`${fieldClass} sm:col-span-2`}
+                                                        value={step.commercialPattern || ''}
+                                                        onChange={(event) => updateStep({ commercialPattern: event.target.value })}
+                                                        placeholder="Chapter title regex — commercial|advert|ad\\s*break|promo"
+                                                    />
+                                                )}
                                                 {step.type === 'move' && (
                                                     <input
                                                         className={`${fieldClass} sm:col-span-2`}
@@ -965,13 +1018,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         })}
                                                         placeholder="Args (space-separated) — -i {input} -c copy {output}"
                                                     />
-                                                    <p className="sm:col-span-2 text-xs text-muted">No shell. Allowlisted executables only (default: ffmpeg, ffprobe). Placeholders: {'{input} {output} {dir} {name} {ext} {basename} {libraryRoot}'}</p>
+                                                    <p className="sm:col-span-2 text-xs text-muted">No shell. Allowlist is under Settings → Media Automation. Placeholders: {'{input} {output} {dir} {name} {ext} {basename} {libraryRoot}'}</p>
                                                 </>}
-                                                {(step.type === 'move' || step.type === 'subtitle-extract') && (
+                                                {(step.type === 'move' || step.type === 'subtitle-extract' || step.type === 'commercial-strip') && (
                                                     <p className="sm:col-span-2 text-xs text-muted">
                                                         {step.type === 'move'
                                                             ? 'Move stays inside configured library roots (cross-device copy+delete if needed).'
-                                                            : 'Extract writes an .srt beside the source and leaves the media file unchanged.'}
+                                                            : step.type === 'commercial-strip'
+                                                                ? 'Requires chapter markers. Matching chapters are cut out with stream copy; files without matches are remuxed unchanged.'
+                                                                : 'Extract writes an .srt beside the source and leaves the media file unchanged.'}
                                                     </p>
                                                 )}
                                             </div>

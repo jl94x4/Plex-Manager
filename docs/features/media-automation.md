@@ -2,7 +2,7 @@
 
 Native Media Automation runs `ffprobe` and `ffmpeg` in the portal container to inspect and process media without a separate transcoding service. It is admin-only and opt-in.
 
-## Version 1.2 scope
+## Version 1.3 scope
 
 Media Automation accepts jobs from:
 
@@ -11,7 +11,7 @@ Media Automation accepts jobs from:
 - filesystem watchers on enabled library roots (debounced create/change events);
 - Sonarr, Radarr, and Lidarr webhooks at `/triggers/media-automation/{sonarr|radarr|lidarr|manual}` when Basic Auth is configured.
 
-The dashboard includes Overview metrics (with a global dry-run banner when Safe fallback is Dry run), worker/scan/watch health, queue job detail with planned steps, live command text, and activity logs, pipeline presets, and activity filters.
+The dashboard includes Overview metrics (with a global dry-run banner when Safe fallback is Dry run), worker/scan/watch health, queue job detail with planned steps, live command text, and activity logs, pipeline presets, and activity filters. Library path fields include a live folder browser over container mounts (`/media`, `/movies`, `/tv`, …).
 
 It does not replace Plex/Jellyfin transcoding and does **not** install third-party Unmanic plugins. Processing uses the built-in native FFmpeg executor and first-party steps:
 
@@ -19,9 +19,15 @@ It does not replace Plex/Jellyfin transcoding and does **not** install third-par
 | --- | --- |
 | Transcode / Remux | Encode or stream-copy via FFmpeg |
 | Strip subtitles | Remux with stream copy and drop subtitle streams |
-| Extract subtitle | Write the first subtitle stream as `.srt` beside the source (media unchanged) |
+| Extract subtitle | Write subtitle stream(s) as `.srt` beside the source (optional language preference) |
+| Keep subtitle languages | Keep video/audio and only selected subtitle language codes (`eng,en`) |
+| Keep first audio | Map first video + first audio (+ optional subs) |
+| Drop commentary | Drop audio streams with commentary/comment disposition |
+| Audio loudnorm | EBU R128 loudnorm on first audio → AAC |
+| Audio stereo | Downmix first audio to 2.0 AAC |
+| Strip commercial chapters | Cut chapters whose titles match a regex (default commercial/advert/promo); remux unchanged if none match |
 | Move / rename | Move within configured library roots (`{dir}/archive/{basename}` templates) |
-| Custom command | Allowlisted executable + arg array only (no shell; default allowlist `ffmpeg`, `ffprobe`) |
+| Custom command | Allowlisted executable + arg array only (no shell; configure allowlist in Settings) |
 
 Remote/sidecar workers remain out of scope.
 

@@ -12,6 +12,23 @@ import type {
 
 const ROOT = '/api/media-automation';
 
+export type MediaAutomationBrowseEntry = {
+    name: string;
+    path: string;
+    type: 'root' | 'directory' | 'file';
+};
+
+export type MediaAutomationBrowseResult = {
+    ok?: boolean;
+    path?: string | null;
+    parent?: string | null;
+    root?: string | null;
+    roots?: string[];
+    entries?: MediaAutomationBrowseEntry[];
+    message?: string;
+    error?: string;
+};
+
 const asList = <T,>(value: unknown, keys: string[]): T[] => {
     if (Array.isArray(value)) return value as T[];
     if (!value || typeof value !== 'object') return [];
@@ -46,6 +63,9 @@ export const mediaAutomationApi = {
         await apiFetch(`${ROOT}/activity?limit=${limit}`),
         ['activity', 'events', 'items', 'results'],
     ),
+    browse: (path = '') => apiFetch(
+        `${ROOT}/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`,
+    ) as Promise<MediaAutomationBrowseResult>,
     libraries: async () => asList<MediaAutomationLibrary>(
         await apiFetch(`${ROOT}/libraries`),
         ['libraries', 'items', 'results'],

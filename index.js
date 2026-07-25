@@ -42,9 +42,11 @@ import {
 import {
     buildStepPlan,
     buildRuleContext,
+    collectBrowseRoots,
     createMediaAutomation,
     detectFfmpegCapabilities,
     getDefaultMediaAutomationConfig,
+    listBrowseDirectory,
     listMediaFiles,
     matchMediaRule,
     normalizeMediaAutomationConfig,
@@ -252,7 +254,18 @@ const normalizeMediaAutomationRuleGroup = (value) => {
 };
 
 const MEDIA_AUTOMATION_STEP_TYPES = new Set([
-    'transcode', 'remux', 'subtitle-strip', 'subtitle-extract', 'move', 'custom-command',
+    'transcode',
+    'remux',
+    'subtitle-strip',
+    'subtitle-extract',
+    'subtitle-keep-lang',
+    'keep-first-audio',
+    'drop-commentary',
+    'audio-normalize',
+    'audio-stereo',
+    'commercial-strip',
+    'move',
+    'custom-command',
 ]);
 
 const normalizeMediaAutomationStep = (value = {}) => {
@@ -270,6 +283,20 @@ const normalizeMediaAutomationStep = (value = {}) => {
     const args = Array.isArray(value.args)
         ? value.args.map((entry) => String(entry || '').slice(0, 500)).filter(Boolean).slice(0, 64)
         : [];
+    const subtitleLanguages = String(value.subtitleLanguages || value.languages || '')
+        .split(/[,\s]+/)
+        .map((entry) => entry.trim().toLowerCase())
+        .filter((entry) => /^[a-z]{2,3}$/.test(entry))
+        .slice(0, 12)
+        .join(',');
+    let commercialPattern = String(value.commercialPattern || '').trim().slice(0, 200);
+    if (commercialPattern) {
+        try {
+            RegExp(commercialPattern, 'i');
+        } catch {
+            commercialPattern = '';
+        }
+    }
     return {
         type,
         container: ['mkv', 'mp4'].includes(String(value.container || '').toLowerCase())
@@ -286,6 +313,9 @@ const normalizeMediaAutomationStep = (value = {}) => {
         executable: String(value.executable || value.command || '').trim().slice(0, 260),
         args,
         skipMediaFinalize: !!value.skipMediaFinalize,
+        subtitleLanguages,
+        keepSubtitles: value.keepSubtitles !== false,
+        commercialPattern,
     };
 };
 
@@ -19094,6 +19124,27 @@ app.post('/api/media-automation/enqueue', requireAdmin, requireMediaAutomation, 
     }
 });
 
+app.get('/api/media-automation/browse', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const libraries = await mediaAutomationService.libraries.list();
+        const extraRoots = (Array.isArray(libraries) ? libraries : [])
+            .flatMap((library) => [library?.rootPath, library?.outputPath, library?.quarantinePath])
+            .filter(Boolean);
+        const roots = await collectBrowseRoots({ extraRoots });
+        const requested = String(req.query.path || '').trim();
+        const listing = await listBrowseDirectory(requested, { roots, includeFiles: false });
+        res.json({
+            ok: true,
+            ...listing,
+            message: listing.roots.length
+                ? undefined
+                : 'No media mounts found in the container. Add Host→Container path mappings (e.g. /media, /movies) and restart.',
+        });
+    } catch (error) {
+        res.status(error.status || 400).json({ error: error.message || 'Failed to browse directories' });
+    }
+});
+
 app.get('/api/media-automation/libraries', requireAdmin, requireMediaAutomation, async (req, res) => {
     res.json({ libraries: await mediaAutomationService.libraries.list() });
 });
@@ -19220,7 +19271,8 @@ app.post('/api/media-automation/pipelines/:id/preview', requireAdmin, requireMed
                 ? (pipeline.hardware || runtime.hardwareAcceleration || 'auto')
                 : 'cpu';
             let adapter;
-            if (mode === 'transcode' || mode === 'remux' || mode === 'subtitle-strip' || mode === 'subtitle-extract') {
+            const needsAdapter = mode === 'transcode' || mode === 'remux';
+            if (needsAdapter) {
                 try {
                     adapter = mode !== 'transcode' || String(step.videoCodec || '').toLowerCase() === 'copy'
                         ? selectMediaAdapter('cpu')

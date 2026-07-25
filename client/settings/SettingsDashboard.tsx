@@ -1128,6 +1128,9 @@ export const SettingsDashboard: React.FC = () => {
                         120000,
                         Math.max(500, Number(saved.libraryWatchDebounceMs) || DEFAULT_MEDIA_AUTOMATION_SETTINGS.libraryWatchDebounceMs),
                     ),
+                    customCommandAllowlist: Array.isArray(saved.customCommandAllowlist)
+                        ? [...new Set(saved.customCommandAllowlist.map((entry: unknown) => String(entry || '').trim()).filter(Boolean))].slice(0, 32)
+                        : [...DEFAULT_MEDIA_AUTOMATION_SETTINGS.customCommandAllowlist],
                 });
             } else {
                 setMediaAutomation({

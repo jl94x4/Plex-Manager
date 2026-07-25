@@ -175,6 +175,12 @@ export type MediaAutomationStepType =
     | 'remux'
     | 'subtitle-strip'
     | 'subtitle-extract'
+    | 'subtitle-keep-lang'
+    | 'keep-first-audio'
+    | 'drop-commentary'
+    | 'audio-normalize'
+    | 'audio-stereo'
+    | 'commercial-strip'
     | 'move'
     | 'custom-command';
 
@@ -196,6 +202,12 @@ export type MediaAutomationStep = {
     /** Arg templates for custom-command (no shell). Placeholders: {input} {output} {dir} {name} {ext} {basename} {libraryRoot} */
     args?: string[];
     skipMediaFinalize?: boolean;
+    /** Comma-separated ISO language codes for subtitle extract/keep */
+    subtitleLanguages?: string;
+    /** Keep subtitle streams when using keep-first-audio (default true) */
+    keepSubtitles?: boolean;
+    /** Regex matched against chapter titles for commercial-strip */
+    commercialPattern?: string;
 };
 
 export type MediaAutomationRuleCondition = {
@@ -240,6 +252,8 @@ export type MediaAutomationSettingsConfig = {
     libraryScanIntervalMinutes: number;
     libraryWatchEnabled: boolean;
     libraryWatchDebounceMs: number;
+    /** Basenames or absolute paths allowed for custom-command steps */
+    customCommandAllowlist: string[];
 };
 
 export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = {
@@ -251,6 +265,7 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     libraryScanIntervalMinutes: 360,
     libraryWatchEnabled: true,
     libraryWatchDebounceMs: 5000,
+    customCommandAllowlist: ['ffmpeg', 'ffprobe'],
 };
 
 export const emptyLibrary = (): MediaAutomationLibrary => ({
@@ -514,6 +529,76 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
                 }],
             },
             steps: [{ type: 'transcode', container: 'mkv', videoCodec: 'copy', audioCodec: 'aac', audioBitrateKbps: 192, subtitleCodec: 'copy', preset: 'medium', crf: 23 }],
+        },
+    },
+    {
+        id: 'loudnorm-first-audio',
+        label: 'Loudnorm first audio',
+        detail: 'EBU R128 loudnorm on the first audio track (AAC), video/subs copied.',
+        pipeline: {
+            name: 'Loudnorm first audio',
+            enabled: true,
+            priority: 28,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: { operator: 'AND', conditions: [] },
+            steps: [{ type: 'audio-normalize', container: 'mkv', audioBitrateKbps: 192 }],
+        },
+    },
+    {
+        id: 'stereo-downmix',
+        label: 'Stereo downmix (AAC)',
+        detail: 'Downmix first audio to 2.0 AAC; keep video and subtitles.',
+        pipeline: {
+            name: 'Stereo downmix',
+            enabled: true,
+            priority: 27,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: { operator: 'AND', conditions: [] },
+            steps: [{ type: 'audio-stereo', container: 'mkv', audioBitrateKbps: 192 }],
+        },
+    },
+    {
+        id: 'drop-commentary-audio',
+        label: 'Drop commentary audio',
+        detail: 'Remux and drop audio streams marked commentary/comment disposition.',
+        pipeline: {
+            name: 'Drop commentary audio',
+            enabled: true,
+            priority: 32,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: { operator: 'AND', conditions: [] },
+            steps: [{ type: 'drop-commentary', container: 'mkv' }],
+        },
+    },
+    {
+        id: 'keep-english-subs',
+        label: 'Keep English subtitles only',
+        detail: 'Keep video/audio and only eng/en subtitle streams.',
+        pipeline: {
+            name: 'Keep English subtitles',
+            enabled: true,
+            priority: 33,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: { operator: 'AND', conditions: [] },
+            steps: [{ type: 'subtitle-keep-lang', container: 'mkv', subtitleLanguages: 'eng,en' }],
+        },
+    },
+    {
+        id: 'strip-commercial-chapters',
+        label: 'Strip commercial chapters',
+        detail: 'Cut chapters whose titles match commercial/advert/promo (requires chapter markers).',
+        pipeline: {
+            name: 'Strip commercial chapters',
+            enabled: true,
+            priority: 22,
+            outputMode: 'dry-run',
+            hardware: 'cpu',
+            rules: { operator: 'AND', conditions: [] },
+            steps: [{ type: 'commercial-strip', container: 'mkv' }],
         },
     },
     {
