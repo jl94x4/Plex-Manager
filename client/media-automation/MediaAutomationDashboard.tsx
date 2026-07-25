@@ -108,6 +108,12 @@ const jobErrorText = (error: MediaAutomationJob['error']) => {
     return error.message || error.code || '';
 };
 
+const jobStateValue = (job: MediaAutomationJob) => String(job.state || job.status || '').toLowerCase();
+const isTerminalJob = (job: MediaAutomationJob) => (
+    ['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'success'].includes(jobStateValue(job))
+);
+const isCancellableJob = (job: MediaAutomationJob) => !isTerminalJob(job);
+
 const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 const cardClass = 'rounded-2xl border border-border/70 bg-card/70 shadow-xl backdrop-blur-md';
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-white/[0.04] px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/50 hover:bg-plex/10 disabled:pointer-events-none disabled:opacity-40';
@@ -224,6 +230,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [pendingPath, setPendingPath] = useState('');
     const [pendingResult, setPendingResult] = useState<MediaAutomationPendingTest | null>(null);
     const [activityFilter, setActivityFilter] = useState<'all' | 'job' | 'scan' | 'watch'>('all');
+    const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
@@ -319,7 +326,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const queueCounts = useMemo(() => {
         const counts = { queued: 0, active: 0, completed: 0, failed: 0 };
         jobs.forEach((job) => {
-            const value = String(job.state || job.status || '').toLowerCase();
+            const value = jobStateValue(job);
             if (['running', 'processing', 'active'].includes(value)) counts.active += 1;
             else if (['completed', 'succeeded', 'success', 'done'].includes(value)) counts.completed += 1;
             else if (['failed', 'error', 'cancelled', 'canceled'].includes(value)) counts.failed += 1;
@@ -327,6 +334,41 @@ export const MediaAutomationDashboard: React.FC = () => {
         });
         return counts;
     }, [jobs]);
+
+    const cancellableJobs = useMemo(() => jobs.filter(isCancellableJob), [jobs]);
+    const finishedJobs = useMemo(() => jobs.filter(isTerminalJob), [jobs]);
+    const allJobIds = useMemo(() => jobs.map((job) => String(job.id)), [jobs]);
+    const allSelected = allJobIds.length > 0 && allJobIds.every((id) => selectedJobIds.has(id));
+    const selectedCancellableIds = useMemo(
+        () => cancellableJobs.map((job) => String(job.id)).filter((id) => selectedJobIds.has(id)),
+        [cancellableJobs, selectedJobIds],
+    );
+    const selectedFinishedIds = useMemo(
+        () => finishedJobs.map((job) => String(job.id)).filter((id) => selectedJobIds.has(id)),
+        [finishedJobs, selectedJobIds],
+    );
+
+    useEffect(() => {
+        const alive = new Set(allJobIds);
+        setSelectedJobIds((current) => {
+            const next = new Set([...current].filter((id) => alive.has(id)));
+            return next.size === current.size ? current : next;
+        });
+    }, [allJobIds]);
+
+    const toggleJobSelected = (jobId: string | number) => {
+        const id = String(jobId);
+        setSelectedJobIds((current) => {
+            const next = new Set(current);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAllJobs = () => {
+        setSelectedJobIds(allSelected ? new Set() : new Set(allJobIds));
+    };
 
     const filteredActivity = useMemo(() => {
         if (activityFilter === 'all') return activity;
@@ -594,38 +636,113 @@ export const MediaAutomationDashboard: React.FC = () => {
                     </section>
                     {jobs.length === 0 ? <EmptyState icon={ListRestart} title="Queue is empty" detail="Enqueue a path, run Scan now, or wait for the library watcher to discover matching media." /> : (
                         <div className="space-y-3">
+                            <section className={`${cardClass} p-4`}>
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <label className="inline-flex items-center gap-2 text-sm font-semibold text-text">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-border bg-background text-plex focus:ring-plex"
+                                            checked={allSelected}
+                                            onChange={toggleSelectAllJobs}
+                                        />
+                                        Select all ({jobs.length})
+                                        {selectedJobIds.size > 0 && (
+                                            <span className="font-normal text-muted">· {selectedJobIds.size} selected</span>
+                                        )}
+                                    </label>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null || selectedCancellableIds.length === 0}
+                                            onClick={() => runAction(
+                                                'cancel-selected',
+                                                () => mediaAutomationApi.bulkCancelJobs(selectedCancellableIds),
+                                                `Cancelled ${selectedCancellableIds.length} job${selectedCancellableIds.length === 1 ? '' : 's'}.`,
+                                            ).then(() => setSelectedJobIds(new Set()))}
+                                        >
+                                            {busy === 'cancel-selected' ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                                            Cancel selected
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null || cancellableJobs.length === 0}
+                                            onClick={() => runAction(
+                                                'cancel-all',
+                                                () => mediaAutomationApi.bulkCancelJobs(),
+                                                `Cancelled ${cancellableJobs.length} active job${cancellableJobs.length === 1 ? '' : 's'}.`,
+                                            ).then(() => setSelectedJobIds(new Set()))}
+                                        >
+                                            {busy === 'cancel-all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                                            Cancel all active
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null || (selectedFinishedIds.length === 0 && finishedJobs.length === 0)}
+                                            onClick={() => {
+                                                const ids = selectedFinishedIds.length > 0 ? selectedFinishedIds : undefined;
+                                                const count = ids ? ids.length : finishedJobs.length;
+                                                return runAction(
+                                                    'clear-finished',
+                                                    () => mediaAutomationApi.bulkRemoveJobs(ids),
+                                                    `Cleared ${count} finished job${count === 1 ? '' : 's'}.`,
+                                                ).then(() => setSelectedJobIds(new Set()));
+                                            }}
+                                        >
+                                            {busy === 'clear-finished' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                            {selectedFinishedIds.length > 0 ? `Clear selected (${selectedFinishedIds.length})` : `Clear finished (${finishedJobs.length})`}
+                                        </button>
+                                    </div>
+                                </div>
+                                <p className="mt-2 text-xs text-muted">
+                                    Dry-run / completed jobs cannot be cancelled — use Clear finished to remove them. Cancel all active stops queued and running work.
+                                </p>
+                            </section>
                             {jobs.map((job) => {
                                 const jobId = job.id;
-                                const state = String(job.state || job.status || '').toLowerCase();
+                                const state = jobStateValue(job);
                                 const dryRunJob = jobIsDryRun(job);
                                 const jobState = dryRunJob && ['completed', 'succeeded', 'success'].includes(state)
                                     ? 'dry-run'
                                     : (job.phase || job.state || job.status);
                                 const percent = jobProgressPercent(job);
                                 const errorText = jobErrorText(job.error);
-                                const canCancel = !['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'success'].includes(state);
+                                const canCancel = isCancellableJob(job);
                                 const canRetry = ['failed', 'cancelled', 'canceled', 'error'].includes(state);
                                 const canSkip = state === 'queued';
+                                const selected = selectedJobIds.has(String(jobId));
                                 return (
-                                    <article key={String(jobId)} className={`${cardClass} cursor-pointer p-4 transition hover:border-plex/40`} onClick={() => openJobDetail(jobId)}>
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <div className="min-w-0">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <StatusPill value={jobState} />
-                                                    <span className="text-xs text-muted">#{jobId}</span>
-                                                    {job.lane && <span className="text-xs uppercase text-muted">{job.lane}</span>}
-                                                    {job.priority != null && <span className="text-xs text-muted">P{job.priority}</span>}
-                                                    {percent != null && <span className="text-xs text-muted">{Math.round(percent)}%</span>}
+                                    <article key={String(jobId)} className={`${cardClass} cursor-pointer p-4 transition hover:border-plex/40 ${selected ? 'border-plex/50' : ''}`} onClick={() => openJobDetail(jobId)}>
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="flex min-w-0 gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    className="mt-1 h-4 w-4 shrink-0 rounded border-border bg-background text-plex focus:ring-plex"
+                                                    checked={selected}
+                                                    onClick={(event) => event.stopPropagation()}
+                                                    onChange={() => toggleJobSelected(jobId)}
+                                                    aria-label={`Select job ${jobId}`}
+                                                />
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <StatusPill value={jobState} />
+                                                        <span className="text-xs text-muted">#{jobId}</span>
+                                                        {job.lane && <span className="text-xs uppercase text-muted">{job.lane}</span>}
+                                                        {job.priority != null && <span className="text-xs text-muted">P{job.priority}</span>}
+                                                        {percent != null && <span className="text-xs text-muted">{Math.round(percent)}%</span>}
+                                                    </div>
+                                                    <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
+                                                    <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.createdAt)}</p>
+                                                    {dryRunJob && ['completed', 'succeeded', 'success'].includes(state) && (
+                                                        <p className="mt-1 text-xs text-amber-300">{jobDryRunReason(job)}</p>
+                                                    )}
+                                                    {jobLiveCommand(job) && (
+                                                        <p className="mt-1 truncate font-mono text-[11px] text-muted" title={jobLiveCommand(job)}>{jobLiveCommand(job)}</p>
+                                                    )}
+                                                    {errorText && <p className="mt-2 text-xs text-red-300">{errorText}</p>}
                                                 </div>
-                                                <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
-                                                <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.createdAt)}</p>
-                                                {dryRunJob && ['completed', 'succeeded', 'success'].includes(state) && (
-                                                    <p className="mt-1 text-xs text-amber-300">{jobDryRunReason(job)}</p>
-                                                )}
-                                                {jobLiveCommand(job) && (
-                                                    <p className="mt-1 truncate font-mono text-[11px] text-muted" title={jobLiveCommand(job)}>{jobLiveCommand(job)}</p>
-                                                )}
-                                                {errorText && <p className="mt-2 text-xs text-red-300">{errorText}</p>}
                                             </div>
                                             <div className="flex shrink-0 gap-2" onClick={(event) => event.stopPropagation()}>
                                                 {canSkip && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`skip-${jobId}`, () => mediaAutomationApi.skipJob(jobId), 'Job skipped.')}><SkipForward className="h-4 w-4" /> Skip</button>}

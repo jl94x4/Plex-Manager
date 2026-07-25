@@ -19050,6 +19050,37 @@ app.get('/api/media-automation/jobs', requireAdmin, requireMediaAutomation, asyn
     res.json({ jobs: jobs.slice(0, limit) });
 });
 
+app.post('/api/media-automation/jobs/bulk', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const action = String(req.body?.action || '').toLowerCase();
+        const ids = Array.isArray(req.body?.ids)
+            ? req.body.ids.map((id) => String(id)).filter(Boolean).slice(0, 500)
+            : undefined;
+        if (action === 'cancel') {
+            const cancelled = await mediaAutomationService.cancelJobs({ ids });
+            await appendAuditLog('media_automation_jobs_bulk_cancelled', req.user, null, {
+                count: cancelled.length,
+                ids: cancelled.map((job) => job.id),
+            });
+            return res.json({ ok: true, action, count: cancelled.length, jobs: cancelled });
+        }
+        if (action === 'remove' || action === 'clear') {
+            const removed = await mediaAutomationService.removeJobs({
+                ids,
+                terminalOnly: req.body?.terminalOnly !== false,
+            });
+            await appendAuditLog('media_automation_jobs_bulk_removed', req.user, null, {
+                count: removed,
+                ids: ids || null,
+            });
+            return res.json({ ok: true, action: 'remove', count: removed });
+        }
+        return res.status(400).json({ error: 'action must be cancel or remove' });
+    } catch (error) {
+        return res.status(error.status || 400).json({ error: error.message || 'Bulk job action failed' });
+    }
+});
+
 app.get('/api/media-automation/jobs/:id', requireAdmin, requireMediaAutomation, async (req, res) => {
     const job = await mediaAutomationService.getJob(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });

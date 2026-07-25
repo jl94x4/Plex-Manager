@@ -85,6 +85,15 @@ export const mediaAutomationApi = {
     scanNow: () => apiFetch(`${ROOT}/scan`, json({})),
     testPending: (path: string) => apiFetch(`${ROOT}/pending/test`, json({ path })) as Promise<MediaAutomationPendingTest>,
     cancelJob: (id: string | number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/cancel`, json({})),
+    bulkCancelJobs: (ids?: Array<string | number>) => apiFetch(`${ROOT}/jobs/bulk`, json({
+        action: 'cancel',
+        ...(ids?.length ? { ids } : {}),
+    })),
+    bulkRemoveJobs: (ids?: Array<string | number>) => apiFetch(`${ROOT}/jobs/bulk`, json({
+        action: 'remove',
+        terminalOnly: true,
+        ...(ids?.length ? { ids } : {}),
+    })),
     skipJob: (id: string | number, reason = 'skipped') => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/skip`, json({ reason })),
     setPriority: (id: string | number, priority: number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/priority`, json({ priority })),
     retryJob: (id: string | number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/retry`, json({})),
