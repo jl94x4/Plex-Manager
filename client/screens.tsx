@@ -9855,7 +9855,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         const label = options.compactLabel || item.label;
         const badgeCount = options.badgeCount || 0;
         const baseClass = options.mobile
-            ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors overflow-hidden ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
+            ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
             : `flex items-center gap-3 px-3 py-2.5 no-underline rounded-lg transition-all text-[14px] font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
 
         if (item.href) {
@@ -10247,106 +10247,115 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 </div>
             )}
 
-            {/* Mobile Bottom Nav — stay above the More overlay so iOS PWA keeps a full, tappable tab bar */}
-            <div className="md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[330] pb-[env(safe-area-inset-bottom)]">
-                <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
-                    {(() => {
-                        const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                        const showMore = normalizedNavOrder.length > maxPrimary;
-                        const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
-                        return (
-                            <>
-                                {primary.map((key) => {
-                                    const item = navItemsConfig[key];
-                                    if (!item) return null;
-                                    const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                    const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
-                                    return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
-                                })}
-                                {showMore && (
-                                    <button
-                                        type="button"
-                                        aria-label="More menu"
-                                        aria-expanded={mobileMoreOpen}
-                                        className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 cursor-pointer overflow-hidden ${
-                                            mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
-                                        }`}
-                                        onClick={() => setMobileMoreOpen((open) => !open)}
-                                    >
-                                        <span className="relative shrink-0">
-                                            <MoreHorizontal className="w-5 h-5" />
-                                        </span>
-                                        <span className="w-full truncate leading-tight px-0.5">More</span>
-                                        {mobileMoreOpen && (
-                                            <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-plex shadow-[0_0_5px_rgba(229,160,13,0.8)]" />
-                                        )}
-                                    </button>
-                                )}
-                            </>
-                        );
-                    })()}
-                </div>
-            </div>
-
-            {/* Mobile More Drawer — backdrop stops above the tab bar so the nav stays fully visible on iOS PWA. */}
-            {mobileMoreOpen && (
-                <div
-                    className="md:hidden fixed top-0 left-0 right-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end bottom-[calc(4rem+env(safe-area-inset-bottom,0px))]"
-                    onClick={() => setMobileMoreOpen(false)}
-                >
+            {/* Mobile bottom nav + More: portal to body so position:fixed tracks the viewport
+                (address bar hide/show) and page content can't paint through a translucent bar. */}
+            {typeof document !== 'undefined' && ReactDOM.createPortal(
+                <>
                     <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label="More menu"
-                        className="bg-card border-t border-border rounded-t-2xl animate-slide-up shadow-2xl max-h-[min(70dvh,calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px)))] overflow-y-auto"
-                        onClick={(e) => e.stopPropagation()}
+                        className="md:hidden fixed inset-x-0 bottom-0 z-[330] border-t border-border bg-card shadow-[0_-8px_24px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom,0px)]"
+                        style={{ position: 'fixed', bottom: 0, left: 0, right: 0 }}
                     >
-                        <div className="flex items-center justify-between p-4 border-b border-white/5 sticky top-0 bg-card z-10">
-                            <h3 className="font-bold text-text">More Menu</h3>
-                            <button
-                                type="button"
-                                className="text-muted hover:text-text p-1 bg-white/5 rounded-full"
-                                onClick={() => setMobileMoreOpen(false)}
-                                aria-label="Close more menu"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-                        <div className="p-5 grid grid-cols-4 gap-4">
+                        <div className="flex items-stretch justify-between w-full h-16 px-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.25rem,env(safe-area-inset-right))]">
                             {(() => {
                                 const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                                const secondary = normalizedNavOrder.length > maxPrimary ? normalizedNavOrder.slice(maxPrimary) : [];
-                                return secondary.map((key) => {
-                                    const item = navItemsConfig[key];
-                                    if (!item) return null;
-                                    const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                    const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
-                                    const handleActivate = () => {
-                                        setMobileMoreOpen(false);
-                                        if (item.href) window.open(item.href, '_blank');
-                                        else if (item.onClick) item.onClick({ preventDefault: () => {} });
-                                        else if (item.route) onNavigate(item.route as any);
-                                    };
-                                    const badgeCount = getNavBadgeCount(key);
-                                    return (
-                                        <button key={key} type="button" onClick={handleActivate} className="flex flex-col items-center gap-2 relative bg-transparent border-0">
-                                            <div className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors ${isCurrent ? 'bg-plex text-background shadow-[0_0_15px_rgba(229,160,13,0.35)]' : 'bg-background/50 text-text hover:bg-white/10 border border-white/5'}`}>
-                                                <item.icon className="w-6 h-6" />
-                                            </div>
-                                            {badgeCount > 0 && (
-                                                <span className="absolute -top-1 right-1 min-w-[18px] h-4.5 px-1 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
-                                                    {badgeCount > 9 ? '9+' : badgeCount}
+                                const showMore = normalizedNavOrder.length > maxPrimary;
+                                const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
+                                return (
+                                    <>
+                                        {primary.map((key) => {
+                                            const item = navItemsConfig[key];
+                                            if (!item) return null;
+                                            const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                            return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
+                                        })}
+                                        {showMore && (
+                                            <button
+                                                type="button"
+                                                aria-label="More menu"
+                                                aria-expanded={mobileMoreOpen}
+                                                className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 max-w-full px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 cursor-pointer ${
+                                                    mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
+                                                }`}
+                                                onClick={() => setMobileMoreOpen((open) => !open)}
+                                            >
+                                                <span className="relative shrink-0">
+                                                    <MoreHorizontal className="w-5 h-5" />
                                                 </span>
-                                            )}
-                                            <span className={`text-[10px] text-center w-full truncate px-1 ${isCurrent ? 'text-plex font-bold' : 'text-muted'}`}>{labelOverride}</span>
-                                        </button>
-                                    );
-                                });
+                                                <span className="w-full truncate leading-tight px-0.5">More</span>
+                                                {mobileMoreOpen && (
+                                                    <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-plex shadow-[0_0_5px_rgba(229,160,13,0.8)]" />
+                                                )}
+                                            </button>
+                                        )}
+                                    </>
+                                );
                             })()}
                         </div>
-                        <div className="pb-4" />
                     </div>
-                </div>
+
+                    {mobileMoreOpen && (
+                        <div
+                            className="md:hidden fixed top-0 left-0 right-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end bottom-[calc(4rem+env(safe-area-inset-bottom,0px))]"
+                            style={{ position: 'fixed' }}
+                            onClick={() => setMobileMoreOpen(false)}
+                        >
+                            <div
+                                role="dialog"
+                                aria-modal="true"
+                                aria-label="More menu"
+                                className="bg-card border-t border-border rounded-t-2xl animate-slide-up shadow-2xl max-h-[min(70dvh,calc(100dvh-5.5rem-env(safe-area-inset-bottom,0px)))] overflow-y-auto"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="flex items-center justify-between p-4 border-b border-white/5 sticky top-0 bg-card z-10">
+                                    <h3 className="font-bold text-text">More Menu</h3>
+                                    <button
+                                        type="button"
+                                        className="text-muted hover:text-text p-1 bg-white/5 rounded-full"
+                                        onClick={() => setMobileMoreOpen(false)}
+                                        aria-label="Close more menu"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
+                                </div>
+                                <div className="p-5 grid grid-cols-4 gap-4">
+                                    {(() => {
+                                        const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
+                                        const secondary = normalizedNavOrder.length > maxPrimary ? normalizedNavOrder.slice(maxPrimary) : [];
+                                        return secondary.map((key) => {
+                                            const item = navItemsConfig[key];
+                                            if (!item) return null;
+                                            const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                            const handleActivate = () => {
+                                                setMobileMoreOpen(false);
+                                                if (item.href) window.open(item.href, '_blank');
+                                                else if (item.onClick) item.onClick({ preventDefault: () => {} });
+                                                else if (item.route) onNavigate(item.route as any);
+                                            };
+                                            const badgeCount = getNavBadgeCount(key);
+                                            return (
+                                                <button key={key} type="button" onClick={handleActivate} className="flex flex-col items-center gap-2 relative bg-transparent border-0">
+                                                    <div className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors ${isCurrent ? 'bg-plex text-background shadow-[0_0_15px_rgba(229,160,13,0.35)]' : 'bg-background/50 text-text hover:bg-white/10 border border-white/5'}`}>
+                                                        <item.icon className="w-6 h-6" />
+                                                    </div>
+                                                    {badgeCount > 0 && (
+                                                        <span className="absolute -top-1 right-1 min-w-[18px] h-4.5 px-1 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
+                                                            {badgeCount > 9 ? '9+' : badgeCount}
+                                                        </span>
+                                                    )}
+                                                    <span className={`text-[10px] text-center w-full truncate px-1 ${isCurrent ? 'text-plex font-bold' : 'text-muted'}`}>{labelOverride}</span>
+                                                </button>
+                                            );
+                                        });
+                                    })()}
+                                </div>
+                                <div className="pb-4" />
+                            </div>
+                        </div>
+                    )}
+                </>,
+                document.body,
             )}
         </>
     );
