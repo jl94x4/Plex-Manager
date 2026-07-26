@@ -12,6 +12,7 @@ import {
     X,
 } from 'lucide-react';
 import { ModalPortal } from '../shared/ModalPortal';
+import { AppAmbientBackground } from '../shared/theme';
 import {
     PIPELINE_PRESETS,
     PIPELINE_PRESET_CATEGORY_LABELS,
@@ -112,18 +113,14 @@ export const PipelineTemplatePicker: React.FC<Props> = ({ open, onClose, onSelec
     return (
         <ModalPortal open={open}>
             <div
-                className="fixed inset-0 z-[1200] flex flex-col bg-[#0b0d10] text-text md:left-72"
+                className="fixed inset-0 z-[1200] flex flex-col overflow-hidden bg-background text-text md:left-72"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="pipeline-template-title"
             >
-                <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                    <div className="absolute -left-24 top-0 h-80 w-80 rounded-full bg-plex/20 blur-3xl" />
-                    <div className="absolute right-0 top-24 h-96 w-96 rounded-full bg-sky-500/10 blur-3xl" />
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(255,255,255,0.04),_transparent_55%)]" />
-                </div>
+                <AppAmbientBackground className="absolute inset-0" />
 
-                <header className="relative z-10 border-b border-white/10 bg-black/30 backdrop-blur-md">
+                <header className="relative z-10 border-b border-white/10 bg-background/40 backdrop-blur-md">
                     <div className="mx-auto flex w-full max-w-7xl items-start justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
                         <div className="min-w-0">
                             <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.22em] text-plex">
@@ -272,7 +269,7 @@ export const PipelineTemplatePicker: React.FC<Props> = ({ open, onClose, onSelec
                     </div>
                 </div>
 
-                <footer className="relative z-10 border-t border-white/10 bg-black/40 px-4 py-3 backdrop-blur-md sm:px-6 lg:px-8">
+                <footer className="relative z-10 border-t border-white/10 bg-background/50 px-4 py-3 backdrop-blur-md sm:px-6 lg:px-8">
                     <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3">
                         <p className="text-xs text-muted">
                             Templates are starting points — you can edit rules, hardware, and output after selecting one.

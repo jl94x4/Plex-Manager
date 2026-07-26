@@ -123,8 +123,11 @@ export const AuthPageBackground: React.FC<{ backgroundImageUrl?: string, trendin
 };
 
 /** Subtle ambient background for authenticated app shell */
-export const AppAmbientBackground: React.FC<{ backgroundImageUrl?: string }> = ({ backgroundImageUrl }) => (
-    <div className="pointer-events-none fixed inset-0 bg-background z-0">
+export const AppAmbientBackground: React.FC<{ backgroundImageUrl?: string; className?: string }> = ({
+    backgroundImageUrl,
+    className = 'fixed inset-0 z-0',
+}) => (
+    <div className={`pointer-events-none bg-background ${className}`}>
         <div className="absolute -top-40 -left-20 w-[420px] h-[420px] rounded-full bg-plex/[0.06] blur-[100px]" />
         <div className="absolute top-1/2 -right-32 w-[360px] h-[360px] rounded-full bg-plex/[0.04] blur-[90px]" />
         <div className="absolute bottom-0 left-1/3 w-[320px] h-[320px] rounded-full bg-plex/[0.03] blur-[80px]" />
