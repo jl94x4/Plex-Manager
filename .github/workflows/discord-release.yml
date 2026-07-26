@@ -3,6 +3,24 @@ name: Discord Release Post
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      release_name:
+        description: Release name to post
+        required: true
+        type: string
+      release_tag:
+        description: Release tag or version
+        required: true
+        type: string
+      release_url:
+        description: Release URL
+        required: true
+        type: string
+      release_notes:
+        description: Optional release notes
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -14,11 +32,11 @@ jobs:
       - name: Post release to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.Discord_Webhook_Release }}
-          RELEASE_NAME: ${{ github.event.release.name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_URL: ${{ github.event.release.html_url }}
-          RELEASE_AUTHOR: ${{ github.event.release.author.login }}
-          RELEASE_BODY: ${{ github.event.release.body }}
+          RELEASE_NAME: ${{ github.event.release.name || inputs.release_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          RELEASE_URL: ${{ github.event.release.html_url || inputs.release_url }}
+          RELEASE_AUTHOR: ${{ github.event.release.author.login || github.actor }}
+          RELEASE_BODY: ${{ github.event.release.body || inputs.release_notes }}
         shell: bash
         run: |
           set -euo pipefail
