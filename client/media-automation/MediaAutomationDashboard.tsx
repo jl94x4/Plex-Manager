@@ -156,10 +156,11 @@ const pathBasename = (value: string) => {
     return parts[parts.length - 1] || value;
 };
 
-const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
-const cardClass = 'rounded-2xl border border-border/70 bg-card/70 shadow-xl backdrop-blur-md';
-const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-white/[0.04] px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/50 hover:bg-plex/10 disabled:pointer-events-none disabled:opacity-40';
-const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-lg bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover disabled:pointer-events-none disabled:opacity-40';
+const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
+const cardClass = 'glass-card shadow-xl';
+const listCardClass = 'rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent shadow-xl transition hover:border-plex/40';
+const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
+const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
 
 const asText = (value: unknown, fallback = '—') => value === undefined || value === null || value === '' ? fallback : String(value);
 const formatTime = (value?: string) => {
@@ -179,22 +180,44 @@ const statusTone = (status?: string) => {
     if (['dry-run', 'dry run', 'planned'].some((key) => value.includes(key))) {
         return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
     }
-    if (['completed', 'succeeded', 'ready', 'running', 'online', 'healthy', 'success', 'processing', 'committing', 'verifying'].some((key) => value.includes(key))) {
+    if (['completed', 'succeeded', 'ready', 'running', 'online', 'healthy', 'success', 'processing', 'committing', 'verifying', 'enabled'].some((key) => value.includes(key))) {
         return 'border-green-500/30 bg-green-500/10 text-green-300';
     }
-    if (['failed', 'error', 'offline', 'stopped', 'cancelled', 'canceled'].some((key) => value.includes(key))) {
+    if (['failed', 'error', 'offline', 'stopped', 'cancelled', 'canceled', 'disabled'].some((key) => value.includes(key))) {
         return 'border-red-500/30 bg-red-500/10 text-red-300';
     }
     if (['paused', 'queued', 'pending', 'probing', 'planning'].some((key) => value.includes(key))) {
         return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
     }
-    return 'border-border bg-white/5 text-muted';
+    return 'border-white/10 bg-white/5 text-muted';
 };
 
 const StatusPill: React.FC<{ value?: string }> = ({ value }) => (
     <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${statusTone(value)}`}>
         {value || 'unknown'}
     </span>
+);
+
+const StatCard: React.FC<{
+    label: string;
+    value: React.ReactNode;
+    hint?: string;
+    icon: React.ReactNode;
+    tone: string;
+}> = ({ label, value, hint, icon, tone }) => (
+    <div className={`relative overflow-hidden rounded-2xl border px-4 py-4 ${tone}`}>
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.06] via-transparent to-transparent" />
+        <div className="relative flex items-start justify-between gap-3">
+            <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-80">{label}</p>
+                <p className="mt-1.5 text-2xl font-black tracking-tight md:text-3xl">{value}</p>
+                {hint ? <p className="mt-1.5 text-[11px] opacity-70">{hint}</p> : null}
+            </div>
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/20">
+                {icon}
+            </div>
+        </div>
+    </div>
 );
 
 const GPU_ADAPTER_IDS = ['nvenc', 'qsv', 'intel-vaapi', 'vaapi'] as const;
@@ -290,11 +313,24 @@ const HardwareBadge: React.FC<{ job: MediaAutomationJob }> = ({ job }) => {
     );
 };
 
-const EmptyState: React.FC<{ icon: React.ComponentType<{ className?: string }>; title: string; detail: string }> = ({ icon: Icon, title, detail }) => (
-    <div className={`${cardClass} flex min-h-48 flex-col items-center justify-center px-6 py-10 text-center`}>
-        <Icon className="mb-3 h-9 w-9 text-plex/70" />
-        <h3 className="font-bold text-text">{title}</h3>
-        <p className="mt-1 max-w-md text-sm text-muted">{detail}</p>
+const EmptyState: React.FC<{
+    icon: React.ComponentType<{ className?: string }>;
+    title: string;
+    detail: string;
+    actionLabel?: string;
+    onAction?: () => void;
+}> = ({ icon: Icon, title, detail, actionLabel, onAction }) => (
+    <div className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/20 px-6 py-10 text-center">
+        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-plex/30 bg-plex/10">
+            <Icon className="h-6 w-6 text-plex" />
+        </div>
+        <h3 className="text-lg font-bold tracking-tight text-text">{title}</h3>
+        <p className="mt-1 max-w-md text-sm leading-relaxed text-muted">{detail}</p>
+        {actionLabel && onAction ? (
+            <button type="button" className={`${primaryButtonClass} mt-5`} onClick={onAction}>
+                {actionLabel}
+            </button>
+        ) : null}
     </div>
 );
 
@@ -685,19 +721,25 @@ export const MediaAutomationDashboard: React.FC = () => {
     }
 
     return (
-        <div className="w-full space-y-6 pb-8">
+        <div className="flex w-full animate-fade-in flex-col gap-6 pb-10">
             <ToastContainer toasts={toasts} setToasts={setToasts} />
-            <header className={`${cardClass} relative overflow-hidden p-5 sm:p-7`}>
-                <div className="absolute inset-y-0 right-0 w-64 bg-gradient-to-l from-plex/10 to-transparent" />
-                <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-plex">
-                            <ServerCog className="h-4 w-4" /> Native worker
+            <header className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-plex/15 via-background/40 to-sky-500/10 p-5 md:p-6">
+                <div className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-plex/20 blur-3xl" />
+                <div className="pointer-events-none absolute -bottom-20 left-10 h-40 w-40 rounded-full bg-sky-400/10 blur-3xl" />
+                <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="min-w-0">
+                        <div className="mb-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-plex">
+                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-plex/30 bg-plex/15">
+                                <ServerCog className="h-3.5 w-3.5" />
+                            </span>
+                            Media Automation
                         </div>
-                        <h1 className="text-2xl font-black text-text sm:text-3xl">Media Automation</h1>
-                        <p className="mt-1 text-sm text-muted">Manage native transcode, remux, and file automation workflows.</p>
+                        <h1 className="text-3xl font-black tracking-tight text-text md:text-4xl">Transcode with control</h1>
+                        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted md:text-[15px]">
+                            Native FFmpeg pipelines for remux, HEVC, and cleanup — with a durable queue, hardware lanes, and safe dry-run until you are ready to write.
+                        </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3 self-start lg:self-auto">
                         <StatusPill value={asText(status.workerState || status.state, 'unknown')} />
                         <button type="button" className={buttonClass} onClick={() => load(true)} disabled={refreshing}>
                             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
@@ -716,9 +758,18 @@ export const MediaAutomationDashboard: React.FC = () => {
                 </div>
             )}
 
-            <nav className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-card/70 p-1.5 custom-scrollbar">
+            <nav className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
                 {tabs.map(({ id, label, icon: Icon }) => (
-                    <button key={id} type="button" onClick={() => setTab(id)} className={`flex min-w-max flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold transition ${tab === id ? 'bg-plex text-background shadow-lg' : 'text-muted hover:bg-white/5 hover:text-text'}`}>
+                    <button
+                        key={id}
+                        type="button"
+                        onClick={() => setTab(id)}
+                        className={`inline-flex min-w-max items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-bold transition ${
+                            tab === id
+                                ? 'border-plex/40 bg-plex/15 text-plex'
+                                : 'border-white/10 bg-black/20 text-muted hover:border-white/20 hover:text-text'
+                        }`}
+                    >
                         <Icon className="h-4 w-4" /> {label}
                     </button>
                 ))}
@@ -747,45 +798,88 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </div>
                     )}
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        {[
-                            ['Queued', status.queuedJobs ?? queueCounts.queued, 'text-amber-300'],
-                            ['Processing', status.activeJobs ?? queueCounts.active, 'text-blue-300'],
-                            ['Completed', status.completedJobs ?? queueCounts.completed, 'text-green-300'],
-                            ['Failed', status.failedJobs ?? queueCounts.failed, 'text-red-300'],
-                        ].map(([label, value, color]) => (
-                            <div key={String(label)} className={`${cardClass} p-4 sm:p-5`}>
-                                <p className="text-xs font-bold uppercase tracking-wide text-muted">{label}</p>
-                                <p className={`mt-2 text-3xl font-black ${color}`}>{asText(value, '0')}</p>
-                            </div>
-                        ))}
+                        <StatCard
+                            label="Queued"
+                            value={asText(status.queuedJobs ?? queueCounts.queued, '0')}
+                            hint="Waiting in lane"
+                            icon={<ListRestart className="h-4 w-4 text-amber-200" />}
+                            tone="border-amber-400/30 bg-amber-500/10 text-amber-100"
+                        />
+                        <StatCard
+                            label="Processing"
+                            value={asText(status.activeJobs ?? queueCounts.active, '0')}
+                            hint="Active encodes"
+                            icon={<Loader2 className="h-4 w-4 text-sky-200" />}
+                            tone="border-sky-400/30 bg-sky-500/10 text-sky-100"
+                        />
+                        <StatCard
+                            label="Completed"
+                            value={asText(status.completedJobs ?? queueCounts.completed, '0')}
+                            hint="Succeeded jobs"
+                            icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
+                            tone="border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
+                        />
+                        <StatCard
+                            label="Failed"
+                            value={asText(status.failedJobs ?? queueCounts.failed, '0')}
+                            hint="Needs attention"
+                            icon={<AlertTriangle className="h-4 w-4 text-red-200" />}
+                            tone="border-red-400/30 bg-red-500/10 text-red-100"
+                        />
                     </div>
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        {[
-                            ['Processed 24h', status.metrics?.processed24h ?? 0, 'text-green-300'],
-                            ['Failed 24h', status.metrics?.failed24h ?? 0, 'text-red-300'],
-                            ['Success rate 24h', status.metrics?.successRate24h == null ? '—' : `${status.metrics.successRate24h}%`, 'text-plex'],
-                            ['Bytes out 24h', formatBytes(status.metrics?.bytesOut24h), 'text-blue-300'],
-                        ].map(([label, value, color]) => (
-                            <div key={String(label)} className={`${cardClass} p-4 sm:p-5`}>
-                                <p className="text-xs font-bold uppercase tracking-wide text-muted">{label}</p>
-                                <p className={`mt-2 text-2xl font-black ${color}`}>{asText(value, '0')}</p>
-                            </div>
-                        ))}
+                        <StatCard
+                            label="Processed 24h"
+                            value={asText(status.metrics?.processed24h ?? 0, '0')}
+                            hint="Last day"
+                            icon={<Gauge className="h-4 w-4 text-emerald-200" />}
+                            tone="border-white/10 bg-white/[0.03] text-text"
+                        />
+                        <StatCard
+                            label="Failed 24h"
+                            value={asText(status.metrics?.failed24h ?? 0, '0')}
+                            hint="Last day"
+                            icon={<AlertTriangle className="h-4 w-4 text-red-200" />}
+                            tone="border-white/10 bg-white/[0.03] text-text"
+                        />
+                        <StatCard
+                            label="Success rate"
+                            value={status.metrics?.successRate24h == null ? '—' : `${status.metrics.successRate24h}%`}
+                            hint="Last 24h"
+                            icon={<CheckCircle2 className="h-4 w-4 text-plex" />}
+                            tone="border-plex/30 bg-plex/10 text-text"
+                        />
+                        <StatCard
+                            label="Bytes out"
+                            value={formatBytes(status.metrics?.bytesOut24h)}
+                            hint="Last 24h"
+                            icon={<ServerCog className="h-4 w-4 text-sky-200" />}
+                            tone="border-white/10 bg-white/[0.03] text-text"
+                        />
                     </div>
                     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-                        <section className={`${cardClass} p-5`}>
-                            <div className="mb-5 flex items-center justify-between">
-                                <h2 className="font-bold text-text">Worker controls</h2>
+                        <section className={`${cardClass} space-y-4 p-5`}>
+                            <div className="mb-1 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-lg font-bold tracking-tight text-text">Worker</h2>
+                                    <p className="mt-0.5 text-xs text-muted">Start the native FFmpeg worker, then scan or enqueue.</p>
+                                </div>
                                 <Cpu className="h-5 w-5 text-plex" />
                             </div>
                             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                                 {[
-                                    ['start', 'Start', CirclePlay],
-                                    ['pause', 'Pause', CirclePause],
-                                    ['resume', 'Resume', Play],
-                                    ['stop', 'Stop', Square],
-                                ].map(([action, label, Icon]) => (
-                                    <button key={String(action)} type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`control-${action}`, () => mediaAutomationApi.control(String(action)), `Worker ${action} requested.`)}>
+                                    ['start', 'Start', CirclePlay, true],
+                                    ['pause', 'Pause', CirclePause, false],
+                                    ['resume', 'Resume', Play, false],
+                                    ['stop', 'Stop', Square, false],
+                                ].map(([action, label, Icon, primary]) => (
+                                    <button
+                                        key={String(action)}
+                                        type="button"
+                                        className={primary ? primaryButtonClass : buttonClass}
+                                        disabled={busy !== null}
+                                        onClick={() => runAction(`control-${action}`, () => mediaAutomationApi.control(String(action)), `Worker ${action} requested.`)}
+                                    >
                                         {busy === `control-${action}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />} {label}
                                     </button>
                                 ))}
@@ -805,8 +899,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <div><dt className="text-muted">Lanes</dt><dd className="mt-1 font-semibold text-text">CPU {status.lanes?.cpu?.running || 0}/{status.lanes?.cpu?.queued || 0} · GPU {status.lanes?.gpu?.running || 0}/{status.lanes?.gpu?.queued || 0}</dd></div>
                             </dl>
                         </section>
-                        <section className={`${cardClass} p-5`}>
-                            <h2 className="mb-5 font-bold text-text">Capabilities</h2>
+                        <section className={`${cardClass} space-y-3 p-5`}>
+                            <h2 className="text-lg font-bold tracking-tight text-text">Capabilities</h2>
                             <div className="space-y-3 text-sm">
                                 <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">FFmpeg</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffmpeg === 'object' ? (capabilities.ffmpeg.available === false ? 'Unavailable' : capabilities.ffmpeg.version || 'Available') : capabilities.ffmpeg ? 'Available' : 'Unknown'}</p></div>
                                 <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">FFprobe</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffprobe === 'object' ? (capabilities.ffprobe.available === false ? 'Unavailable' : capabilities.ffprobe.version || 'Available') : capabilities.ffprobe ? 'Available' : 'Unknown'}</p></div>
@@ -973,7 +1067,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </div>
                         )}
                     </section>
-                    {jobs.length === 0 ? <EmptyState icon={ListRestart} title="Queue is empty" detail="Enqueue a path, run Scan now, or wait for the library watcher to discover matching media." /> : (
+                    {jobs.length === 0 ? (
+                        <EmptyState
+                            icon={ListRestart}
+                            title="Queue is empty"
+                            detail="Enqueue a path, run Scan now, or wait for the library watcher to discover matching media."
+                            actionLabel="Scan now"
+                            onAction={() => runAction('scan-now', () => mediaAutomationApi.scanNow(), 'Library scan started.')}
+                        />
+                    ) : (
                         <div className="space-y-3">
                             <section className={`${cardClass} p-4`}>
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1055,7 +1157,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 const canSkip = state === 'queued';
                                 const selected = selectedJobIds.has(String(jobId));
                                 return (
-                                    <article key={String(jobId)} className={`${cardClass} cursor-pointer p-4 transition hover:border-plex/40 ${selected ? 'border-plex/50' : ''}`} onClick={() => openJobDetail(jobId)}>
+                                    <article key={String(jobId)} className={`${listCardClass} cursor-pointer p-4 ${selected ? 'border-plex/50' : ''}`} onClick={() => openJobDetail(jobId)}>
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div className="flex min-w-0 gap-3">
                                                 <input
@@ -1189,8 +1291,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                     <section className={`${cardClass} p-5`}>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <h2 className="font-bold text-text">Your pipelines</h2>
-                                <p className="mt-1 text-xs text-muted">Pipelines decide which files match and what FFmpeg does. Start from a template if you are unsure.</p>
+                                <h2 className="text-lg font-bold tracking-tight text-text">Your pipelines</h2>
+                                <p className="mt-1 text-sm leading-relaxed text-muted">Pipelines decide which files match and what FFmpeg does. Start from a template if you are unsure.</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 <button type="button" className={buttonClass} onClick={() => setTemplatePickerOpen(true)}>
@@ -1236,7 +1338,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             {pipelines.map((pipeline) => {
                                 const samplePath = String(pipeline.samplePath || '').trim();
                                 return (
-                                <article key={String(pipeline.id ?? pipeline.name)} className={`${cardClass} p-5`}>
+                                <article key={String(pipeline.id ?? pipeline.name)} className={`${listCardClass} p-5`}>
                                     <div className="flex items-start justify-between gap-3">
                                         <div>
                                             <div className="flex items-center gap-2">
@@ -1289,10 +1391,18 @@ export const MediaAutomationDashboard: React.FC = () => {
             {tab === 'libraries' && (
                 <div className="space-y-4">
                     <div className="flex justify-end"><button type="button" className={primaryButtonClass} onClick={() => setLibraryDraft(emptyLibrary())}><Plus className="h-4 w-4" /> New library</button></div>
-                    {libraries.length === 0 ? <EmptyState icon={FolderCog} title="No libraries configured" detail="Add a source root, optional output path, and quarantine path." /> : (
+                    {libraries.length === 0 ? (
+                        <EmptyState
+                            icon={FolderCog}
+                            title="No libraries configured"
+                            detail="Add a source root the container can see, plus optional output and quarantine paths."
+                            actionLabel="New library"
+                            onAction={() => setLibraryDraft(emptyLibrary())}
+                        />
+                    ) : (
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                             {libraries.map((library) => (
-                                <article key={String(library.id ?? library.name)} className={`${cardClass} p-5`}>
+                                <article key={String(library.id ?? library.name)} className={`${listCardClass} p-5`}>
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="min-w-0"><h3 className="font-bold text-text">{library.name}</h3><p className="mt-2 truncate font-mono text-xs text-plex">{library.rootPath}</p></div>
                                         <div className="flex gap-1">
@@ -1336,7 +1446,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </button>
                         ))}
                     </div>
-                    {filteredActivity.length === 0 ? <EmptyState icon={Activity} title="No activity recorded" detail="Worker, scan, watcher, and queue events will appear here." /> : (
+                    {filteredActivity.length === 0 ? (
+                        <EmptyState
+                            icon={Activity}
+                            title="No activity recorded"
+                            detail="Worker, scan, watcher, and queue events will appear here once the worker is running."
+                            actionLabel="Start worker"
+                            onAction={() => runAction('start', () => mediaAutomationApi.control('start'), 'Worker started.')}
+                        />
+                    ) : (
                         <div className={`${cardClass} divide-y divide-border/60 overflow-hidden`}>
                             {filteredActivity.map((entry, index) => (
                                 <div key={String(entry.id ?? index)} className="flex gap-3 p-4">

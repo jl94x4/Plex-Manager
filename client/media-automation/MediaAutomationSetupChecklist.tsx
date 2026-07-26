@@ -9,8 +9,9 @@ import {
     type SetupChecklistStep,
 } from './pipelineUi';
 
-const cardClass = 'rounded-2xl border border-border/70 bg-card/70 shadow-xl backdrop-blur-md';
-const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-white/[0.04] px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/50 hover:bg-plex/10 disabled:pointer-events-none disabled:opacity-40';
+const cardClass = 'glass-card shadow-xl';
+const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
+const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
 
 type Props = {
     status: MediaAutomationStatus;
@@ -32,6 +33,7 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
         [status, libraries, pipelines],
     );
     const complete = setupChecklistComplete(steps);
+    const doneCount = steps.filter((step) => step.done && !step.warn).length;
     const [dismissed, setDismissed] = useState(false);
 
     useEffect(() => {
@@ -49,16 +51,20 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
 
     const visible = compact ? steps.filter((step) => !step.done || step.warn) : steps;
     if (compact && visible.length === 0 && complete) return null;
+    const nextIncomplete = steps.find((step) => !step.done || step.warn);
 
     return (
         <section className={`${cardClass} p-5`}>
             <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                    <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-plex">
+                    <div className="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-plex">
                         <ListChecks className="h-3.5 w-3.5" /> Setup
+                        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-bold text-muted normal-case tracking-normal">
+                            {doneCount}/{steps.length}
+                        </span>
                     </div>
-                    <h2 className="font-bold text-text">{complete ? 'Ready to process media' : 'Get a pipeline running'}</h2>
-                    <p className="mt-1 text-xs text-muted">
+                    <h2 className="text-lg font-bold tracking-tight text-text">{complete ? 'Ready to process media' : 'Get a pipeline running'}</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-muted">
                         {complete
                             ? 'Checklist complete. Queue a sample or run Scan now when you are ready.'
                             : 'Work top to bottom — missing any step usually looks like “job completed but nothing changed.”'}
@@ -78,23 +84,35 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
                     </button>
                 )}
             </div>
+            <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-white/5">
+                <div
+                    className="h-full rounded-full bg-plex transition-all duration-500"
+                    style={{ width: `${Math.round((doneCount / Math.max(steps.length, 1)) * 100)}%` }}
+                />
+            </div>
             <ol className="space-y-2">
-                {visible.map((step, index) => (
+                {visible.map((step, index) => {
+                    const isNext = nextIncomplete?.id === step.id;
+                    return (
                     <li
                         key={step.id}
-                        className={`flex flex-col gap-2 rounded-xl border px-3 py-3 sm:flex-row sm:items-center sm:justify-between ${
+                        className={`flex flex-col gap-2 rounded-xl border px-3 py-3 transition sm:flex-row sm:items-center sm:justify-between ${
                             step.done && !step.warn
                                 ? 'border-emerald-500/20 bg-emerald-500/5'
                                 : step.warn
                                     ? 'border-amber-500/30 bg-amber-500/10'
-                                    : 'border-border bg-background/30'
+                                    : isNext
+                                        ? 'border-plex/40 bg-plex/10'
+                                        : 'border-white/10 bg-black/20 hover:border-plex/30'
                         }`}
                     >
                         <div className="min-w-0 flex items-start gap-3">
                             <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
                                 step.done && !step.warn
                                     ? 'bg-emerald-500/20 text-emerald-200'
-                                    : 'bg-white/5 text-muted'
+                                    : isNext
+                                        ? 'bg-plex/25 text-plex'
+                                        : 'bg-white/5 text-muted'
                             }`}
                             >
                                 {step.done && !step.warn ? <CheckCircle2 className="h-3.5 w-3.5" /> : index + 1}
@@ -105,12 +123,17 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
                             </div>
                         </div>
                         {step.action && step.actionLabel && (
-                            <button type="button" className={buttonClass} onClick={() => onAction(step.action!)}>
+                            <button
+                                type="button"
+                                className={isNext ? primaryButtonClass : buttonClass}
+                                onClick={() => onAction(step.action!)}
+                            >
                                 {step.actionLabel} <ChevronRight className="h-4 w-4" />
                             </button>
                         )}
                     </li>
-                ))}
+                    );
+                })}
             </ol>
         </section>
     );
