@@ -18888,10 +18888,11 @@ const loadMediaAutomationCapabilities = async ({ force = false } = {}) => {
         ffmpeg: { available: true, version: firstLine(ffmpegVersion.stdout || ffmpegVersion.stderr) },
         ffprobe: { available: true, version: firstLine(ffprobeVersion.stdout || ffprobeVersion.stderr) },
         hardware: Object.entries(detected)
-            .filter(([name, available]) => name !== 'details' && available)
+            .filter(([name, available]) => name !== 'details' && name !== 'devices' && available)
             .map(([name]) => name),
         encoders,
         details,
+        devices: detected.devices || null,
         plugins: mediaAutomationService.plugins.list().map((plugin) => ({
             id: plugin.id,
             type: plugin.type,

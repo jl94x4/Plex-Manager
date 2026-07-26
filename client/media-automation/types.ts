@@ -38,6 +38,8 @@ export type MediaAutomationStatus = {
     libraryScanIntervalMinutes?: number;
     outputMode?: OutputMode;
     dryRun?: boolean;
+    hardwareAcceleration?: HardwareMode;
+    fallbackHardware?: HardwareMode;
     watch?: {
         watching?: boolean;
         pending?: number;
@@ -58,6 +60,23 @@ export type MediaAutomationCapabilities = {
     hardware?: string[];
     encoders?: string[];
     details?: Record<string, { label?: string; encoders?: string[]; error?: string; syntheticTested?: boolean }>;
+    devices?: {
+        dri?: {
+            present?: boolean;
+            renderNodes?: string[];
+            cardNodes?: string[];
+            device?: string;
+            exists?: boolean;
+            readable?: boolean;
+        };
+        nvidia?: {
+            device?: boolean;
+            cudaLib?: string | null;
+            visibleDevices?: string | null;
+            driverCapabilities?: string | null;
+            runtimeHint?: string | null;
+        };
+    };
     error?: string;
     [key: string]: unknown;
 };

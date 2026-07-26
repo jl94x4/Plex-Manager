@@ -206,6 +206,35 @@ const StatusPill: React.FC<{ value?: string }> = ({ value }) => (
     </span>
 );
 
+const GPU_ADAPTER_IDS = ['nvenc', 'qsv', 'intel-vaapi', 'vaapi'] as const;
+
+/** Hardware modes actually configured in settings / pipelines (not every probe result). */
+const collectConfiguredHardware = (
+    status: MediaAutomationStatus,
+    pipelines: MediaAutomationPipeline[],
+): Set<string> => {
+    const modes = new Set<string>();
+    const add = (value: unknown) => {
+        const mode = String(value || '').toLowerCase();
+        if (['auto', 'cpu', 'nvenc', 'qsv', 'intel-vaapi', 'vaapi'].includes(mode)) modes.add(mode);
+    };
+    add(status.hardwareAcceleration);
+    add(status.fallbackHardware);
+    for (const pipeline of pipelines) {
+        add(pipeline.hardware);
+        add((pipeline as { hardwareAcceleration?: string }).hardwareAcceleration);
+    }
+    if (modes.size === 0) modes.add('auto');
+    return modes;
+};
+
+const adapterRelevantToConfig = (adapterId: string, configured: Set<string>) => {
+    if (configured.has(adapterId)) return true;
+    // "auto" prefers any working GPU — only treat adapters as relevant when none are up yet
+    // (handled separately). Explicit cpu-only configs never care about GPU probe failures.
+    return false;
+};
+
 const jobHardwareInfo = (job: MediaAutomationJob | null | undefined) => {
     if (!job) return null;
     const plans = jobPlans(job);
@@ -431,6 +460,36 @@ export const MediaAutomationDashboard: React.FC = () => {
             setSavingEditor(false);
         }
     };
+
+    const configuredHardware = useMemo(
+        () => collectConfiguredHardware(status, pipelines),
+        [status, pipelines],
+    );
+    const availableHardware = useMemo(
+        () => (Array.isArray(capabilities.hardware) ? capabilities.hardware.map(String) : ['cpu']),
+        [capabilities.hardware],
+    );
+    const anyGpuAvailable = useMemo(
+        () => GPU_ADAPTER_IDS.some((id) => availableHardware.includes(id)),
+        [availableHardware],
+    );
+    const caresAboutIntel = useMemo(() => (
+        configuredHardware.has('qsv')
+        || configuredHardware.has('intel-vaapi')
+        || configuredHardware.has('vaapi')
+        || (configuredHardware.has('auto') && !anyGpuAvailable)
+    ), [configuredHardware, anyGpuAvailable]);
+    const caresAboutNvenc = useMemo(() => (
+        configuredHardware.has('nvenc')
+        || (configuredHardware.has('auto') && !anyGpuAvailable)
+    ), [configuredHardware, anyGpuAvailable]);
+    const relevantAdapterErrors = useMemo(() => (
+        (['qsv', 'intel-vaapi', 'vaapi', 'nvenc'] as const).filter((id) => {
+            if (availableHardware.includes(id)) return false;
+            if (!capabilities.details?.[id]?.error) return false;
+            return adapterRelevantToConfig(id, configuredHardware);
+        })
+    ), [availableHardware, capabilities.details, configuredHardware]);
 
     const queueCounts = useMemo(() => {
         const counts = { queued: 0, active: 0, completed: 0, failed: 0 };
@@ -732,14 +791,36 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             );
                                         })}
                                     </div>
-                                    {!capabilities.hardware?.includes('qsv') && !capabilities.hardware?.includes('intel-vaapi') && (
+                                    {caresAboutIntel && !availableHardware.includes('qsv') && !availableHardware.includes('intel-vaapi') && (
                                         <p className="mt-2 text-xs text-amber-200/90">
-                                            Intel QSV/VAAPI off — map Unraid <span className="font-mono text-plex">/dev/dri</span> into the container, rebuild/pull the latest image (DRI group fix), then run Test worker.
+                                            {capabilities.devices?.dri?.present === false
+                                                ? <>Intel QSV needs <span className="font-mono text-plex">/dev/dri</span> mapped in the Unraid template (GPU Devices Intel/AMD).</>
+                                                : capabilities.devices?.dri?.readable === false
+                                                    ? <>Intel render node is present but not readable by PUID — recreate the container on the latest image so the entrypoint can attach DRI groups.</>
+                                                    : <>Intel QSV/VAAPI is selected but unavailable — map <span className="font-mono text-plex">/dev/dri</span>, pull latest nightly, then Test worker.</>}
                                         </p>
                                     )}
-                                    {(['qsv', 'intel-vaapi', 'vaapi', 'nvenc'] as const).map((id) => {
+                                    {caresAboutNvenc && !availableHardware.includes('nvenc') && (
+                                        <p className="mt-2 text-xs text-amber-200/90">
+                                            {capabilities.devices?.nvidia?.cudaLib
+                                                ? 'NVENC is selected but the encoder test failed — check NVIDIA_DRIVER_CAPABILITIES=all and GPU UUID.'
+                                                : <>NVENC is selected but not ready — set <span className="font-mono text-plex">NVIDIA_VISIBLE_DEVICES</span>, <span className="font-mono text-plex">NVIDIA_DRIVER_CAPABILITIES=all</span>, and Extra Parameters <span className="font-mono text-plex">--runtime=nvidia</span>.</>}
+                                        </p>
+                                    )}
+                                    {configuredHardware.has('auto') && !anyGpuAvailable && !configuredHardware.has('cpu') && (
+                                        <p className="mt-2 text-xs text-amber-200/90">
+                                            Hardware is set to Auto but no GPU adapter passed the worker test. Use CPU, or map Intel <span className="font-mono text-plex">/dev/dri</span> / NVIDIA runtime and Test worker again.
+                                        </p>
+                                    )}
+                                    {caresAboutIntel && capabilities.devices?.dri?.present && (
+                                        <p className="mt-2 font-mono text-[11px] text-muted">
+                                            DRI: {(capabilities.devices.dri.renderNodes || []).join(', ') || 'no render nodes'}
+                                            {capabilities.devices.dri.readable ? ' · readable' : ' · not readable'}
+                                        </p>
+                                    )}
+                                    {relevantAdapterErrors.map((id) => {
                                         const detailError = capabilities.details?.[id]?.error;
-                                        if (!detailError || capabilities.hardware?.includes(id)) return null;
+                                        if (!detailError) return null;
                                         return (
                                             <p key={`${id}-error`} className="mt-2 break-words text-xs text-red-300/90">
                                                 <span className="font-semibold uppercase">{id}</span>: {detailError}
