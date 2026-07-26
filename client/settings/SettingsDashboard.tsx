@@ -1162,6 +1162,8 @@ export const SettingsDashboard: React.FC = () => {
                     hdr10Handling: ['preserve', 'strip', 'skip'].includes(String(saved.hdr10Handling || ''))
                         ? saved.hdr10Handling
                         : 'preserve',
+                    // Preserve Start/Pause across settings saves (UI controls live on Media Automation).
+                    workerPaused: saved.workerPaused !== false,
                     workerGroups: Array.isArray(saved.workerGroups) ? saved.workerGroups : [],
                     deliveryTargets: Array.isArray(saved.deliveryTargets) ? saved.deliveryTargets : [],
                 });

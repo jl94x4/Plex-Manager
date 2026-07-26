@@ -144,6 +144,8 @@ export type MediaAutomationStatus = {
     state?: string;
     workerState?: string;
     paused?: boolean;
+    /** Persisted encode gate: true = queue only, false = worker may claim jobs. */
+    workerPaused?: boolean;
     activeJobs?: number;
     queuedJobs?: number;
     completedJobs?: number;
@@ -471,6 +473,8 @@ export type MediaAutomationSettingsConfig = {
     dolbyVisionHandling?: 'skip' | 'preserve' | 'strip';
     /** HDR10/HLG: preserve metadata + 10-bit (default), strip, or skip. */
     hdr10Handling?: 'preserve' | 'strip' | 'skip';
+    /** When true, queue fills but encodes do not start until Start is pressed. */
+    workerPaused?: boolean;
     workerGroups?: MediaAutomationWorkerGroup[];
     deliveryTargets?: MediaAutomationDeliveryTarget[];
 };
@@ -496,6 +500,7 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     minSavingsPercent: 0,
     dolbyVisionHandling: 'skip',
     hdr10Handling: 'preserve',
+    workerPaused: true,
     workerGroups: [],
     deliveryTargets: [],
 };

@@ -30,7 +30,7 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
 
     const dryRun = !!(status?.dryRun || status?.outputMode === 'dry-run');
     const failed = Number(status?.failedJobs || status?.metrics?.failed24h || 0);
-    const paused = !!status?.paused;
+    const paused = status ? (status.workerPaused ?? status.paused) !== false : false;
     const stats = [
         { label: 'Queued', value: status?.queuedJobs ?? 0, icon: ListTodo, className: 'text-amber-300' },
         { label: 'Active', value: status?.activeJobs ?? 0, icon: Cpu, className: 'text-sky-300' },
@@ -47,7 +47,7 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
                     </div>
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Media Automation</p>
-                        <p className="font-bold text-text">{paused ? 'Worker paused' : 'Native processing'}</p>
+                        <p className="font-bold text-text">{paused ? 'Paused — queue only' : 'Encoding'}</p>
                     </div>
                 </div>
                 {error && !status ? (
@@ -65,7 +65,7 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
                 <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${paused ? 'border-amber-500/30 text-amber-300' : 'border-emerald-500/30 text-emerald-300'}`}>
-                            {paused ? 'Paused' : 'Running'}
+                            {paused ? 'Paused — queue only' : 'Encoding'}
                         </span>
                         {dryRun && (
                             <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-200">

@@ -254,10 +254,12 @@ export const buildSetupChecklist = ({
         },
         {
             id: 'worker',
-            label: 'Worker running',
-            detail: workerRunning ? 'Worker is running.' : 'Start or resume the worker so queued jobs process.',
+            label: 'Encoding started',
+            detail: workerRunning
+                ? 'Worker is encoding queued jobs.'
+                : 'Jobs can be queued while paused. Start when you want encodes to run.',
             done: workerRunning,
-            actionLabel: workerRunning ? undefined : 'Start worker',
+            actionLabel: workerRunning ? undefined : 'Start encoding',
             action: workerRunning ? undefined : 'start-worker',
         },
     ];

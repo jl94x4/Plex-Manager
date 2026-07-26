@@ -1012,7 +1012,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 self-start lg:self-auto">
-                        <StatusPill value={asText(status.workerState || status.state, 'unknown')} />
+                        <StatusPill
+                            value={
+                                (status.workerPaused ?? status.paused) !== false
+                                    ? 'Paused — queue only'
+                                    : (String(status.workerState || status.state || '').toLowerCase() === 'running'
+                                        ? 'Encoding'
+                                        : asText(status.workerState || status.state, 'stopped'))
+                            }
+                        />
                         {status.quietHoursActive && (
                             <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-sky-200">
                                 Quiet hours
@@ -1312,7 +1320,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <div className="mb-1 flex items-center justify-between">
                                 <div>
                                     <h2 className="text-lg font-bold tracking-tight text-text">Worker</h2>
-                                    <p className="mt-0.5 text-xs text-muted">Start the native FFmpeg worker, then scan or enqueue.</p>
+                                    <p className="mt-0.5 text-xs text-muted">
+                                        {(status.workerPaused ?? status.paused) !== false
+                                            ? 'Paused — queue only. Jobs can be queued while paused. Start when you want encodes to run.'
+                                            : 'Encoding — worker may claim queued jobs.'}
+                                    </p>
                                 </div>
                                 <Cpu className="h-5 w-5 text-plex" />
                             </div>
@@ -1571,6 +1583,37 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </div>
                         </div>
                     )}
+                    <section className={`${cardClass} p-5`}>
+                        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h2 className="font-bold text-text">Encode control</h2>
+                                <p className="mt-1 text-xs text-muted">
+                                    Jobs can be queued while paused. Start when you want encodes to run.
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <StatusPill
+                                    value={(status.workerPaused ?? status.paused) !== false ? 'Paused — queue only' : 'Encoding'}
+                                />
+                                <button
+                                    type="button"
+                                    className={primaryButtonClass}
+                                    disabled={busy !== null || (status.workerPaused ?? status.paused) === false}
+                                    onClick={() => runAction('control-start', () => mediaAutomationApi.control('start'), 'Encoding started.')}
+                                >
+                                    {busy === 'control-start' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CirclePlay className="h-4 w-4" />} Start
+                                </button>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null || (status.workerPaused ?? status.paused) !== false}
+                                    onClick={() => runAction('control-pause', () => mediaAutomationApi.control('pause'), 'Encoding paused — queue only.')}
+                                >
+                                    {busy === 'control-pause' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CirclePause className="h-4 w-4" />} Pause
+                                </button>
+                            </div>
+                        </div>
+                    </section>
                     <section className={`${cardClass} p-5`}>
                         <h2 className="mb-4 font-bold text-text">Enqueue a path</h2>
                         <div className="space-y-3">

@@ -3986,7 +3986,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     mediaAutomationCapabilitiesAt = 0;
     await refreshMediaAutomationAuthCache();
     try {
-        if (collexionsConfig.mediaAutomationEnabled && !mediaAutomationPaused) {
+        // Keep the service running whenever the feature is enabled so scans/enqueue work.
+        // Encode claiming is gated by persisted workerPaused (Start/Pause), not settings save.
+        if (collexionsConfig.mediaAutomationEnabled) {
             void mediaAutomationService.start()
                 .then(() => mediaAutomationService.reloadLibraries())
                 .catch((error) => log(`[media-automation] Failed to reload after settings save: ${error.message}`));
@@ -18307,7 +18309,6 @@ const scannerPortalConfig = (config = {}) => ({
     plexServerUrl: String(config.plexServerUrl || '').trim() || resolveConfiguredPlexServerUrl(config),
 });
 
-let mediaAutomationPaused = false;
 let mediaAutomationCapabilitiesCache = null;
 let mediaAutomationCapabilitiesAt = 0;
 let mediaAutomationService;
@@ -18320,11 +18321,34 @@ const getMediaAutomationServiceConfig = async () => {
         : [];
     return {
         ...runtime,
-        enabled: runtime.enabled && !mediaAutomationPaused,
+        // Feature enabled is independent of encode pause — scans/enqueue still run while paused.
+        enabled: runtime.enabled,
+        workerPaused: runtime.workerPaused !== false,
         rules: pipelines
             .filter((pipeline) => pipeline.enabled !== false)
             .flatMap((pipeline) => Array.isArray(pipeline.compiledRules) ? pipeline.compiledRules : []),
     };
+};
+
+/** Persist Start/Pause so encode gating survives container restarts. */
+const setMediaAutomationWorkerPaused = async (paused) => {
+    const config = await loadFile(CONFIG_PATH, {});
+    const existing = config.mediaAutomation && typeof config.mediaAutomation === 'object'
+        ? config.mediaAutomation
+        : {};
+    const nextMediaAutomation = normalizeMediaAutomationConfig({
+        ...existing,
+        workerPaused: paused === true,
+    }, existing);
+    await saveFile(CONFIG_PATH, {
+        ...config,
+        mediaAutomation: {
+            ...existing,
+            ...nextMediaAutomation,
+            workerPaused: paused === true,
+        },
+    });
+    return paused === true;
 };
 
 // Pause-when-streaming: count active Plex/Jellyfin playback sessions (short cache
@@ -19148,8 +19172,11 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
         res.json({
             ...status,
             enabled: true,
-            paused: mediaAutomationPaused,
-            workerState: mediaAutomationPaused ? 'paused' : (status.running ? 'running' : 'stopped'),
+            paused: status.workerPaused !== false,
+            workerPaused: status.workerPaused !== false,
+            workerState: status.workerPaused !== false
+                ? 'paused'
+                : (status.running ? 'running' : 'stopped'),
             activeJobs: jobs.filter((job) => job.state === 'running').length,
             queuedJobs: jobs.filter((job) => job.state === 'queued').length,
             completedJobs: jobs.filter((job) => job.state === 'succeeded').length,
@@ -19228,11 +19255,13 @@ app.post('/api/media-automation/control', requireAdmin, requireMediaAutomation, 
     try {
         const action = String(req.body?.action || '').toLowerCase();
         if (action === 'pause' || action === 'stop') {
-            mediaAutomationPaused = true;
-            await mediaAutomationService.stop();
-        } else if (action === 'resume' || action === 'start') {
-            mediaAutomationPaused = false;
+            await setMediaAutomationWorkerPaused(true);
+            // Keep service/timers up for scans; workers no-op while workerPaused.
             await mediaAutomationService.start();
+        } else if (action === 'resume' || action === 'start') {
+            await setMediaAutomationWorkerPaused(false);
+            await mediaAutomationService.start();
+            await mediaAutomationService.scheduler.processNow();
         } else if (action === 'process') {
             await mediaAutomationService.scheduler.processNow();
         } else if (action === 'scan' || action === 'scannow') {
