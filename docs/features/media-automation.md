@@ -34,10 +34,12 @@ It does not replace Plex/Jellyfin transcoding and does **not** install third-par
 | Audio loudnorm | EBU R128 loudnorm on first audio → AAC |
 | Audio stereo | Downmix first audio to 2.0 AAC |
 | Strip commercial chapters | Cut chapters whose titles match a regex (default commercial/advert/promo); remux unchanged if none match |
-| Move / rename | Move within configured library roots (`{dir}/archive/{basename}` templates) |
+| Move / rename | Move within configured library roots (`{dir}/archive/{basename}`, plus `{n}`, `{s00e00}`, `{quality}`, …) |
 | Custom command | Allowlisted executable + arg array only (no shell; configure allowlist in Settings) |
 
-Remote/sidecar workers remain out of scope.
+Also includes durable **History** (7d/30d savings), live **scan progress**, library **tags** + **worker groups**, per-weekday **quiet hours**, and **delivery targets** (copy/move finished files into a mapped Sonarr drop on another Unraid).
+
+Remote FFmpeg workers / Unmanic Central remain out of scope.
 
 ### Library discovery settings
 

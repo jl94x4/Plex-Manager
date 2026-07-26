@@ -1149,6 +1149,11 @@ export const SettingsDashboard: React.FC = () => {
                     quietHoursEnabled: saved.quietHoursEnabled === true,
                     quietHoursStart: String(saved.quietHoursStart || DEFAULT_MEDIA_AUTOMATION_SETTINGS.quietHoursStart),
                     quietHoursEnd: String(saved.quietHoursEnd || DEFAULT_MEDIA_AUTOMATION_SETTINGS.quietHoursEnd),
+                    quietHoursDays: Array.isArray(saved.quietHoursDays)
+                        ? saved.quietHoursDays.map((day: unknown) => Number(day)).filter((day: number) => Number.isInteger(day) && day >= 0 && day <= 6)
+                        : [],
+                    workerGroups: Array.isArray(saved.workerGroups) ? saved.workerGroups : [],
+                    deliveryTargets: Array.isArray(saved.deliveryTargets) ? saved.deliveryTargets : [],
                 });
             } else {
                 setMediaAutomation({

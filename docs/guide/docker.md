@@ -96,6 +96,10 @@ services:
 
 Keep `privileged: false`. Worker Test runs a short synthetic encode for each non-CPU adapter when the matching encoders are present, then use a controlled copy job before enabling replace mode. An explicitly selected unavailable adapter fails rather than silently falling back to CPU unless CPU fallback is enabled. See [Native Media Automation](/features/media-automation).
 
+### Cross-Unraid delivery (Sonarr drop)
+
+Encode stays on the Portal host. To hand finished files to Sonarr on another Unraid, map that remote share into the Portal container (for example host `/mnt/remotes/tower2_sonarr/import` → container `/exports/sonarr-drop`), then add a Delivery target in Settings → Media Automation with that container path. Assign the target on the library. Naming can stay `as-is` (Sonarr renames on import) or use `sonarr-pattern`.
+
 ## Common Commands
 
 ```bash

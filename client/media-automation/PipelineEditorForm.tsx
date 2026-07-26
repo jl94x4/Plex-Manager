@@ -386,7 +386,8 @@ export const PipelineEditorForm: React.FC<Props> = ({
                                                     <input className={`${fieldClass} sm:col-span-2`} value={step.commercialPattern || ''} onChange={(event) => updateStep({ commercialPattern: event.target.value })} placeholder="Chapter title regex" />
                                                 )}
                                                 {step.type === 'move' && (
-                                                    <input className={`${fieldClass} sm:col-span-2`} value={step.destination || ''} onChange={(event) => updateStep({ destination: event.target.value })} placeholder="Destination template - {dir}/archive/{basename}" />
+                                                    <input className={`${fieldClass} sm:col-span-2`} value={step.destination || ''} onChange={(event) => updateStep({ destination: event.target.value })} placeholder="Destination - {dir}/archive/{n} - {s00e00} - {quality}{ext}" />
+                                                    <p className="sm:col-span-2 text-[11px] text-muted">Tokens: {'{dir} {name} {ext} {basename} {n} {s00e00} {quality} {year} {stem}'} and more.</p>
                                                 )}
                                                 {step.type === 'custom-command' && <>
                                                     <input className={fieldClass} value={step.executable || ''} onChange={(event) => updateStep({ executable: event.target.value })} placeholder="Executable (ffmpeg / ffprobe)" />

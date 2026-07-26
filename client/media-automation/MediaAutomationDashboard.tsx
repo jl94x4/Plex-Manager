@@ -11,6 +11,7 @@ import {
     FolderCog,
     FolderSearch,
     Gauge,
+    History,
     Layers3,
     Link2,
     ListRestart,
@@ -61,6 +62,7 @@ import {
     type HardwareMode,
     type MediaAutomationActivity,
     type MediaAutomationCapabilities,
+    type MediaAutomationHistoryEntry,
     type MediaAutomationJob,
     type MediaAutomationLibrary,
     type MediaAutomationPendingTest,
@@ -207,7 +209,7 @@ const createRuleCondition = (): MediaAutomationRuleCondition => ({
     value: '',
 });
 const normalizeRules = normalizePipelineRules;
-const MEDIA_AUTOMATION_TABS: MediaAutomationTab[] = ['overview', 'queue', 'pipelines', 'libraries', 'activity'];
+const MEDIA_AUTOMATION_TABS: MediaAutomationTab[] = ['overview', 'queue', 'pipelines', 'libraries', 'history', 'activity'];
 const ACTIVITY_PAGE_SIZE_OPTIONS = [20, 50, 75, 100] as const;
 const ACTIVITY_PAGE_SIZE_KEY = 'media-automation-activity-page-size';
 
@@ -457,6 +459,9 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [workerTestError, setWorkerTestError] = useState('');
     const [goLiveOpen, setGoLiveOpen] = useState(false);
     const [scanPreview, setScanPreview] = useState<MediaAutomationStatus['lastScanResult'] | null>(null);
+    const [historyEntries, setHistoryEntries] = useState<MediaAutomationHistoryEntry[]>([]);
+    const [historyFilter, setHistoryFilter] = useState<'all' | 'completed' | 'failed' | 'cancelled' | 'dry-run'>('all');
+    const [historySearch, setHistorySearch] = useState('');
     const profilesFileRef = React.useRef<HTMLInputElement | null>(null);
     const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
     const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
@@ -477,6 +482,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             ['capabilities', mediaAutomationApi.capabilities()],
             ['jobs', mediaAutomationApi.jobs()],
             ['activity', mediaAutomationApi.activity(500)],
+            ['history', mediaAutomationApi.history({ limit: 200 })],
             ['libraries', mediaAutomationApi.libraries()],
             ['pipelines', mediaAutomationApi.pipelines()],
         ] as const;
@@ -492,6 +498,10 @@ export const MediaAutomationDashboard: React.FC = () => {
             if (key === 'capabilities') setCapabilities(result.value as MediaAutomationCapabilities);
             if (key === 'jobs') setJobs(result.value as MediaAutomationJob[]);
             if (key === 'activity') setActivity(result.value as MediaAutomationActivity[]);
+            if (key === 'history') {
+                const payload = result.value as { entries?: MediaAutomationHistoryEntry[] };
+                setHistoryEntries(payload.entries || []);
+            }
             if (key === 'libraries') setLibraries(result.value as MediaAutomationLibrary[]);
             if (key === 'pipelines') setPipelines(result.value as MediaAutomationPipeline[]);
         });
@@ -840,6 +850,7 @@ export const MediaAutomationDashboard: React.FC = () => {
         { id: 'queue', label: 'Queue', icon: ListRestart },
         { id: 'pipelines', label: 'Pipelines', icon: Layers3 },
         { id: 'libraries', label: 'Libraries', icon: FolderCog },
+        { id: 'history', label: 'History', icon: History },
         { id: 'activity', label: 'Activity', icon: Activity },
     ];
 
@@ -1047,13 +1058,86 @@ export const MediaAutomationDashboard: React.FC = () => {
                             icon={<Gauge className="h-4 w-4 text-plex" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
+                        <StatCard
+                            label="Saved 7d"
+                            value={formatBytes(status.metrics?.bytesSaved7d ?? status.savings?.['7d']?.bytesSaved)}
+                            hint="History aggregate"
+                            icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
+                            tone="border-emerald-500/30 bg-emerald-500/10 text-text"
+                        />
+                        <StatCard
+                            label="Saved 30d"
+                            value={formatBytes(status.metrics?.bytesSaved30d ?? status.savings?.['30d']?.bytesSaved)}
+                            hint="History aggregate"
+                            icon={<History className="h-4 w-4 text-sky-200" />}
+                            tone="border-sky-500/30 bg-sky-500/10 text-text"
+                        />
                     </div>
+                    {(status.scanning || status.scanProgress?.running) && (
+                        <section className={`${cardClass} space-y-3 p-5`}>
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h2 className="font-bold text-text">Scan in progress</h2>
+                                    <p className="mt-1 text-sm text-muted">
+                                        {status.scanProgress?.discovered || 0} discovered · {status.scanProgress?.enqueued || 0} queued · {status.scanProgress?.skipped || 0} skipped
+                                    </p>
+                                </div>
+                                <Loader2 className="h-5 w-5 animate-spin text-plex" />
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                                <div className="h-full w-1/3 animate-pulse rounded-full bg-plex/70" />
+                            </div>
+                            {status.scanProgress?.currentPath && (
+                                <p className="truncate font-mono text-xs text-muted" title={status.scanProgress.currentPath}>
+                                    {status.scanProgress.currentPath}
+                                </p>
+                            )}
+                        </section>
+                    )}
+                    {!!(status.recentScans || []).length && (
+                        <section className={`${cardClass} p-5`}>
+                            <h2 className="font-bold text-text">Recent scans</h2>
+                            <div className="mt-3 space-y-2">
+                                {(status.recentScans || []).slice(0, 5).map((scan) => (
+                                    <div key={scan.id || scan.at} className="rounded-lg border border-border/60 bg-background/30 px-3 py-2 text-xs">
+                                        <p className="font-semibold text-text">
+                                            {scan.discovered || 0} discovered · {scan.enqueued || 0} queued · {scan.skipped || 0} skipped
+                                        </p>
+                                        <p className="mt-1 text-muted">{scan.at ? new Date(scan.at).toLocaleString() : '—'}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+                    {!!(status.deliveryTargets || []).length && (
+                        <section className={`${cardClass} p-5`}>
+                            <h2 className="font-bold text-text">Delivery targets</h2>
+                            <p className="mt-1 text-sm text-muted">Cross-Unraid drop folders after successful encodes. Map the remote share into the container path below.</p>
+                            <div className="mt-3 space-y-2">
+                                {(status.deliveryTargets || []).map((target) => (
+                                    <div key={target.id} className="rounded-lg border border-border/60 bg-background/30 px-3 py-2 text-xs">
+                                        <p className="font-semibold text-text">{target.name} · {target.mode} · {target.namingMode}</p>
+                                        <p className="mt-1 truncate font-mono text-muted" title={target.path}>{target.path || '(path missing)'}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
                     {status.quietHoursEnabled && (
                         <div className={`rounded-xl border px-4 py-3 text-sm ${status.quietHoursActive ? 'border-sky-500/40 bg-sky-500/10 text-sky-50' : 'border-border/70 bg-background/30 text-muted'}`}>
                             Quiet hours {status.quietHoursStart || '23:00'} - {status.quietHoursEnd || '07:00'}
                             {status.quietHoursActive
                                 ? ' are active now. New encodes are paused; queued jobs will start when the window ends.'
                                 : ' are configured. Encoding runs outside that window.'}
+                            {' '}
+                            <a className="font-semibold text-plex hover:underline" href={portalUrl('/settings#media-automation')}>Edit in Settings</a>
+                        </div>
+                    )}
+                    {!status.quietHoursEnabled && (
+                        <div className="rounded-xl border border-border/70 bg-background/30 px-4 py-3 text-sm text-muted">
+                            Quiet hours are off.
+                            {' '}
+                            <a className="font-semibold text-plex hover:underline" href={portalUrl('/settings#media-automation')}>Enable in Settings → Media Automation</a>
                         </div>
                     )}
                     {(scanPreview || status.lastScanResult?.skippedDetails?.length) && (
@@ -1555,6 +1639,9 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <StatusPill value={jobState} />
                                                         <HardwareBadge job={job} />
+                                                        {(Array.isArray(job.metadata?.tags) ? job.metadata.tags : []).map((tag: string) => (
+                                                            <span key={tag} className="rounded border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-plex">{tag}</span>
+                                                        ))}
                                                         <span className="text-xs text-muted">#{jobId}</span>
                                                         {job.priority != null && <span className="text-xs text-muted">P{job.priority}</span>}
                                                         {percent != null && <span className="text-xs font-semibold text-plex">{Math.round(percent)}%</span>}
@@ -1844,8 +1931,10 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <div className="rounded-xl border border-border/60 bg-background/30 px-3 py-2.5">
                                 <dt className="text-xs font-bold uppercase tracking-wide text-muted">Last scan</dt>
                                 <dd className="mt-1 font-semibold text-text">
-                                    {formatTime(status.lastScanAt)}
-                                    {status.lastScanResult ? ` · ${status.lastScanResult.enqueued || 0} queued` : ''}
+                                    {status.scanning || status.scanProgress?.running
+                                        ? `Scanning… ${status.scanProgress?.discovered || 0} discovered`
+                                        : formatTime(status.lastScanAt)}
+                                    {!status.scanning && status.lastScanResult ? ` · ${status.lastScanResult.enqueued || 0} queued` : ''}
                                 </dd>
                             </div>
                             <div className="rounded-xl border border-border/60 bg-background/30 px-3 py-2.5">
@@ -2013,6 +2102,97 @@ export const MediaAutomationDashboard: React.FC = () => {
                             })}
                         </div>
                     )}
+                </div>
+            )}
+
+            {tab === 'history' && (
+                <div className="space-y-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                        <div>
+                            <h2 className="text-lg font-bold text-text">Task history</h2>
+                            <p className="mt-1 text-sm text-muted">Durable record of completed, failed, cancelled, and dry-run jobs beyond the rotating queue.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {(['all', 'completed', 'failed', 'cancelled', 'dry-run'] as const).map((value) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    className={`${buttonClass} ${historyFilter === value ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
+                                    onClick={() => setHistoryFilter(value)}
+                                >
+                                    {value}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <input
+                        className={fieldClass}
+                        value={historySearch}
+                        onChange={(event) => setHistorySearch(event.target.value)}
+                        placeholder="Search path, pipeline, tags…"
+                    />
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        <StatCard label="Saved 7d" value={formatBytes(status.savings?.['7d']?.bytesSaved)} hint="History" icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />} tone="border-emerald-500/30 bg-emerald-500/10 text-text" />
+                        <StatCard label="Encode 7d" value={formatDurationSeconds(Math.round(Number(status.savings?.['7d']?.encodeMs || 0) / 1000)) || '0s'} hint="History" icon={<Gauge className="h-4 w-4 text-plex" />} tone="border-white/10 bg-white/[0.03] text-text" />
+                        <StatCard label="Saved 30d" value={formatBytes(status.savings?.['30d']?.bytesSaved)} hint="History" icon={<History className="h-4 w-4 text-sky-200" />} tone="border-sky-500/30 bg-sky-500/10 text-text" />
+                        <StatCard label="Encode 30d" value={formatDurationSeconds(Math.round(Number(status.savings?.['30d']?.encodeMs || 0) / 1000)) || '0s'} hint="History" icon={<Gauge className="h-4 w-4 text-muted" />} tone="border-white/10 bg-white/[0.03] text-text" />
+                    </div>
+                    <div className="space-y-2">
+                        {historyEntries
+                            .filter((entry) => {
+                                const state = String(entry.state || '').toLowerCase();
+                                if (historyFilter === 'completed') return ['succeeded', 'completed', 'success'].includes(state) && !entry.dryRun;
+                                if (historyFilter === 'failed') return ['failed', 'error'].includes(state);
+                                if (historyFilter === 'cancelled') return ['cancelled', 'canceled'].includes(state);
+                                if (historyFilter === 'dry-run') return entry.dryRun === true;
+                                return true;
+                            })
+                            .filter((entry) => {
+                                if (!historySearch.trim()) return true;
+                                const needle = historySearch.toLowerCase();
+                                return `${entry.sourcePath || ''} ${entry.pipelineName || ''} ${(entry.tags || []).join(' ')} ${entry.id}`
+                                    .toLowerCase()
+                                    .includes(needle);
+                            })
+                            .map((entry) => (
+                                <article key={entry.id} className={`${cardClass} space-y-2 p-4`}>
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="truncate font-semibold text-text" title={entry.sourcePath}>{pathBasename(entry.sourcePath || entry.id)}</p>
+                                            <p className="mt-1 truncate font-mono text-xs text-muted" title={entry.sourcePath}>{entry.sourcePath}</p>
+                                        </div>
+                                        <StatusPill value={entry.dryRun ? 'dry-run' : asText(entry.state, 'unknown')} />
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 text-[11px] text-muted">
+                                        <span>{formatBytes(entry.sourceBytes)} in</span>
+                                        <span>{formatBytes(entry.outputBytes)} out</span>
+                                        <span className="text-emerald-300">{formatBytes(entry.bytesSaved)} saved</span>
+                                        <span>{formatDurationSeconds(Math.round(Number(entry.durationMs || 0) / 1000)) || '0s'}</span>
+                                        {entry.adapterLabel || entry.adapter ? <span>{entry.adapterLabel || entry.adapter}</span> : null}
+                                        {(entry.tags || []).map((tag) => (
+                                            <span key={tag} className="rounded border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-plex">{tag}</span>
+                                        ))}
+                                    </div>
+                                    {entry.delivery && (
+                                        <p className="text-xs text-muted">
+                                            Delivery: {String((entry.delivery as { deliveredPath?: string; error?: string }).deliveredPath
+                                                || (entry.delivery as { error?: string }).error
+                                                || 'recorded')}
+                                        </p>
+                                    )}
+                                    <button
+                                        type="button"
+                                        className={`${buttonClass} text-xs`}
+                                        onClick={() => setSelectedJobId(entry.id)}
+                                    >
+                                        Open job detail
+                                    </button>
+                                </article>
+                            ))}
+                        {!historyEntries.length && (
+                            <p className={`${cardClass} p-5 text-sm text-muted`}>No history yet. Finished jobs will appear here.</p>
+                        )}
+                    </div>
                 </div>
             )}
 
@@ -2345,6 +2525,34 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     value={String(libraryDraft.pipelineId ?? '')}
                                     onChange={(pipelineId) => setLibraryDraft({ ...libraryDraft, pipelineId })}
                                     options={[{ value: '', label: 'Automatic / first matching pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
+                                />
+                            </label>
+                            <label className="block space-y-2 text-sm font-semibold text-text">Tags
+                                <input
+                                    className={fieldClass}
+                                    value={(libraryDraft.tags || []).join(', ')}
+                                    placeholder="tv, priority"
+                                    onChange={(event) => setLibraryDraft({
+                                        ...libraryDraft,
+                                        tags: event.target.value.split(/[,\s]+/).map((entry) => entry.trim().toLowerCase()).filter(Boolean),
+                                    })}
+                                />
+                                <span className="block text-xs font-normal text-muted">Jobs inherit these tags for worker-group matching.</span>
+                            </label>
+                            <label className="block space-y-2 text-sm font-semibold text-text">Delivery target
+                                <CustomSelect
+                                    value={String(libraryDraft.deliveryTargetId ?? '')}
+                                    onChange={(deliveryTargetId) => setLibraryDraft({
+                                        ...libraryDraft,
+                                        deliveryTargetId: deliveryTargetId || null,
+                                    })}
+                                    options={[
+                                        { value: '', label: 'None (no delivery)' },
+                                        ...(status.deliveryTargets || []).map((target) => ({
+                                            value: String(target.id),
+                                            label: target.name,
+                                        })),
+                                    ]}
                                 />
                             </label>
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

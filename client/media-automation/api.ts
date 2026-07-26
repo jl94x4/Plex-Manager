@@ -2,11 +2,13 @@ import { apiFetch } from '../shared/api';
 import type {
     MediaAutomationActivity,
     MediaAutomationCapabilities,
+    MediaAutomationHistoryEntry,
     MediaAutomationJob,
     MediaAutomationLibrary,
     MediaAutomationPendingTest,
     MediaAutomationPipeline,
     MediaAutomationPipelinePreview,
+    MediaAutomationScanHistoryEntry,
     MediaAutomationStatus,
 } from './types';
 
@@ -67,6 +69,25 @@ export const mediaAutomationApi = {
     activity: async (limit = 500) => asList<MediaAutomationActivity>(
         await apiFetch(`${ROOT}/activity?limit=${limit}`),
         ['activity', 'events', 'items', 'results'],
+    ),
+    history: async (options: { limit?: number; state?: string; q?: string } = {}) => {
+        const params = new URLSearchParams();
+        params.set('limit', String(options.limit ?? 200));
+        if (options.state) params.set('state', options.state);
+        if (options.q) params.set('q', options.q);
+        const response = await apiFetch(`${ROOT}/history?${params}`) as {
+            history?: MediaAutomationHistoryEntry[];
+            entries?: MediaAutomationHistoryEntry[];
+            savings?: MediaAutomationStatus['savings'];
+        };
+        return {
+            entries: asList<MediaAutomationHistoryEntry>(response, ['history', 'entries', 'items']),
+            savings: response.savings || null,
+        };
+    },
+    scanHistory: async (limit = 20) => asList<MediaAutomationScanHistoryEntry>(
+        await apiFetch(`${ROOT}/scan-history?limit=${limit}`),
+        ['entries', 'scans', 'items'],
     ),
     browse: (path = '', options: {
         files?: boolean;

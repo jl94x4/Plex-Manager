@@ -1,4 +1,4 @@
-export type MediaAutomationTab = 'overview' | 'queue' | 'pipelines' | 'libraries' | 'activity';
+export type MediaAutomationTab = 'overview' | 'queue' | 'pipelines' | 'libraries' | 'history' | 'activity';
 export type OutputMode = 'dry-run' | 'copy' | 'replace';
 export type HardwareMode = 'auto' | 'cpu' | 'nvenc' | 'qsv' | 'intel-vaapi' | 'vaapi';
 
@@ -11,6 +11,86 @@ export type MediaAutomationMetrics = {
     bytesOut24h?: number;
     bytesSaved24h?: number;
     encodeMs24h?: number;
+    bytesSaved7d?: number;
+    encodeMs7d?: number;
+    bytesSaved30d?: number;
+    encodeMs30d?: number;
+};
+
+export type MediaAutomationSavingsWindow = {
+    days?: number;
+    completed?: number;
+    failed?: number;
+    bytesIn?: number;
+    bytesOut?: number;
+    bytesSaved?: number;
+    encodeMs?: number;
+};
+
+export type MediaAutomationWorkerGroup = {
+    id: string;
+    name: string;
+    tags: string[];
+    cpuConcurrency: number;
+    gpuConcurrency: number;
+    priorityBias: number;
+    enabled?: boolean;
+};
+
+export type MediaAutomationDeliveryTarget = {
+    id: string;
+    name: string;
+    path: string;
+    mode: 'copy' | 'move';
+    namingMode: 'as-is' | 'sonarr-pattern';
+    enabled?: boolean;
+    sonarrInstanceId?: string | null;
+};
+
+export type MediaAutomationScanProgress = {
+    running?: boolean;
+    discovered?: number;
+    enqueued?: number;
+    skipped?: number;
+    errors?: number;
+    currentPath?: string | null;
+    startedAt?: string;
+    updatedAt?: string;
+};
+
+export type MediaAutomationScanHistoryEntry = {
+    id?: string;
+    at?: string;
+    discovered?: number;
+    enqueued?: number;
+    skipped?: number;
+    errors?: unknown[];
+    skippedDetails?: Array<{ filePath?: string; reason?: string; videoCodec?: string | null }>;
+};
+
+export type MediaAutomationHistoryEntry = {
+    id: string;
+    sourcePath?: string;
+    pipelineId?: string | null;
+    pipelineName?: string;
+    libraryId?: string | null;
+    state?: string;
+    lane?: string;
+    tags?: string[];
+    createdAt?: string | null;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+    sourceBytes?: number;
+    outputBytes?: number;
+    bytesSaved?: number;
+    durationMs?: number;
+    adapter?: string | null;
+    adapterLabel?: string | null;
+    dryRun?: boolean;
+    finalPath?: string | null;
+    quarantinedPath?: string | null;
+    delivery?: Record<string, unknown> | null;
+    error?: { code?: string; message?: string } | null;
 };
 
 export type MediaAutomationStatus = {
@@ -45,7 +125,16 @@ export type MediaAutomationStatus = {
     quietHoursEnabled?: boolean;
     quietHoursStart?: string;
     quietHoursEnd?: string;
+    quietHoursDays?: number[];
     quietHoursActive?: boolean;
+    scanProgress?: MediaAutomationScanProgress | null;
+    recentScans?: MediaAutomationScanHistoryEntry[];
+    workerGroups?: MediaAutomationWorkerGroup[];
+    deliveryTargets?: MediaAutomationDeliveryTarget[];
+    savings?: {
+        '7d'?: MediaAutomationSavingsWindow;
+        '30d'?: MediaAutomationSavingsWindow;
+    } | null;
     outputMode?: OutputMode;
     dryRun?: boolean;
     hardwareAcceleration?: HardwareMode;
@@ -173,6 +262,8 @@ export type MediaAutomationLibrary = {
     /** Optional per-library output mode override (empty = pipeline/global). */
     outputMode?: OutputMode | '' | null;
     priorityBoost?: number;
+    tags?: string[];
+    deliveryTargetId?: string | null;
     [key: string]: unknown;
 };
 
@@ -306,6 +397,9 @@ export type MediaAutomationSettingsConfig = {
     quietHoursEnabled?: boolean;
     quietHoursStart?: string;
     quietHoursEnd?: string;
+    quietHoursDays?: number[];
+    workerGroups?: MediaAutomationWorkerGroup[];
+    deliveryTargets?: MediaAutomationDeliveryTarget[];
 };
 
 export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = {
@@ -322,6 +416,9 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     quietHoursEnabled: false,
     quietHoursStart: '23:00',
     quietHoursEnd: '07:00',
+    quietHoursDays: [],
+    workerGroups: [],
+    deliveryTargets: [],
 };
 
 export const emptyLibrary = (): MediaAutomationLibrary => ({
@@ -334,6 +431,28 @@ export const emptyLibrary = (): MediaAutomationLibrary => ({
     hardware: '',
     outputMode: '',
     priorityBoost: 0,
+    tags: [],
+    deliveryTargetId: null,
+});
+
+export const emptyWorkerGroup = (): MediaAutomationWorkerGroup => ({
+    id: `group-${Date.now()}`,
+    name: 'Worker group',
+    tags: [],
+    cpuConcurrency: 1,
+    gpuConcurrency: 0,
+    priorityBias: 0,
+    enabled: true,
+});
+
+export const emptyDeliveryTarget = (): MediaAutomationDeliveryTarget => ({
+    id: `delivery-${Date.now()}`,
+    name: 'Sonarr drop',
+    path: '',
+    mode: 'copy',
+    namingMode: 'as-is',
+    enabled: true,
+    sonarrInstanceId: null,
 });
 
 export const emptyPipeline = (): MediaAutomationPipeline => ({

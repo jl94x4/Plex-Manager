@@ -222,6 +222,9 @@ const mediaAutomationConfigForApi = (config = {}) => {
         quietHoursEnabled: runtime.quietHoursEnabled === true,
         quietHoursStart: runtime.quietHoursStart,
         quietHoursEnd: runtime.quietHoursEnd,
+        quietHoursDays: Array.isArray(runtime.quietHoursDays) ? runtime.quietHoursDays : [],
+        workerGroups: Array.isArray(runtime.workerGroups) ? runtime.workerGroups : [],
+        deliveryTargets: Array.isArray(runtime.deliveryTargets) ? runtime.deliveryTargets : [],
         auth: {
             username: String(auth.username || ''),
             password: auth.password ? SECRET_MASK : '',
@@ -426,6 +429,13 @@ const normalizeMediaAutomationLibraryInput = (value = {}, id) => {
             ? String(value.outputMode).toLowerCase()
             : '',
         priorityBoost: Math.max(0, Math.min(999, Number(value.priorityBoost) || 0)),
+        tags: [...new Set(
+            (Array.isArray(value.tags) ? value.tags : String(value.tags || '').split(/[,\s]+/))
+                .map((entry) => String(entry || '').trim().toLowerCase())
+                .filter((entry) => entry && entry.length <= 40)
+                .slice(0, 24),
+        )],
+        deliveryTargetId: value.deliveryTargetId ? String(value.deliveryTargetId) : null,
     };
 };
 
@@ -18288,6 +18298,41 @@ mediaAutomationService = createMediaAutomation({
     queuePath: MEDIA_AUTOMATION_QUEUE_PATH,
     getConfig: getMediaAutomationServiceConfig,
     logger: console,
+    resolveDeliveryNaming: async ({ target, sourcePath } = {}) => {
+        try {
+            const config = await loadFile(CONFIG_PATH, {});
+            const instance = target?.sonarrInstanceId
+                ? getArrInstance(config, target.sonarrInstanceId)
+                : getArrInstances(config, { type: 'sonarr', enabledOnly: true }).find(isArrInstanceReady);
+            if (!instance || !isArrInstanceReady(instance)) return null;
+            const namingConfig = await fetchArrInstanceJson(instance, '/api/v3/config/naming', {
+                resolveUrl: resolveIntegrationUrlForFetch,
+                fetchImpl: fetch,
+            });
+            const basename = path.basename(String(sourcePath || ''));
+            const stem = basename.replace(/\.[^.]+$/, '');
+            const seriesMatch = /^(.*?)[\s._-]*[Ss](\d{1,2})[Ee](\d{1,3})/.exec(stem);
+            const namingContext = seriesMatch
+                ? {
+                    seriesTitle: String(seriesMatch[1] || '').replace(/[._]+/g, ' ').trim(),
+                    series: String(seriesMatch[1] || '').replace(/[._]+/g, ' ').trim(),
+                    seasonNumber: Number(seriesMatch[2]),
+                    episodeNumber: Number(seriesMatch[3]),
+                    n: String(seriesMatch[1] || '').replace(/[._]+/g, ' ').trim(),
+                    title: String(seriesMatch[1] || '').replace(/[._]+/g, ' ').trim(),
+                }
+                : {
+                    movieTitle: stem.replace(/[._]+/g, ' ').trim(),
+                    movie: stem.replace(/[._]+/g, ' ').trim(),
+                    n: stem.replace(/[._]+/g, ' ').trim(),
+                    title: stem.replace(/[._]+/g, ' ').trim(),
+                };
+            return { namingConfig, namingContext };
+        } catch (error) {
+            log(`[media-automation] Sonarr naming lookup failed: ${error.message}`);
+            return null;
+        }
+    },
     onActivity: async (entry) => {
         log(`[media-automation] ${entry.message || entry.type}`);
         const outputPath = String(entry.data?.output || '').trim();
@@ -18964,7 +19009,15 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
                 || status.quietHoursEnabled === true,
             quietHoursStart: config.mediaAutomation?.quietHoursStart || status.quietHoursStart || '23:00',
             quietHoursEnd: config.mediaAutomation?.quietHoursEnd || status.quietHoursEnd || '07:00',
+            quietHoursDays: Array.isArray(config.mediaAutomation?.quietHoursDays)
+                ? config.mediaAutomation.quietHoursDays
+                : (status.quietHoursDays || []),
             quietHoursActive: !!status.quietHoursActive,
+            scanProgress: status.scanProgress || null,
+            recentScans: status.recentScans || [],
+            workerGroups: status.workerGroups || config.mediaAutomation?.workerGroups || [],
+            deliveryTargets: status.deliveryTargets || config.mediaAutomation?.deliveryTargets || [],
+            savings: status.savings || null,
             metrics: {
                 processed24h: succeededRecent.length,
                 failed24h: failedRecent.length,
@@ -18985,6 +19038,10 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
                     const value = Number(job.result?.durationMs || 0);
                     return sum + (Number.isFinite(value) ? value : 0);
                 }, 0),
+                bytesSaved7d: status.savings?.['7d']?.bytesSaved || 0,
+                encodeMs7d: status.savings?.['7d']?.encodeMs || 0,
+                bytesSaved30d: status.savings?.['30d']?.bytesSaved || 0,
+                encodeMs30d: status.savings?.['30d']?.encodeMs || 0,
             },
         });
     } catch (error) {
@@ -19221,6 +19278,36 @@ app.get('/api/media-automation/activity', requireAdmin, requireMediaAutomation, 
             status: entry.type.endsWith('.failed') ? 'failed' : (entry.type.endsWith('.completed') ? 'completed' : 'info'),
         })),
     });
+});
+
+app.get('/api/media-automation/history', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const entries = await mediaAutomationService.listHistory({
+            limit: Math.min(1000, Math.max(1, Number(req.query.limit) || 200)),
+            state: req.query.state || 'all',
+            q: req.query.q || '',
+        });
+        const savings7d = await mediaAutomationService.historyAggregates({ days: 7 });
+        const savings30d = await mediaAutomationService.historyAggregates({ days: 30 });
+        res.json({
+            history: entries,
+            entries,
+            savings: { '7d': savings7d, '30d': savings30d },
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to load Media Automation history' });
+    }
+});
+
+app.get('/api/media-automation/scan-history', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const entries = await mediaAutomationService.listScanHistory({
+            limit: Math.min(100, Math.max(1, Number(req.query.limit) || 20)),
+        });
+        res.json({ entries, scans: entries });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to load scan history' });
+    }
 });
 
 app.post('/api/media-automation/enqueue', requireAdmin, requireMediaAutomation, async (req, res) => {

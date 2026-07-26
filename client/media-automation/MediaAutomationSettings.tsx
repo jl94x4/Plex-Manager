@@ -1,7 +1,14 @@
 import React from 'react';
-import { Clock3, Cpu, FolderSearch, Gauge, Radar, ShieldCheck } from 'lucide-react';
+import { Clock3, Cpu, FolderSearch, Gauge, Radar, Server, ShieldCheck, Tags } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
-import type { HardwareMode, MediaAutomationSettingsConfig, OutputMode } from './types';
+import type {
+    HardwareMode,
+    MediaAutomationDeliveryTarget,
+    MediaAutomationSettingsConfig,
+    MediaAutomationWorkerGroup,
+    OutputMode,
+} from './types';
+import { emptyDeliveryTarget, emptyWorkerGroup } from './types';
 import { portalUrl } from '../shared/basePath';
 
 type Props = {
@@ -14,6 +21,15 @@ type Props = {
 };
 
 const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-text outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
+const WEEKDAYS = [
+    { value: 1, label: 'Mon' },
+    { value: 2, label: 'Tue' },
+    { value: 3, label: 'Wed' },
+    { value: 4, label: 'Thu' },
+    { value: 5, label: 'Fri' },
+    { value: 6, label: 'Sat' },
+    { value: 0, label: 'Sun' },
+];
 
 export const MediaAutomationSettings: React.FC<Props> = ({
     enabled,
@@ -25,6 +41,26 @@ export const MediaAutomationSettings: React.FC<Props> = ({
 }) => {
     const update = (patch: Partial<MediaAutomationSettingsConfig>) => onConfigChange({ ...config, ...patch });
     const globalDryRun = config.fallback.outputMode === 'dry-run';
+    const quietDays = Array.isArray(config.quietHoursDays) ? config.quietHoursDays : [];
+    const workerGroups = Array.isArray(config.workerGroups) ? config.workerGroups : [];
+    const deliveryTargets = Array.isArray(config.deliveryTargets) ? config.deliveryTargets : [];
+
+    const toggleQuietDay = (day: number) => {
+        const next = quietDays.includes(day)
+            ? quietDays.filter((entry) => entry !== day)
+            : [...quietDays, day].sort((a, b) => a - b);
+        update({ quietHoursDays: next });
+    };
+
+    const updateWorkerGroup = (index: number, patch: Partial<MediaAutomationWorkerGroup>) => {
+        const next = workerGroups.map((group, i) => (i === index ? { ...group, ...patch } : group));
+        update({ workerGroups: next });
+    };
+
+    const updateDeliveryTarget = (index: number, patch: Partial<MediaAutomationDeliveryTarget>) => {
+        const next = deliveryTargets.map((target, i) => (i === index ? { ...target, ...patch } : target));
+        update({ deliveryTargets: next });
+    };
 
     return (
         <div className="mb-8 animate-fade-in space-y-6">
@@ -63,6 +99,271 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     disabled={!enabled}
                     border={false}
                 />
+            </section>
+
+            <section className="glass-card-sm p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                    <Clock3 className="w-5 h-5 text-plex" />
+                    <h4 className="font-bold text-text">Quiet hours</h4>
+                </div>
+                <p className="text-sm text-muted">
+                    Pause claiming new encode jobs overnight (or any window). Scans and ARR webhooks can still fill the queue; work starts when the window ends.
+                </p>
+                <SettingsToggleRow
+                    title="Pause encoding during quiet hours"
+                    description="Uses the container/host local clock. Example: 23:00 to 07:00."
+                    checked={config.quietHoursEnabled === true}
+                    onChange={(quietHoursEnabled) => update({ quietHoursEnabled })}
+                    disabled={!enabled}
+                    border={false}
+                />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Start (HH:MM)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            value={config.quietHoursStart || '23:00'}
+                            disabled={!enabled || config.quietHoursEnabled !== true}
+                            onChange={(event) => update({ quietHoursStart: event.target.value })}
+                            placeholder="23:00"
+                        />
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        End (HH:MM)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            value={config.quietHoursEnd || '07:00'}
+                            disabled={!enabled || config.quietHoursEnabled !== true}
+                            onChange={(event) => update({ quietHoursEnd: event.target.value })}
+                            placeholder="07:00"
+                        />
+                    </label>
+                </div>
+                <div>
+                    <p className="mb-2 text-xs uppercase tracking-wide font-bold text-muted">Active days</p>
+                    <p className="mb-2 text-xs text-muted">Leave all off to apply quiet hours every day.</p>
+                    <div className="flex flex-wrap gap-2">
+                        {WEEKDAYS.map((day) => {
+                            const active = quietDays.includes(day.value);
+                            return (
+                                <button
+                                    key={day.value}
+                                    type="button"
+                                    disabled={!enabled || config.quietHoursEnabled !== true}
+                                    onClick={() => toggleQuietDay(day.value)}
+                                    className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
+                                        active
+                                            ? 'border-plex/50 bg-plex/20 text-plex'
+                                            : 'border-border bg-background/40 text-muted hover:text-text'
+                                    }`}
+                                >
+                                    {day.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </section>
+
+            <section className="glass-card-sm p-5 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <Tags className="w-5 h-5 text-plex" />
+                        <h4 className="font-bold text-text">Worker groups</h4>
+                    </div>
+                    <button
+                        type="button"
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-text hover:border-plex/40"
+                        disabled={!enabled}
+                        onClick={() => update({ workerGroups: [...workerGroups, emptyWorkerGroup()] })}
+                    >
+                        Add group
+                    </button>
+                </div>
+                <p className="text-sm text-muted">
+                    Optional tagged lanes. Empty tags accept any job. Leave empty to use global CPU/GPU concurrency only.
+                </p>
+                {workerGroups.length === 0 && (
+                    <p className="text-xs text-muted">No worker groups configured. Global concurrency applies.</p>
+                )}
+                {workerGroups.map((group, index) => (
+                    <div key={group.id || index} className="space-y-3 rounded-xl border border-border/70 bg-background/30 p-4">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                Name
+                                <input
+                                    className={`${fieldClass} mt-2`}
+                                    value={group.name}
+                                    disabled={!enabled}
+                                    onChange={(event) => updateWorkerGroup(index, { name: event.target.value })}
+                                />
+                            </label>
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                Tags (comma-separated)
+                                <input
+                                    className={`${fieldClass} mt-2`}
+                                    value={(group.tags || []).join(', ')}
+                                    disabled={!enabled}
+                                    placeholder="tv, priority"
+                                    onChange={(event) => updateWorkerGroup(index, {
+                                        tags: event.target.value.split(/[,\s]+/).map((entry) => entry.trim().toLowerCase()).filter(Boolean),
+                                    })}
+                                />
+                            </label>
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                CPU concurrency
+                                <input
+                                    className={`${fieldClass} mt-2`}
+                                    type="number"
+                                    min={0}
+                                    max={32}
+                                    value={group.cpuConcurrency}
+                                    disabled={!enabled}
+                                    onChange={(event) => updateWorkerGroup(index, {
+                                        cpuConcurrency: Math.min(32, Math.max(0, Number(event.target.value) || 0)),
+                                    })}
+                                />
+                            </label>
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                GPU concurrency
+                                <input
+                                    className={`${fieldClass} mt-2`}
+                                    type="number"
+                                    min={0}
+                                    max={16}
+                                    value={group.gpuConcurrency}
+                                    disabled={!enabled}
+                                    onChange={(event) => updateWorkerGroup(index, {
+                                        gpuConcurrency: Math.min(16, Math.max(0, Number(event.target.value) || 0)),
+                                    })}
+                                />
+                            </label>
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                Priority bias
+                                <input
+                                    className={`${fieldClass} mt-2`}
+                                    type="number"
+                                    min={-100}
+                                    max={100}
+                                    value={group.priorityBias}
+                                    disabled={!enabled}
+                                    onChange={(event) => updateWorkerGroup(index, {
+                                        priorityBias: Math.min(100, Math.max(-100, Number(event.target.value) || 0)),
+                                    })}
+                                />
+                            </label>
+                        </div>
+                        <button
+                            type="button"
+                            className="text-xs font-bold text-red-300 hover:underline"
+                            disabled={!enabled}
+                            onClick={() => update({ workerGroups: workerGroups.filter((_, i) => i !== index) })}
+                        >
+                            Remove group
+                        </button>
+                    </div>
+                ))}
+            </section>
+
+            <section className="glass-card-sm p-5 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <Server className="w-5 h-5 text-plex" />
+                        <h4 className="font-bold text-text">Delivery targets</h4>
+                    </div>
+                    <button
+                        type="button"
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-text hover:border-plex/40"
+                        disabled={!enabled}
+                        onClick={() => update({ deliveryTargets: [...deliveryTargets, emptyDeliveryTarget()] })}
+                    >
+                        Add target
+                    </button>
+                </div>
+                <p className="text-sm text-muted">
+                    After a successful encode, copy or move the finished file into a container path mapped to another Unraid share (for example a Sonarr import drop). Encode stays on this server.
+                </p>
+                {deliveryTargets.map((target, index) => (
+                    <div key={target.id || index} className="space-y-3 rounded-xl border border-border/70 bg-background/30 p-4">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                Name
+                                <input
+                                    className={`${fieldClass} mt-2`}
+                                    value={target.name}
+                                    disabled={!enabled}
+                                    onChange={(event) => updateDeliveryTarget(index, { name: event.target.value })}
+                                />
+                            </label>
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                Container path
+                                <input
+                                    className={`${fieldClass} mt-2`}
+                                    value={target.path}
+                                    disabled={!enabled}
+                                    placeholder="/exports/sonarr-drop"
+                                    onChange={(event) => updateDeliveryTarget(index, { path: event.target.value })}
+                                />
+                            </label>
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                Mode
+                                <div className="mt-2">
+                                    <CustomSelect
+                                        value={target.mode}
+                                        onChange={(mode) => updateDeliveryTarget(index, { mode: mode as 'copy' | 'move' })}
+                                        options={[
+                                            { value: 'copy', label: 'Copy' },
+                                            { value: 'move', label: 'Move' },
+                                        ]}
+                                    />
+                                </div>
+                            </label>
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                Naming
+                                <div className="mt-2">
+                                    <CustomSelect
+                                        value={target.namingMode}
+                                        onChange={(namingMode) => updateDeliveryTarget(index, {
+                                            namingMode: namingMode as 'as-is' | 'sonarr-pattern',
+                                        })}
+                                        options={[
+                                            { value: 'as-is', label: 'As-is (Sonarr renames on import)' },
+                                            { value: 'sonarr-pattern', label: 'Sonarr naming pattern' },
+                                        ]}
+                                    />
+                                </div>
+                            </label>
+                            <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                                Sonarr instance id (optional)
+                                <input
+                                    className={`${fieldClass} mt-2`}
+                                    value={target.sonarrInstanceId || ''}
+                                    disabled={!enabled}
+                                    placeholder="Default Sonarr instance"
+                                    onChange={(event) => updateDeliveryTarget(index, {
+                                        sonarrInstanceId: event.target.value.trim() || null,
+                                    })}
+                                />
+                            </label>
+                        </div>
+                        <SettingsToggleRow
+                            title="Enabled"
+                            description="Disable to keep the target configured without delivering."
+                            checked={target.enabled !== false}
+                            onChange={(next) => updateDeliveryTarget(index, { enabled: next })}
+                            disabled={!enabled}
+                            border={false}
+                        />
+                        <button
+                            type="button"
+                            className="text-xs font-bold text-red-300 hover:underline"
+                            disabled={!enabled}
+                            onClick={() => update({ deliveryTargets: deliveryTargets.filter((_, i) => i !== index) })}
+                        >
+                            Remove target
+                        </button>
+                    </div>
+                ))}
             </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -140,7 +441,7 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                             />
                         </label>
                     </div>
-                    <p className="text-xs text-muted">CPU and GPU queues are limited independently. Set a lane to 0 to pause new jobs on that lane.</p>
+                    <p className="text-xs text-muted">CPU and GPU queues are limited independently. Set a lane to 0 to pause new jobs on that lane. Worker groups override this when configured.</p>
                 </div>
 
                 <div className="glass-card-sm p-5 space-y-4">
@@ -186,43 +487,6 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                             </p>
                         </div>
                     )}
-                </div>
-
-                <div className="glass-card-sm p-5 space-y-4 lg:col-span-3">
-                    <div className="flex items-center gap-2">
-                        <Clock3 className="w-5 h-5 text-plex" />
-                        <h4 className="font-bold text-text">Quiet hours</h4>
-                    </div>
-                    <SettingsToggleRow
-                        title="Pause encoding overnight"
-                        description="Stop claiming new encode jobs during this local-time window. Scans and ARR webhooks can still enqueue work for later."
-                        checked={config.quietHoursEnabled === true}
-                        onChange={(quietHoursEnabled) => update({ quietHoursEnabled })}
-                        border={false}
-                    />
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <label className="block text-xs uppercase tracking-wide font-bold text-muted">
-                            Start (HH:MM)
-                            <input
-                                className={`${fieldClass} mt-2`}
-                                value={config.quietHoursStart || '23:00'}
-                                disabled={config.quietHoursEnabled !== true}
-                                onChange={(event) => update({ quietHoursStart: event.target.value })}
-                                placeholder="23:00"
-                            />
-                        </label>
-                        <label className="block text-xs uppercase tracking-wide font-bold text-muted">
-                            End (HH:MM)
-                            <input
-                                className={`${fieldClass} mt-2`}
-                                value={config.quietHoursEnd || '07:00'}
-                                disabled={config.quietHoursEnabled !== true}
-                                onChange={(event) => update({ quietHoursEnd: event.target.value })}
-                                placeholder="07:00"
-                            />
-                        </label>
-                    </div>
-                    <p className="text-xs text-muted">Uses the container/host local clock. Example: 23:00 to 07:00 pauses overnight and resumes at 7am.</p>
                 </div>
             </section>
 
