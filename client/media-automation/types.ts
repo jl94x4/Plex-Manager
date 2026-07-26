@@ -337,6 +337,8 @@ export type MediaAutomationStep = {
     preset?: string;
     /** Quality: CRF/CQ/QP style 0–51 (lower = higher quality / larger files). Ignored when videoBitrateKbps is set. */
     crf?: number;
+    /** Encode 10-bit (Main10 / P010). HEVC and AV1 only; ignored for H.264. */
+    tenBit?: boolean;
     /** Move destination template, e.g. `{dir}/archive/{basename}` */
     destination?: string;
     /** Allowlisted executable basename or absolute path for custom-command */

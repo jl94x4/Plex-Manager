@@ -256,6 +256,14 @@ export const PipelineEditorForm: React.FC<Props> = ({
                         <input className={fieldClass} value={primaryStep.audioCodec || ''} onChange={(event) => updatePrimaryStep({ audioCodec: event.target.value })} placeholder="Audio codec (copy)" />
                         <input className={fieldClass} value={primaryStep.subtitleCodec || ''} onChange={(event) => updatePrimaryStep({ subtitleCodec: event.target.value })} placeholder="Subtitle codec (copy/drop)" />
                         <input className={fieldClass} value={primaryStep.preset || ''} onChange={(event) => updatePrimaryStep({ preset: event.target.value })} placeholder="Speed preset (medium)" />
+                        <CustomSelect
+                            value={primaryStep.tenBit === true ? 'yes' : 'no'}
+                            onChange={(tenBit) => updatePrimaryStep({ tenBit: tenBit === 'yes' })}
+                            options={[
+                                { value: 'no', label: '10-bit: No (8-bit)' },
+                                { value: 'yes', label: '10-bit: Yes (HEVC/AV1 Main10)' },
+                            ]}
+                        />
                         <input
                             className={fieldClass}
                             type="number"
@@ -365,6 +373,14 @@ export const PipelineEditorForm: React.FC<Props> = ({
                                                     <input className={fieldClass} value={step.audioCodec || ''} onChange={(event) => updateStep({ audioCodec: event.target.value })} placeholder="Audio codec (copy)" />
                                                     <input className={fieldClass} value={step.subtitleCodec || ''} onChange={(event) => updateStep({ subtitleCodec: event.target.value })} placeholder="Subtitle codec (copy/drop)" />
                                                     <input className={fieldClass} value={step.preset || ''} onChange={(event) => updateStep({ preset: event.target.value })} placeholder="Speed preset (medium/slow/fast)" />
+                                                    <CustomSelect
+                                                        value={step.tenBit === true ? 'yes' : 'no'}
+                                                        onChange={(tenBit) => updateStep({ tenBit: tenBit === 'yes' })}
+                                                        options={[
+                                                            { value: 'no', label: '10-bit: No (8-bit)' },
+                                                            { value: 'yes', label: '10-bit: Yes (HEVC/AV1 Main10)' },
+                                                        ]}
+                                                    />
                                                     <input className={fieldClass} type="number" min={100} max={100000} value={step.videoBitrateKbps || ''} onChange={(event) => updateStep({ videoBitrateKbps: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="Video bitrate kbps" />
                                                     <input className={fieldClass} type="number" min={0} max={51} value={step.crf ?? ''} onChange={(event) => updateStep({ crf: event.target.value === '' ? undefined : Number(event.target.value) })} placeholder="Quality CRF/CQ" disabled={!!step.videoBitrateKbps} />
                                                     <input className={fieldClass} type="number" min={32} max={1536} value={step.audioBitrateKbps || ''} onChange={(event) => updateStep({ audioBitrateKbps: event.target.value ? Number(event.target.value) : undefined })} placeholder="Audio bitrate kbps" />
