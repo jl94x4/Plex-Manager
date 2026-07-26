@@ -1152,6 +1152,10 @@ export const SettingsDashboard: React.FC = () => {
                     quietHoursDays: Array.isArray(saved.quietHoursDays)
                         ? saved.quietHoursDays.map((day: unknown) => Number(day)).filter((day: number) => Number.isInteger(day) && day >= 0 && day <= 6)
                         : [],
+                    pauseWhenStreamingEnabled: saved.pauseWhenStreamingEnabled === true,
+                    pauseWhenStreamingLanes: saved.pauseWhenStreamingLanes === 'all' ? 'all' : 'gpu',
+                    arrRescanEnabled: saved.arrRescanEnabled === true,
+                    minSavingsPercent: Math.min(95, Math.max(0, Math.round(Number(saved.minSavingsPercent) || 0))),
                     workerGroups: Array.isArray(saved.workerGroups) ? saved.workerGroups : [],
                     deliveryTargets: Array.isArray(saved.deliveryTargets) ? saved.deliveryTargets : [],
                 });

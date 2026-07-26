@@ -51,6 +51,21 @@ const json = (value: unknown): RequestInit => ({
     body: JSON.stringify(value),
 });
 
+export type MediaAutomationEstimate = {
+    filePath: string;
+    pipelineId?: string | number | null;
+    adapter?: string | null;
+    adapterLabel?: string | null;
+    sampleSeconds: number;
+    sampleStartSeconds?: number;
+    sampleBytes: number;
+    durationSeconds: number;
+    sourceBytes: number;
+    estimatedOutputBytes: number;
+    estimatedBytesSaved: number;
+    estimatedSavingsPercent: number | null;
+};
+
 export const mediaAutomationApi = {
     status: () => apiFetch(`${ROOT}/status`) as Promise<MediaAutomationStatus>,
     capabilities: () => apiFetch(`${ROOT}/capabilities`) as Promise<MediaAutomationCapabilities>,
@@ -132,6 +147,10 @@ export const mediaAutomationApi = {
     skipJob: (id: string | number, reason = 'skipped') => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/skip`, json({ reason })),
     setPriority: (id: string | number, priority: number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/priority`, json({ priority })),
     retryJob: (id: string | number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/retry`, json({})),
+    estimate: (path: string, pipelineId?: string | number | null, sampleSeconds?: number) => apiFetch(
+        `${ROOT}/estimate`,
+        json({ path, pipelineId: pipelineId ?? null, ...(sampleSeconds ? { sampleSeconds } : {}) }),
+    ) as Promise<{ ok?: boolean; estimate?: MediaAutomationEstimate; error?: string }>,
     createLibrary: (library: MediaAutomationLibrary) => apiFetch(`${ROOT}/libraries`, json(library)),
     updateLibrary: (id: string | number, library: MediaAutomationLibrary) => apiFetch(`${ROOT}/libraries/${encodeURIComponent(id)}`, {
         method: 'PUT',

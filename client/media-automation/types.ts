@@ -139,6 +139,12 @@ export type MediaAutomationStatus = {
     dryRun?: boolean;
     hardwareAcceleration?: HardwareMode;
     fallbackHardware?: HardwareMode;
+    streamingPauseActive?: boolean;
+    activeStreamCount?: number;
+    pauseWhenStreamingEnabled?: boolean;
+    pauseWhenStreamingLanes?: 'gpu' | 'all';
+    arrRescanEnabled?: boolean;
+    minSavingsPercent?: number;
     watch?: {
         watching?: boolean;
         pending?: number;
@@ -401,6 +407,13 @@ export type MediaAutomationSettingsConfig = {
     quietHoursStart?: string;
     quietHoursEnd?: string;
     quietHoursDays?: number[];
+    /** Hold encode lanes while Plex/Jellyfin playback sessions are active. */
+    pauseWhenStreamingEnabled?: boolean;
+    pauseWhenStreamingLanes?: 'gpu' | 'all';
+    /** Ask Sonarr/Radarr to rescan the affected item after replace or delivery. */
+    arrRescanEnabled?: boolean;
+    /** 0 disables. Discard transcode outputs saving less than this percent. */
+    minSavingsPercent?: number;
     workerGroups?: MediaAutomationWorkerGroup[];
     deliveryTargets?: MediaAutomationDeliveryTarget[];
 };
@@ -420,6 +433,10 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     quietHoursStart: '23:00',
     quietHoursEnd: '07:00',
     quietHoursDays: [],
+    pauseWhenStreamingEnabled: false,
+    pauseWhenStreamingLanes: 'gpu',
+    arrRescanEnabled: false,
+    minSavingsPercent: 0,
     workerGroups: [],
     deliveryTargets: [],
 };

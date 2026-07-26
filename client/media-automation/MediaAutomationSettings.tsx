@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock3, Cpu, FolderSearch, Gauge, Radar, Server, ShieldCheck, Tags } from 'lucide-react';
+import { Clock3, Cpu, FolderSearch, Gauge, PlayCircle, Radar, Server, ShieldCheck, Tags } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import type {
     HardwareMode,
@@ -163,6 +163,60 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                         })}
                     </div>
                 </div>
+            </section>
+
+            <section className="glass-card-sm p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                    <PlayCircle className="w-5 h-5 text-plex" />
+                    <h4 className="font-bold text-text">Streaming & guardrails</h4>
+                </div>
+                <SettingsToggleRow
+                    title="Pause encodes while anyone is streaming"
+                    description="Holds new encode jobs while Plex/Jellyfin playback sessions are active, so transcodes never fight viewers for the GPU. Running jobs finish; new ones wait."
+                    checked={config.pauseWhenStreamingEnabled === true}
+                    onChange={(pauseWhenStreamingEnabled) => update({ pauseWhenStreamingEnabled })}
+                    disabled={!enabled}
+                    border={false}
+                />
+                <label className="block max-w-sm text-xs uppercase tracking-wide font-bold text-muted">
+                    Lanes to pause
+                    <div className="mt-2">
+                        <CustomSelect
+                            value={config.pauseWhenStreamingLanes === 'all' ? 'all' : 'gpu'}
+                            onChange={(lanes) => update({ pauseWhenStreamingLanes: lanes as 'gpu' | 'all' })}
+                            options={[
+                                { value: 'gpu', label: 'GPU lane only (recommended)' },
+                                { value: 'all', label: 'GPU and CPU lanes' },
+                            ]}
+                        />
+                    </div>
+                </label>
+                <SettingsToggleRow
+                    title="Notify Sonarr/Radarr after changes"
+                    description="After a Replace or delivery succeeds, ask the matching Sonarr series or Radarr movie to rescan so their file/quality info stays accurate. Uses instances from Settings → Integrations."
+                    checked={config.arrRescanEnabled === true}
+                    onChange={(arrRescanEnabled) => update({ arrRescanEnabled })}
+                    disabled={!enabled}
+                    border={false}
+                />
+                <label className="block max-w-sm text-xs uppercase tracking-wide font-bold text-muted" htmlFor="media-automation-min-savings">
+                    Minimum savings (%)
+                    <input
+                        id="media-automation-min-savings"
+                        className={`${fieldClass} mt-2`}
+                        type="number"
+                        min={0}
+                        max={95}
+                        disabled={!enabled}
+                        value={config.minSavingsPercent ?? 0}
+                        onChange={(event) => update({
+                            minSavingsPercent: Math.min(95, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                        })}
+                    />
+                </label>
+                <p className="text-xs text-muted">
+                    0 disables the guardrail. When set, transcode outputs that shrink the file by less than this percent are discarded and the original is kept (job completes as skipped).
+                </p>
             </section>
 
             <section className="glass-card-sm p-5 space-y-4">

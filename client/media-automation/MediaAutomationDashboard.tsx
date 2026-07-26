@@ -748,6 +748,33 @@ export const MediaAutomationDashboard: React.FC = () => {
         }
     };
 
+    const runEstimate = async (job: MediaAutomationJob) => {
+        const jobId = String(job.id);
+        const sourcePath = String(job.sourcePath || job.path || '');
+        if (!sourcePath) {
+            toast('Job has no source path to estimate.', 'error');
+            return;
+        }
+        setBusy(`estimate-${jobId}`);
+        toast('Estimating savings with a 60s sample encode - this can take a minute or two…');
+        try {
+            const response = await mediaAutomationApi.estimate(sourcePath, job.pipelineId ?? null);
+            const estimate = response.estimate;
+            if (!estimate) throw new Error(response.error || 'Estimate failed');
+            const percent = estimate.estimatedSavingsPercent;
+            toast(
+                `Estimated savings for ${sourcePath.split(/[\\/]/).pop()}: `
+                + `${percent != null ? `${percent}%` : 'unknown'}`
+                + ` (~${formatBytes(estimate.estimatedBytesSaved)} of ${formatBytes(estimate.sourceBytes)})`
+                + `${estimate.adapterLabel || estimate.adapter ? ` via ${estimate.adapterLabel || estimate.adapter}` : ''}.`,
+            );
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Estimate failed', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
     const formatBytes = (value?: number) => {
         const bytes = Number(value || 0);
         if (!Number.isFinite(bytes) || bytes <= 0) return '-';
@@ -882,6 +909,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                         {status.quietHoursActive && (
                             <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-sky-200">
                                 Quiet hours
+                            </span>
+                        )}
+                        {status.streamingPauseActive && (
+                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-200">
+                                Paused - {Number(status.activeStreamCount) || 0} stream{(Number(status.activeStreamCount) || 0) === 1 ? '' : 's'} active
                             </span>
                         )}
                         <button type="button" className={buttonClass} onClick={() => setGoLiveOpen(true)}>
@@ -1685,6 +1717,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 </div>
                                             </div>
                                             <div className="flex shrink-0 gap-2" onClick={(event) => event.stopPropagation()}>
+                                                {canSkip && job.pipelineId != null && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runEstimate(job)}><Gauge className="h-4 w-4" /> Estimate</button>}
                                                 {canSkip && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`skip-${jobId}`, () => mediaAutomationApi.skipJob(jobId), 'Job skipped.')}><SkipForward className="h-4 w-4" /> Skip</button>}
                                                 {canRetry && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`retry-${jobId}`, () => mediaAutomationApi.retryJob(jobId), 'Job queued for retry.')}><RotateCcw className="h-4 w-4" /> Retry</button>}
                                                 {canCancel && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`cancel-${jobId}`, () => mediaAutomationApi.cancelJob(jobId), 'Job cancelled.')}><X className="h-4 w-4" /> Cancel</button>}

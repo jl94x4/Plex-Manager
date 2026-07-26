@@ -838,6 +838,7 @@ import {
     fetchSonarrSeriesById,
     triggerSonarrEpisodeSearch,
     fetchArrQueueSummary,
+    fetchArrInstance,
     fetchArrInstanceJson,
     fetchRadarrMovieReleaseDates,
 } from './lib/arr-service.js';
@@ -18293,11 +18294,129 @@ const getMediaAutomationServiceConfig = async () => {
     };
 };
 
+// Pause-when-streaming: count active Plex/Jellyfin playback sessions (short cache
+// so the scheduler poll cannot hammer the media servers).
+let mediaStreamCountCache = { at: 0, count: 0 };
+const countActiveMediaStreams = async () => {
+    const now = Date.now();
+    if (now - mediaStreamCountCache.at < 15_000) return mediaStreamCountCache.count;
+    const config = await loadFile(CONFIG_PATH, {});
+    let count = 0;
+    if (config.plexToken) {
+        try {
+            const uri = await getPlexConnectionUri(config);
+            if (uri) {
+                const data = await fetch(`${uri}/status/sessions?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) })
+                    .then((r) => (r.ok ? r.json() : null))
+                    .catch(() => null);
+                count += Array.isArray(data?.MediaContainer?.Metadata) ? data.MediaContainer.Metadata.length : 0;
+            }
+        } catch { /* best effort — scheduler fails open */ }
+    }
+    if (config.jellyfinUrl && config.jellyfinApiKey) {
+        try {
+            const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
+            const sessions = await fetchWithTimeout(`${baseUrl}/Sessions`, { headers: jellyfinHeaders(config.jellyfinApiKey) }, 10000)
+                .then((r) => (r.ok ? r.json() : []))
+                .catch(() => []);
+            count += (Array.isArray(sessions) ? sessions : []).filter((session) => session?.NowPlayingItem).length;
+        } catch { /* best effort */ }
+    }
+    mediaStreamCountCache = { at: now, count };
+    return count;
+};
+
+// Arr rescan hooks: match the changed file to a Sonarr series / Radarr movie by
+// path prefix (library lists cached briefly) and request a targeted rescan.
+const ARR_RESCAN_CACHE_TTL_MS = 5 * 60_000;
+const arrRescanListCache = new Map();
+const arrCachedList = async (instance, endpoint) => {
+    const key = `${instance.id}:${endpoint}`;
+    const cached = arrRescanListCache.get(key);
+    if (cached && Date.now() - cached.at < ARR_RESCAN_CACHE_TTL_MS) return cached.items;
+    const items = await fetchArrInstanceJson(instance, endpoint, {
+        resolveUrl: resolveIntegrationUrlForFetch,
+        fetchImpl: fetch,
+        timeoutMs: 60_000,
+    });
+    const list = Array.isArray(items) ? items : [];
+    arrRescanListCache.set(key, { at: Date.now(), items: list });
+    return list;
+};
+
+const normalizeMediaPathForMatch = (value) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+const mediaPathIsWithin = (child, parent) => {
+    const childPath = normalizeMediaPathForMatch(child);
+    const parentPath = normalizeMediaPathForMatch(parent);
+    return !!parentPath && (childPath === parentPath || childPath.startsWith(`${parentPath}/`));
+};
+
+const postArrCommand = (instance, body) => fetchArrInstance(instance, '/api/v3/command', {
+    resolveUrl: resolveIntegrationUrlForFetch,
+    fetchImpl: fetch,
+    method: 'POST',
+    body,
+    timeoutMs: 30_000,
+});
+
+const triggerArrRescanForPath = async (config, filePath) => {
+    const results = [];
+    for (const instance of getArrInstances(config, { type: 'sonarr', enabledOnly: true }).filter(isArrInstanceReady)) {
+        const series = await arrCachedList(instance, '/api/v3/series');
+        const match = series
+            .filter((entry) => entry?.path && mediaPathIsWithin(filePath, entry.path))
+            .sort((a, b) => String(b.path).length - String(a.path).length)[0];
+        if (!match) continue;
+        const response = await postArrCommand(instance, { name: 'RescanSeries', seriesId: match.id });
+        results.push({ type: 'sonarr', instance: instance.name || instance.id, title: match.title, ok: !!response?.ok });
+    }
+    for (const instance of getArrInstances(config, { type: 'radarr', enabledOnly: true }).filter(isArrInstanceReady)) {
+        const movies = await arrCachedList(instance, '/api/v3/movie');
+        const match = movies
+            .filter((entry) => mediaPathIsWithin(filePath, entry?.path || entry?.folderName))
+            .sort((a, b) => String(b.path || b.folderName || '').length - String(a.path || a.folderName || '').length)[0];
+        if (!match) continue;
+        const response = await postArrCommand(instance, { name: 'RescanMovie', movieId: match.id });
+        results.push({ type: 'radarr', instance: instance.name || instance.id, title: match.title, ok: !!response?.ok });
+    }
+    return results;
+};
+
 mediaAutomationService = createMediaAutomation({
     dataDir: MEDIA_AUTOMATION_DIR,
     queuePath: MEDIA_AUTOMATION_QUEUE_PATH,
     getConfig: getMediaAutomationServiceConfig,
     logger: console,
+    getActiveStreamCount: countActiveMediaStreams,
+    onMediaCommitted: async (event) => {
+        try {
+            const config = await loadFile(CONFIG_PATH, {});
+            const runtime = mediaAutomationRuntimeConfig(config);
+            if (!runtime.arrRescanEnabled) return;
+            // Delivered to a mapped Sonarr drop folder: ask Sonarr to import it properly.
+            if (event.deliveredPath && event.deliveryTargetId) {
+                const target = (runtime.deliveryTargets || []).find((entry) => String(entry.id) === String(event.deliveryTargetId));
+                const instance = target?.sonarrInstanceId ? getArrInstance(config, target.sonarrInstanceId) : null;
+                if (instance && isArrInstanceReady(instance)) {
+                    const response = await postArrCommand(instance, {
+                        name: 'DownloadedEpisodesScan',
+                        path: event.deliveredPath,
+                        importMode: 'Move',
+                    });
+                    log(`[media-automation] Sonarr drop-folder import ${response?.ok ? 'requested' : 'failed'}: ${event.deliveredPath}`);
+                    return;
+                }
+            }
+            const targetPath = event.finalPath || event.sourcePath;
+            if (!targetPath) return;
+            const results = await triggerArrRescanForPath(config, targetPath);
+            if (results.length) {
+                log(`[media-automation] Arr rescan requested for ${path.basename(targetPath)}: ${results.map((entry) => `${entry.type}:${entry.title}${entry.ok ? '' : ' (failed)'}`).join(', ')}`);
+            }
+        } catch (error) {
+            log(`[media-automation] Arr rescan hook failed: ${error.message}`);
+        }
+    },
     resolveDeliveryNaming: async ({ target, sourcePath } = {}) => {
         try {
             const config = await loadFile(CONFIG_PATH, {});
@@ -19264,6 +19383,26 @@ app.post('/api/media-automation/jobs/:id/retry', requireAdmin, requireMediaAutom
         res.json({ ok: true, job });
     } catch (error) {
         res.status(400).json({ error: error.message || 'Job cannot be retried' });
+    }
+});
+
+app.post('/api/media-automation/estimate', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const filePath = String(req.body?.path || req.body?.filePath || '').trim();
+        if (!filePath) return res.status(400).json({ error: 'path is required' });
+        const estimate = await mediaAutomationService.estimate({
+            filePath,
+            pipelineId: req.body?.pipelineId ?? null,
+            sampleSeconds: req.body?.sampleSeconds,
+        });
+        await appendAuditLog('media_automation_estimate', req.user, null, {
+            path: filePath,
+            pipelineId: req.body?.pipelineId ?? null,
+        });
+        res.json({ ok: true, estimate });
+    } catch (error) {
+        const status = ['OUTSIDE_LIBRARY', 'NO_TRANSCODE_STEP', 'PIPELINE_NOT_FOUND', 'NO_DURATION'].includes(error?.code) ? 400 : 500;
+        res.status(status).json({ error: error.message || 'Estimate failed', code: error?.code || null });
     }
 });
 
