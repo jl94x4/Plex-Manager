@@ -1904,11 +1904,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </div>
                         <label className="flex items-center gap-2 text-xs font-semibold text-muted">
                             <span className="whitespace-nowrap">Per page</span>
-                            <select
-                                className="rounded-lg border border-white/10 bg-background/70 px-2.5 py-2 text-sm font-semibold text-text outline-none transition focus:border-plex"
+                            <CustomSelect
+                                compact
+                                className="min-w-[5.5rem]"
                                 value={activityPageSize}
-                                onChange={(event) => {
-                                    const next = Number(event.target.value) as typeof ACTIVITY_PAGE_SIZE_OPTIONS[number];
+                                onChange={(value) => {
+                                    const next = Number(value) as typeof ACTIVITY_PAGE_SIZE_OPTIONS[number];
+                                    if (!ACTIVITY_PAGE_SIZE_OPTIONS.includes(next)) return;
                                     setActivityPageSize(next);
                                     try {
                                         localStorage.setItem(ACTIVITY_PAGE_SIZE_KEY, String(next));
@@ -1916,11 +1918,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         // ignore
                                     }
                                 }}
-                            >
-                                {ACTIVITY_PAGE_SIZE_OPTIONS.map((size) => (
-                                    <option key={size} value={size}>{size}</option>
-                                ))}
-                            </select>
+                                options={ACTIVITY_PAGE_SIZE_OPTIONS.map((size) => ({
+                                    value: String(size),
+                                    label: String(size),
+                                }))}
+                            />
                         </label>
                     </div>
                     {filteredActivity.length === 0 ? (
