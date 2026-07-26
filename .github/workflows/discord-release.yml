@@ -1,0 +1,76 @@
+name: Discord Release Post
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  post-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post release to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.Discord_Webhook_Release }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_AUTHOR: ${{ github.event.release.author.login }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${DISCORD_WEBHOOK_URL}" ]]; then
+            echo "Discord_Webhook_Release secret is not set."
+            exit 1
+          fi
+
+          node <<'NODE'
+          const fs = require('fs');
+
+          const releaseName = process.env.RELEASE_NAME || process.env.RELEASE_TAG || 'New release';
+          const releaseTag = process.env.RELEASE_TAG || '';
+          const releaseUrl = process.env.RELEASE_URL || '';
+          const releaseAuthor = process.env.RELEASE_AUTHOR || 'GitHub';
+          const releaseBody = (process.env.RELEASE_BODY || '').trim();
+          const maxDescriptionLength = 3500;
+          const description = releaseBody.length > maxDescriptionLength
+            ? `${releaseBody.slice(0, maxDescriptionLength - 20)}\n\n...read more on GitHub`
+            : (releaseBody || 'Release notes are available on GitHub.');
+
+          const payload = {
+            username: 'Server Manager Portal Releases',
+            embeds: [
+              {
+                title: `New release: ${releaseName}`,
+                url: releaseUrl,
+                description,
+                color: 0x2f81f7,
+                fields: [
+                  {
+                    name: 'Version',
+                    value: releaseTag || 'Unknown',
+                    inline: true
+                  },
+                  {
+                    name: 'Published by',
+                    value: releaseAuthor,
+                    inline: true
+                  }
+                ],
+                timestamp: new Date().toISOString()
+              }
+            ]
+          };
+
+          fs.writeFileSync('discord-release-payload.json', JSON.stringify(payload));
+          NODE
+
+          curl --fail-with-body \
+            -H "Content-Type: application/json" \
+            -X POST \
+            --data @discord-release-payload.json \
+            "${DISCORD_WEBHOOK_URL}"
