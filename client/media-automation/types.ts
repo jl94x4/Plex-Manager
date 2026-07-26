@@ -9,6 +9,8 @@ export type MediaAutomationMetrics = {
     successRate24h?: number | null;
     bytesIn24h?: number;
     bytesOut24h?: number;
+    bytesSaved24h?: number;
+    encodeMs24h?: number;
 };
 
 export type MediaAutomationStatus = {
@@ -31,6 +33,7 @@ export type MediaAutomationStatus = {
         enqueued?: number;
         skipped?: number;
         errors?: unknown[];
+        skippedDetails?: Array<{ filePath?: string; reason?: string; videoCodec?: string | null }>;
         at?: string;
     } | null;
     libraryScanEnabled?: boolean;
@@ -39,6 +42,10 @@ export type MediaAutomationStatus = {
     watchEnvEnabled?: boolean;
     libraryWatchConfigured?: boolean;
     notifyOnJobFailed?: boolean;
+    quietHoursEnabled?: boolean;
+    quietHoursStart?: string;
+    quietHoursEnd?: string;
+    quietHoursActive?: boolean;
     outputMode?: OutputMode;
     dryRun?: boolean;
     hardwareAcceleration?: HardwareMode;
@@ -161,6 +168,11 @@ export type MediaAutomationLibrary = {
     quarantinePath: string;
     pipelineId?: string | number | null;
     enabled?: boolean;
+    /** Optional per-library hardware override (empty = pipeline/global). */
+    hardware?: HardwareMode | '' | null;
+    /** Optional per-library output mode override (empty = pipeline/global). */
+    outputMode?: OutputMode | '' | null;
+    priorityBoost?: number;
     [key: string]: unknown;
 };
 
@@ -291,6 +303,9 @@ export type MediaAutomationSettingsConfig = {
     customCommandAllowlist: string[];
     /** Send Gotify when a job fails (requires portal Gotify settings). */
     notifyOnJobFailed?: boolean;
+    quietHoursEnabled?: boolean;
+    quietHoursStart?: string;
+    quietHoursEnd?: string;
 };
 
 export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = {
@@ -304,6 +319,9 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     libraryWatchDebounceMs: 5000,
     customCommandAllowlist: ['ffmpeg', 'ffprobe'],
     notifyOnJobFailed: false,
+    quietHoursEnabled: false,
+    quietHoursStart: '23:00',
+    quietHoursEnd: '07:00',
 };
 
 export const emptyLibrary = (): MediaAutomationLibrary => ({
@@ -313,6 +331,9 @@ export const emptyLibrary = (): MediaAutomationLibrary => ({
     quarantinePath: '',
     pipelineId: '',
     enabled: true,
+    hardware: '',
+    outputMode: '',
+    priorityBoost: 0,
 });
 
 export const emptyPipeline = (): MediaAutomationPipeline => ({

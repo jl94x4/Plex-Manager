@@ -1146,6 +1146,9 @@ export const SettingsDashboard: React.FC = () => {
                         ? [...new Set(saved.customCommandAllowlist.map((entry: unknown) => String(entry || '').trim()).filter(Boolean))].slice(0, 32)
                         : [...DEFAULT_MEDIA_AUTOMATION_SETTINGS.customCommandAllowlist],
                     notifyOnJobFailed: saved.notifyOnJobFailed === true,
+                    quietHoursEnabled: saved.quietHoursEnabled === true,
+                    quietHoursStart: String(saved.quietHoursStart || DEFAULT_MEDIA_AUTOMATION_SETTINGS.quietHoursStart),
+                    quietHoursEnd: String(saved.quietHoursEnd || DEFAULT_MEDIA_AUTOMATION_SETTINGS.quietHoursEnd),
                 });
             } else {
                 setMediaAutomation({

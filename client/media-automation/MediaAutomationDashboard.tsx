@@ -24,8 +24,10 @@ import {
     Save,
     ServerCog,
     SkipForward,
+    Sparkles,
     Square,
     Trash2,
+    Upload,
     X,
 } from 'lucide-react';
 import { CustomSelect, SettingsSwitch } from '../shared/ui';
@@ -37,6 +39,12 @@ import { PathBrowserField } from './PathBrowserField';
 import { PipelineTemplatePicker } from './PipelineTemplatePicker';
 import { MediaAutomationSetupChecklist } from './MediaAutomationSetupChecklist';
 import { PipelineEditorForm } from './PipelineEditorForm';
+import { MediaAutomationGoLiveWizard } from './MediaAutomationGoLiveWizard';
+import {
+    buildEncodeProfilePack,
+    downloadEncodeProfilePack,
+    parseEncodeProfilePack,
+} from './encodeProfilePack';
 import {
     countJobsForLibrary,
     libraryPipelineLabel,
@@ -447,6 +455,9 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [queueSearch, setQueueSearch] = useState('');
     const [workerTestResult, setWorkerTestResult] = useState<MediaAutomationCapabilities | null>(null);
     const [workerTestError, setWorkerTestError] = useState('');
+    const [goLiveOpen, setGoLiveOpen] = useState(false);
+    const [scanPreview, setScanPreview] = useState<MediaAutomationStatus['lastScanResult'] | null>(null);
+    const profilesFileRef = React.useRef<HTMLInputElement | null>(null);
     const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
     const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
     const [postSavePipeline, setPostSavePipeline] = useState<MediaAutomationPipeline | null>(null);
@@ -857,6 +868,14 @@ export const MediaAutomationDashboard: React.FC = () => {
                     </div>
                     <div className="flex flex-wrap items-center gap-3 self-start lg:self-auto">
                         <StatusPill value={asText(status.workerState || status.state, 'unknown')} />
+                        {status.quietHoursActive && (
+                            <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-sky-200">
+                                Quiet hours
+                            </span>
+                        )}
+                        <button type="button" className={buttonClass} onClick={() => setGoLiveOpen(true)}>
+                            <Sparkles className="h-4 w-4" /> Go live
+                        </button>
                         <button type="button" className={buttonClass} onClick={() => load(true)} disabled={refreshing}>
                             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
                         </button>
@@ -1014,7 +1033,57 @@ export const MediaAutomationDashboard: React.FC = () => {
                             icon={<ServerCog className="h-4 w-4 text-sky-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
+                        <StatCard
+                            label="Bytes saved"
+                            value={formatBytes(status.metrics?.bytesSaved24h)}
+                            hint="Last 24h"
+                            icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
+                            tone="border-emerald-500/30 bg-emerald-500/10 text-text"
+                        />
+                        <StatCard
+                            label="Encode time"
+                            value={formatDurationSeconds(Math.round(Number(status.metrics?.encodeMs24h || 0) / 1000)) || '0s'}
+                            hint="Last 24h"
+                            icon={<Gauge className="h-4 w-4 text-plex" />}
+                            tone="border-white/10 bg-white/[0.03] text-text"
+                        />
                     </div>
+                    {status.quietHoursEnabled && (
+                        <div className={`rounded-xl border px-4 py-3 text-sm ${status.quietHoursActive ? 'border-sky-500/40 bg-sky-500/10 text-sky-50' : 'border-border/70 bg-background/30 text-muted'}`}>
+                            Quiet hours {status.quietHoursStart || '23:00'} - {status.quietHoursEnd || '07:00'}
+                            {status.quietHoursActive
+                                ? ' are active now. New encodes are paused; queued jobs will start when the window ends.'
+                                : ' are configured. Encoding runs outside that window.'}
+                        </div>
+                    )}
+                    {(scanPreview || status.lastScanResult?.skippedDetails?.length) && (
+                        <section className={`${cardClass} p-5`}>
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <h2 className="font-bold text-text">Last scan skip preview</h2>
+                                    <p className="mt-1 text-sm text-muted">
+                                        {(scanPreview || status.lastScanResult)?.discovered || 0} discovered ·{' '}
+                                        {(scanPreview || status.lastScanResult)?.enqueued || 0} queued ·{' '}
+                                        {(scanPreview || status.lastScanResult)?.skipped || 0} skipped
+                                    </p>
+                                </div>
+                                <button type="button" className="rounded-lg p-2 text-muted hover:bg-white/5" onClick={() => setScanPreview(null)} aria-label="Dismiss">
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                            <div className="mt-3 space-y-2">
+                                {((scanPreview || status.lastScanResult)?.skippedDetails || []).slice(0, 12).map((entry, index) => (
+                                    <div key={`${entry.filePath}-${index}`} className="rounded-lg border border-border/60 bg-background/30 px-3 py-2 text-xs">
+                                        <p className="font-semibold text-plex">{String(entry.reason || 'skipped').replace(/-/g, ' ')}</p>
+                                        <p className="mt-1 truncate font-mono text-muted" title={entry.filePath}>{entry.filePath}</p>
+                                    </div>
+                                ))}
+                                {!((scanPreview || status.lastScanResult)?.skippedDetails || []).length && (
+                                    <p className="text-sm text-muted">No skip details recorded for this scan.</p>
+                                )}
+                            </div>
+                        </section>
+                    )}
                     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
                         <section className={`${cardClass} space-y-4 p-5`}>
                             <div className="mb-1 flex items-center justify-between">
@@ -1043,7 +1112,29 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 ))}
                             </div>
                             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction('scan-now', mediaAutomationApi.scanNow, 'Library scan completed.')}>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null}
+                                    onClick={async () => {
+                                        setBusy('scan-now');
+                                        try {
+                                            const response = await mediaAutomationApi.scanNow() as {
+                                                result?: MediaAutomationStatus['lastScanResult'];
+                                                status?: MediaAutomationStatus;
+                                            };
+                                            const result = response?.result || response as MediaAutomationStatus['lastScanResult'];
+                                            setScanPreview(result || null);
+                                            if (response?.status) setStatus(response.status);
+                                            toast(`Scan finished: ${result?.enqueued || 0} queued, ${result?.skipped || 0} skipped.`);
+                                            await load(true);
+                                        } catch (error) {
+                                            toast(error instanceof Error ? error.message : 'Library scan failed', 'error');
+                                        } finally {
+                                            setBusy(null);
+                                        }
+                                    }}
+                                >
                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />} Scan now
                                 </button>
                                 <button
@@ -1587,6 +1678,50 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <p className="mt-1 text-sm leading-relaxed text-muted">Pipelines decide which files match and what FFmpeg does. Start from a template if you are unsure.</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    onClick={() => {
+                                        const pack = buildEncodeProfilePack();
+                                        downloadEncodeProfilePack(pack);
+                                        toast('Encode profile pack downloaded.');
+                                    }}
+                                >
+                                    <Save className="h-4 w-4" /> Export profiles
+                                </button>
+                                <button type="button" className={buttonClass} onClick={() => profilesFileRef.current?.click()}>
+                                    <Upload className="h-4 w-4" /> Import profiles
+                                </button>
+                                <input
+                                    ref={profilesFileRef}
+                                    type="file"
+                                    accept="application/json,.json"
+                                    className="hidden"
+                                    onChange={async (event) => {
+                                        const file = event.target.files?.[0];
+                                        event.target.value = '';
+                                        if (!file) return;
+                                        try {
+                                            const pack = parseEncodeProfilePack(JSON.parse(await file.text()));
+                                            setBusy('import-profiles');
+                                            for (const preset of pack.presets) {
+                                                await mediaAutomationApi.createPipeline({
+                                                    ...emptyPipeline(),
+                                                    ...preset.pipeline,
+                                                    name: preset.pipeline.name || preset.label,
+                                                    samplePath: '',
+                                                });
+                                            }
+                                            toast(`Imported ${pack.presets.length} profile${pack.presets.length === 1 ? '' : 's'}.`);
+                                            await load(true);
+                                            selectTab('pipelines');
+                                        } catch (error) {
+                                            toast(error instanceof Error ? error.message : 'Failed to import profile pack', 'error');
+                                        } finally {
+                                            setBusy(null);
+                                        }
+                                    }}
+                                />
                                 <button type="button" className={buttonClass} onClick={() => setTemplatePickerOpen(true)}>
                                     <Layers3 className="h-4 w-4" /> Use template
                                 </button>
@@ -2083,6 +2218,25 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 <p className="mt-1 break-all font-mono text-xs text-plex">{jobFinalPath(selectedJob)}</p>
                                             </div>
                                         )}
+                                        {selectedJob?.result && typeof selectedJob.result === 'object' && (selectedJob.result as { output?: { quarantinedPath?: string } }).output?.quarantinedPath && (
+                                            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-50">
+                                                <p className="font-bold">Original quarantined</p>
+                                                <p className="mt-1 break-all font-mono text-xs text-amber-100/90">
+                                                    {String((selectedJob.result as { output?: { quarantinedPath?: string } }).output?.quarantinedPath)}
+                                                </p>
+                                                <p className="mt-2 text-xs text-amber-100/80">
+                                                    Replace mode moved the previous file here after verify. Restore manually if needed, then Retry.
+                                                </p>
+                                            </div>
+                                        )}
+                                        {selectedJob?.result && typeof selectedJob.result === 'object' && (
+                                            <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                                                <div><dt className="text-muted">Bytes in</dt><dd className="mt-1 font-semibold text-text">{formatBytes(Number((selectedJob.result as { sourceBytes?: number }).sourceBytes))}</dd></div>
+                                                <div><dt className="text-muted">Bytes out</dt><dd className="mt-1 font-semibold text-text">{formatBytes(Number((selectedJob.result as { outputBytes?: number }).outputBytes))}</dd></div>
+                                                <div><dt className="text-muted">Saved</dt><dd className="mt-1 font-semibold text-emerald-300">{formatBytes(Number((selectedJob.result as { bytesSaved?: number }).bytesSaved))}</dd></div>
+                                                <div><dt className="text-muted">Encode</dt><dd className="mt-1 font-semibold text-text">{formatDurationSeconds(Math.round(Number((selectedJob.result as { durationMs?: number }).durationMs || 0) / 1000)) || '-'}</dd></div>
+                                            </dl>
+                                        )}
                                         {jobIsDryRun(selectedJob) && (
                                             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
                                                 {jobDryRunReason(selectedJob) || 'Dry-run completed: the worker only planned FFmpeg steps. No media was rewritten.'}
@@ -2184,7 +2338,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <section className="space-y-4 border-t border-border/60 pt-4">
                             <div>
                                 <h3 className="text-sm font-bold text-text">Routing</h3>
-                                <p className="mt-1 text-xs text-muted">Automatic uses the first matching enabled pipeline.</p>
+                                <p className="mt-1 text-xs text-muted">Automatic uses the first matching enabled pipeline. Optional overrides apply only to this library.</p>
                             </div>
                             <label className="block space-y-2 text-sm font-semibold text-text">Assigned pipeline
                                 <CustomSelect
@@ -2193,11 +2347,40 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     options={[{ value: '', label: 'Automatic / first matching pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
                                 />
                             </label>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <label className="block space-y-2 text-sm font-semibold text-text">Hardware override
+                                    <CustomSelect
+                                        value={String(libraryDraft.hardware || '')}
+                                        onChange={(hardware) => setLibraryDraft({ ...libraryDraft, hardware: hardware as MediaAutomationLibrary['hardware'] })}
+                                        options={[
+                                            { value: '', label: 'Use pipeline / global' },
+                                            { value: 'auto', label: 'Auto' },
+                                            { value: 'cpu', label: 'CPU' },
+                                            { value: 'nvenc', label: 'NVENC' },
+                                            { value: 'qsv', label: 'QSV' },
+                                            { value: 'intel-vaapi', label: 'Intel VAAPI' },
+                                            { value: 'vaapi', label: 'AMD VAAPI' },
+                                        ]}
+                                    />
+                                </label>
+                                <label className="block space-y-2 text-sm font-semibold text-text">Output mode override
+                                    <CustomSelect
+                                        value={String(libraryDraft.outputMode || '')}
+                                        onChange={(outputMode) => setLibraryDraft({ ...libraryDraft, outputMode: outputMode as MediaAutomationLibrary['outputMode'] })}
+                                        options={[
+                                            { value: '', label: 'Use pipeline / global' },
+                                            { value: 'dry-run', label: 'Dry run' },
+                                            { value: 'copy', label: 'Copy' },
+                                            { value: 'replace', label: 'Replace' },
+                                        ]}
+                                    />
+                                </label>
+                            </div>
                         </section>
                         <section className="space-y-4 border-t border-border/60 pt-4">
                             <div>
                                 <h3 className="text-sm font-bold text-text">Destinations</h3>
-                                <p className="mt-1 text-xs text-muted">Leave blank to use pipeline defaults.</p>
+                                <p className="mt-1 text-xs text-muted">Leave blank to use pipeline defaults. Quarantine is used on Replace after verify.</p>
                             </div>
                             <PathBrowserField
                                 label="Output path"
@@ -2244,6 +2427,21 @@ export const MediaAutomationDashboard: React.FC = () => {
                 open={templatePickerOpen}
                 onClose={() => setTemplatePickerOpen(false)}
                 onSelect={openPipelineFromPreset}
+            />
+            <MediaAutomationGoLiveWizard
+                open={goLiveOpen}
+                onClose={() => setGoLiveOpen(false)}
+                status={status}
+                libraries={libraries}
+                pipelines={pipelines}
+                busy={busy}
+                onAction={(action) => {
+                    if (!action) return;
+                    handleSetupAction(action);
+                    if (action === 'settings' || action === 'libraries' || action === 'pipelines' || action === 'start-worker' || action === 'scan') {
+                        setGoLiveOpen(false);
+                    }
+                }}
             />
         </div>
     );

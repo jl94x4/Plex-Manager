@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, FolderSearch, Gauge, Radar, ShieldCheck } from 'lucide-react';
+import { Clock3, Cpu, FolderSearch, Gauge, Radar, ShieldCheck } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import type { HardwareMode, MediaAutomationSettingsConfig, OutputMode } from './types';
 import { portalUrl } from '../shared/basePath';
@@ -186,6 +186,43 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                             </p>
                         </div>
                     )}
+                </div>
+
+                <div className="glass-card-sm p-5 space-y-4 lg:col-span-3">
+                    <div className="flex items-center gap-2">
+                        <Clock3 className="w-5 h-5 text-plex" />
+                        <h4 className="font-bold text-text">Quiet hours</h4>
+                    </div>
+                    <SettingsToggleRow
+                        title="Pause encoding overnight"
+                        description="Stop claiming new encode jobs during this local-time window. Scans and ARR webhooks can still enqueue work for later."
+                        checked={config.quietHoursEnabled === true}
+                        onChange={(quietHoursEnabled) => update({ quietHoursEnabled })}
+                        border={false}
+                    />
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                            Start (HH:MM)
+                            <input
+                                className={`${fieldClass} mt-2`}
+                                value={config.quietHoursStart || '23:00'}
+                                disabled={config.quietHoursEnabled !== true}
+                                onChange={(event) => update({ quietHoursStart: event.target.value })}
+                                placeholder="23:00"
+                            />
+                        </label>
+                        <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                            End (HH:MM)
+                            <input
+                                className={`${fieldClass} mt-2`}
+                                value={config.quietHoursEnd || '07:00'}
+                                disabled={config.quietHoursEnabled !== true}
+                                onChange={(event) => update({ quietHoursEnd: event.target.value })}
+                                placeholder="07:00"
+                            />
+                        </label>
+                    </div>
+                    <p className="text-xs text-muted">Uses the container/host local clock. Example: 23:00 to 07:00 pauses overnight and resumes at 7am.</p>
                 </div>
             </section>
 

@@ -219,6 +219,9 @@ const mediaAutomationConfigForApi = (config = {}) => {
         watchEnvEnabled: mediaAutomationWatchOptIn(),
         libraryWatchConfigured: config.mediaAutomation?.libraryWatchEnabled === true,
         notifyOnJobFailed: runtime.notifyOnJobFailed === true,
+        quietHoursEnabled: runtime.quietHoursEnabled === true,
+        quietHoursStart: runtime.quietHoursStart,
+        quietHoursEnd: runtime.quietHoursEnd,
         auth: {
             username: String(auth.username || ''),
             password: auth.password ? SECRET_MASK : '',
@@ -416,6 +419,13 @@ const normalizeMediaAutomationLibraryInput = (value = {}, id) => {
         quarantinePath,
         enabled: value.enabled !== false,
         pipelineId: value.pipelineId ? String(value.pipelineId) : null,
+        hardware: ['auto', 'cpu', 'nvenc', 'qsv', 'intel-vaapi', 'vaapi'].includes(String(value.hardware || '').toLowerCase())
+            ? String(value.hardware).toLowerCase()
+            : '',
+        outputMode: ['dry-run', 'copy', 'replace'].includes(String(value.outputMode || '').toLowerCase())
+            ? String(value.outputMode).toLowerCase()
+            : '',
+        priorityBoost: Math.max(0, Math.min(999, Number(value.priorityBoost) || 0)),
     };
 };
 
@@ -18950,6 +18960,11 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
             watchEnvEnabled: mediaAutomationWatchOptIn(),
             libraryWatchConfigured: config.mediaAutomation?.libraryWatchEnabled === true,
             notifyOnJobFailed: config.mediaAutomation?.notifyOnJobFailed === true,
+            quietHoursEnabled: config.mediaAutomation?.quietHoursEnabled === true
+                || status.quietHoursEnabled === true,
+            quietHoursStart: config.mediaAutomation?.quietHoursStart || status.quietHoursStart || '23:00',
+            quietHoursEnd: config.mediaAutomation?.quietHoursEnd || status.quietHoursEnd || '07:00',
+            quietHoursActive: !!status.quietHoursActive,
             metrics: {
                 processed24h: succeededRecent.length,
                 failed24h: failedRecent.length,
@@ -18959,6 +18974,17 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
                     : null,
                 bytesIn24h: sumResultBytes('sourceBytes') || sumResultBytes('inputBytes'),
                 bytesOut24h: sumResultBytes('outputBytes'),
+                bytesSaved24h: succeededRecent.reduce((sum, job) => {
+                    const saved = Number(job.result?.bytesSaved);
+                    if (Number.isFinite(saved) && saved > 0) return sum + saved;
+                    const inn = Number(job.result?.sourceBytes || job.result?.inputBytes || 0);
+                    const out = Number(job.result?.outputBytes || 0);
+                    return sum + Math.max(0, inn - out);
+                }, 0),
+                encodeMs24h: succeededRecent.reduce((sum, job) => {
+                    const value = Number(job.result?.durationMs || 0);
+                    return sum + (Number.isFinite(value) ? value : 0);
+                }, 0),
             },
         });
     } catch (error) {
