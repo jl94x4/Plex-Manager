@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Activity,
     AlertTriangle,
+    ArrowUpToLine,
     CheckCircle2,
     ChevronDown,
     CirclePause,
@@ -132,6 +133,92 @@ const jobLiveCommand = (job: MediaAutomationJob | null | undefined) => {
         return [first.executable || 'ffmpeg', ...first.args].join(' ');
     }
     return '';
+};
+
+type MediaProbeSummary = {
+    container: string | null;
+    videoCodec: string | null;
+    videoProfile: string | null;
+    resolution: string | null;
+    bitDepth: string | null;
+    frameRate: string | null;
+    bitrateKbps: number | null;
+    audioSummary: string | null;
+    durationSeconds: number | null;
+    sizeBytes: number | null;
+};
+
+const probeSummary = (probe: unknown): MediaProbeSummary | null => {
+    if (!probe || typeof probe !== 'object') return null;
+    const record = probe as { format?: Record<string, unknown>; streams?: Array<Record<string, unknown>> };
+    const format = record.format || {};
+    const streams = Array.isArray(record.streams) ? record.streams : [];
+    const video = streams.find((stream) => stream.codec_type === 'video');
+    const audios = streams.filter((stream) => stream.codec_type === 'audio');
+    if (!video && streams.length === 0 && Object.keys(format).length === 0) return null;
+    const positive = (value: unknown) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    };
+    const durationSeconds = positive(format.duration) ?? positive(video?.duration);
+    const sizeBytes = positive(format.size);
+    let bitrateKbps = positive(format.bit_rate) != null ? Number(format.bit_rate) / 1000 : null;
+    if (bitrateKbps == null && sizeBytes != null && durationSeconds != null) {
+        bitrateKbps = (sizeBytes * 8) / durationSeconds / 1000;
+    }
+    const width = positive(video?.width);
+    const height = positive(video?.height);
+    const pixFmt = String(video?.pix_fmt || '');
+    const bitsPerSample = positive(video?.bits_per_raw_sample);
+    const bitDepth = !video
+        ? null
+        : (bitsPerSample != null
+            ? `${bitsPerSample}-bit`
+            : (pixFmt ? (/12/.test(pixFmt) ? '12-bit' : (/10/.test(pixFmt) ? '10-bit' : '8-bit')) : null));
+    const frameRate = (() => {
+        const raw = String(video?.avg_frame_rate || video?.r_frame_rate || '');
+        const [numerator, denominator] = raw.split('/').map(Number);
+        if (Number.isFinite(numerator) && Number.isFinite(denominator) && numerator > 0 && denominator > 0) {
+            return `${Math.round((numerator / denominator) * 100) / 100} fps`;
+        }
+        return null;
+    })();
+    const audioSummary = audios.length
+        ? audios.slice(0, 3).map((stream) => `${String(stream.codec_name || 'audio')}${stream.channels ? ` ${stream.channels}ch` : ''}`).join(', ')
+            + (audios.length > 3 ? ` +${audios.length - 3} more` : '')
+        : null;
+    return {
+        container: String(format.format_name || '').split(',')[0] || null,
+        videoCodec: video ? (String(video.codec_name || '') || null) : null,
+        videoProfile: video ? (String(video.profile || '') || null) : null,
+        resolution: width != null && height != null ? `${width}x${height}` : null,
+        bitDepth,
+        frameRate,
+        bitrateKbps,
+        audioSummary,
+        durationSeconds,
+        sizeBytes,
+    };
+};
+
+const jobSourceSummary = (job: MediaAutomationJob | null | undefined) => probeSummary(job?.metadata?.probe);
+
+const jobOutputSummary = (job: MediaAutomationJob | null | undefined) => {
+    const result = job?.result;
+    if (!result || typeof result !== 'object') return null;
+    const output = (result as { output?: { verification?: { metadata?: unknown; size?: number } } }).output;
+    const summary = probeSummary(output?.verification?.metadata);
+    if (summary && summary.sizeBytes == null) {
+        const fallbackSize = Number(output?.verification?.size) || Number((result as { outputBytes?: number }).outputBytes) || 0;
+        summary.sizeBytes = fallbackSize > 0 ? fallbackSize : null;
+    }
+    return summary;
+};
+
+const formatBitrate = (kbps: number | null) => {
+    if (kbps == null || !Number.isFinite(kbps) || kbps <= 0) return null;
+    if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;
+    return `${Math.round(kbps)} kbps`;
 };
 
 const jobIsDryRun = (job: MediaAutomationJob | null | undefined) => {
@@ -644,6 +731,10 @@ export const MediaAutomationDashboard: React.FC = () => {
     }, [jobs]);
 
     const cancellableJobs = useMemo(() => jobs.filter(isCancellableJob), [jobs]);
+    const queuedTopPriority = useMemo(() => jobs.reduce(
+        (max, job) => (jobStateValue(job) === 'queued' ? Math.max(max, Number(job.priority) || 0) : max),
+        0,
+    ), [jobs]);
     const finishedJobs = useMemo(() => jobs.filter(isTerminalJob), [jobs]);
     const allJobIds = useMemo(() => jobs.map((job) => String(job.id)), [jobs]);
     const allSelected = allJobIds.length > 0 && allJobIds.every((id) => selectedJobIds.has(id));
@@ -1717,6 +1808,21 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 </div>
                                             </div>
                                             <div className="flex shrink-0 gap-2" onClick={(event) => event.stopPropagation()}>
+                                                {canSkip && (
+                                                    <button
+                                                        type="button"
+                                                        className={buttonClass}
+                                                        disabled={busy !== null || (Number(job.priority) || 0) >= 999}
+                                                        title="Move to the front of the queue"
+                                                        onClick={() => runAction(
+                                                            `front-${jobId}`,
+                                                            () => mediaAutomationApi.setPriority(jobId, Math.min(999, queuedTopPriority + 1)),
+                                                            'Moved to front of queue.',
+                                                        )}
+                                                    >
+                                                        {busy === `front-${jobId}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpToLine className="h-4 w-4" />} Front
+                                                    </button>
+                                                )}
                                                 {canSkip && job.pipelineId != null && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runEstimate(job)}><Gauge className="h-4 w-4" /> Estimate</button>}
                                                 {canSkip && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`skip-${jobId}`, () => mediaAutomationApi.skipJob(jobId), 'Job skipped.')}><SkipForward className="h-4 w-4" /> Skip</button>}
                                                 {canRetry && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`retry-${jobId}`, () => mediaAutomationApi.retryJob(jobId), 'Job queued for retry.')}><RotateCcw className="h-4 w-4" /> Retry</button>}
@@ -2463,6 +2569,69 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 <div><dt className="text-muted">Encode</dt><dd className="mt-1 font-semibold text-text">{formatDurationSeconds(Math.round(Number((selectedJob.result as { durationMs?: number }).durationMs || 0) / 1000)) || '-'}</dd></div>
                                             </dl>
                                         )}
+                                        {(() => {
+                                            const before = jobSourceSummary(selectedJob);
+                                            const after = jobOutputSummary(selectedJob);
+                                            if (!before && !after) return null;
+                                            const sourceBytes = Number((selectedJob?.result as { sourceBytes?: number } | null)?.sourceBytes || 0) || before?.sizeBytes || 0;
+                                            const outputBytes = Number((selectedJob?.result as { outputBytes?: number } | null)?.outputBytes || 0) || after?.sizeBytes || 0;
+                                            const savingsPercent = after && sourceBytes > 0 && outputBytes > 0
+                                                ? Math.round((1 - outputBytes / sourceBytes) * 1000) / 10
+                                                : null;
+                                            const videoLabel = (summary: MediaProbeSummary | null) => {
+                                                if (!summary?.videoCodec) return null;
+                                                return summary.videoProfile ? `${summary.videoCodec} (${summary.videoProfile})` : summary.videoCodec;
+                                            };
+                                            const rows: Array<{ label: string; from: string | null; to: string | null }> = [
+                                                { label: 'Container', from: before?.container ?? null, to: after?.container ?? null },
+                                                { label: 'Video', from: videoLabel(before), to: videoLabel(after) },
+                                                { label: 'Resolution', from: before?.resolution ?? null, to: after?.resolution ?? null },
+                                                { label: 'Bit depth', from: before?.bitDepth ?? null, to: after?.bitDepth ?? null },
+                                                { label: 'Frame rate', from: before?.frameRate ?? null, to: after?.frameRate ?? null },
+                                                { label: 'Bitrate', from: formatBitrate(before?.bitrateKbps ?? null), to: formatBitrate(after?.bitrateKbps ?? null) },
+                                                { label: 'Audio', from: before?.audioSummary ?? null, to: after?.audioSummary ?? null },
+                                                { label: 'Size', from: before?.sizeBytes ? formatBytes(before.sizeBytes) : null, to: after?.sizeBytes ? formatBytes(after.sizeBytes) : null },
+                                                { label: 'Duration', from: formatDurationSeconds(before?.durationSeconds), to: formatDurationSeconds(after?.durationSeconds) },
+                                            ].filter((row) => row.from != null || row.to != null);
+                                            if (rows.length === 0) return null;
+                                            return (
+                                                <div className="rounded-xl border border-border bg-background/30 p-4">
+                                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                                        <h3 className="font-bold text-text">{after ? 'Before / after' : 'Source media'}</h3>
+                                                        {savingsPercent != null && (
+                                                            <span className={`text-xs font-semibold ${savingsPercent > 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                                                {savingsPercent > 0 ? `${savingsPercent}% smaller` : `${Math.abs(savingsPercent)}% larger`}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="mt-3 overflow-x-auto">
+                                                        <table className="w-full min-w-[420px] text-sm">
+                                                            <thead>
+                                                                <tr className="text-left text-xs uppercase tracking-wide text-muted">
+                                                                    <th className="py-1.5 pr-4 font-semibold" />
+                                                                    <th className="py-1.5 pr-4 font-semibold">Source</th>
+                                                                    {after && <th className="py-1.5 font-semibold">Output</th>}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-border/40">
+                                                                {rows.map((row) => {
+                                                                    const changed = after != null && row.from != null && row.to != null && row.from !== row.to;
+                                                                    return (
+                                                                        <tr key={row.label}>
+                                                                            <td className="py-1.5 pr-4 text-xs text-muted">{row.label}</td>
+                                                                            <td className="py-1.5 pr-4 text-text">{row.from ?? '-'}</td>
+                                                                            {after && (
+                                                                                <td className={`py-1.5 ${changed ? 'font-semibold text-plex' : 'text-text'}`}>{row.to ?? '-'}</td>
+                                                                            )}
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                         {jobIsDryRun(selectedJob) && (
                                             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
                                                 {jobDryRunReason(selectedJob) || 'Dry-run completed: the worker only planned FFmpeg steps. No media was rewritten.'}
