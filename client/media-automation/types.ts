@@ -369,7 +369,7 @@ export const PIPELINE_PRESETS: Array<{
     {
         id: 'hevc-1500k-keep-streams',
         label: 'HEVC 1500kbps (keep A/V)',
-        detail: 'Fixed 1500 kbps video bitrate — predictable file size. Copies audio and subtitles unchanged.',
+        detail: 'Fixed 1500 kbps video bitrate - predictable file size. Copies audio and subtitles unchanged.',
         category: 'quality',
         pipeline: {
             name: 'HEVC 1500kbps keep streams',
@@ -392,7 +392,7 @@ export const PIPELINE_PRESETS: Array<{
     {
         id: 'high-quality-hevc',
         label: 'High quality HEVC',
-        detail: 'HEVC CRF 18 / slow — near-transparent quality, larger files (Unmanic high-quality style).',
+        detail: 'HEVC CRF 18 / slow - near-transparent quality, larger files (Unmanic high-quality style).',
         category: 'quality',
         pipeline: {
             name: 'High quality HEVC',
@@ -407,7 +407,7 @@ export const PIPELINE_PRESETS: Array<{
     {
         id: 'balanced-hevc',
         label: 'Balanced HEVC',
-        detail: 'HEVC CRF 23 / medium — good quality-to-size default for most libraries.',
+        detail: 'HEVC CRF 23 / medium - good quality-to-size default for most libraries.',
         category: 'quality',
         pipeline: {
             name: 'Balanced HEVC',
@@ -422,7 +422,7 @@ export const PIPELINE_PRESETS: Array<{
     {
         id: 'space-saver-hevc',
         label: 'Space saver HEVC',
-        detail: 'HEVC CRF 28 / fast, AAC 96k — shrink libraries while staying watchable.',
+        detail: 'HEVC CRF 28 / fast, AAC 96k - shrink libraries while staying watchable.',
         category: 'quality',
         pipeline: {
             name: 'Space saver HEVC',
@@ -446,7 +446,7 @@ export const PIPELINE_PRESETS: Array<{
     {
         id: 'low-quality-hevc',
         label: 'Low quality / archive',
-        detail: 'HEVC CRF 32 / veryfast, capped 1280px — aggressive archive / storage reclaim.',
+        detail: 'HEVC CRF 32 / veryfast, capped 1280px - aggressive archive / storage reclaim.',
         category: 'quality',
         pipeline: {
             name: 'Low quality archive',
@@ -501,7 +501,7 @@ export const PIPELINE_PRESETS: Array<{
     {
         id: 'hevc-720p',
         label: 'HEVC 720p space saver',
-        detail: 'Cap at 1280px + HEVC CRF 28 — common TV / mobile space-saver profile.',
+        detail: 'Cap at 1280px + HEVC CRF 28 - common TV / mobile space-saver profile.',
         category: 'quality',
         pipeline: {
             name: 'HEVC 720p space saver',
@@ -532,7 +532,7 @@ export const PIPELINE_PRESETS: Array<{
     {
         id: 'h264-compat',
         label: 'H.264 compatibility',
-        detail: 'H.264 CRF 20 / medium — broad device compatibility when HEVC is not wanted.',
+        detail: 'H.264 CRF 20 / medium - broad device compatibility when HEVC is not wanted.',
         category: 'quality',
         pipeline: {
             name: 'H.264 compatibility',
@@ -593,7 +593,7 @@ export const PIPELINE_PRESETS: Array<{
     {
         id: 'aac-audio-normalize',
         label: 'AAC stereo normalize',
-        detail: 'Keep video, re-encode audio to AAC 192k — useful after remux/transcode cleanup.',
+        detail: 'Keep video, re-encode audio to AAC 192k - useful after remux/transcode cleanup.',
         category: 'audio',
         pipeline: {
             name: 'AAC stereo normalize',
@@ -691,7 +691,7 @@ export const PIPELINE_PRESETS: Array<{
     {
         id: 'dry-run-probe',
         label: 'Dry-run probe',
-        detail: 'Match everything and plan only — safest way to validate rules and hardware.',
+        detail: 'Match everything and plan only - safest way to validate rules and hardware.',
         category: 'utility',
         pipeline: {
             name: 'Dry-run probe',

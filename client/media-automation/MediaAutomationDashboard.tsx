@@ -140,7 +140,7 @@ const jobDryRunReason = (job: MediaAutomationJob | null | undefined) => {
     if (reason === 'pipeline-output-mode') {
         return 'Pipeline output mode is still Dry run. Edit the pipeline, set Copy or Replace, save, then re-queue.';
     }
-    return 'Planned only — FFmpeg was not run and no files were written.';
+    return 'Planned only - FFmpeg was not run and no files were written.';
 };
 
 const jobErrorText = (error: MediaAutomationJob['error']) => {
@@ -165,9 +165,9 @@ const listCardClass = 'rounded-2xl border border-white/10 bg-gradient-to-br from
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
 
-const asText = (value: unknown, fallback = '—') => value === undefined || value === null || value === '' ? fallback : String(value);
+const asText = (value: unknown, fallback = '-') => value === undefined || value === null || value === '' ? fallback : String(value);
 const formatTime = (value?: string) => {
-    if (!value) return '—';
+    if (!value) return '-';
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 };
@@ -178,6 +178,24 @@ const createRuleCondition = (): MediaAutomationRuleCondition => ({
     value: '',
 });
 const normalizeRules = normalizePipelineRules;
+const MEDIA_AUTOMATION_TABS: MediaAutomationTab[] = ['overview', 'queue', 'pipelines', 'libraries', 'activity'];
+
+const parseMediaAutomationTab = (hash = typeof window !== 'undefined' ? window.location.hash : ''): MediaAutomationTab => {
+    const raw = String(hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim().toLowerCase();
+    return MEDIA_AUTOMATION_TABS.includes(raw as MediaAutomationTab)
+        ? (raw as MediaAutomationTab)
+        : 'overview';
+};
+
+const mediaAutomationTabHash = (tab: MediaAutomationTab) => (tab === 'overview' ? '' : `#${tab}`);
+
+const writeMediaAutomationTabHash = (tab: MediaAutomationTab) => {
+    if (typeof window === 'undefined') return;
+    const desired = mediaAutomationTabHash(tab);
+    if ((window.location.hash || '') === desired) return;
+    const next = `${window.location.pathname}${window.location.search}${desired}`;
+    window.history.replaceState(null, '', next);
+};
 const statusTone = (status?: string) => {
     const value = String(status || '').toLowerCase();
     if (['dry-run', 'dry run', 'planned'].some((key) => value.includes(key))) {
@@ -247,7 +265,7 @@ const collectConfiguredHardware = (
 
 const adapterRelevantToConfig = (adapterId: string, configured: Set<string>) => {
     if (configured.has(adapterId)) return true;
-    // "auto" prefers any working GPU — only treat adapters as relevant when none are up yet
+    // "auto" prefers any working GPU - only treat adapters as relevant when none are up yet
     // (handled separately). Explicit cpu-only configs never care about GPU probe failures.
     return false;
 };
@@ -303,7 +321,7 @@ const HardwareBadge: React.FC<{ job: MediaAutomationJob }> = ({ job }) => {
     const title = info.fallback
         ? `Requested ${info.requested || 'GPU'} but fell back to CPU`
         : info.pending
-            ? `${info.label} — encoder chosen when the job starts`
+            ? `${info.label} - encoder chosen when the job starts`
             : `Using ${info.label}`;
     return (
         <span
@@ -362,7 +380,7 @@ const EditorShell: React.FC<{ title: string; onClose: () => void; onSave: () => 
 );
 
 export const MediaAutomationDashboard: React.FC = () => {
-    const [tab, setTab] = useState<MediaAutomationTab>('overview');
+    const [tab, setTab] = useState<MediaAutomationTab>(() => parseMediaAutomationTab());
     const [status, setStatus] = useState<MediaAutomationStatus>({});
     const [capabilities, setCapabilities] = useState<MediaAutomationCapabilities>({});
     const [jobs, setJobs] = useState<MediaAutomationJob[]>([]);
@@ -431,6 +449,14 @@ export const MediaAutomationDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        writeMediaAutomationTabHash(tab);
+    }, [tab]);
+    useEffect(() => {
+        const onHashChange = () => setTab(parseMediaAutomationTab());
+        window.addEventListener('hashchange', onHashChange);
+        return () => window.removeEventListener('hashchange', onHashChange);
+    }, []);
     useEffect(() => {
         const hasActive = jobs.some((job) => {
             const state = jobStateValue(job);
@@ -622,7 +648,7 @@ export const MediaAutomationDashboard: React.FC = () => {
 
     const formatBytes = (value?: number) => {
         const bytes = Number(value || 0);
-        if (!Number.isFinite(bytes) || bytes <= 0) return '—';
+        if (!Number.isFinite(bytes) || bytes <= 0) return '-';
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
         if (bytes < 1024 ** 3) return `${(bytes / (1024 ** 2)).toFixed(1)} MB`;
@@ -647,17 +673,22 @@ export const MediaAutomationDashboard: React.FC = () => {
         });
     };
 
+    const selectTab = useCallback((next: MediaAutomationTab) => {
+        setTab(next);
+        writeMediaAutomationTabHash(next);
+    }, []);
+
     const handleSetupAction = (action: 'settings' | 'libraries' | 'pipelines' | 'start-worker' | 'scan') => {
         if (action === 'settings') {
             window.location.assign(portalUrl('/settings#media-automation'));
             return;
         }
         if (action === 'libraries') {
-            setTab('libraries');
+            selectTab('libraries');
             return;
         }
         if (action === 'pipelines') {
-            setTab('pipelines');
+            selectTab('pipelines');
             return;
         }
         if (action === 'start-worker') {
@@ -740,7 +771,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </div>
                         <h1 className="text-3xl font-black tracking-tight text-text md:text-4xl">Transcode with control</h1>
                         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted md:text-[15px]">
-                            Native FFmpeg pipelines for remux, HEVC, and cleanup — with a durable queue, hardware lanes, and safe dry-run until you are ready to write.
+                            Native FFmpeg pipelines for remux, HEVC, and cleanup - with a durable queue, hardware lanes, and safe dry-run until you are ready to write.
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 self-start lg:self-auto">
@@ -767,7 +798,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                     <button
                         key={id}
                         type="button"
-                        onClick={() => setTab(id)}
+                        onClick={() => selectTab(id)}
                         className={`inline-flex min-w-max items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-bold transition ${
                             tab === id
                                 ? 'border-plex/40 bg-plex/15 text-plex'
@@ -848,7 +879,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         />
                         <StatCard
                             label="Success rate"
-                            value={status.metrics?.successRate24h == null ? '—' : `${status.metrics.successRate24h}%`}
+                            value={status.metrics?.successRate24h == null ? '-' : `${status.metrics.successRate24h}%`}
                             hint="Last 24h"
                             icon={<CheckCircle2 className="h-4 w-4 text-plex" />}
                             tone="border-plex/30 bg-plex/10 text-text"
@@ -940,15 +971,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             {capabilities.devices?.dri?.present === false
                                                 ? <>Intel QSV needs <span className="font-mono text-plex">/dev/dri</span> mapped in the Unraid template (GPU Devices Intel/AMD).</>
                                                 : capabilities.devices?.dri?.readable === false
-                                                    ? <>Intel render node is present but not readable by PUID — recreate the container on the latest image so the entrypoint can attach DRI groups.</>
-                                                    : <>Intel QSV/VAAPI is selected but unavailable — map <span className="font-mono text-plex">/dev/dri</span>, pull latest nightly, then Test worker.</>}
+                                                    ? <>Intel render node is present but not readable by PUID - recreate the container on the latest image so the entrypoint can attach DRI groups.</>
+                                                    : <>Intel QSV/VAAPI is selected but unavailable - map <span className="font-mono text-plex">/dev/dri</span>, pull latest nightly, then Test worker.</>}
                                         </p>
                                     )}
                                     {caresAboutNvenc && !availableHardware.includes('nvenc') && (
                                         <p className="mt-2 text-xs text-amber-200/90">
                                             {capabilities.devices?.nvidia?.cudaLib
-                                                ? 'NVENC is selected but the encoder test failed — check NVIDIA_DRIVER_CAPABILITIES=all and GPU UUID.'
-                                                : <>NVENC is selected but not ready — set <span className="font-mono text-plex">NVIDIA_VISIBLE_DEVICES</span>, <span className="font-mono text-plex">NVIDIA_DRIVER_CAPABILITIES=all</span>, and Extra Parameters <span className="font-mono text-plex">--runtime=nvidia</span>.</>}
+                                                ? 'NVENC is selected but the encoder test failed - check NVIDIA_DRIVER_CAPABILITIES=all and GPU UUID.'
+                                                : <>NVENC is selected but not ready - set <span className="font-mono text-plex">NVIDIA_VISIBLE_DEVICES</span>, <span className="font-mono text-plex">NVIDIA_DRIVER_CAPABILITIES=all</span>, and Extra Parameters <span className="font-mono text-plex">--runtime=nvidia</span>.</>}
                                         </p>
                                     )}
                                     {configuredHardware.has('auto') && !anyGpuAvailable && !configuredHardware.has('cpu') && (
@@ -985,7 +1016,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <div className="flex gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
                             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
                             <div>
-                                <p className="font-bold text-amber-50">Global dry-run is still ON — jobs will not rewrite media</p>
+                                <p className="font-bold text-amber-50">Global dry-run is still ON - jobs will not rewrite media</p>
                                 <p className="mt-1 text-xs text-amber-100/90">
                                     Settings → Media Automation → Safe fallback must be Copy or Replace (then Save). Changing only the pipeline is not enough while this override is active.
                                 </p>
@@ -1142,7 +1173,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     </div>
                                 </div>
                                 <p className="mt-2 text-xs text-muted">
-                                    Dry-run / completed jobs cannot be cancelled — use Clear finished to remove them. Cancel all active stops queued and running work.
+                                    Dry-run / completed jobs cannot be cancelled - use Clear finished to remove them. Cancel all active stops queued and running work.
                                 </p>
                             </section>
                             {jobs.map((job) => {
@@ -1194,7 +1225,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         <p className="mt-1 text-xs text-muted">Encoded {progressMeta.elapsedLabel}</p>
                                                     )}
                                                     {isActive && percent == null && (
-                                                        <p className="mt-1 text-xs text-amber-300">Encoding started — waiting for first FFmpeg progress update…</p>
+                                                        <p className="mt-1 text-xs text-amber-300">Encoding started - waiting for first FFmpeg progress update…</p>
                                                     )}
                                                     {dryRunJob && ['completed', 'succeeded', 'success'].includes(state) && (
                                                         <p className="mt-1 text-xs text-amber-300">{jobDryRunReason(job)}</p>
@@ -1240,7 +1271,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <section className={`${cardClass} border-plex/30 p-5`}>
                             <div className="flex items-start justify-between gap-3">
                                 <div>
-                                    <h2 className="font-bold text-text">Pipeline saved — next steps</h2>
+                                    <h2 className="font-bold text-text">Pipeline saved - next steps</h2>
                                     <p className="mt-1 text-sm text-muted">
                                         {postSavePipeline.name} is ready to validate. Work through these before expecting files to change.
                                     </p>
@@ -1250,11 +1281,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 </button>
                             </div>
                             <ol className="mt-4 space-y-2 text-sm text-text">
-                                <li className="rounded-lg bg-background/40 px-3 py-2">1. {String(postSavePipeline.samplePath || '').trim() ? 'Sample file is set — run Dry-run on the card below.' : 'Edit the pipeline and save a sample file.'}</li>
+                                <li className="rounded-lg bg-background/40 px-3 py-2">1. {String(postSavePipeline.samplePath || '').trim() ? 'Sample file is set - run Dry-run on the card below.' : 'Edit the pipeline and save a sample file.'}</li>
                                 <li className="rounded-lg bg-background/40 px-3 py-2">
                                     2. {postSavePipeline.outputMode === 'dry-run'
-                                        ? 'Still plan-only — switch to Copy or Replace when you want real writes.'
-                                        : 'Output can write — confirm Settings → Safe fallback is not Dry run.'}
+                                        ? 'Still plan-only - switch to Copy or Replace when you want real writes.'
+                                        : 'Output can write - confirm Settings → Safe fallback is not Dry run.'}
                                 </li>
                                 <li className="rounded-lg bg-background/40 px-3 py-2">3. Start the worker, then Queue sample or Scan now.</li>
                             </ol>
@@ -1313,7 +1344,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <div className="mx-auto max-w-2xl text-center">
                                 <Layers3 className="mx-auto h-10 w-10 text-plex" />
                                 <h3 className="mt-3 text-lg font-bold text-text">Create your first pipeline</h3>
-                                <p className="mt-2 text-sm text-muted">Pick a common goal — you can change hardware, matching, and output before anything writes.</p>
+                                <p className="mt-2 text-sm text-muted">Pick a common goal - you can change hardware, matching, and output before anything writes.</p>
                             </div>
                             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
                                 {PIPELINE_STARTER_IDS.map((id) => {
@@ -1382,7 +1413,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             </div>
                                         </div>
                                     ) : (
-                                        <p className="mt-3 text-xs text-muted">No sample file saved yet — edit the pipeline and set one for one-click queueing.</p>
+                                        <p className="mt-3 text-xs text-muted">No sample file saved yet - edit the pipeline and set one for one-click queueing.</p>
                                     )}
                                 </article>
                                 );
@@ -1522,13 +1553,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         <div className="mt-3 space-y-2 rounded-lg border border-border/70 bg-background/30 p-3 text-xs">
                                             <div>
                                                 <p className="text-muted">Root</p>
-                                                <p className="mt-0.5 truncate font-mono text-plex" title={library.rootPath}>{library.rootPath || '—'}</p>
+                                                <p className="mt-0.5 truncate font-mono text-plex" title={library.rootPath}>{library.rootPath || '-'}</p>
                                             </div>
                                             <div className="grid gap-2 sm:grid-cols-2">
                                                 <div>
                                                     <p className="text-muted">Pipeline</p>
                                                     <p className="mt-0.5 break-all text-text">
-                                                        {pipelineName === 'Automatic' ? 'Automatic — first matching' : pipelineName}
+                                                        {pipelineName === 'Automatic' ? 'Automatic - first matching' : pipelineName}
                                                     </p>
                                                 </div>
                                                 <div>
@@ -1634,7 +1665,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             <ModalPortal open={selectedJobId !== null}>
                 {selectedJobId !== null && (
                     <div className="fixed inset-0 z-[1200] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={() => { setSelectedJobId(null); setSelectedJob(null); setJobLogs([]); }}>
-                        <div className="max-h-[94dvh] w-full overflow-y-auto rounded-t-2xl border border-border bg-card shadow-2xl custom-scrollbar sm:max-w-3xl sm:rounded-2xl" onMouseDown={(event) => event.stopPropagation()}>
+                        <div className="max-h-[94dvh] w-full overflow-y-auto rounded-t-2xl border border-border bg-card shadow-2xl custom-scrollbar sm:max-w-5xl sm:rounded-2xl" onMouseDown={(event) => event.stopPropagation()}>
                             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 px-5 py-4 backdrop-blur-md">
                                 <div>
                                     <h2 className="text-lg font-bold text-text">Job detail</h2>
@@ -1746,7 +1777,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     {jobLogs.map((entry, index) => (
                                                         <div key={String(entry.id ?? index)} className="rounded-lg bg-card/60 p-2 text-xs">
                                                             <div className="flex justify-between gap-2"><span className="font-semibold text-text">{entry.type || 'event'}</span><span className="text-muted">{formatTime(entry.createdAt || entry.timestamp || entry.at)}</span></div>
-                                                            <p className="mt-1 text-muted">{entry.message || '—'}</p>
+                                                            <p className="mt-1 text-muted">{entry.message || '-'}</p>
                                                         </div>
                                                     ))}
                                                 </div>

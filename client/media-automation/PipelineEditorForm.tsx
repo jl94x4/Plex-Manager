@@ -24,7 +24,7 @@ const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-white/[0.04] px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/50 hover:bg-plex/10 disabled:pointer-events-none disabled:opacity-40';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-lg bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover disabled:pointer-events-none disabled:opacity-40';
 
-const asText = (value: unknown, fallback = '—') => value === undefined || value === null || value === '' ? fallback : String(value);
+const asText = (value: unknown, fallback = '-') => value === undefined || value === null || value === '' ? fallback : String(value);
 
 type Props = {
     pipelineDraft: MediaAutomationPipeline;
@@ -115,7 +115,7 @@ export const PipelineEditorForm: React.FC<Props> = ({
                 </div>
                 {pipelineDraft.outputMode === 'dry-run' && (
                     <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-                        Plan only — jobs will not rewrite media. Switch to Write a copy or Replace original when you are ready.
+                        Plan only - jobs will not rewrite media. Switch to Write a copy or Replace original when you are ready.
                     </div>
                 )}
                 {(pipelineDraft.outputMode === 'replace' || pipelineDraft.outputMode === 'copy') && (
@@ -124,7 +124,7 @@ export const PipelineEditorForm: React.FC<Props> = ({
                             ? 'Replace mode atomically promotes verified output over the source.'
                             : 'Copy mode writes beside the source and leaves the original untouched.'}
                         {globalDryRun
-                            ? ' Global Safe fallback is still Dry run — Settings must allow writes or nothing will change.'
+                            ? ' Global Safe fallback is still Dry run - Settings must allow writes or nothing will change.'
                             : ' Keep plan-only until paths and hardware look good.'}
                     </div>
                 )}
@@ -163,7 +163,7 @@ export const PipelineEditorForm: React.FC<Props> = ({
                             </button>
                         </div>
                         {pipelineDraft.rules.conditions.length === 0 && (
-                            <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">No conditions — this pipeline matches every file.</div>
+                            <div className="rounded-xl border border-dashed border-border p-4 text-center text-sm text-muted">No conditions - this pipeline matches every file.</div>
                         )}
                         {pipelineDraft.rules.conditions.map((condition, index) => {
                             const updateCondition = (patch: Partial<MediaAutomationRuleCondition>) => setPipelineDraft({
@@ -280,7 +280,7 @@ export const PipelineEditorForm: React.FC<Props> = ({
                     </div>
                 )}
                 {(pipelineDraft.steps || []).length > 1 && (
-                    <p className="text-xs text-muted">This pipeline has {(pipelineDraft.steps || []).length} steps — open Advanced to reorder or edit the rest.</p>
+                    <p className="text-xs text-muted">This pipeline has {(pipelineDraft.steps || []).length} steps - open Advanced to reorder or edit the rest.</p>
                 )}
             </section>
 
@@ -374,7 +374,7 @@ export const PipelineEditorForm: React.FC<Props> = ({
                                                     <input className={fieldClass} type="number" min={32} max={1536} value={step.audioBitrateKbps || ''} onChange={(event) => updateStep({ audioBitrateKbps: event.target.value ? Number(event.target.value) : undefined })} placeholder="Audio bitrate kbps (AAC)" />
                                                 )}
                                                 {(step.type === 'subtitle-extract' || step.type === 'subtitle-keep-lang') && (
-                                                    <input className={`${fieldClass} sm:col-span-2`} value={step.subtitleLanguages || ''} onChange={(event) => updateStep({ subtitleLanguages: event.target.value })} placeholder={step.type === 'subtitle-keep-lang' ? 'Languages to keep — eng,en' : 'Preferred languages (optional)'} />
+                                                    <input className={`${fieldClass} sm:col-span-2`} value={step.subtitleLanguages || ''} onChange={(event) => updateStep({ subtitleLanguages: event.target.value })} placeholder={step.type === 'subtitle-keep-lang' ? 'Languages to keep - eng,en' : 'Preferred languages (optional)'} />
                                                 )}
                                                 {step.type === 'keep-first-audio' && (
                                                     <label className="sm:col-span-2 flex items-center gap-2 text-sm text-text">
@@ -386,7 +386,7 @@ export const PipelineEditorForm: React.FC<Props> = ({
                                                     <input className={`${fieldClass} sm:col-span-2`} value={step.commercialPattern || ''} onChange={(event) => updateStep({ commercialPattern: event.target.value })} placeholder="Chapter title regex" />
                                                 )}
                                                 {step.type === 'move' && (
-                                                    <input className={`${fieldClass} sm:col-span-2`} value={step.destination || ''} onChange={(event) => updateStep({ destination: event.target.value })} placeholder="Destination template — {dir}/archive/{basename}" />
+                                                    <input className={`${fieldClass} sm:col-span-2`} value={step.destination || ''} onChange={(event) => updateStep({ destination: event.target.value })} placeholder="Destination template - {dir}/archive/{basename}" />
                                                 )}
                                                 {step.type === 'custom-command' && <>
                                                     <input className={fieldClass} value={step.executable || ''} onChange={(event) => updateStep({ executable: event.target.value })} placeholder="Executable (ffmpeg / ffprobe)" />

@@ -121,7 +121,7 @@ export const PathBrowserField: React.FC<Props> = ({
                     setListing(fallback);
                     setCursor('');
                     setEntries(fallback.entries || []);
-                    setError('Path not browsable — pick a mount root');
+                    setError('Path not browsable - pick a mount root');
                     return;
                 } catch {
                     // fall through

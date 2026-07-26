@@ -3351,7 +3351,7 @@ export const SettingsDashboard: React.FC = () => {
                                             )}
                                         </div>
                                         <p className="text-sm text-muted mb-2">
-                                            Native FFmpeg worker with its own queue, library scan/watch, and ARR webhooks — managed from the Media Automation page (not a classic scheduled task).
+                                            Native FFmpeg worker with its own queue, library scan/watch, and ARR webhooks - managed from the Media Automation page (not a classic scheduled task).
                                         </p>
                                         <p className="text-xs text-muted">
                                             Configure scan/watch under Settings → Media Automation. Open the dashboard for Scan now, queue, and job commands.

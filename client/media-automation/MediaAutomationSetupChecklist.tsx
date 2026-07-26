@@ -67,7 +67,7 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
                     <p className="mt-1 text-sm leading-relaxed text-muted">
                         {complete
                             ? 'Checklist complete. Queue a sample or run Scan now when you are ready.'
-                            : 'Work top to bottom — missing any step usually looks like “job completed but nothing changed.”'}
+                            : 'Work top to bottom - missing any step usually looks like “job completed but nothing changed.”'}
                     </p>
                 </div>
                 {complete && (

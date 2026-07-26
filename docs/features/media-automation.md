@@ -45,7 +45,7 @@ Remote/sidecar workers remain out of scope.
 | --- | --- | --- |
 | Library scan enabled | on | Periodic full discovery of configured library roots |
 | Scan interval (minutes) | 360 | How often periodic scans run (15–10080) |
-| Filesystem watcher | **off** | Realtime enqueue under library roots. Keep off for large/remote mounts — use Scan now or ARR webhooks instead. Also requires `MEDIA_AUTOMATION_ENABLE_WATCH=1` in the container env before it can start. |
+| Filesystem watcher | **off** | Realtime enqueue under library roots. Keep off for large/remote mounts - use Scan now or ARR webhooks instead. Also requires `MEDIA_AUTOMATION_ENABLE_WATCH=1` in the container env before it can start. |
 | Watch debounce (ms) | 5000 | Wait for writes to settle before enqueue |
 
 **Important:** when Settings → Media Automation → Safe fallback output mode is **Dry run**, every job is forced to dry-run regardless of per-pipeline output mode.
