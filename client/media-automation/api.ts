@@ -64,7 +64,7 @@ export const mediaAutomationApi = {
         await apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/logs?limit=${limit}`),
         ['entries', 'logs', 'activity', 'items'],
     ),
-    activity: async (limit = 100) => asList<MediaAutomationActivity>(
+    activity: async (limit = 500) => asList<MediaAutomationActivity>(
         await apiFetch(`${ROOT}/activity?limit=${limit}`),
         ['activity', 'events', 'items', 'results'],
     ),

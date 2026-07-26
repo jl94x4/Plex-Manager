@@ -179,6 +179,19 @@ const createRuleCondition = (): MediaAutomationRuleCondition => ({
 });
 const normalizeRules = normalizePipelineRules;
 const MEDIA_AUTOMATION_TABS: MediaAutomationTab[] = ['overview', 'queue', 'pipelines', 'libraries', 'activity'];
+const ACTIVITY_PAGE_SIZE_OPTIONS = [20, 50, 75, 100] as const;
+const ACTIVITY_PAGE_SIZE_KEY = 'media-automation-activity-page-size';
+
+const readActivityPageSize = (): typeof ACTIVITY_PAGE_SIZE_OPTIONS[number] => {
+    try {
+        const raw = Number(localStorage.getItem(ACTIVITY_PAGE_SIZE_KEY));
+        return ACTIVITY_PAGE_SIZE_OPTIONS.includes(raw as typeof ACTIVITY_PAGE_SIZE_OPTIONS[number])
+            ? (raw as typeof ACTIVITY_PAGE_SIZE_OPTIONS[number])
+            : 20;
+    } catch {
+        return 20;
+    }
+};
 
 const parseMediaAutomationTab = (hash = typeof window !== 'undefined' ? window.location.hash : ''): MediaAutomationTab => {
     const raw = String(hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim().toLowerCase();
@@ -406,6 +419,8 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [pendingPath, setPendingPath] = useState('');
     const [pendingResult, setPendingResult] = useState<MediaAutomationPendingTest | null>(null);
     const [activityFilter, setActivityFilter] = useState<'all' | 'job' | 'scan' | 'watch'>('all');
+    const [activityPageSize, setActivityPageSize] = useState<typeof ACTIVITY_PAGE_SIZE_OPTIONS[number]>(() => readActivityPageSize());
+    const [activityPage, setActivityPage] = useState(1);
     const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
     const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
     const [postSavePipeline, setPostSavePipeline] = useState<MediaAutomationPipeline | null>(null);
@@ -424,7 +439,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             ['status', mediaAutomationApi.status()],
             ['capabilities', mediaAutomationApi.capabilities()],
             ['jobs', mediaAutomationApi.jobs()],
-            ['activity', mediaAutomationApi.activity()],
+            ['activity', mediaAutomationApi.activity(500)],
             ['libraries', mediaAutomationApi.libraries()],
             ['pipelines', mediaAutomationApi.pipelines()],
         ] as const;
@@ -626,6 +641,20 @@ export const MediaAutomationDashboard: React.FC = () => {
             return true;
         });
     }, [activity, activityFilter]);
+
+    const activityPageCount = Math.max(1, Math.ceil(filteredActivity.length / activityPageSize));
+    const pagedActivity = useMemo(() => {
+        const start = (activityPage - 1) * activityPageSize;
+        return filteredActivity.slice(start, start + activityPageSize);
+    }, [filteredActivity, activityPage, activityPageSize]);
+
+    useEffect(() => {
+        setActivityPage(1);
+    }, [activityFilter, activityPageSize]);
+
+    useEffect(() => {
+        if (activityPage > activityPageCount) setActivityPage(activityPageCount);
+    }, [activityPage, activityPageCount]);
 
     const openJobDetail = async (jobId: string | number) => {
         setSelectedJobId(jobId);
@@ -1624,22 +1653,44 @@ export const MediaAutomationDashboard: React.FC = () => {
 
             {tab === 'activity' && (
                 <div className="space-y-4">
-                    <div className="flex flex-wrap gap-2">
-                        {([
-                            ['all', 'All'],
-                            ['job', 'Jobs'],
-                            ['scan', 'Scans'],
-                            ['watch', 'Watcher'],
-                        ] as const).map(([id, label]) => (
-                            <button
-                                key={id}
-                                type="button"
-                                className={`${buttonClass} ${activityFilter === id ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
-                                onClick={() => setActivityFilter(id)}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-wrap gap-2">
+                            {([
+                                ['all', 'All'],
+                                ['job', 'Jobs'],
+                                ['scan', 'Scans'],
+                                ['watch', 'Watcher'],
+                            ] as const).map(([id, label]) => (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    className={`${buttonClass} ${activityFilter === id ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
+                                    onClick={() => setActivityFilter(id)}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+                            <span className="whitespace-nowrap">Per page</span>
+                            <select
+                                className="rounded-lg border border-white/10 bg-background/70 px-2.5 py-2 text-sm font-semibold text-text outline-none transition focus:border-plex"
+                                value={activityPageSize}
+                                onChange={(event) => {
+                                    const next = Number(event.target.value) as typeof ACTIVITY_PAGE_SIZE_OPTIONS[number];
+                                    setActivityPageSize(next);
+                                    try {
+                                        localStorage.setItem(ACTIVITY_PAGE_SIZE_KEY, String(next));
+                                    } catch {
+                                        // ignore
+                                    }
+                                }}
                             >
-                                {label}
-                            </button>
-                        ))}
+                                {ACTIVITY_PAGE_SIZE_OPTIONS.map((size) => (
+                                    <option key={size} value={size}>{size}</option>
+                                ))}
+                            </select>
+                        </label>
                     </div>
                     {filteredActivity.length === 0 ? (
                         <EmptyState
@@ -1650,14 +1701,47 @@ export const MediaAutomationDashboard: React.FC = () => {
                             onAction={() => runAction('start', () => mediaAutomationApi.control('start'), 'Worker started.')}
                         />
                     ) : (
-                        <div className={`${cardClass} divide-y divide-border/60 overflow-hidden`}>
-                            {filteredActivity.map((entry, index) => (
-                                <div key={String(entry.id ?? index)} className="flex gap-3 p-4">
-                                    <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${statusTone(entry.status).includes('red') ? 'bg-red-400' : statusTone(entry.status).includes('green') ? 'bg-green-400' : 'bg-plex'}`} />
-                                    <div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><p className="font-semibold text-text">{entry.message || entry.action || entry.type || 'Automation event'}</p><time className="text-xs text-muted">{formatTime(entry.createdAt || entry.timestamp || entry.at)}</time></div><p className="mt-1 text-xs text-muted">{entry.type || entry.action || 'activity'}{entry.jobId !== undefined ? ` · Job #${entry.jobId}` : ''}</p></div>
-                                </div>
-                            ))}
-                        </div>
+                        <>
+                            <div className={`${cardClass} divide-y divide-border/60 overflow-hidden`}>
+                                {pagedActivity.map((entry, index) => (
+                                    <div key={String(entry.id ?? `${activityPage}-${index}`)} className="flex gap-3 p-4">
+                                        <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${statusTone(entry.status).includes('red') ? 'bg-red-400' : statusTone(entry.status).includes('green') ? 'bg-green-400' : 'bg-plex'}`} />
+                                        <div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><p className="font-semibold text-text">{entry.message || entry.action || entry.type || 'Automation event'}</p><time className="text-xs text-muted">{formatTime(entry.createdAt || entry.timestamp || entry.at)}</time></div><p className="mt-1 text-xs text-muted">{entry.type || entry.action || 'activity'}{entry.jobId !== undefined ? ` · Job #${entry.jobId}` : ''}</p></div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <p className="text-xs text-muted">
+                                    Showing {Math.min(filteredActivity.length, (activityPage - 1) * activityPageSize + 1)}
+                                    -
+                                    {Math.min(filteredActivity.length, activityPage * activityPageSize)}
+                                    {' '}of {filteredActivity.length}
+                                </p>
+                                {activityPageCount > 1 && (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={activityPage <= 1}
+                                            onClick={() => setActivityPage((page) => Math.max(1, page - 1))}
+                                        >
+                                            Previous
+                                        </button>
+                                        <span className="text-sm text-muted">
+                                            Page {activityPage} of {activityPageCount}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={activityPage >= activityPageCount}
+                                            onClick={() => setActivityPage((page) => Math.min(activityPageCount, page + 1))}
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </>
                     )}
                 </div>
             )}
