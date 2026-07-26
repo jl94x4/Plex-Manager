@@ -135,6 +135,9 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                         <Cpu className="w-5 h-5 text-plex" />
                         <h4 className="font-bold text-text">Safe fallback</h4>
                     </div>
+                    <p className="text-xs text-muted">
+                        Global override for every job. Leave Dry run until a sample looks right, then switch to Copy or Replace so pipelines can write. The Media Automation Setup checklist flags this too.
+                    </p>
                     <CustomSelect
                         value={config.fallback.hardware}
                         onChange={(hardware) => update({

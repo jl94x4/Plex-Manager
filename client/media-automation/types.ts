@@ -349,11 +349,28 @@ const h264SkipRule = (): MediaAutomationRules => ({
 });
 
 /** Unmanic-inspired pipeline seeds (quality profiles + common remux/compat flows). */
-export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string; pipeline: MediaAutomationPipeline }> = [
+export type PipelinePresetCategory = 'quality' | 'remux' | 'audio' | 'subtitles' | 'utility';
+
+export const PIPELINE_PRESET_CATEGORY_LABELS: Record<PipelinePresetCategory, string> = {
+    quality: 'Quality',
+    remux: 'Remux',
+    audio: 'Audio',
+    subtitles: 'Subtitles',
+    utility: 'Utility',
+};
+
+export const PIPELINE_PRESETS: Array<{
+    id: string;
+    label: string;
+    detail: string;
+    category: PipelinePresetCategory;
+    pipeline: MediaAutomationPipeline;
+}> = [
     {
         id: 'hevc-1500k-keep-streams',
         label: 'HEVC 1500kbps (keep A/V)',
         detail: 'Fixed 1500 kbps video bitrate — predictable file size. Copies audio and subtitles unchanged.',
+        category: 'quality',
         pipeline: {
             name: 'HEVC 1500kbps keep streams',
             enabled: true,
@@ -376,6 +393,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'high-quality-hevc',
         label: 'High quality HEVC',
         detail: 'HEVC CRF 18 / slow — near-transparent quality, larger files (Unmanic high-quality style).',
+        category: 'quality',
         pipeline: {
             name: 'High quality HEVC',
             enabled: true,
@@ -390,6 +408,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'balanced-hevc',
         label: 'Balanced HEVC',
         detail: 'HEVC CRF 23 / medium — good quality-to-size default for most libraries.',
+        category: 'quality',
         pipeline: {
             name: 'Balanced HEVC',
             enabled: true,
@@ -404,6 +423,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'space-saver-hevc',
         label: 'Space saver HEVC',
         detail: 'HEVC CRF 28 / fast, AAC 96k — shrink libraries while staying watchable.',
+        category: 'quality',
         pipeline: {
             name: 'Space saver HEVC',
             enabled: true,
@@ -427,6 +447,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'low-quality-hevc',
         label: 'Low quality / archive',
         detail: 'HEVC CRF 32 / veryfast, capped 1280px — aggressive archive / storage reclaim.',
+        category: 'quality',
         pipeline: {
             name: 'Low quality archive',
             enabled: true,
@@ -451,6 +472,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'hevc-1080p',
         label: 'HEVC 1080p',
         detail: 'Downscale above 1080p to 1920px wide, then HEVC CRF 23.',
+        category: 'quality',
         pipeline: {
             name: 'HEVC 1080p',
             enabled: true,
@@ -480,6 +502,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'hevc-720p',
         label: 'HEVC 720p space saver',
         detail: 'Cap at 1280px + HEVC CRF 28 — common TV / mobile space-saver profile.',
+        category: 'quality',
         pipeline: {
             name: 'HEVC 720p space saver',
             enabled: true,
@@ -510,6 +533,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'h264-compat',
         label: 'H.264 compatibility',
         detail: 'H.264 CRF 20 / medium — broad device compatibility when HEVC is not wanted.',
+        category: 'quality',
         pipeline: {
             name: 'H.264 compatibility',
             enabled: true,
@@ -524,6 +548,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'remux-mkv',
         label: 'Remux to MKV',
         detail: 'Copy streams into MKV without re-encoding (container cleanup only).',
+        category: 'remux',
         pipeline: {
             name: 'Remux to MKV',
             enabled: true,
@@ -546,6 +571,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'remux-mp4',
         label: 'Remux to MP4',
         detail: 'Copy streams into MP4 when the source is not already MP4.',
+        category: 'remux',
         pipeline: {
             name: 'Remux to MP4',
             enabled: true,
@@ -568,6 +594,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'aac-audio-normalize',
         label: 'AAC stereo normalize',
         detail: 'Keep video, re-encode audio to AAC 192k — useful after remux/transcode cleanup.',
+        category: 'audio',
         pipeline: {
             name: 'AAC stereo normalize',
             enabled: true,
@@ -590,6 +617,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'loudnorm-first-audio',
         label: 'Loudnorm first audio',
         detail: 'EBU R128 loudnorm on the first audio track (AAC), video/subs copied.',
+        category: 'audio',
         pipeline: {
             name: 'Loudnorm first audio',
             enabled: true,
@@ -604,6 +632,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'stereo-downmix',
         label: 'Stereo downmix (AAC)',
         detail: 'Downmix first audio to 2.0 AAC; keep video and subtitles.',
+        category: 'audio',
         pipeline: {
             name: 'Stereo downmix',
             enabled: true,
@@ -618,6 +647,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'drop-commentary-audio',
         label: 'Drop commentary audio',
         detail: 'Remux and drop audio streams marked commentary/comment disposition.',
+        category: 'audio',
         pipeline: {
             name: 'Drop commentary audio',
             enabled: true,
@@ -632,6 +662,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'keep-english-subs',
         label: 'Keep English subtitles only',
         detail: 'Keep video/audio and only eng/en subtitle streams.',
+        category: 'subtitles',
         pipeline: {
             name: 'Keep English subtitles',
             enabled: true,
@@ -646,6 +677,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'strip-commercial-chapters',
         label: 'Strip commercial chapters',
         detail: 'Cut chapters whose titles match commercial/advert/promo (requires chapter markers).',
+        category: 'utility',
         pipeline: {
             name: 'Strip commercial chapters',
             enabled: true,
@@ -660,6 +692,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'dry-run-probe',
         label: 'Dry-run probe',
         detail: 'Match everything and plan only — safest way to validate rules and hardware.',
+        category: 'utility',
         pipeline: {
             name: 'Dry-run probe',
             enabled: true,
@@ -674,6 +707,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'strip-subtitles',
         label: 'Strip embedded subtitles',
         detail: 'Remux with stream copy and drop subtitle streams.',
+        category: 'subtitles',
         pipeline: {
             name: 'Strip embedded subtitles',
             enabled: true,
@@ -688,6 +722,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'extract-first-subtitle',
         label: 'Extract first subtitle (SRT)',
         detail: 'Write the first subtitle stream beside the source as .srt (source file unchanged).',
+        category: 'subtitles',
         pipeline: {
             name: 'Extract first subtitle',
             enabled: true,
@@ -702,6 +737,7 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         id: 'move-to-archive',
         label: 'Move to archive folder',
         detail: 'Rename/move within library roots using `{dir}/archive/{basename}`.',
+        category: 'utility',
         pipeline: {
             name: 'Move to archive',
             enabled: true,
@@ -713,3 +749,6 @@ export const PIPELINE_PRESETS: Array<{ id: string; label: string; detail: string
         },
     },
 ];
+
+/** Featured empty-state starters (subset of PIPELINE_PRESETS). */
+export const PIPELINE_STARTER_IDS = ['balanced-hevc', 'remux-mkv', 'strip-subtitles'] as const;
