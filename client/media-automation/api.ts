@@ -1,6 +1,7 @@
 import { apiFetch } from '../shared/api';
 import type {
     MediaAutomationActivity,
+    MediaAutomationAnalyzeResult,
     MediaAutomationCapabilities,
     MediaAutomationHistoryEntry,
     MediaAutomationJob,
@@ -130,6 +131,14 @@ export const mediaAutomationApi = {
         ['pipelines', 'items', 'results'],
     ),
     enqueue: (path: string, pipelineId?: string | number) => apiFetch(`${ROOT}/enqueue`, json({ path, pipelineId })),
+    enqueueMany: (paths: string[], pipelineId?: string | number) => apiFetch(`${ROOT}/enqueue`, json({ paths, pipelineId })),
+    analyze: (options: {
+        libraryId?: string | number | null;
+        pipelineId?: string | number | null;
+        force?: boolean;
+        limit?: number;
+        minSizeBytes?: number;
+    } = {}) => apiFetch(`${ROOT}/analyze`, json(options)) as Promise<MediaAutomationAnalyzeResult>,
     testWorker: () => apiFetch(`${ROOT}/worker/test`, json({})),
     control: (action: string) => apiFetch(`${ROOT}/control`, json({ action })),
     scanNow: () => apiFetch(`${ROOT}/scan`, json({})),

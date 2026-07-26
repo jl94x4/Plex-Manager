@@ -23,6 +23,7 @@ import {
     Radar,
     RefreshCw,
     RotateCcw,
+    ScanSearch,
     Save,
     ServerCog,
     SkipForward,
@@ -42,6 +43,7 @@ import { PipelineTemplatePicker } from './PipelineTemplatePicker';
 import { MediaAutomationSetupChecklist } from './MediaAutomationSetupChecklist';
 import { PipelineEditorForm } from './PipelineEditorForm';
 import { MediaAutomationGoLiveWizard } from './MediaAutomationGoLiveWizard';
+import { SavingsAnalyzerPanel } from './SavingsAnalyzerPanel';
 import {
     buildEncodeProfilePack,
     downloadEncodeProfilePack,
@@ -296,7 +298,7 @@ const createRuleCondition = (): MediaAutomationRuleCondition => ({
     value: '',
 });
 const normalizeRules = normalizePipelineRules;
-const MEDIA_AUTOMATION_TABS: MediaAutomationTab[] = ['overview', 'queue', 'pipelines', 'libraries', 'history', 'activity'];
+const MEDIA_AUTOMATION_TABS: MediaAutomationTab[] = ['overview', 'queue', 'pipelines', 'libraries', 'analyzer', 'history', 'activity'];
 const ACTIVITY_PAGE_SIZE_OPTIONS = [20, 50, 75, 100] as const;
 const ACTIVITY_PAGE_SIZE_KEY = 'media-automation-activity-page-size';
 
@@ -968,6 +970,7 @@ export const MediaAutomationDashboard: React.FC = () => {
         { id: 'queue', label: 'Queue', icon: ListRestart },
         { id: 'pipelines', label: 'Pipelines', icon: Layers3 },
         { id: 'libraries', label: 'Libraries', icon: FolderCog },
+        { id: 'analyzer', label: 'Analyzer', icon: ScanSearch },
         { id: 'history', label: 'History', icon: History },
         { id: 'activity', label: 'Activity', icon: Activity },
     ];
@@ -2255,6 +2258,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </div>
                     )}
                 </div>
+            )}
+
+            {tab === 'analyzer' && (
+                <SavingsAnalyzerPanel
+                    libraries={libraries}
+                    pipelines={pipelines}
+                    toast={toast}
+                    onEnqueued={() => load(true)}
+                />
             )}
 
             {tab === 'history' && (

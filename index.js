@@ -3089,7 +3089,7 @@ app.post('/api/admin/stop-impersonation', requireAuth, async (req, res) => {
 
 const DEFAULT_DASHBOARD_LAYOUT = {
     version: 1,
-    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'recentlyAdded', 'bazarrTools'],
+    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'],
     mainGridOrder: [
         'adminBadge', 'quickActions', 'accessStatus', 'announcement', 'referral',
         'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'analytics'
@@ -3103,7 +3103,7 @@ const DEFAULT_DASHBOARD_LAYOUT = {
     topWatchedRows: 1
 };
 
-const DASHBOARD_SECTIONS = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'recentlyAdded', 'bazarrTools'];
+const DASHBOARD_SECTIONS = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'];
 const DASHBOARD_MAIN_GRID_WIDGETS = [
     'adminBadge', 'accessStatus', 'tempAccessSetup', 'quickActions', 'announcement',
     'referral', 'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'analytics'
@@ -3162,18 +3162,18 @@ const migrateDashboardSections = (sections) => {
     } else if (!next.includes('pendingRequests')) {
         next.push('pendingRequests');
     }
-    const placeScannerBeforeRecentlyAdded = () => {
-        const existing = next.indexOf('scanner');
-        if (existing >= 0) next.splice(existing, 1);
+    // Only seed missing sections — do not force-reorder (that fought Home Layout drag/save).
+    if (!next.includes('scanner')) {
         const ra = next.indexOf('recentlyAdded');
         if (ra >= 0) next.splice(ra, 0, 'scanner');
         else next.push('scanner');
-    };
-    if (!next.includes('scanner')) placeScannerBeforeRecentlyAdded();
-    else {
-        const si = next.indexOf('scanner');
-        const ra = next.indexOf('recentlyAdded');
-        if (si >= 0 && ra >= 0 && si > ra) placeScannerBeforeRecentlyAdded();
+    }
+    if (!next.includes('mediaAutomation')) {
+        const scannerIndex = next.indexOf('scanner');
+        const recentlyAddedIndex = next.indexOf('recentlyAdded');
+        const insertAt = scannerIndex >= 0 ? scannerIndex + 1 : recentlyAddedIndex;
+        if (insertAt >= 0) next.splice(insertAt, 0, 'mediaAutomation');
+        else next.push('mediaAutomation');
     }
     if (!next.includes('bazarrTools')) next.push('bazarrTools');
     return next;
@@ -3190,7 +3190,30 @@ const normalizeDashboardLayout = (raw) => {
             result.push(value);
         });
         if (fillMissing) {
-            allowed.forEach((id) => { if (!seen.has(id)) result.push(id); });
+            // Insert missing ids beside their default neighbors (not always at the end),
+            // so new sections like mediaAutomation don't get stuck under Bazarr.
+            allowed.forEach((id, defaultIndex) => {
+                if (seen.has(id)) return;
+                let insertAt = result.length;
+                for (let i = defaultIndex - 1; i >= 0; i -= 1) {
+                    const prevIdx = result.indexOf(allowed[i]);
+                    if (prevIdx >= 0) {
+                        insertAt = prevIdx + 1;
+                        break;
+                    }
+                }
+                if (insertAt === result.length) {
+                    for (let i = defaultIndex + 1; i < allowed.length; i += 1) {
+                        const nextIdx = result.indexOf(allowed[i]);
+                        if (nextIdx >= 0) {
+                            insertAt = nextIdx;
+                            break;
+                        }
+                    }
+                }
+                result.splice(insertAt, 0, id);
+                seen.add(id);
+            });
         }
         return result;
     };
@@ -19406,6 +19429,29 @@ app.post('/api/media-automation/estimate', requireAdmin, requireMediaAutomation,
     }
 });
 
+app.post('/api/media-automation/analyze', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const result = await mediaAutomationService.analyze({
+            libraryId: req.body?.libraryId ?? null,
+            pipelineId: req.body?.pipelineId ?? null,
+            force: req.body?.force === true || req.body?.force === 1 || req.body?.force === '1',
+            limit: req.body?.limit,
+            minSizeBytes: req.body?.minSizeBytes,
+            concurrency: req.body?.concurrency,
+        });
+        await appendAuditLog('media_automation_analyze', req.user, null, {
+            libraryId: result.libraryId,
+            pipelineId: result.pipelineId,
+            analyzed: result.totals?.analyzed || 0,
+            estimatedBytesSaved: result.totals?.estimatedBytesSaved || 0,
+        });
+        res.json(result);
+    } catch (error) {
+        const status = ['LIBRARY_NOT_FOUND', 'PIPELINE_NOT_FOUND'].includes(error?.code) ? 400 : 500;
+        res.status(status).json({ error: error.message || 'Analyze failed', code: error?.code || null });
+    }
+});
+
 app.get('/api/media-automation/activity', requireAdmin, requireMediaAutomation, async (req, res) => {
     const entries = await mediaAutomationService.listActivity({
         limit: Math.min(500, Math.max(1, Number(req.query.limit) || 100)),
@@ -19451,17 +19497,26 @@ app.get('/api/media-automation/scan-history', requireAdmin, requireMediaAutomati
 
 app.post('/api/media-automation/enqueue', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
-        const sourcePath = String(req.body?.path || '').trim();
-        if (!sourcePath) return res.status(400).json({ error: 'Path is required' });
         const pipelineId = String(req.body?.pipelineId || '').trim() || undefined;
-        const results = await enqueueMediaAutomationPath(sourcePath, { pipelineId, priority: 10 });
+        const pathList = Array.isArray(req.body?.paths)
+            ? req.body.paths.map((entry) => String(entry || '').trim()).filter(Boolean).slice(0, 500)
+            : [];
+        const sourcePath = String(req.body?.path || '').trim();
+        if (!sourcePath && !pathList.length) return res.status(400).json({ error: 'Path is required' });
+        const candidates = pathList.length ? pathList : [sourcePath];
+        const results = [];
+        for (const candidate of candidates) {
+            results.push(...await enqueueMediaAutomationPath(candidate, { pipelineId, priority: 10 }));
+        }
         const jobs = results.filter((result) => result.job).map((result) => result.job);
+        const queued = results.filter((result) => result.enqueued).length;
         await appendAuditLog('media_automation_job_enqueued', req.user, null, {
-            path: sourcePath,
+            path: sourcePath || null,
+            paths: pathList.length ? pathList.length : null,
             pipelineId: pipelineId || null,
-            count: jobs.length,
+            count: queued,
         });
-        res.status(202).json({ ok: true, queued: jobs.length, jobs, results });
+        res.status(202).json({ ok: true, queued, jobs, results });
     } catch (error) {
         res.status(error.status || 400).json({ error: error.message || 'Failed to enqueue media' });
     }

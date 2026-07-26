@@ -150,32 +150,38 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                 </div>
 
                 <div className="rounded-xl bg-black/25 border border-white/5 px-3.5 py-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                        <p className="text-[9px] uppercase tracking-wider font-bold text-muted shrink-0">Latest activity</p>
-                        {last ? (
-                            <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                                    <span className={`text-[10px] font-bold uppercase ${last.ok ? 'text-emerald-300' : 'text-red-300'}`}>
-                                        {last.ok ? 'ok' : 'error'}
+                    <p className="text-[9px] uppercase tracking-wider font-bold text-muted mb-2.5">Latest activity</p>
+                    {last ? (
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,11rem)_minmax(0,1.2fr)_minmax(0,1fr)] md:items-center md:gap-4">
+                            <div className="min-w-0 flex flex-wrap items-center gap-1.5">
+                                <span className={`text-[10px] font-bold uppercase ${last.ok ? 'text-emerald-300' : 'text-red-300'}`}>
+                                    {last.ok ? 'ok' : 'error'}
+                                </span>
+                                {(last.reason || last.action) ? (
+                                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${lastStyle.className}`}>
+                                        {last.reason || lastStyle.label}
                                     </span>
-                                    {(last.reason || last.action) ? (
-                                        <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${lastStyle.className}`}>
-                                            {last.reason || lastStyle.label}
-                                        </span>
-                                    ) : null}
-                                    <span className="text-[10px] text-muted">{formatScannerWhen(last.at)}</span>
-                                    <ScannerSourceBadge source={last.source} />
-                                </div>
-                                {last.title ? <p className="text-sm text-text font-semibold mb-0.5 truncate">{last.title}</p> : null}
-                                <p className="text-xs text-text/90 font-medium break-all leading-snug" title={last.folder}>
-                                    {shortenScannerPath(last.folder, 4)}
-                                </p>
-                                {last.error ? <p className="text-[10px] text-red-200/90 mt-1">{last.error}</p> : null}
+                                ) : null}
+                                <span className="text-[10px] text-muted">{formatScannerWhen(last.at)}</span>
+                                <ScannerSourceBadge source={last.source} />
                             </div>
-                        ) : (
-                            <p className="text-xs text-muted flex-1">Waiting for the next webhook or manual scan.</p>
-                        )}
-                    </div>
+                            <div className="min-w-0">
+                                {last.title ? (
+                                    <p className="text-sm text-text font-semibold truncate" title={last.title}>{last.title}</p>
+                                ) : (
+                                    <p className="text-sm text-muted">No title reported</p>
+                                )}
+                                {last.error ? <p className="text-[10px] text-red-200/90 mt-1 truncate" title={last.error}>{last.error}</p> : null}
+                            </div>
+                            <div className="min-w-0 md:text-right">
+                                <p className="text-xs text-muted font-medium truncate md:whitespace-nowrap" title={last.folder}>
+                                    {shortenScannerPath(last.folder, 5)}
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="text-xs text-muted">Waiting for the next webhook or manual scan.</p>
+                    )}
                 </div>
 
                 <div className="flex items-center justify-between gap-2 lg:hidden">

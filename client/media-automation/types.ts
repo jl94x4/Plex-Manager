@@ -1,4 +1,50 @@
-export type MediaAutomationTab = 'overview' | 'queue' | 'pipelines' | 'libraries' | 'history' | 'activity';
+export type MediaAutomationTab = 'overview' | 'queue' | 'pipelines' | 'libraries' | 'analyzer' | 'history' | 'activity';
+
+export type MediaAutomationAnalyzeRow = {
+    path: string;
+    libraryId?: string | number | null;
+    libraryName?: string | null;
+    matched?: boolean;
+    forced?: boolean;
+    matchReason?: string;
+    pipelineId?: string | number | null;
+    pipelineName?: string | null;
+    ruleId?: string | number | null;
+    container?: string | null;
+    videoCodec?: string | null;
+    width?: number | null;
+    height?: number | null;
+    durationSeconds?: number | null;
+    sizeBytes?: number | null;
+    bitrateKbps?: number | null;
+    estimateMode?: 'heuristic' | 'sample' | string;
+    confidence?: 'high' | 'medium' | 'low' | string;
+    estimateReason?: string;
+    estimatedOutputBytes?: number | null;
+    estimatedBytesSaved?: number | null;
+    estimatedSavingsPercent?: number | null;
+};
+
+export type MediaAutomationAnalyzeResult = {
+    ok?: boolean;
+    estimateMode?: string;
+    libraryId?: string | number | null;
+    pipelineId?: string | number | null;
+    force?: boolean;
+    truncated?: boolean;
+    limit?: number;
+    minSizeBytes?: number;
+    totals?: {
+        discovered?: number;
+        considered?: number;
+        analyzed?: number;
+        matched?: number;
+        estimatedBytesSaved?: number;
+        sourceBytes?: number;
+    };
+    rows?: MediaAutomationAnalyzeRow[];
+    error?: string;
+};
 export type OutputMode = 'dry-run' | 'copy' | 'replace';
 export type HardwareMode = 'auto' | 'cpu' | 'nvenc' | 'qsv' | 'intel-vaapi' | 'vaapi';
 

@@ -101,11 +101,30 @@ const uniqueValid = <T extends string>(values: unknown, allowed: T[], fallback: 
         const id = value as T;
         if (!allowed.includes(id) || seen.has(id)) return;
         seen.add(id);
-            result.push(id);
+        result.push(id);
     });
     if (fillMissing) {
-        allowed.forEach((id) => {
-            if (!seen.has(id)) result.push(id);
+        allowed.forEach((id, defaultIndex) => {
+            if (seen.has(id)) return;
+            let insertAt = result.length;
+            for (let i = defaultIndex - 1; i >= 0; i -= 1) {
+                const prevIdx = result.indexOf(allowed[i]);
+                if (prevIdx >= 0) {
+                    insertAt = prevIdx + 1;
+                    break;
+                }
+            }
+            if (insertAt === result.length) {
+                for (let i = defaultIndex + 1; i < allowed.length; i += 1) {
+                    const nextIdx = result.indexOf(allowed[i]);
+                    if (nextIdx >= 0) {
+                        insertAt = nextIdx;
+                        break;
+                    }
+                }
+            }
+            result.splice(insertAt, 0, id);
+            seen.add(id);
         });
     }
     return result;
@@ -141,18 +160,11 @@ const migrateDashboardSections = (sections: DashboardSectionId[]): DashboardSect
     } else if (!next.includes('pendingRequests')) {
         next.push('pendingRequests');
     }
-    const placeScannerBeforeRecentlyAdded = () => {
-        const existing = next.indexOf('scanner');
-        if (existing >= 0) next.splice(existing, 1);
+    // Only seed missing sections — never force-reorder saved Home Layout order.
+    if (!next.includes('scanner')) {
         const ra = next.indexOf('recentlyAdded');
         if (ra >= 0) next.splice(ra, 0, 'scanner');
         else next.push('scanner');
-    };
-    if (!next.includes('scanner')) placeScannerBeforeRecentlyAdded();
-    else {
-        const si = next.indexOf('scanner');
-        const ra = next.indexOf('recentlyAdded');
-        if (si >= 0 && ra >= 0 && si > ra) placeScannerBeforeRecentlyAdded();
     }
     if (!next.includes('mediaAutomation')) {
         const scannerIndex = next.indexOf('scanner');
