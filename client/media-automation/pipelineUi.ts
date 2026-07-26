@@ -1,4 +1,5 @@
 import type {
+    MediaAutomationJob,
     MediaAutomationLibrary,
     MediaAutomationPipeline,
     MediaAutomationRuleCondition,
@@ -107,6 +108,52 @@ export const summarizePipelineOutcome = (pipeline: MediaAutomationPipeline): str
         .filter(Boolean)
         .join(' · ');
 };
+
+const normalizeFsPath = (value: string) => value.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+export const libraryPipelineLabel = (
+    library: MediaAutomationLibrary,
+    pipelines: MediaAutomationPipeline[],
+): string => {
+    if (library.pipelineId == null || library.pipelineId === '') return 'Automatic';
+    const match = pipelines.find((pipeline) => String(pipeline.id) === String(library.pipelineId));
+    return match?.name || `Pipeline ${library.pipelineId}`;
+};
+
+export const summarizeLibraryOutcome = (
+    library: MediaAutomationLibrary,
+    pipelines: MediaAutomationPipeline[],
+): string => {
+    const root = String(library.rootPath || '').trim() || '…';
+    const pipeline = libraryPipelineLabel(library, pipelines);
+    const out = String(library.outputPath || '').trim();
+    return [
+        `Scans ${root}`,
+        pipeline === 'Automatic' ? 'Automatic' : pipeline,
+        out ? `out ${out}` : 'pipeline default out',
+    ].join(' · ');
+};
+
+const ACTIVE_JOB_STATES = new Set([
+    'queued', 'pending', 'waiting', 'running', 'active', 'processing', 'paused', 'retry', 'retrying',
+]);
+
+export const pathBelongsToLibrary = (filePath: string, library: MediaAutomationLibrary): boolean => {
+    const root = normalizeFsPath(String(library.rootPath || '').trim());
+    const file = normalizeFsPath(String(filePath || '').trim());
+    if (!root || !file) return false;
+    return file === root || file.startsWith(`${root}/`);
+};
+
+export const countJobsForLibrary = (
+    jobs: MediaAutomationJob[],
+    library: MediaAutomationLibrary,
+): number => jobs.filter((job) => {
+    const state = String(job.state || job.status || '').toLowerCase();
+    if (!ACTIVE_JOB_STATES.has(state)) return false;
+    const filePath = String(job.path || job.sourcePath || '');
+    return pathBelongsToLibrary(filePath, library);
+}).length;
 
 export type SetupChecklistStep = {
     id: string;

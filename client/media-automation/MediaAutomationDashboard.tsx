@@ -35,7 +35,10 @@ import { PipelineTemplatePicker } from './PipelineTemplatePicker';
 import { MediaAutomationSetupChecklist } from './MediaAutomationSetupChecklist';
 import { PipelineEditorForm } from './PipelineEditorForm';
 import {
+    countJobsForLibrary,
+    libraryPipelineLabel,
     normalizePipelineRules,
+    summarizeLibraryOutcome,
     summarizeMatchRules,
     summarizePipelineOutcome,
 } from './pipelineUi';
@@ -391,6 +394,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [editorAdvancedOpen, setEditorAdvancedOpen] = useState(false);
     const [editorMatchAdvancedOpen, setEditorMatchAdvancedOpen] = useState(false);
     const [forceSampleSection, setForceSampleSection] = useState(false);
+    const [libraryPathHealth, setLibraryPathHealth] = useState<Record<string, { ok: boolean; message: string }>>({});
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
@@ -1390,38 +1394,198 @@ export const MediaAutomationDashboard: React.FC = () => {
 
             {tab === 'libraries' && (
                 <div className="space-y-4">
-                    <div className="flex justify-end"><button type="button" className={primaryButtonClass} onClick={() => setLibraryDraft(emptyLibrary())}><Plus className="h-4 w-4" /> New library</button></div>
+                    <section className={`${cardClass} p-5`}>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold tracking-tight text-text">Your libraries</h2>
+                                <p className="mt-1 text-sm leading-relaxed text-muted">
+                                    Libraries are scan roots the container can see. Pipelines decide which files match and what FFmpeg does.
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null}
+                                    onClick={() => runAction('scan-now', mediaAutomationApi.scanNow, 'Library scan completed.')}
+                                >
+                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />}
+                                    Scan now
+                                </button>
+                                <button type="button" className={primaryButtonClass} onClick={() => setLibraryDraft(emptyLibrary())}>
+                                    <Plus className="h-4 w-4" /> New library
+                                </button>
+                            </div>
+                        </div>
+                        <dl className="mt-4 grid grid-cols-1 gap-3 border-t border-border/60 pt-4 text-sm sm:grid-cols-3">
+                            <div className="rounded-xl border border-border/60 bg-background/30 px-3 py-2.5">
+                                <dt className="text-xs font-bold uppercase tracking-wide text-muted">Last scan</dt>
+                                <dd className="mt-1 font-semibold text-text">
+                                    {formatTime(status.lastScanAt)}
+                                    {status.lastScanResult ? ` · ${status.lastScanResult.enqueued || 0} queued` : ''}
+                                </dd>
+                            </div>
+                            <div className="rounded-xl border border-border/60 bg-background/30 px-3 py-2.5">
+                                <dt className="text-xs font-bold uppercase tracking-wide text-muted">Periodic scan</dt>
+                                <dd className="mt-1 font-semibold text-text">
+                                    {status.libraryScanEnabled === false
+                                        ? 'Disabled'
+                                        : status.periodicScanning
+                                            ? `Every ${status.libraryScanIntervalMinutes || 360}m`
+                                            : 'Idle'}
+                                </dd>
+                            </div>
+                            <div className="rounded-xl border border-border/60 bg-background/30 px-3 py-2.5">
+                                <dt className="text-xs font-bold uppercase tracking-wide text-muted">Watcher</dt>
+                                <dd className="mt-1 flex items-center gap-2 font-semibold text-text">
+                                    <Radar className="h-3.5 w-3.5 text-plex" />
+                                    {status.libraryWatchEnabled === false
+                                        ? 'Disabled'
+                                        : status.watch?.watching
+                                            ? `Watching ${status.watch.roots?.length || 0} root(s)`
+                                            : 'Not watching'}
+                                </dd>
+                            </div>
+                        </dl>
+                    </section>
                     {libraries.length === 0 ? (
-                        <EmptyState
-                            icon={FolderCog}
-                            title="No libraries configured"
-                            detail="Add a source root the container can see, plus optional output and quarantine paths."
-                            actionLabel="New library"
-                            onAction={() => setLibraryDraft(emptyLibrary())}
-                        />
+                        <section className={`${cardClass} p-6`}>
+                            <div className="mx-auto max-w-2xl text-center">
+                                <FolderCog className="mx-auto h-10 w-10 text-plex" />
+                                <h3 className="mt-3 text-lg font-bold text-text">Map your first library</h3>
+                                <p className="mt-2 text-sm text-muted">
+                                    Use a container path under your media mount (e.g. <span className="font-mono text-plex">/media/movies</span>), not a host Unraid path.
+                                </p>
+                            </div>
+                            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                {[
+                                    { name: 'Movies', rootPath: '/media/movies' },
+                                    { name: 'TV', rootPath: '/media/tv' },
+                                ].map((starter) => (
+                                    <button
+                                        key={starter.name}
+                                        type="button"
+                                        className="rounded-xl border border-border bg-background/30 p-4 text-left transition hover:border-plex/50 hover:bg-plex/10"
+                                        onClick={() => setLibraryDraft({ ...emptyLibrary(), name: starter.name, rootPath: starter.rootPath })}
+                                    >
+                                        <p className="font-bold text-text">{starter.name}</p>
+                                        <p className="mt-1 font-mono text-xs text-plex">{starter.rootPath}</p>
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="mt-4 flex justify-center">
+                                <button type="button" className={buttonClass} onClick={() => setLibraryDraft(emptyLibrary())}>
+                                    Blank library
+                                </button>
+                            </div>
+                        </section>
                     ) : (
                         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                            {libraries.map((library) => (
-                                <article key={String(library.id ?? library.name)} className={`${listCardClass} p-5`}>
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div className="min-w-0"><h3 className="font-bold text-text">{library.name}</h3><p className="mt-2 truncate font-mono text-xs text-plex">{library.rootPath}</p></div>
-                                        <div className="flex gap-1">
-                                            <button type="button" className={buttonClass} onClick={() => setLibraryDraft({ ...emptyLibrary(), ...library })}><Pencil className="h-4 w-4" /></button>
-                                            <button type="button" className={buttonClass} disabled={library.id === undefined || busy !== null} onClick={() => { if (library.id !== undefined && window.confirm(`Delete library "${library.name}"?`)) runAction(`delete-library-${library.id}`, () => mediaAutomationApi.deleteLibrary(library.id!), 'Library deleted.'); }}><Trash2 className="h-4 w-4 text-red-300" /></button>
+                            {libraries.map((library) => {
+                                const libraryKey = String(library.id ?? library.name);
+                                const health = libraryPathHealth[libraryKey];
+                                const queueCount = countJobsForLibrary(jobs, library);
+                                const pipelineName = libraryPipelineLabel(library, pipelines);
+                                return (
+                                    <article key={libraryKey} className={`${listCardClass} p-5`}>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <h3 className="font-bold text-text">{library.name}</h3>
+                                                    <StatusPill value={library.enabled === false ? 'disabled' : 'enabled'} />
+                                                    {queueCount > 0 && (
+                                                        <span className="rounded-full border border-plex/30 bg-plex/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-plex">
+                                                            {queueCount} in queue
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="mt-2 text-sm text-text">{summarizeLibraryOutcome(library, pipelines)}</p>
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <button type="button" className={buttonClass} onClick={() => setLibraryDraft({ ...emptyLibrary(), ...library })}>
+                                                    <Pencil className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={library.id === undefined || busy !== null}
+                                                    onClick={() => {
+                                                        if (library.id !== undefined && window.confirm(`Delete library "${library.name}"?`)) {
+                                                            runAction(`delete-library-${library.id}`, () => mediaAutomationApi.deleteLibrary(library.id!), 'Library deleted.');
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-4 w-4 text-red-300" />
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <dl className="mt-4 grid gap-2 text-xs">
-                                        <div><dt className="text-muted">Pipeline</dt><dd className="mt-0.5 break-all text-text">{pipelines.find((pipeline) => String(pipeline.id) === String(library.pipelineId || ''))?.name || (library.pipelineId ? `Pipeline ${library.pipelineId}` : 'Automatic')}</dd></div>
-                                        <div><dt className="text-muted">Output</dt><dd className="mt-0.5 break-all text-text">{library.outputPath || 'Pipeline default'}</dd></div>
-                                        <div><dt className="text-muted">Quarantine</dt><dd className="mt-0.5 break-all text-text">{library.quarantinePath || 'Not configured'}</dd></div>
-                                    </dl>
-                                    {library.id !== undefined && (
-                                        <button type="button" className={`${buttonClass} mt-4 w-full`} disabled={busy !== null} onClick={() => runAction(`test-library-${library.id}`, () => mediaAutomationApi.testLibrary(library.id!), 'Library path is readable.')}>
-                                            {busy === `test-library-${library.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Test library path
-                                        </button>
-                                    )}
-                                </article>
-                            ))}
+                                        <div className="mt-3 space-y-2 rounded-lg border border-border/70 bg-background/30 p-3 text-xs">
+                                            <div>
+                                                <p className="text-muted">Root</p>
+                                                <p className="mt-0.5 truncate font-mono text-plex" title={library.rootPath}>{library.rootPath || '—'}</p>
+                                            </div>
+                                            <div className="grid gap-2 sm:grid-cols-2">
+                                                <div>
+                                                    <p className="text-muted">Pipeline</p>
+                                                    <p className="mt-0.5 break-all text-text">
+                                                        {pipelineName === 'Automatic' ? 'Automatic — first matching' : pipelineName}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-muted">Output</p>
+                                                    <p className="mt-0.5 break-all text-text">{library.outputPath || 'Pipeline default'}</p>
+                                                </div>
+                                                <div className="sm:col-span-2">
+                                                    <p className="text-muted">Quarantine</p>
+                                                    <p className="mt-0.5 break-all text-text">{library.quarantinePath || 'Not set'}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {library.id !== undefined && (
+                                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null}
+                                                    onClick={async () => {
+                                                        const key = `test-library-${library.id}`;
+                                                        setBusy(key);
+                                                        try {
+                                                            const result = await mediaAutomationApi.testLibrary(library.id!) as { ok?: boolean; rootPath?: string; error?: string };
+                                                            const ok = result?.ok !== false;
+                                                            setLibraryPathHealth((current) => ({
+                                                                ...current,
+                                                                [libraryKey]: {
+                                                                    ok,
+                                                                    message: ok
+                                                                        ? `Readable${result?.rootPath ? ` · ${result.rootPath}` : ''}`
+                                                                        : (result?.error || 'Path check failed'),
+                                                                },
+                                                            }));
+                                                            toast(ok ? 'Library path is readable.' : (result?.error || 'Library path check failed'), ok ? 'success' : 'error');
+                                                        } catch (error) {
+                                                            const message = error instanceof Error ? error.message : 'Library path check failed';
+                                                            setLibraryPathHealth((current) => ({
+                                                                ...current,
+                                                                [libraryKey]: { ok: false, message },
+                                                            }));
+                                                            toast(message, 'error');
+                                                        } finally {
+                                                            setBusy(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    {busy === `test-library-${library.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                                    Test path
+                                                </button>
+                                                {health && (
+                                                    <p className={`text-xs ${health.ok ? 'text-emerald-300' : 'text-red-300'}`}>{health.message}</p>
+                                                )}
+                                            </div>
+                                        )}
+                                    </article>
+                                );
+                            })}
                         </div>
                     )}
                 </div>
@@ -1599,37 +1763,55 @@ export const MediaAutomationDashboard: React.FC = () => {
             <ModalPortal open={libraryDraft !== null}>
                 {libraryDraft && (
                     <EditorShell title={libraryDraft.id === undefined ? 'New library' : 'Edit library'} onClose={() => setLibraryDraft(null)} onSave={saveLibrary} saving={savingEditor}>
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <label className="space-y-2 text-sm font-semibold text-text">Name<input className={fieldClass} value={libraryDraft.name} onChange={(event) => setLibraryDraft({ ...libraryDraft, name: event.target.value })} placeholder="Movies" /></label>
-                            <div className="flex items-end pb-2"><label className="flex items-center gap-3 text-sm font-semibold text-text"><SettingsSwitch checked={libraryDraft.enabled !== false} onChange={(enabled) => setLibraryDraft({ ...libraryDraft, enabled })} /> Enabled</label></div>
-                        </div>
-                        <PathBrowserField
-                            label="Root path"
-                            value={libraryDraft.rootPath}
-                            onChange={(rootPath) => setLibraryDraft({ ...libraryDraft, rootPath })}
-                            placeholder="/media/movies"
-                        />
-                        <label className="block space-y-2 text-sm font-semibold text-text">Assigned pipeline
-                            <CustomSelect
-                                value={String(libraryDraft.pipelineId ?? '')}
-                                onChange={(pipelineId) => setLibraryDraft({ ...libraryDraft, pipelineId })}
-                                options={[{ value: '', label: 'Automatic / first matching pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
+                        <section className="space-y-4">
+                            <div>
+                                <h3 className="text-sm font-bold text-text">Source</h3>
+                                <p className="mt-1 text-xs text-muted">Name and root path the container can read for discovery.</p>
+                            </div>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <label className="space-y-2 text-sm font-semibold text-text">Name<input className={fieldClass} value={libraryDraft.name} onChange={(event) => setLibraryDraft({ ...libraryDraft, name: event.target.value })} placeholder="Movies" /></label>
+                                <div className="flex items-end pb-2"><label className="flex items-center gap-3 text-sm font-semibold text-text"><SettingsSwitch checked={libraryDraft.enabled !== false} onChange={(enabled) => setLibraryDraft({ ...libraryDraft, enabled })} /> Enabled</label></div>
+                            </div>
+                            <PathBrowserField
+                                label="Root path"
+                                value={libraryDraft.rootPath}
+                                onChange={(rootPath) => setLibraryDraft({ ...libraryDraft, rootPath })}
+                                placeholder="/media/movies"
                             />
-                        </label>
-                        <PathBrowserField
-                            label="Output path"
-                            value={libraryDraft.outputPath || ''}
-                            onChange={(outputPath) => setLibraryDraft({ ...libraryDraft, outputPath })}
-                            placeholder="/media/processed"
-                            optional
-                        />
-                        <PathBrowserField
-                            label="Quarantine path"
-                            value={libraryDraft.quarantinePath || ''}
-                            onChange={(quarantinePath) => setLibraryDraft({ ...libraryDraft, quarantinePath })}
-                            placeholder="/media/quarantine"
-                            optional
-                        />
+                        </section>
+                        <section className="space-y-4 border-t border-border/60 pt-4">
+                            <div>
+                                <h3 className="text-sm font-bold text-text">Routing</h3>
+                                <p className="mt-1 text-xs text-muted">Automatic uses the first matching enabled pipeline.</p>
+                            </div>
+                            <label className="block space-y-2 text-sm font-semibold text-text">Assigned pipeline
+                                <CustomSelect
+                                    value={String(libraryDraft.pipelineId ?? '')}
+                                    onChange={(pipelineId) => setLibraryDraft({ ...libraryDraft, pipelineId })}
+                                    options={[{ value: '', label: 'Automatic / first matching pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
+                                />
+                            </label>
+                        </section>
+                        <section className="space-y-4 border-t border-border/60 pt-4">
+                            <div>
+                                <h3 className="text-sm font-bold text-text">Destinations</h3>
+                                <p className="mt-1 text-xs text-muted">Leave blank to use pipeline defaults.</p>
+                            </div>
+                            <PathBrowserField
+                                label="Output path"
+                                value={libraryDraft.outputPath || ''}
+                                onChange={(outputPath) => setLibraryDraft({ ...libraryDraft, outputPath })}
+                                placeholder="/media/processed"
+                                optional
+                            />
+                            <PathBrowserField
+                                label="Quarantine path"
+                                value={libraryDraft.quarantinePath || ''}
+                                onChange={(quarantinePath) => setLibraryDraft({ ...libraryDraft, quarantinePath })}
+                                placeholder="/media/quarantine"
+                                optional
+                            />
+                        </section>
                     </EditorShell>
                 )}
             </ModalPortal>
