@@ -338,6 +338,7 @@ const normalizeMediaAutomationStep = (value = {}) => {
         subtitleLanguages,
         keepSubtitles: value.keepSubtitles !== false,
         commercialPattern,
+        tenBit: value.tenBit === true || Number(value.bitDepth) === 10,
     };
 };
 
@@ -357,6 +358,12 @@ const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
     if (!steps.length) steps.push(normalizeMediaAutomationStep());
     const ruleGroup = normalizeMediaAutomationRuleGroup(value.rules);
     const firstStep = steps[0];
+    const dolbyVisionHandling = ['skip', 'preserve', 'strip', 'inherit'].includes(String(value.dolbyVisionHandling || '').toLowerCase())
+        ? String(value.dolbyVisionHandling).toLowerCase()
+        : 'inherit';
+    const hdr10Handling = ['preserve', 'strip', 'skip', 'inherit'].includes(String(value.hdr10Handling || '').toLowerCase())
+        ? String(value.hdr10Handling).toLowerCase()
+        : 'inherit';
     const action = {
         mode: firstStep.type,
         videoCodec: firstStep.videoCodec,
@@ -367,6 +374,7 @@ const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
         maxWidth: firstStep.maxWidth,
         preset: firstStep.preset,
         crf: firstStep.crf,
+        tenBit: firstStep.tenBit === true,
         outputExtension: `.${firstStep.container}`,
         outputMode,
         hardwareAcceleration: hardware,
@@ -386,6 +394,8 @@ const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
         outputMode,
         hardware,
         samplePath,
+        dolbyVisionHandling,
+        hdr10Handling,
         rules: ruleGroup,
         steps,
         compiledRules: [{

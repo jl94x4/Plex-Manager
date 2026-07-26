@@ -1156,6 +1156,12 @@ export const SettingsDashboard: React.FC = () => {
                     pauseWhenStreamingLanes: saved.pauseWhenStreamingLanes === 'all' ? 'all' : 'gpu',
                     arrRescanEnabled: saved.arrRescanEnabled === true,
                     minSavingsPercent: Math.min(95, Math.max(0, Math.round(Number(saved.minSavingsPercent) || 0))),
+                    dolbyVisionHandling: ['skip', 'preserve', 'strip'].includes(String(saved.dolbyVisionHandling || ''))
+                        ? saved.dolbyVisionHandling
+                        : 'skip',
+                    hdr10Handling: ['preserve', 'strip', 'skip'].includes(String(saved.hdr10Handling || ''))
+                        ? saved.hdr10Handling
+                        : 'preserve',
                     workerGroups: Array.isArray(saved.workerGroups) ? saved.workerGroups : [],
                     deliveryTargets: Array.isArray(saved.deliveryTargets) ? saved.deliveryTargets : [],
                 });

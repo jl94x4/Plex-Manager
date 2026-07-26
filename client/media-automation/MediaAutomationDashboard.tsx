@@ -148,6 +148,7 @@ type MediaProbeSummary = {
     audioSummary: string | null;
     durationSeconds: number | null;
     sizeBytes: number | null;
+    hdrKind: string | null;
 };
 
 const probeSummary = (probe: unknown): MediaProbeSummary | null => {
@@ -189,6 +190,17 @@ const probeSummary = (probe: unknown): MediaProbeSummary | null => {
         ? audios.slice(0, 3).map((stream) => `${String(stream.codec_name || 'audio')}${stream.channels ? ` ${stream.channels}ch` : ''}`).join(', ')
             + (audios.length > 3 ? ` +${audios.length - 3} more` : '')
         : null;
+    const transfer = String(video?.color_transfer || '').toLowerCase();
+    const sideData = Array.isArray(video?.side_data_list) ? video.side_data_list : [];
+    const hasDovi = sideData.some((entry) => /dovi|dolby vision/i.test(String((entry as { side_data_type?: string })?.side_data_type || '')))
+        || /^dvh/i.test(String(video?.codec_tag_string || ''));
+    const hdrKind = !video
+        ? null
+        : (hasDovi
+            ? 'Dolby Vision'
+            : (transfer === 'smpte2084'
+                ? 'HDR10'
+                : (transfer === 'arib-std-b67' ? 'HLG' : null)));
     return {
         container: String(format.format_name || '').split(',')[0] || null,
         videoCodec: video ? (String(video.codec_name || '') || null) : null,
@@ -200,6 +212,7 @@ const probeSummary = (probe: unknown): MediaProbeSummary | null => {
         audioSummary,
         durationSeconds,
         sizeBytes,
+        hdrKind,
     };
 };
 
@@ -2597,6 +2610,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             const rows: Array<{ label: string; from: string | null; to: string | null }> = [
                                                 { label: 'Container', from: before?.container ?? null, to: after?.container ?? null },
                                                 { label: 'Video', from: videoLabel(before), to: videoLabel(after) },
+                                                { label: 'HDR', from: before?.hdrKind ?? null, to: after?.hdrKind ?? null },
                                                 { label: 'Resolution', from: before?.resolution ?? null, to: after?.resolution ?? null },
                                                 { label: 'Bit depth', from: before?.bitDepth ?? null, to: after?.bitDepth ?? null },
                                                 { label: 'Frame rate', from: before?.frameRate ?? null, to: after?.frameRate ?? null },

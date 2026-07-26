@@ -217,6 +217,44 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                 <p className="text-xs text-muted">
                     0 disables the guardrail. When set, transcode outputs that shrink the file by less than this percent are discarded and the original is kept (job completes as skipped).
                 </p>
+                <label className="block max-w-lg text-xs uppercase tracking-wide font-bold text-muted">
+                    Dolby Vision handling
+                    <div className="mt-2">
+                        <CustomSelect
+                            value={config.dolbyVisionHandling || 'skip'}
+                            onChange={(dolbyVisionHandling) => update({
+                                dolbyVisionHandling: dolbyVisionHandling as 'skip' | 'preserve' | 'strip',
+                            })}
+                            options={[
+                                { value: 'skip', label: 'Skip (recommended)' },
+                                { value: 'strip', label: 'Strip HDR and encode anyway' },
+                                { value: 'preserve', label: 'Preserve best-effort (often lossy)' },
+                            ]}
+                        />
+                    </div>
+                </label>
+                <p className="text-xs text-muted">
+                    Re-encoding Dolby Vision usually drops the DV RPU and washes out the image. Remux/copy pipelines are still allowed.
+                </p>
+                <label className="block max-w-lg text-xs uppercase tracking-wide font-bold text-muted">
+                    HDR10 / HLG handling
+                    <div className="mt-2">
+                        <CustomSelect
+                            value={config.hdr10Handling || 'preserve'}
+                            onChange={(hdr10Handling) => update({
+                                hdr10Handling: hdr10Handling as 'preserve' | 'strip' | 'skip',
+                            })}
+                            options={[
+                                { value: 'preserve', label: 'Preserve (force 10-bit + HDR tags)' },
+                                { value: 'strip', label: 'Strip HDR metadata' },
+                                { value: 'skip', label: 'Skip HDR10/HLG files' },
+                            ]}
+                        />
+                    </div>
+                </label>
+                <p className="text-xs text-muted">
+                    Preserve forces Main10/P010 on HEVC/AV1 and writes color + mastering/MaxCLL tags when ffprobe reports them (best on CPU x265).
+                </p>
             </section>
 
             <section className="glass-card-sm p-5 space-y-4">

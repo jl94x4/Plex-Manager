@@ -112,6 +112,38 @@ export const PipelineEditorForm: React.FC<Props> = ({
                             ]}
                         />
                     </label>
+                    <label className="space-y-2 text-sm font-semibold text-text">
+                        Dolby Vision
+                        <CustomSelect
+                            value={pipelineDraft.dolbyVisionHandling || 'inherit'}
+                            onChange={(dolbyVisionHandling) => setPipelineDraft({
+                                ...pipelineDraft,
+                                dolbyVisionHandling: dolbyVisionHandling as 'inherit' | 'skip' | 'preserve' | 'strip',
+                            })}
+                            options={[
+                                { value: 'inherit', label: 'Use global setting' },
+                                { value: 'skip', label: 'Skip (recommended)' },
+                                { value: 'strip', label: 'Strip and encode' },
+                                { value: 'preserve', label: 'Preserve best-effort' },
+                            ]}
+                        />
+                    </label>
+                    <label className="space-y-2 text-sm font-semibold text-text">
+                        HDR10 / HLG
+                        <CustomSelect
+                            value={pipelineDraft.hdr10Handling || 'inherit'}
+                            onChange={(hdr10Handling) => setPipelineDraft({
+                                ...pipelineDraft,
+                                hdr10Handling: hdr10Handling as 'inherit' | 'preserve' | 'strip' | 'skip',
+                            })}
+                            options={[
+                                { value: 'inherit', label: 'Use global setting' },
+                                { value: 'preserve', label: 'Preserve + 10-bit' },
+                                { value: 'strip', label: 'Strip HDR metadata' },
+                                { value: 'skip', label: 'Skip HDR files' },
+                            ]}
+                        />
+                    </label>
                 </div>
                 {pipelineDraft.outputMode === 'dry-run' && (
                     <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">

@@ -191,6 +191,8 @@ export type MediaAutomationStatus = {
     pauseWhenStreamingLanes?: 'gpu' | 'all';
     arrRescanEnabled?: boolean;
     minSavingsPercent?: number;
+    dolbyVisionHandling?: 'skip' | 'preserve' | 'strip';
+    hdr10Handling?: 'preserve' | 'strip' | 'skip';
     watch?: {
         watching?: boolean;
         pending?: number;
@@ -421,6 +423,9 @@ export type MediaAutomationPipeline = {
     hardware: HardwareMode;
     /** Saved sample media path for preview / one-click queue (container path). */
     samplePath?: string;
+    /** inherit = use global Settings. */
+    dolbyVisionHandling?: 'inherit' | 'skip' | 'preserve' | 'strip';
+    hdr10Handling?: 'inherit' | 'preserve' | 'strip' | 'skip';
     rules: MediaAutomationRules;
     steps: MediaAutomationStep[];
     [key: string]: unknown;
@@ -462,6 +467,10 @@ export type MediaAutomationSettingsConfig = {
     arrRescanEnabled?: boolean;
     /** 0 disables. Discard transcode outputs saving less than this percent. */
     minSavingsPercent?: number;
+    /** Dolby Vision re-encodes: skip (default), strip, or preserve (best-effort, often lossy). */
+    dolbyVisionHandling?: 'skip' | 'preserve' | 'strip';
+    /** HDR10/HLG: preserve metadata + 10-bit (default), strip, or skip. */
+    hdr10Handling?: 'preserve' | 'strip' | 'skip';
     workerGroups?: MediaAutomationWorkerGroup[];
     deliveryTargets?: MediaAutomationDeliveryTarget[];
 };
@@ -485,6 +494,8 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     pauseWhenStreamingLanes: 'gpu',
     arrRescanEnabled: false,
     minSavingsPercent: 0,
+    dolbyVisionHandling: 'skip',
+    hdr10Handling: 'preserve',
     workerGroups: [],
     deliveryTargets: [],
 };
@@ -530,6 +541,8 @@ export const emptyPipeline = (): MediaAutomationPipeline => ({
     outputMode: 'dry-run',
     hardware: 'auto',
     samplePath: '',
+    dolbyVisionHandling: 'inherit',
+    hdr10Handling: 'inherit',
     rules: {
         operator: 'AND',
         conditions: [{
