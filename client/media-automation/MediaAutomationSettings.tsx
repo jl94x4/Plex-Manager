@@ -2,6 +2,7 @@ import React from 'react';
 import { Cpu, FolderSearch, Gauge, Radar, ShieldCheck } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import type { HardwareMode, MediaAutomationSettingsConfig, OutputMode } from './types';
+import { portalUrl } from '../shared/basePath';
 
 type Props = {
     enabled: boolean;
@@ -54,6 +55,14 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     disabled={!enabled}
                     border={false}
                 />
+                <SettingsToggleRow
+                    title="Gotify on job failure"
+                    description="Send a Gotify alert when a Media Automation job fails. Requires Gotify to be configured under Settings → Notifications."
+                    checked={config.notifyOnJobFailed === true}
+                    onChange={(notifyOnJobFailed) => update({ notifyOnJobFailed })}
+                    disabled={!enabled}
+                    border={false}
+                />
             </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -77,7 +86,11 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                         autoComplete="new-password"
                         onChange={(event) => update({ auth: { ...config.auth, password: event.target.value } })}
                     />
-                    <p className="text-xs text-muted">Used by Sonarr, Radarr, and Lidarr webhook callers via HTTP Basic Auth at <code className="text-plex">/triggers/media-automation/*</code>.</p>
+                    <p className="text-xs text-muted">
+                        Used by Sonarr, Radarr, and Lidarr webhook callers via HTTP Basic Auth at <code className="text-plex">/triggers/media-automation/*</code>.
+                        Copyable URLs are on the Media Automation Overview tab. ARR host path rewrites live under{' '}
+                        <a className="text-plex hover:underline" href={portalUrl('/settings#scanner')}>Settings → Scanner</a>.
+                    </p>
                 </div>
 
                 <div className="glass-card-sm p-5 space-y-4">

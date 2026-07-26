@@ -3,13 +3,16 @@ import {
     Activity,
     AlertTriangle,
     CheckCircle2,
+    ChevronDown,
     CirclePause,
     CirclePlay,
+    Copy,
     Cpu,
     FolderCog,
     FolderSearch,
     Gauge,
     Layers3,
+    Link2,
     ListRestart,
     Loader2,
     Pencil,
@@ -148,6 +151,24 @@ const jobErrorText = (error: MediaAutomationJob['error']) => {
     if (typeof error === 'string') return error;
     return error.message || error.code || '';
 };
+
+const jobFinalPath = (job: MediaAutomationJob | null | undefined) => {
+    if (!job) return '';
+    const result = job.result;
+    if (result && typeof result === 'object') {
+        const output = (result as { output?: { finalPath?: string } }).output;
+        if (output?.finalPath) return String(output.finalPath);
+        if ((result as { finalPath?: string }).finalPath) return String((result as { finalPath?: string }).finalPath);
+    }
+    return String(job.outputPath || '');
+};
+
+const MA_WEBHOOK_PATHS = [
+    { label: 'Sonarr', path: '/triggers/media-automation/sonarr', tone: 'text-sky-300' },
+    { label: 'Radarr', path: '/triggers/media-automation/radarr', tone: 'text-amber-300' },
+    { label: 'Lidarr', path: '/triggers/media-automation/lidarr', tone: 'text-violet-300' },
+    { label: 'Manual', path: '/triggers/media-automation/manual', tone: 'text-emerald-300' },
+] as const;
 
 const jobStateValue = (job: MediaAutomationJob) => String(job.state || job.status || '').toLowerCase();
 const isTerminalJob = (job: MediaAutomationJob) => (
@@ -418,9 +439,14 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [jobDetailBusy, setJobDetailBusy] = useState(false);
     const [pendingPath, setPendingPath] = useState('');
     const [pendingResult, setPendingResult] = useState<MediaAutomationPendingTest | null>(null);
-    const [activityFilter, setActivityFilter] = useState<'all' | 'job' | 'scan' | 'watch'>('all');
+    const [activityFilter, setActivityFilter] = useState<'all' | 'job' | 'scan' | 'watch' | 'trigger'>('all');
     const [activityPageSize, setActivityPageSize] = useState<typeof ACTIVITY_PAGE_SIZE_OPTIONS[number]>(() => readActivityPageSize());
     const [activityPage, setActivityPage] = useState(1);
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [queueFilter, setQueueFilter] = useState<'all' | 'queued' | 'active' | 'failed' | 'dry-run' | 'completed'>('all');
+    const [queueSearch, setQueueSearch] = useState('');
+    const [workerTestResult, setWorkerTestResult] = useState<MediaAutomationCapabilities | null>(null);
+    const [workerTestError, setWorkerTestError] = useState('');
     const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
     const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
     const [postSavePipeline, setPostSavePipeline] = useState<MediaAutomationPipeline | null>(null);
@@ -638,9 +664,35 @@ export const MediaAutomationDashboard: React.FC = () => {
             if (activityFilter === 'job') return type.startsWith('job.') || type.includes('worker.');
             if (activityFilter === 'scan') return type.includes('library.scan') || type.includes('scan');
             if (activityFilter === 'watch') return type.includes('library.watch') || type.includes('watch');
+            if (activityFilter === 'trigger') return type.includes('trigger') || type.includes('webhook') || type.includes('sonarr') || type.includes('radarr') || type.includes('lidarr');
             return true;
         });
     }, [activity, activityFilter]);
+
+    const filteredJobs = useMemo(() => {
+        const query = queueSearch.trim().toLowerCase();
+        return jobs.filter((job) => {
+            const state = jobStateValue(job);
+            const dryRunJob = jobIsDryRun(job);
+            if (queueFilter === 'queued' && state !== 'queued') return false;
+            if (queueFilter === 'active' && !['running', 'processing', 'active', 'probing', 'planning', 'planned', 'verifying', 'committing'].includes(state)) return false;
+            if (queueFilter === 'failed' && !['failed', 'error'].includes(state)) return false;
+            if (queueFilter === 'completed' && !['completed', 'succeeded', 'success', 'done'].includes(state)) return false;
+            if (queueFilter === 'dry-run' && !dryRunJob) return false;
+            if (!query) return true;
+            const haystack = `${job.path || ''} ${job.sourcePath || ''} ${job.pipelineName || ''} ${job.id}`.toLowerCase();
+            return haystack.includes(query);
+        });
+    }, [jobs, queueFilter, queueSearch]);
+
+    const copyText = async (text: string, success = 'Copied to clipboard.') => {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast(success);
+        } catch {
+            toast(text, 'error');
+        }
+    };
 
     const activityPageCount = Math.max(1, Math.ceil(filteredActivity.length / activityPageSize));
     const pagedActivity = useMemo(() => {
@@ -822,21 +874,63 @@ export const MediaAutomationDashboard: React.FC = () => {
                 </div>
             )}
 
-            <nav className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-                {tabs.map(({ id, label, icon: Icon }) => (
-                    <button
-                        key={id}
-                        type="button"
-                        onClick={() => selectTab(id)}
-                        className={`inline-flex min-w-max items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-bold transition ${
-                            tab === id
-                                ? 'border-plex/40 bg-plex/15 text-plex'
-                                : 'border-white/10 bg-black/20 text-muted hover:border-white/20 hover:text-text'
-                        }`}
-                    >
-                        <Icon className="h-4 w-4" /> {label}
-                    </button>
-                ))}
+            <nav className="space-y-2">
+                <div className="relative sm:hidden">
+                    {(() => {
+                        const active = tabs.find((entry) => entry.id === tab) || tabs[0];
+                        const ActiveIcon = active.icon;
+                        return (
+                            <>
+                                <button
+                                    type="button"
+                                    className={`${buttonClass} w-full justify-between border-plex/40 bg-plex/15 text-plex`}
+                                    onClick={() => setMobileNavOpen((open) => !open)}
+                                    aria-expanded={mobileNavOpen}
+                                >
+                                    <span className="inline-flex items-center gap-2">
+                                        <ActiveIcon className="h-4 w-4" /> {active.label}
+                                    </span>
+                                    <ChevronDown className={`h-4 w-4 transition-transform ${mobileNavOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {mobileNavOpen && (
+                                    <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+                                        {tabs.map(({ id, label, icon: Icon }) => (
+                                            <button
+                                                key={id}
+                                                type="button"
+                                                className={`flex w-full items-center gap-2 px-3.5 py-3 text-left text-sm font-bold transition ${
+                                                    tab === id ? 'bg-plex/15 text-plex' : 'text-text hover:bg-white/5'
+                                                }`}
+                                                onClick={() => {
+                                                    selectTab(id);
+                                                    setMobileNavOpen(false);
+                                                }}
+                                            >
+                                                <Icon className="h-4 w-4" /> {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        );
+                    })()}
+                </div>
+                <div className="hidden gap-1.5 sm:flex">
+                    {tabs.map(({ id, label, icon: Icon }) => (
+                        <button
+                            key={id}
+                            type="button"
+                            onClick={() => selectTab(id)}
+                            className={`inline-flex min-w-max items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-bold transition ${
+                                tab === id
+                                    ? 'border-plex/40 bg-plex/15 text-plex'
+                                    : 'border-white/10 bg-black/20 text-muted hover:border-white/20 hover:text-text'
+                            }`}
+                        >
+                            <Icon className="h-4 w-4" /> {label}
+                        </button>
+                    ))}
+                </div>
             </nav>
 
             {tab === 'overview' && (
@@ -952,16 +1046,88 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction('scan-now', mediaAutomationApi.scanNow, 'Library scan completed.')}>
                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />} Scan now
                                 </button>
-                                <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction('worker-test', mediaAutomationApi.testWorker, 'Worker test completed.')}>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null}
+                                    onClick={async () => {
+                                        setBusy('worker-test');
+                                        setWorkerTestError('');
+                                        try {
+                                            const result = await mediaAutomationApi.testWorker() as MediaAutomationCapabilities & { ok?: boolean; error?: string };
+                                            if (result?.ok === false || result?.available === false) {
+                                                setWorkerTestError(result.error || 'Worker test failed');
+                                                setWorkerTestResult(result);
+                                                toast(result.error || 'Worker test failed', 'error');
+                                            } else {
+                                                setWorkerTestResult(result);
+                                                setCapabilities(result);
+                                                toast('Worker test completed.');
+                                            }
+                                            await load(true);
+                                        } catch (error) {
+                                            const message = error instanceof Error ? error.message : 'Worker test failed';
+                                            setWorkerTestError(message);
+                                            setWorkerTestResult(null);
+                                            toast(message, 'error');
+                                        } finally {
+                                            setBusy(null);
+                                        }
+                                    }}
+                                >
                                     {busy === 'worker-test' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Test worker
                                 </button>
                             </div>
+                            {(workerTestResult || workerTestError) && (
+                                <div className={`mt-3 rounded-xl border p-4 text-sm ${workerTestError ? 'border-red-500/30 bg-red-500/10 text-red-100' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-50'}`}>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p className="font-bold">{workerTestError ? 'Worker test failed' : 'Worker test passed'}</p>
+                                            {workerTestError && <p className="mt-1 text-xs opacity-90">{workerTestError}</p>}
+                                            {workerTestResult && (
+                                                <div className="mt-2 space-y-1 text-xs opacity-90">
+                                                    <p>FFmpeg: {typeof workerTestResult.ffmpeg === 'object' ? (workerTestResult.ffmpeg.version || (workerTestResult.ffmpeg.available === false ? 'unavailable' : 'available')) : (workerTestResult.ffmpeg ? 'available' : 'unknown')}</p>
+                                                    <p>Hardware: {(Array.isArray(workerTestResult.hardware) ? workerTestResult.hardware : []).join(', ') || 'cpu only'}</p>
+                                                    {workerTestResult.devices?.dri && (
+                                                        <p>/dev/dri: {workerTestResult.devices.dri.present === false ? 'not mapped' : (workerTestResult.devices.dri.readable === false ? 'present but not readable' : (workerTestResult.devices.dri.device || 'present'))}</p>
+                                                    )}
+                                                    {(['qsv', 'nvenc', 'intel-vaapi', 'vaapi'] as const).map((id) => {
+                                                        const detail = workerTestResult.details?.[id];
+                                                        if (!detail?.error) return null;
+                                                        return <p key={id} className="text-amber-200">{detail.label || id}: {detail.error}</p>;
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <button type="button" className="rounded-lg p-1 text-current/70 hover:bg-white/10" onClick={() => { setWorkerTestResult(null); setWorkerTestError(''); }} aria-label="Dismiss">
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                             <dl className="mt-5 grid grid-cols-1 gap-3 border-t border-border/60 pt-5 text-sm sm:grid-cols-2">
                                 <div><dt className="text-muted">Last scan</dt><dd className="mt-1 font-semibold text-text">{formatTime(status.lastScanAt)}{status.lastScanResult ? ` · ${status.lastScanResult.enqueued || 0} queued` : ''}</dd></div>
                                 <div><dt className="text-muted">Periodic scan</dt><dd className="mt-1 font-semibold text-text">{status.libraryScanEnabled === false ? 'Disabled' : status.periodicScanning ? `Every ${status.libraryScanIntervalMinutes || 360}m` : 'Idle'}</dd></div>
-                                <div><dt className="text-muted">Watcher</dt><dd className="mt-1 flex items-center gap-2 font-semibold text-text"><Radar className="h-3.5 w-3.5 text-plex" />{status.libraryWatchEnabled === false ? 'Disabled' : status.watch?.watching ? `Watching ${status.watch.roots?.length || 0} root(s)` : 'Not watching'}</dd></div>
+                                <div>
+                                    <dt className="text-muted">Watcher</dt>
+                                    <dd className="mt-1 flex items-center gap-2 font-semibold text-text">
+                                        <Radar className="h-3.5 w-3.5 text-plex" />
+                                        {status.libraryWatchConfigured && status.watchEnvEnabled === false
+                                            ? 'Blocked: set MEDIA_AUTOMATION_ENABLE_WATCH=1'
+                                            : status.libraryWatchEnabled === false
+                                                ? 'Disabled'
+                                                : status.watch?.watching
+                                                    ? `Watching ${status.watch.roots?.length || 0} root(s)`
+                                                    : 'Not watching'}
+                                    </dd>
+                                </div>
                                 <div><dt className="text-muted">Lanes</dt><dd className="mt-1 font-semibold text-text">CPU {status.lanes?.cpu?.running || 0}/{status.lanes?.cpu?.queued || 0} · GPU {status.lanes?.gpu?.running || 0}/{status.lanes?.gpu?.queued || 0}</dd></div>
                             </dl>
+                            {status.libraryWatchConfigured && status.watchEnvEnabled === false && (
+                                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                                    Watcher is enabled in Settings, but the container env gate is off. Add <code className="font-mono text-plex">MEDIA_AUTOMATION_ENABLE_WATCH=1</code> and recreate the container.
+                                </div>
+                            )}
                         </section>
                         <section className={`${cardClass} space-y-3 p-5`}>
                             <h2 className="text-lg font-bold tracking-tight text-text">Capabilities</h2>
@@ -1036,6 +1202,32 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </div>
                         </section>
                     </div>
+                    <section className={`${cardClass} p-5`}>
+                        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold tracking-tight text-text">ARR webhooks</h2>
+                                <p className="mt-0.5 text-xs text-muted">
+                                    Point Sonarr / Radarr / Lidarr Connect webhooks here (HTTP Basic Auth from Settings). Path rewrites are shared with{' '}
+                                    <a className="text-plex hover:underline" href={portalUrl('/settings#scanner')}>Settings → Scanner</a>.
+                                </p>
+                            </div>
+                            <Link2 className="hidden h-5 w-5 text-plex sm:block" />
+                        </div>
+                        <div className="space-y-2">
+                            {MA_WEBHOOK_PATHS.map((row) => {
+                                const full = `${typeof window !== 'undefined' ? window.location.origin : ''}${portalUrl(row.path)}`;
+                                return (
+                                    <div key={row.path} className="flex flex-col gap-2 rounded-xl border border-border/70 bg-background/30 p-3 sm:flex-row sm:items-center">
+                                        <span className={`shrink-0 text-xs font-bold uppercase tracking-wide ${row.tone}`}>{row.label}</span>
+                                        <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted" title={full}>{full}</code>
+                                        <button type="button" className={buttonClass} onClick={() => void copyText(full, `${row.label} webhook URL copied.`)}>
+                                            <Copy className="h-4 w-4" /> Copy
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
                 </div>
             )}
 
@@ -1143,6 +1335,38 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <div className="space-y-3">
                             <section className={`${cardClass} p-4`}>
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <div className="flex flex-wrap gap-2">
+                                        {([
+                                            ['all', 'All'],
+                                            ['queued', 'Queued'],
+                                            ['active', 'Active'],
+                                            ['dry-run', 'Dry-run'],
+                                            ['failed', 'Failed'],
+                                            ['completed', 'Completed'],
+                                        ] as const).map(([id, label]) => (
+                                            <button
+                                                key={id}
+                                                type="button"
+                                                className={`${buttonClass} ${queueFilter === id ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
+                                                onClick={() => setQueueFilter(id)}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <label className="relative block w-full lg:max-w-xs">
+                                        <span className="sr-only">Search queue</span>
+                                        <input
+                                            className={`${fieldClass} pl-3`}
+                                            value={queueSearch}
+                                            onChange={(event) => setQueueSearch(event.target.value)}
+                                            placeholder="Search path or pipeline…"
+                                        />
+                                    </label>
+                                </div>
+                            </section>
+                            <section className={`${cardClass} p-4`}>
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                     <label className="inline-flex items-center gap-2 text-sm font-semibold text-text">
                                         <input
                                             type="checkbox"
@@ -1150,7 +1374,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             checked={allSelected}
                                             onChange={toggleSelectAllJobs}
                                         />
-                                        Select all ({jobs.length})
+                                        Select all ({filteredJobs.length}{filteredJobs.length !== jobs.length ? ` of ${jobs.length}` : ''})
                                         {selectedJobIds.size > 0 && (
                                             <span className="font-normal text-muted">· {selectedJobIds.size} selected</span>
                                         )}
@@ -1205,7 +1429,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     Dry-run / completed jobs cannot be cancelled - use Clear finished to remove them. Cancel all active stops queued and running work.
                                 </p>
                             </section>
-                            {jobs.map((job) => {
+                            {filteredJobs.length === 0 ? (
+                                <div className={`${cardClass} p-6 text-center text-sm text-muted`}>
+                                    No jobs match this filter{queueSearch.trim() ? ' / search' : ''}.
+                                </div>
+                            ) : filteredJobs.map((job) => {
                                 const jobId = job.id;
                                 const state = jobStateValue(job);
                                 const dryRunJob = jobIsDryRun(job);
@@ -1499,11 +1727,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <dt className="text-xs font-bold uppercase tracking-wide text-muted">Watcher</dt>
                                 <dd className="mt-1 flex items-center gap-2 font-semibold text-text">
                                     <Radar className="h-3.5 w-3.5 text-plex" />
-                                    {status.libraryWatchEnabled === false
-                                        ? 'Disabled'
-                                        : status.watch?.watching
-                                            ? `Watching ${status.watch.roots?.length || 0} root(s)`
-                                            : 'Not watching'}
+                                    {status.libraryWatchConfigured && status.watchEnvEnabled === false
+                                        ? 'Blocked: set MEDIA_AUTOMATION_ENABLE_WATCH=1'
+                                        : status.libraryWatchEnabled === false
+                                            ? 'Disabled'
+                                            : status.watch?.watching
+                                                ? `Watching ${status.watch.roots?.length || 0} root(s)`
+                                                : 'Not watching'}
                                 </dd>
                             </div>
                         </dl>
@@ -1660,6 +1890,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 ['job', 'Jobs'],
                                 ['scan', 'Scans'],
                                 ['watch', 'Watcher'],
+                                ['trigger', 'ARR'],
                             ] as const).map(([id, label]) => (
                                 <button
                                     key={id}
@@ -1704,9 +1935,24 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <>
                             <div className={`${cardClass} divide-y divide-border/60 overflow-hidden`}>
                                 {pagedActivity.map((entry, index) => (
-                                    <div key={String(entry.id ?? `${activityPage}-${index}`)} className="flex gap-3 p-4">
+                                    <div
+                                        key={String(entry.id ?? `${activityPage}-${index}`)}
+                                        className={`flex gap-3 p-4 ${entry.jobId != null ? 'cursor-pointer transition hover:bg-white/[0.03]' : ''}`}
+                                        onClick={() => {
+                                            if (entry.jobId != null) void openJobDetail(entry.jobId);
+                                        }}
+                                        onKeyDown={(event) => {
+                                            if (entry.jobId == null) return;
+                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                void openJobDetail(entry.jobId);
+                                            }
+                                        }}
+                                        role={entry.jobId != null ? 'button' : undefined}
+                                        tabIndex={entry.jobId != null ? 0 : undefined}
+                                    >
                                         <div className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${statusTone(entry.status).includes('red') ? 'bg-red-400' : statusTone(entry.status).includes('green') ? 'bg-green-400' : 'bg-plex'}`} />
-                                        <div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><p className="font-semibold text-text">{entry.message || entry.action || entry.type || 'Automation event'}</p><time className="text-xs text-muted">{formatTime(entry.createdAt || entry.timestamp || entry.at)}</time></div><p className="mt-1 text-xs text-muted">{entry.type || entry.action || 'activity'}{entry.jobId !== undefined ? ` · Job #${entry.jobId}` : ''}</p></div>
+                                        <div className="min-w-0 flex-1"><div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><p className="font-semibold text-text">{entry.message || entry.action || entry.type || 'Automation event'}</p><time className="text-xs text-muted">{formatTime(entry.createdAt || entry.timestamp || entry.at)}</time></div><p className="mt-1 text-xs text-muted">{entry.type || entry.action || 'activity'}{entry.jobId !== undefined ? ` · Job #${entry.jobId}` : ''}{entry.jobId != null ? ' · Open' : ''}</p></div>
                                     </div>
                                 ))}
                             </div>
@@ -1795,7 +2041,46 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 </label>
                                             )}
                                         </div>
+                                        {selectedJob && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {isCancellableJob(selectedJob) && (
+                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`cancel-${selectedJobId}`, () => mediaAutomationApi.cancelJob(selectedJobId!), 'Job cancelled.').then(() => openJobDetail(selectedJobId!))}>
+                                                        {busy === `cancel-${selectedJobId}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />} Cancel
+                                                    </button>
+                                                )}
+                                                {jobStateValue(selectedJob) === 'queued' && (
+                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`skip-${selectedJobId}`, () => mediaAutomationApi.skipJob(selectedJobId!), 'Job skipped.').then(() => openJobDetail(selectedJobId!))}>
+                                                        <SkipForward className="h-4 w-4" /> Skip
+                                                    </button>
+                                                )}
+                                                {['failed', 'cancelled', 'canceled', 'error'].includes(jobStateValue(selectedJob)) && (
+                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`retry-${selectedJobId}`, () => mediaAutomationApi.retryJob(selectedJobId!), 'Job queued for retry.').then(() => openJobDetail(selectedJobId!))}>
+                                                        <RotateCcw className="h-4 w-4" /> Retry
+                                                    </button>
+                                                )}
+                                                {jobIsDryRun(selectedJob) && String(selectedJob.path || selectedJob.sourcePath || '').trim() && (
+                                                    <button
+                                                        type="button"
+                                                        className={primaryButtonClass}
+                                                        disabled={busy !== null}
+                                                        onClick={() => runAction(
+                                                            `requeue-write-${selectedJobId}`,
+                                                            () => mediaAutomationApi.enqueue(String(selectedJob.path || selectedJob.sourcePath), selectedJob.pipelineId),
+                                                            'Queued again for a real write (still subject to Safe fallback / pipeline output mode).',
+                                                        )}
+                                                    >
+                                                        <Play className="h-4 w-4" /> Queue for real write
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
                                         <p className="break-all font-semibold text-text">{selectedJob?.path || selectedJob?.sourcePath || 'Path not reported'}</p>
+                                        {jobFinalPath(selectedJob) && (
+                                            <div className="rounded-lg border border-border/70 bg-background/30 p-3 text-sm">
+                                                <p className="text-xs text-muted">{jobIsDryRun(selectedJob) ? 'Planned output path' : 'Output path'}</p>
+                                                <p className="mt-1 break-all font-mono text-xs text-plex">{jobFinalPath(selectedJob)}</p>
+                                            </div>
+                                        )}
                                         {jobIsDryRun(selectedJob) && (
                                             <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
                                                 {jobDryRunReason(selectedJob) || 'Dry-run completed: the worker only planned FFmpeg steps. No media was rewritten.'}

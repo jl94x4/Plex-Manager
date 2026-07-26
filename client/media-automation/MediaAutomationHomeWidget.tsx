@@ -28,11 +28,14 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
         return () => window.clearInterval(timer);
     }, [load]);
 
+    const dryRun = !!(status?.dryRun || status?.outputMode === 'dry-run');
+    const failed = Number(status?.failedJobs || status?.metrics?.failed24h || 0);
+    const paused = !!status?.paused;
     const stats = [
         { label: 'Queued', value: status?.queuedJobs ?? 0, icon: ListTodo, className: 'text-amber-300' },
         { label: 'Active', value: status?.activeJobs ?? 0, icon: Cpu, className: 'text-sky-300' },
         { label: 'Complete', value: status?.completedJobs ?? 0, icon: CheckCircle2, className: 'text-emerald-300' },
-        { label: 'Failed', value: status?.failedJobs ?? 0, icon: TriangleAlert, className: 'text-red-300' },
+        { label: 'Failed', value: failed, icon: TriangleAlert, className: 'text-red-300' },
     ];
 
     return (
@@ -44,7 +47,7 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
                     </div>
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Media Automation</p>
-                        <p className="font-bold text-text">{status?.paused ? 'Worker paused' : 'Native processing'}</p>
+                        <p className="font-bold text-text">{paused ? 'Worker paused' : 'Native processing'}</p>
                     </div>
                 </div>
                 {error && !status ? (
@@ -59,10 +62,22 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
                         ))}
                     </div>
                 )}
-                <div className="flex items-center justify-between gap-2 lg:justify-end">
-                    <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${status?.paused ? 'border-amber-500/30 text-amber-300' : 'border-emerald-500/30 text-emerald-300'}`}>
-                        {status?.paused ? 'Paused' : 'Running'}
-                    </span>
+                <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${paused ? 'border-amber-500/30 text-amber-300' : 'border-emerald-500/30 text-emerald-300'}`}>
+                            {paused ? 'Paused' : 'Running'}
+                        </span>
+                        {dryRun && (
+                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-200">
+                                Dry-run
+                            </span>
+                        )}
+                        {failed > 0 && (
+                            <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-red-200">
+                                {failed} failed
+                            </span>
+                        )}
+                    </div>
                     <button type="button" onClick={() => void load()} className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text" title="Refresh">
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                     </button>

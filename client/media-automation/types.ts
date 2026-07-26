@@ -36,6 +36,9 @@ export type MediaAutomationStatus = {
     libraryScanEnabled?: boolean;
     libraryWatchEnabled?: boolean;
     libraryScanIntervalMinutes?: number;
+    watchEnvEnabled?: boolean;
+    libraryWatchConfigured?: boolean;
+    notifyOnJobFailed?: boolean;
     outputMode?: OutputMode;
     dryRun?: boolean;
     hardwareAcceleration?: HardwareMode;
@@ -286,6 +289,8 @@ export type MediaAutomationSettingsConfig = {
     libraryWatchDebounceMs: number;
     /** Basenames or absolute paths allowed for custom-command steps */
     customCommandAllowlist: string[];
+    /** Send Gotify when a job fails (requires portal Gotify settings). */
+    notifyOnJobFailed?: boolean;
 };
 
 export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = {
@@ -298,6 +303,7 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     libraryWatchEnabled: false,
     libraryWatchDebounceMs: 5000,
     customCommandAllowlist: ['ffmpeg', 'ffprobe'],
+    notifyOnJobFailed: false,
 };
 
 export const emptyLibrary = (): MediaAutomationLibrary => ({

@@ -1145,6 +1145,7 @@ export const SettingsDashboard: React.FC = () => {
                     customCommandAllowlist: Array.isArray(saved.customCommandAllowlist)
                         ? [...new Set(saved.customCommandAllowlist.map((entry: unknown) => String(entry || '').trim()).filter(Boolean))].slice(0, 32)
                         : [...DEFAULT_MEDIA_AUTOMATION_SETTINGS.customCommandAllowlist],
+                    notifyOnJobFailed: saved.notifyOnJobFailed === true,
                 });
             } else {
                 setMediaAutomation({

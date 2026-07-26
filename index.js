@@ -216,6 +216,9 @@ const mediaAutomationConfigForApi = (config = {}) => {
     return {
         ...runtime,
         enabled: !!config.mediaAutomationEnabled,
+        watchEnvEnabled: mediaAutomationWatchOptIn(),
+        libraryWatchConfigured: config.mediaAutomation?.libraryWatchEnabled === true,
+        notifyOnJobFailed: runtime.notifyOnJobFailed === true,
         auth: {
             username: String(auth.username || ''),
             password: auth.password ? SECRET_MASK : '',
@@ -18278,6 +18281,21 @@ mediaAutomationService = createMediaAutomation({
     onActivity: async (entry) => {
         log(`[media-automation] ${entry.message || entry.type}`);
         const outputPath = String(entry.data?.output || '').trim();
+        if (entry.type === 'job.failed') {
+            try {
+                const config = await loadFile(CONFIG_PATH, {});
+                if (config.mediaAutomation?.notifyOnJobFailed) {
+                    await sendGotifyAlert(
+                        config,
+                        'Media Automation job failed',
+                        `${entry.message || 'Job failed'}${entry.jobId ? ` (Job #${entry.jobId})` : ''}`,
+                        8,
+                    );
+                }
+            } catch (error) {
+                log(`[media-automation] Gotify notify failed: ${error.message}`);
+            }
+        }
         if (entry.type !== 'job.completed' || !outputPath) return;
         try {
             const config = await loadFile(CONFIG_PATH, {});
@@ -18919,6 +18937,7 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
             const value = Number(job.result?.[key] ?? job.metadata?.[key] ?? 0);
             return sum + (Number.isFinite(value) ? value : 0);
         }, 0);
+        const config = await loadFile(CONFIG_PATH, {});
         res.json({
             ...status,
             enabled: true,
@@ -18928,6 +18947,9 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
             queuedJobs: jobs.filter((job) => job.state === 'queued').length,
             completedJobs: jobs.filter((job) => job.state === 'succeeded').length,
             failedJobs: jobs.filter((job) => job.state === 'failed').length,
+            watchEnvEnabled: mediaAutomationWatchOptIn(),
+            libraryWatchConfigured: config.mediaAutomation?.libraryWatchEnabled === true,
+            notifyOnJobFailed: config.mediaAutomation?.notifyOnJobFailed === true,
             metrics: {
                 processed24h: succeededRecent.length,
                 failed24h: failedRecent.length,
