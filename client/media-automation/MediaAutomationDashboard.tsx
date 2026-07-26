@@ -1369,6 +1369,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         <p className="mt-2 font-mono text-[11px] text-muted">
                                             DRI: {(capabilities.devices.dri.renderNodes || []).join(', ') || 'no render nodes'}
                                             {capabilities.devices.dri.readable ? ' · readable' : ' · not readable'}
+                                            {capabilities.devices.dri.vendor
+                                                ? ` · ${String(capabilities.devices.dri.vendor)}${capabilities.devices.dri.vendorId ? ` (${capabilities.devices.dri.vendorId})` : ''}`
+                                                : (capabilities.devices.dri.vendors?.length
+                                                    ? ` · ${capabilities.devices.dri.vendors.join(', ')}`
+                                                    : '')}
                                         </p>
                                     )}
                                     {relevantAdapterErrors.map((id) => {

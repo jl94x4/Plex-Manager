@@ -167,6 +167,9 @@ export type MediaAutomationCapabilities = {
             device?: string;
             exists?: boolean;
             readable?: boolean;
+            vendors?: string[];
+            vendor?: string | null;
+            vendorId?: string | null;
         };
         nvidia?: {
             device?: boolean;
