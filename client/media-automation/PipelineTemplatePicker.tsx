@@ -112,7 +112,7 @@ export const PipelineTemplatePicker: React.FC<Props> = ({ open, onClose, onSelec
     return (
         <ModalPortal open={open}>
             <div
-                className="fixed inset-0 z-[1200] flex flex-col bg-[#0b0d10] text-text"
+                className="fixed inset-0 z-[1200] flex flex-col bg-[#0b0d10] text-text md:left-72"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="pipeline-template-title"
