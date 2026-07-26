@@ -41,9 +41,10 @@ gids="$PGID"
 collect_dri_gids
 
 # Prefer setpriv so we can attach /dev/dri GIDs as supplementary groups.
+# Do not combine --clear-groups with --groups (mutually exclusive on util-linux).
 if command -v setpriv >/dev/null 2>&1; then
   groups_csv=$(echo "$gids" | tr ' ' ',')
-  exec setpriv --reuid="$PUID" --regid="$PGID" --clear-groups --groups="$groups_csv" -- "$@"
+  exec setpriv --reuid="$PUID" --regid="$PGID" --groups="$groups_csv" -- "$@"
 fi
 
 if command -v gosu >/dev/null 2>&1; then
