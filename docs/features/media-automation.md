@@ -73,10 +73,10 @@ Review the capability panel after changing an image, driver, device mapping, or 
 | CPU | Reports available when `libx264` is compiled in. No GPU device is required. |
 | NVIDIA NVENC | Reports available when `h264_nvenc` (or peer codec) is compiled in **and** the synthetic encode succeeds. Needs NVIDIA Container Toolkit / runtime. |
 | Intel QSV | Reports available when `h264_qsv` succeeds a synthetic encode. Needs a usable Intel render node. |
-| Intel VAAPI | Separate adapter (`intel-vaapi`) using `h264_vaapi` plus a synthetic encode through `/dev/dri`. |
-| AMD VAAPI | Adapter `vaapi` using the same VAAPI encoders with an AMD render node and Mesa. |
+| Intel VAAPI | Separate adapter (`intel-vaapi`) using `h264_vaapi` plus a synthetic encode through `/dev/dri`. Requires an Intel DRM vendor on the render node. |
+| AMD VAAPI | Adapter `vaapi` using the same VAAPI encoders. Requires an AMD DRM vendor on the render node, so Intel-only hosts keep this adapter off. |
 
-The image includes FFmpeg/FFprobe, `vainfo`, Mesa VAAPI userspace, and Intel VAAPI userspace where Debian Bookworm publishes it for the image architecture. Kernel and GPU drivers always come from the host.
+The image ships `jellyfin-ffmpeg` (FFmpeg 7 with Intel oneVPL QSV runtime and iHD driver) as the primary FFmpeg/FFprobe, with Debian's FFmpeg, `vainfo`, and Mesa VAAPI userspace as fallback. This matters for QSV: Debian's stock FFmpeg uses Intel's legacy Media SDK, which fails to initialize on 11th-gen and newer iGPUs even when VAAPI works. Kernel and GPU drivers always come from the host.
 
 ## Hardware access
 

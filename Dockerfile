@@ -73,6 +73,32 @@ RUN apt-get update \
     && ffprobe -version \
     && rm -rf /var/lib/apt/lists/*
 
+# Debian's stock FFmpeg links Intel's legacy Media SDK (libmfx), which cannot
+# initialize QSV on 11th-gen+ iGPUs ("Current resolution/pixel format is
+# unsupported"). jellyfin-ffmpeg bundles the oneVPL runtime + iHD driver, so
+# install it and put wrappers first on PATH; distro ffmpeg stays as fallback.
+RUN set -eu; \
+    arch="$(dpkg --print-architecture)"; \
+    if [ "$arch" = "amd64" ] || [ "$arch" = "arm64" ]; then \
+        apt-get update \
+        && apt-get install -y --no-install-recommends curl gnupg \
+        && mkdir -p /etc/apt/keyrings \
+        && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg \
+        && printf 'Types: deb\nURIs: https://repo.jellyfin.org/debian\nSuites: bookworm\nComponents: main\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/jellyfin.gpg\n' "$arch" > /etc/apt/sources.list.d/jellyfin.sources \
+        && apt-get update \
+        && apt-get install -y --no-install-recommends jellyfin-ffmpeg7 \
+        && apt-get purge -y curl gnupg \
+        && apt-get autoremove -y \
+        && rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/jellyfin.sources; \
+    fi; \
+    if [ -x /usr/lib/jellyfin-ffmpeg/ffmpeg ]; then \
+        printf '#!/bin/sh\nexport LIBVA_DRIVERS_PATH="${LIBVA_DRIVERS_PATH:-/usr/lib/jellyfin-ffmpeg/lib/dri:/usr/lib/x86_64-linux-gnu/dri}"\nexec /usr/lib/jellyfin-ffmpeg/ffmpeg "$@"\n' > /usr/local/bin/ffmpeg \
+        && printf '#!/bin/sh\nexport LIBVA_DRIVERS_PATH="${LIBVA_DRIVERS_PATH:-/usr/lib/jellyfin-ffmpeg/lib/dri:/usr/lib/x86_64-linux-gnu/dri}"\nexec /usr/lib/jellyfin-ffmpeg/ffprobe "$@"\n' > /usr/local/bin/ffprobe \
+        && chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe; \
+    fi; \
+    ffmpeg -version; \
+    ffprobe -version
+
 COPY package.json package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/index.js ./
