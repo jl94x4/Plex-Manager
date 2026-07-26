@@ -874,7 +874,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </div>
                         <h1 className="text-3xl font-black tracking-tight text-text md:text-4xl">Transcode with control</h1>
                         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted md:text-[15px]">
-                            Native FFmpeg pipelines for remux, HEVC, and cleanup - with a durable queue, hardware lanes, and safe dry-run until you are ready to write.
+                            Native FFmpeg pipelines for remux, HEVC, and cleanup - with a durable queue, hardware lanes, and safe dry-run until you are ready to encode.
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 self-start lg:self-auto">
@@ -1178,22 +1178,30 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <Cpu className="h-5 w-5 text-plex" />
                             </div>
                             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                                {[
-                                    ['start', 'Start', CirclePlay, true],
-                                    ['pause', 'Pause', CirclePause, false],
-                                    ['resume', 'Resume', Play, false],
-                                    ['stop', 'Stop', Square, false],
-                                ].map(([action, label, Icon, primary]) => (
-                                    <button
-                                        key={String(action)}
-                                        type="button"
-                                        className={primary ? primaryButtonClass : buttonClass}
-                                        disabled={busy !== null}
-                                        onClick={() => runAction(`control-${action}`, () => mediaAutomationApi.control(String(action)), `Worker ${action} requested.`)}
-                                    >
-                                        {busy === `control-${action}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />} {label}
-                                    </button>
-                                ))}
+                                {([
+                                    { action: 'start', label: 'Start', Icon: CirclePlay, primary: true },
+                                    { action: 'pause', label: 'Pause', Icon: CirclePause, primary: false },
+                                    { action: 'resume', label: 'Resume', Icon: Play, primary: false },
+                                    { action: 'stop', label: 'Stop', Icon: Square, primary: false },
+                                ] satisfies Array<{
+                                    action: string;
+                                    label: string;
+                                    Icon: React.ComponentType<{ className?: string }>;
+                                    primary: boolean;
+                                }>).map(({ action, label, Icon, primary }) => {
+                                    const ActionIcon = Icon;
+                                    return (
+                                        <button
+                                            key={action}
+                                            type="button"
+                                            className={primary ? primaryButtonClass : buttonClass}
+                                            disabled={busy !== null}
+                                            onClick={() => runAction(`control-${action}`, () => mediaAutomationApi.control(action), `Worker ${action} requested.`)}
+                                        >
+                                            {busy === `control-${action}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <ActionIcon className="h-4 w-4" />} {label}
+                                        </button>
+                                    );
+                                })}
                             </div>
                             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <button
