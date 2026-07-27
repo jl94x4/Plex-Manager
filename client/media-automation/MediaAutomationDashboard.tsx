@@ -1501,14 +1501,14 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <StatCard
                             label="Completed"
                             value={asText(status.completedJobs ?? queueCounts.completed, '0')}
-                            hint="Succeeded jobs"
+                            hint="History (all time)"
                             icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
                             tone="border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
                         />
                         <StatCard
                             label="Failed"
                             value={asText(status.failedJobs ?? queueCounts.failed, '0')}
-                            hint="Needs attention"
+                            hint="History (all time)"
                             icon={<AlertTriangle className="h-4 w-4 text-red-200" />}
                             tone="border-red-400/30 bg-red-500/10 text-red-100"
                         />
@@ -1517,42 +1517,42 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <StatCard
                             label="Processed 24h"
                             value={asText(status.metrics?.processed24h ?? 0, '0')}
-                            hint="Last day"
+                            hint="History · last day"
                             icon={<Gauge className="h-4 w-4 text-emerald-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
                             label="Failed 24h"
                             value={asText(status.metrics?.failed24h ?? 0, '0')}
-                            hint="Last day"
+                            hint="History · last day"
                             icon={<AlertTriangle className="h-4 w-4 text-red-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
                             label="Success rate"
                             value={status.metrics?.successRate24h == null ? '-' : `${status.metrics.successRate24h}%`}
-                            hint="Last 24h"
+                            hint="History · last 24h"
                             icon={<CheckCircle2 className="h-4 w-4 text-plex" />}
                             tone="border-plex/30 bg-plex/10 text-text"
                         />
                         <StatCard
                             label="Bytes out"
                             value={formatBytes(status.metrics?.bytesOut24h)}
-                            hint="Last 24h"
+                            hint="History · last 24h"
                             icon={<ServerCog className="h-4 w-4 text-sky-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
                             label="Bytes saved"
                             value={formatBytes(status.metrics?.bytesSaved24h)}
-                            hint="Last 24h"
+                            hint="History · last 24h"
                             icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
                             tone="border-emerald-500/30 bg-emerald-500/10 text-text"
                         />
                         <StatCard
                             label="Encode time"
                             value={formatDurationSeconds(Math.round(Number(status.metrics?.encodeMs24h || 0) / 1000)) || '0s'}
-                            hint="Last 24h"
+                            hint="History · last 24h"
                             icon={<Gauge className="h-4 w-4 text-plex" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />

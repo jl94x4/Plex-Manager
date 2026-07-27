@@ -19373,19 +19373,9 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
     try {
         const status = await mediaAutomationService.status();
         const jobs = status.jobs || [];
-        const dayAgo = Date.now() - 86_400_000;
-        const finishedRecent = jobs.filter((job) => {
-            const finished = Date.parse(job.finishedAt || job.updatedAt || 0);
-            return Number.isFinite(finished) && finished >= dayAgo
-                && ['succeeded', 'failed', 'cancelled'].includes(job.state);
-        });
-        const succeededRecent = finishedRecent.filter((job) => job.state === 'succeeded');
-        const failedRecent = finishedRecent.filter((job) => job.state === 'failed');
-        const sumResultBytes = (key) => finishedRecent.reduce((sum, job) => {
-            const value = Number(job.result?.[key] ?? job.metadata?.[key] ?? 0);
-            return sum + (Number.isFinite(value) ? value : 0);
-        }, 0);
         const config = await loadFile(CONFIG_PATH, {});
+        // Completed/failed + 24h/7d/30d metrics come from durable history (service.status),
+        // not the live queue — clearing finished jobs must not reset Overview counters.
         res.json({
             ...status,
             enabled: true,
@@ -19399,8 +19389,8 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
             autoPausedForQueueDepth: !!status.autoPausedForQueueDepth,
             activeJobs: jobs.filter((job) => job.state === 'running').length,
             queuedJobs: jobs.filter((job) => job.state === 'queued').length,
-            completedJobs: jobs.filter((job) => job.state === 'succeeded').length,
-            failedJobs: jobs.filter((job) => job.state === 'failed').length,
+            completedJobs: status.completedJobs ?? 0,
+            failedJobs: status.failedJobs ?? 0,
             watchEnvEnabled: mediaAutomationWatchOptIn(),
             libraryWatchConfigured: config.mediaAutomation?.libraryWatchEnabled === true,
             notifyOnJobFailed: config.mediaAutomation?.notifyOnJobFailed === true,
@@ -19424,26 +19414,15 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
             workerGroups: status.workerGroups || config.mediaAutomation?.workerGroups || [],
             deliveryTargets: status.deliveryTargets || config.mediaAutomation?.deliveryTargets || [],
             savings: status.savings || null,
-            metrics: {
-                processed24h: succeededRecent.length,
-                failed24h: failedRecent.length,
-                cancelled24h: finishedRecent.filter((job) => job.state === 'cancelled').length,
-                successRate24h: finishedRecent.length
-                    ? Math.round((succeededRecent.length / finishedRecent.length) * 100)
-                    : null,
-                bytesIn24h: sumResultBytes('sourceBytes') || sumResultBytes('inputBytes'),
-                bytesOut24h: sumResultBytes('outputBytes'),
-                bytesSaved24h: succeededRecent.reduce((sum, job) => {
-                    const saved = Number(job.result?.bytesSaved);
-                    if (Number.isFinite(saved) && saved > 0) return sum + saved;
-                    const inn = Number(job.result?.sourceBytes || job.result?.inputBytes || 0);
-                    const out = Number(job.result?.outputBytes || 0);
-                    return sum + Math.max(0, inn - out);
-                }, 0),
-                encodeMs24h: succeededRecent.reduce((sum, job) => {
-                    const value = Number(job.result?.durationMs || 0);
-                    return sum + (Number.isFinite(value) ? value : 0);
-                }, 0),
+            metrics: status.metrics || {
+                processed24h: 0,
+                failed24h: 0,
+                cancelled24h: 0,
+                successRate24h: null,
+                bytesIn24h: 0,
+                bytesOut24h: 0,
+                bytesSaved24h: 0,
+                encodeMs24h: 0,
                 bytesSaved7d: status.savings?.['7d']?.bytesSaved || 0,
                 encodeMs7d: status.savings?.['7d']?.encodeMs || 0,
                 bytesSaved30d: status.savings?.['30d']?.bytesSaved || 0,
