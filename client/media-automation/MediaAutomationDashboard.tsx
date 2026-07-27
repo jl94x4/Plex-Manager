@@ -292,6 +292,49 @@ const pathBasename = (value: string) => {
     return parts[parts.length - 1] || value;
 };
 
+/** Whole-library folder names that usually mean “scan everything under here”. */
+const BROAD_LIBRARY_BASENAMES = new Set([
+    'media', 'movies', 'movie', 'films', 'film', 'tv', 'tvs', 'shows', 'show',
+    'television', 'series', 'anime', 'music', 'videos', 'video', 'library',
+    'tv shows', 'tv-shows', 'tv_shows', 'tvshows',
+]);
+
+/** True when a library root looks like an entire media tree, not a show/season folder. */
+const isBroadLibraryRoot = (rootPath: string) => {
+    const normalized = String(rootPath || '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+    if (!normalized) return false;
+    const segments = normalized.split('/').filter(Boolean);
+    // Drop Windows drive letter so D:/Media counts as depth 1.
+    const meaningful = segments[0] && /^[A-Za-z]:$/.test(segments[0]) ? segments.slice(1) : segments;
+    if (meaningful.length === 0) return true;
+    if (meaningful.length <= 2) return true;
+    const base = meaningful[meaningful.length - 1].toLowerCase();
+    return meaningful.length <= 3 && BROAD_LIBRARY_BASENAMES.has(base);
+};
+
+const confirmBroadLibrarySave = (rootPath: string) => {
+    if (!isBroadLibraryRoot(rootPath)) return true;
+    return window.confirm(
+        `This root looks like a whole library:\n\n${rootPath}\n\n`
+        + 'Scans will walk everything under it and queue matching files for encode. '
+        + 'Prefer a narrower folder (one show/season) if you only meant a small test.\n\n'
+        + 'Save this library root anyway?',
+    );
+};
+
+const confirmBroadLibraryScan = (roots: string[]) => {
+    const broad = roots.filter(isBroadLibraryRoot);
+    if (!broad.length) return true;
+    const listed = broad.slice(0, 8).join('\n');
+    const extra = broad.length > 8 ? `\n…and ${broad.length - 8} more` : '';
+    return window.confirm(
+        'Scan will walk broad library root(s) and may queue a lot of files:\n\n'
+        + `${listed}${extra}\n\n`
+        + 'Encoding still needs Start if the worker is paused, but the queue can fill quickly.\n\n'
+        + 'Run Scan now anyway?',
+    );
+};
+
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 const cardClass = 'glass-card shadow-xl';
 const listCardClass = 'rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent shadow-xl transition hover:border-plex/40';
@@ -654,6 +697,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             toast('Library name and root path are required.', 'error');
             return;
         }
+        if (!confirmBroadLibrarySave(libraryDraft.rootPath)) return;
         setSavingEditor(true);
         try {
             if (libraryDraft.id !== undefined) await mediaAutomationApi.updateLibrary(libraryDraft.id, libraryDraft);
@@ -1368,6 +1412,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     className={buttonClass}
                                     disabled={busy !== null}
                                     onClick={async () => {
+                                        const enabledRoots = libraries
+                                            .filter((library) => library.enabled !== false)
+                                            .map((library) => String(library.rootPath || '').trim())
+                                            .filter(Boolean);
+                                        if (!confirmBroadLibraryScan(enabledRoots)) return;
                                         setBusy('scan-now');
                                         try {
                                             const response = await mediaAutomationApi.scanNow() as {
@@ -2825,6 +2874,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 onChange={(rootPath) => setLibraryDraft({ ...libraryDraft, rootPath })}
                                 placeholder="/media/movies"
                             />
+                            {isBroadLibraryRoot(libraryDraft.rootPath) && (
+                                <p className="text-xs text-amber-300">
+                                    This looks like a whole-library folder. Scans will walk everything under it and can queue thousands of files. Prefer a narrower path for tests.
+                                </p>
+                            )}
                         </section>
                         <section className="space-y-4 border-t border-border/60 pt-4">
                             <div>
