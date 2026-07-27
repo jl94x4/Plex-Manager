@@ -70,7 +70,7 @@ export type MediaAutomationEstimate = {
 export const mediaAutomationApi = {
     status: () => apiFetch(`${ROOT}/status`) as Promise<MediaAutomationStatus>,
     capabilities: () => apiFetch(`${ROOT}/capabilities`) as Promise<MediaAutomationCapabilities>,
-    jobs: async (limit = 100) => asList<MediaAutomationJob>(
+    jobs: async (limit = 1000) => asList<MediaAutomationJob>(
         await apiFetch(`${ROOT}/jobs?limit=${limit}`),
         ['jobs', 'items', 'results'],
     ),

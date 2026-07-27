@@ -19548,7 +19548,7 @@ app.post('/api/media-automation/pending/test', requireAdmin, requireMediaAutomat
 });
 
 app.get('/api/media-automation/jobs', requireAdmin, requireMediaAutomation, async (req, res) => {
-    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+    const limit = Math.min(2000, Math.max(1, Number(req.query.limit) || 1000));
     const jobs = await mediaAutomationService.listJobs();
     res.json({ jobs: jobs.slice(0, limit) });
 });

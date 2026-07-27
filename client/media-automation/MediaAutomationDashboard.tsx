@@ -490,6 +490,9 @@ const normalizeRules = normalizePipelineRules;
 const MEDIA_AUTOMATION_TABS: MediaAutomationTab[] = ['overview', 'queue', 'pipelines', 'libraries', 'analyzer', 'history', 'activity'];
 const ACTIVITY_PAGE_SIZE_OPTIONS = [20, 50, 75, 100] as const;
 const ACTIVITY_PAGE_SIZE_KEY = 'media-automation-activity-page-size';
+const QUEUE_PAGE_SIZE_OPTIONS = [25, 50, 75, 100, 200] as const;
+const QUEUE_PAGE_SIZE_KEY = 'media-automation-queue-page-size';
+const QUEUE_JOBS_FETCH_LIMIT = 1000;
 
 const readActivityPageSize = (): typeof ACTIVITY_PAGE_SIZE_OPTIONS[number] => {
     try {
@@ -499,6 +502,17 @@ const readActivityPageSize = (): typeof ACTIVITY_PAGE_SIZE_OPTIONS[number] => {
             : 20;
     } catch {
         return 20;
+    }
+};
+
+const readQueuePageSize = (): typeof QUEUE_PAGE_SIZE_OPTIONS[number] => {
+    try {
+        const raw = Number(localStorage.getItem(QUEUE_PAGE_SIZE_KEY));
+        return QUEUE_PAGE_SIZE_OPTIONS.includes(raw as typeof QUEUE_PAGE_SIZE_OPTIONS[number])
+            ? (raw as typeof QUEUE_PAGE_SIZE_OPTIONS[number])
+            : 50;
+    } catch {
+        return 50;
     }
 };
 
@@ -730,6 +744,8 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [activityFilter, setActivityFilter] = useState<'all' | 'job' | 'scan' | 'watch' | 'trigger'>('all');
     const [activityPageSize, setActivityPageSize] = useState<typeof ACTIVITY_PAGE_SIZE_OPTIONS[number]>(() => readActivityPageSize());
     const [activityPage, setActivityPage] = useState(1);
+    const [queuePageSize, setQueuePageSize] = useState<typeof QUEUE_PAGE_SIZE_OPTIONS[number]>(() => readQueuePageSize());
+    const [queuePage, setQueuePage] = useState(1);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [queueFilter, setQueueFilter] = useState<'all' | 'queued' | 'active' | 'failed' | 'dry-run' | 'completed'>('all');
     const [queueSearch, setQueueSearch] = useState('');
@@ -740,6 +756,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [workerTestError, setWorkerTestError] = useState('');
     const [goLiveOpen, setGoLiveOpen] = useState(false);
     const [scanPreview, setScanPreview] = useState<MediaAutomationStatus['lastScanResult'] | null>(null);
+    const [skipPreviewDismissedKey, setSkipPreviewDismissedKey] = useState<string | null>(null);
     const [historyEntries, setHistoryEntries] = useState<MediaAutomationHistoryEntry[]>([]);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'completed' | 'failed' | 'cancelled' | 'dry-run'>('all');
     const [historySearch, setHistorySearch] = useState('');
@@ -761,7 +778,7 @@ export const MediaAutomationDashboard: React.FC = () => {
         const requests = [
             ['status', mediaAutomationApi.status()],
             ['capabilities', mediaAutomationApi.capabilities()],
-            ['jobs', mediaAutomationApi.jobs()],
+            ['jobs', mediaAutomationApi.jobs(QUEUE_JOBS_FETCH_LIMIT)],
             ['activity', mediaAutomationApi.activity(500)],
             ['history', mediaAutomationApi.history({ limit: 200 })],
             ['libraries', mediaAutomationApi.libraries()],
@@ -858,6 +875,8 @@ export const MediaAutomationDashboard: React.FC = () => {
             const response = await mediaAutomationApi.scanNow(options) as ScanNowResponse;
             const result = (response?.result || response) as ScanNowResponse;
             if (options.preview || options.planOnly) {
+                setScanPreview(result || null);
+                setSkipPreviewDismissedKey(null);
                 const sampleSkips = result.sampleSkips
                     || result.result?.sampleSkips
                     || [];
@@ -869,6 +888,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                 );
             } else if (!options.libraryId) {
                 setScanPreview(result || null);
+                setSkipPreviewDismissedKey(null);
                 toast(`Scan finished: ${result.enqueued ?? 0} queued, ${result.skipped ?? 0} skipped.`);
             } else {
                 toast(`Scan finished: ${result.enqueued ?? 0} queued, ${result.skipped ?? 0} skipped.`);
@@ -1107,6 +1127,20 @@ export const MediaAutomationDashboard: React.FC = () => {
         });
     }, [jobs, queueFilter, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter]);
 
+    const queuePageCount = Math.max(1, Math.ceil(filteredJobs.length / queuePageSize));
+    const pagedJobs = useMemo(() => {
+        const start = (queuePage - 1) * queuePageSize;
+        return filteredJobs.slice(start, start + queuePageSize);
+    }, [filteredJobs, queuePage, queuePageSize]);
+
+    useEffect(() => {
+        setQueuePage(1);
+    }, [queueFilter, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter, queuePageSize]);
+
+    useEffect(() => {
+        if (queuePage > queuePageCount) setQueuePage(queuePageCount);
+    }, [queuePage, queuePageCount]);
+
     const copyText = async (text: string, success = 'Copied to clipboard.') => {
         try {
             await navigator.clipboard.writeText(text);
@@ -1282,6 +1316,15 @@ export const MediaAutomationDashboard: React.FC = () => {
         { id: 'history', label: 'History', icon: History },
         { id: 'activity', label: 'Activity', icon: Activity },
     ];
+
+    const activeSkipPreview = scanPreview || status?.lastScanResult || null;
+    const skipPreviewKey = String(
+        activeSkipPreview?.at
+        || `${activeSkipPreview?.discovered || 0}:${activeSkipPreview?.enqueued || 0}:${activeSkipPreview?.skipped || 0}:${activeSkipPreview?.skippedDetails?.[0]?.filePath || ''}`,
+    );
+    const showSkipPreview = Boolean(activeSkipPreview)
+        && skipPreviewDismissedKey !== skipPreviewKey
+        && Boolean(scanPreview || activeSkipPreview?.skippedDetails?.length);
 
     if (loading) {
         return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="h-10 w-10 animate-spin text-plex" /></div>;
@@ -1593,23 +1636,31 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <a className="font-semibold text-plex hover:underline" href={portalUrl('/settings#media-automation')}>Enable in Settings → Media Automation</a>
                         </div>
                     )}
-                    {(scanPreview || status.lastScanResult?.skippedDetails?.length) && (
+                    {showSkipPreview && (
                         <section className={`${cardClass} p-5`}>
                             <div className="flex items-start justify-between gap-3">
                                 <div>
                                     <h2 className="font-bold text-text">Last scan skip preview</h2>
                                     <p className="mt-1 text-sm text-muted">
-                                        {(scanPreview || status.lastScanResult)?.discovered || 0} discovered ·{' '}
-                                        {(scanPreview || status.lastScanResult)?.enqueued || 0} queued ·{' '}
-                                        {(scanPreview || status.lastScanResult)?.skipped || 0} skipped
+                                        {activeSkipPreview?.discovered || 0} discovered ·{' '}
+                                        {activeSkipPreview?.enqueued || 0} queued ·{' '}
+                                        {activeSkipPreview?.skipped || 0} skipped
                                     </p>
                                 </div>
-                                <button type="button" className="rounded-lg p-2 text-muted hover:bg-white/5" onClick={() => setScanPreview(null)} aria-label="Dismiss">
+                                <button
+                                    type="button"
+                                    className="rounded-lg p-2 text-muted hover:bg-white/5"
+                                    onClick={() => {
+                                        setScanPreview(null);
+                                        setSkipPreviewDismissedKey(skipPreviewKey || 'dismissed');
+                                    }}
+                                    aria-label="Dismiss"
+                                >
                                     <X className="h-4 w-4" />
                                 </button>
                             </div>
                             <div className="mt-3 space-y-2">
-                                {((scanPreview || status.lastScanResult)?.skippedDetails || []).slice(0, 12).map((entry, index) => (
+                                {(activeSkipPreview?.skippedDetails || []).slice(0, 12).map((entry, index) => (
                                     <div key={`${entry.filePath}-${index}`} className="rounded-lg border border-border/60 bg-background/30 px-3 py-2 text-xs">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${skipReasonChipClass(entry.reason)}`}>
@@ -1624,7 +1675,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         <p className="mt-1 truncate font-mono text-muted" title={entry.filePath}>{entry.filePath}</p>
                                     </div>
                                 ))}
-                                {!((scanPreview || status.lastScanResult)?.skippedDetails || []).length && (
+                                {!(activeSkipPreview?.skippedDetails || []).length && (
                                     <p className="text-sm text-muted">No skip details recorded for this scan.</p>
                                 )}
                             </div>
@@ -2081,6 +2132,28 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         onChange={(event) => setQueueErrorFilter(event.target.value)}
                                         placeholder="Filter by error text…"
                                     />
+                                    <label className="flex items-center gap-2 text-xs font-semibold text-muted sm:ml-auto">
+                                        <span className="whitespace-nowrap">Per page</span>
+                                        <CustomSelect
+                                            compact
+                                            className="min-w-[5.5rem]"
+                                            value={queuePageSize}
+                                            onChange={(value) => {
+                                                const next = Number(value) as typeof QUEUE_PAGE_SIZE_OPTIONS[number];
+                                                if (!QUEUE_PAGE_SIZE_OPTIONS.includes(next)) return;
+                                                setQueuePageSize(next);
+                                                try {
+                                                    localStorage.setItem(QUEUE_PAGE_SIZE_KEY, String(next));
+                                                } catch {
+                                                    // ignore
+                                                }
+                                            }}
+                                            options={QUEUE_PAGE_SIZE_OPTIONS.map((size) => ({
+                                                value: String(size),
+                                                label: String(size),
+                                            }))}
+                                        />
+                                    </label>
                                 </div>
                             </section>
                             <section className={`${cardClass} p-4`}>
@@ -2202,7 +2275,9 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <div className={`${cardClass} p-6 text-center text-sm text-muted`}>
                                     No jobs match this filter{queueSearch.trim() || queueLibraryFilter || queuePipelineFilter || queueErrorFilter.trim() ? ' / filters' : ''}.
                                 </div>
-                            ) : filteredJobs.map((job) => {
+                            ) : (
+                                <>
+                                    {pagedJobs.map((job) => {
                                 const jobId = job.id;
                                 const state = jobStateValue(job);
                                 const dryRunJob = jobIsDryRun(job);
@@ -2323,7 +2398,41 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         )}
                                     </article>
                                 );
-                            })}
+                                    })}
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <p className="text-xs text-muted">
+                                            Showing {Math.min(filteredJobs.length, (queuePage - 1) * queuePageSize + 1)}
+                                            -
+                                            {Math.min(filteredJobs.length, queuePage * queuePageSize)}
+                                            {' '}of {filteredJobs.length}
+                                            {jobs.length >= QUEUE_JOBS_FETCH_LIMIT ? ` (loaded first ${QUEUE_JOBS_FETCH_LIMIT})` : ''}
+                                        </p>
+                                        {queuePageCount > 1 && (
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={queuePage <= 1}
+                                                    onClick={() => setQueuePage((page) => Math.max(1, page - 1))}
+                                                >
+                                                    Previous
+                                                </button>
+                                                <span className="text-sm text-muted">
+                                                    Page {queuePage} of {queuePageCount}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={queuePage >= queuePageCount}
+                                                    onClick={() => setQueuePage((page) => Math.min(queuePageCount, page + 1))}
+                                                >
+                                                    Next
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
