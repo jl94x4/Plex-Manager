@@ -2147,7 +2147,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         ]}
                                     />
                                     <input
-                                        className={`${fieldClass} sm:max-w-xs`}
+                                        className="w-full sm:max-w-xs rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex"
                                         value={queueErrorFilter}
                                         onChange={(event) => setQueueErrorFilter(event.target.value)}
                                         placeholder="Filter by error text…"
