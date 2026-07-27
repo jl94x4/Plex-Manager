@@ -167,9 +167,20 @@ export const mediaAutomationApi = {
     setPriority: (id: string | number, priority: number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/priority`, json({ priority })),
     retryJob: (id: string | number, options: { forceCpu?: boolean } = {}) =>
         apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/retry`, json({ forceCpu: options.forceCpu === true })),
-    estimate: (path: string, pipelineId?: string | number | null, sampleSeconds?: number) => apiFetch(
+    estimate: (
+        path: string,
+        pipelineId?: string | number | null,
+        sampleSeconds?: number,
+        options: { libraryId?: string | number | null; libraryRoot?: string | null } = {},
+    ) => apiFetch(
         `${ROOT}/estimate`,
-        json({ path, pipelineId: pipelineId ?? null, ...(sampleSeconds ? { sampleSeconds } : {}) }),
+        json({
+            path,
+            pipelineId: pipelineId ?? null,
+            ...(sampleSeconds ? { sampleSeconds } : {}),
+            libraryId: options.libraryId ?? null,
+            libraryRoot: options.libraryRoot ?? null,
+        }),
     ) as Promise<{ ok?: boolean; estimate?: MediaAutomationEstimate; error?: string }>,
     createLibrary: (library: MediaAutomationLibrary) => apiFetch(`${ROOT}/libraries`, json(library)),
     updateLibrary: (id: string | number, library: MediaAutomationLibrary) => apiFetch(`${ROOT}/libraries/${encodeURIComponent(id)}`, {

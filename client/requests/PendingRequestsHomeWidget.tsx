@@ -165,9 +165,10 @@ export const PendingRequestsHomeWidget: React.FC<{
         if (wide) {
             return (
                 <RequestCardShell key={item.id} backdropUrl={item.backdropUrl} posterUrl={item.posterUrl}>
-                <div className="flex flex-col sm:flex-row gap-3 p-3">
-                    <div className="flex gap-3 min-w-0 flex-1">
-                        <div className="w-14 aspect-[2/3] rounded-lg overflow-hidden bg-card border border-border/40 shrink-0">
+                <div className="flex flex-col sm:flex-row sm:items-start gap-3 p-3">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                        {/* Explicit w×h — flex stretch overrides aspect-ratio and squeezes posters. */}
+                        <div className="w-16 h-24 rounded-lg overflow-hidden bg-card border border-border/40 shrink-0 self-start">
                             {item.posterUrl ? (
                                 <img src={item.posterUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
                             ) : (
@@ -223,7 +224,7 @@ export const PendingRequestsHomeWidget: React.FC<{
         return (
             <RequestCardShell key={item.id} backdropUrl={item.backdropUrl} posterUrl={item.posterUrl}>
             <div className="flex items-center gap-3 p-2.5">
-                <div className="w-10 aspect-[2/3] rounded overflow-hidden bg-card border border-border/40 shrink-0">
+                <div className="w-12 h-[4.5rem] rounded overflow-hidden bg-card border border-border/40 shrink-0 self-center">
                     {item.posterUrl ? (
                         <img src={item.posterUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
                     ) : (

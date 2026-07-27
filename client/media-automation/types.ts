@@ -298,6 +298,8 @@ export type MediaAutomationJob = {
     id: string | number;
     path?: string;
     sourcePath?: string;
+    libraryId?: string | number | null;
+    libraryRoot?: string | null;
     pipelineId?: string | number;
     pipelineName?: string;
     status?: string;

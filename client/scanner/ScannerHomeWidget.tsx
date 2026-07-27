@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Clock3, ListTodo, Radar, RefreshCw, Target } from 'lucide-react';
+import { CheckCircle2, Clock3, FolderInput, ListTodo, Radar, RefreshCw, Target } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { formatScannerWhen, scannerActionStyles, shortenScannerPath } from './eventMeta';
 import { ScannerSourceBadge } from './ScannerSourceBadge';
@@ -149,38 +149,79 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                     </div>
                 </div>
 
-                <div className="rounded-xl bg-black/25 border border-white/5 px-3.5 py-3">
-                    <p className="text-[9px] uppercase tracking-wider font-bold text-muted mb-2.5">Latest activity</p>
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3 px-0.5">
+                        <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-muted">Latest activity</p>
+                        {last?.at ? (
+                            <p className="text-[11px] text-muted/80 tabular-nums shrink-0">{formatScannerWhen(last.at)}</p>
+                        ) : null}
+                    </div>
                     {last ? (
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,11rem)_minmax(0,1.2fr)_minmax(0,1fr)] md:items-center md:gap-4">
-                            <div className="min-w-0 flex flex-wrap items-center gap-1.5">
-                                <span className={`text-[10px] font-bold uppercase ${last.ok ? 'text-emerald-300' : 'text-red-300'}`}>
-                                    {last.ok ? 'ok' : 'error'}
-                                </span>
-                                {(last.reason || last.action) ? (
-                                    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${lastStyle.className}`}>
-                                        {last.reason || lastStyle.label}
+                        <div
+                            className={`relative overflow-hidden rounded-xl border px-3.5 py-3.5 sm:px-4 sm:py-4 ${
+                                last.ok
+                                    ? 'border-emerald-400/20 bg-gradient-to-br from-emerald-500/[0.08] via-white/[0.03] to-transparent'
+                                    : 'border-red-400/25 bg-gradient-to-br from-red-500/[0.10] via-white/[0.03] to-transparent'
+                            }`}
+                        >
+                            <div
+                                className={`absolute inset-y-0 left-0 w-1 ${
+                                    last.ok ? 'bg-emerald-400/70' : 'bg-red-400/70'
+                                }`}
+                                aria-hidden
+                            />
+                            <div className="pl-2.5 sm:pl-3 flex flex-col gap-2.5 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span
+                                        className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                                            last.ok
+                                                ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-200'
+                                                : 'bg-red-500/15 border-red-400/35 text-red-200'
+                                        }`}
+                                    >
+                                        {last.ok ? (
+                                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                                        ) : (
+                                            <span className="w-1.5 h-1.5 rounded-full bg-red-300 shrink-0" />
+                                        )}
+                                        {last.ok ? 'Success' : 'Failed'}
                                     </span>
+                                    {(last.reason || last.action) ? (
+                                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${lastStyle.className}`}>
+                                            {last.reason || lastStyle.label}
+                                        </span>
+                                    ) : null}
+                                    <ScannerSourceBadge source={last.source} className="ml-0.5" />
+                                </div>
+
+                                <div className="min-w-0">
+                                    {last.title ? (
+                                        <p className="text-[15px] leading-snug text-text font-semibold tracking-tight truncate" title={last.title}>
+                                            {last.title}
+                                        </p>
+                                    ) : (
+                                        <p className="text-sm text-muted">No title reported</p>
+                                    )}
+                                    {last.error ? (
+                                        <p className="text-xs text-red-200/90 mt-1.5 truncate" title={last.error}>{last.error}</p>
+                                    ) : null}
+                                </div>
+
+                                {last.folder ? (
+                                    <p
+                                        className="inline-flex items-center gap-1.5 max-w-full text-xs text-muted/90 font-medium"
+                                        title={last.folder}
+                                    >
+                                        <FolderInput className="w-3.5 h-3.5 shrink-0 text-sky-300/70" />
+                                        <span className="truncate">{shortenScannerPath(last.folder, 5)}</span>
+                                    </p>
                                 ) : null}
-                                <span className="text-[10px] text-muted">{formatScannerWhen(last.at)}</span>
-                                <ScannerSourceBadge source={last.source} />
-                            </div>
-                            <div className="min-w-0">
-                                {last.title ? (
-                                    <p className="text-sm text-text font-semibold truncate" title={last.title}>{last.title}</p>
-                                ) : (
-                                    <p className="text-sm text-muted">No title reported</p>
-                                )}
-                                {last.error ? <p className="text-[10px] text-red-200/90 mt-1 truncate" title={last.error}>{last.error}</p> : null}
-                            </div>
-                            <div className="min-w-0 md:text-right">
-                                <p className="text-xs text-muted font-medium truncate md:whitespace-nowrap" title={last.folder}>
-                                    {shortenScannerPath(last.folder, 5)}
-                                </p>
                             </div>
                         </div>
                     ) : (
-                        <p className="text-xs text-muted">Waiting for the next webhook or manual scan.</p>
+                        <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-center">
+                            <p className="text-sm text-muted">Waiting for the next webhook or manual scan.</p>
+                        </div>
                     )}
                 </div>
 

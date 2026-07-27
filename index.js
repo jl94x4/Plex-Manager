@@ -19726,10 +19726,13 @@ app.post('/api/media-automation/estimate', requireAdmin, requireMediaAutomation,
             filePath,
             pipelineId: req.body?.pipelineId ?? null,
             sampleSeconds: req.body?.sampleSeconds,
+            libraryId: req.body?.libraryId ?? null,
+            libraryRoot: req.body?.libraryRoot ?? null,
         });
         await appendAuditLog('media_automation_estimate', req.user, null, {
             path: filePath,
             pipelineId: req.body?.pipelineId ?? null,
+            libraryId: req.body?.libraryId ?? null,
         });
         res.json({ ok: true, estimate });
     } catch (error) {

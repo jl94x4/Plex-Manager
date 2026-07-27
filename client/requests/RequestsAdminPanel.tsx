@@ -528,8 +528,8 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                 posterUrl={item.posterUrl}
                                 className={`hover:border-plex/25 ${isSelected ? 'ring-1 ring-plex/40' : ''}`}
                             >
-                            <div className="flex flex-col sm:flex-row gap-4 p-4">
-                                <div className="flex gap-4 min-w-0 flex-1">
+                            <div className="flex flex-col sm:flex-row sm:items-start gap-4 p-4">
+                                <div className="flex items-start gap-4 min-w-0 flex-1">
                                     {showPendingActions && (
                                         <label className="flex items-start pt-1 cursor-pointer shrink-0">
                                             <input
@@ -540,7 +540,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                             />
                                         </label>
                                     )}
-                                    <div className="w-[9rem] aspect-[2/3] rounded-lg overflow-hidden bg-card border border-border/50 shrink-0">
+                                    <div className="w-[9rem] h-[13.5rem] self-start rounded-lg overflow-hidden bg-card border border-border/50 shrink-0">
                                         {item.posterUrl ? (
                                             <img
                                                 src={item.posterUrl}

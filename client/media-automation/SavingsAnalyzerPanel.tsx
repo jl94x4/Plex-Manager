@@ -168,7 +168,9 @@ export const SavingsAnalyzerPanel: React.FC<Props> = ({
         }
         toast('Running 60s sample encode - this can take a minute…');
         try {
-            const response = await mediaAutomationApi.estimate(row.path, row.pipelineId ?? pipelineId ?? null);
+            const response = await mediaAutomationApi.estimate(row.path, row.pipelineId ?? pipelineId ?? null, undefined, {
+                libraryId: row.libraryId ?? null,
+            });
             const estimate = response.estimate;
             if (!estimate) throw new Error(response.error || 'Estimate failed');
             toast(

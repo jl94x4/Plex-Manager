@@ -1214,7 +1214,10 @@ export const MediaAutomationDashboard: React.FC = () => {
         setBusy(`estimate-${jobId}`);
         toast('Estimating savings with a 60s sample encode - this can take a minute or two…');
         try {
-            const response = await mediaAutomationApi.estimate(sourcePath, job.pipelineId ?? null);
+            const response = await mediaAutomationApi.estimate(sourcePath, job.pipelineId ?? null, undefined, {
+                libraryId: (job.libraryId as string | number | null | undefined) ?? null,
+                libraryRoot: typeof job.libraryRoot === 'string' ? job.libraryRoot : null,
+            });
             const estimate = response.estimate;
             if (!estimate) throw new Error(response.error || 'Estimate failed');
             const percent = estimate.estimatedSavingsPercent;
