@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock3, Cpu, FolderSearch, Gauge, PlayCircle, Radar, Server, ShieldCheck, Tags } from 'lucide-react';
+import { Clock3, Cpu, FolderSearch, Gauge, Percent, PlayCircle, Radar, Server, ShieldCheck, Tags } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import type {
     HardwareMode,
@@ -272,24 +272,6 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     disabled={!enabled}
                     border={false}
                 />
-                <label className="block max-w-sm text-xs uppercase tracking-wide font-bold text-muted" htmlFor="media-automation-min-savings">
-                    Minimum savings (%)
-                    <input
-                        id="media-automation-min-savings"
-                        className={`${fieldClass} mt-2`}
-                        type="number"
-                        min={0}
-                        max={95}
-                        disabled={!enabled}
-                        value={config.minSavingsPercent ?? 0}
-                        onChange={(event) => update({
-                            minSavingsPercent: Math.min(95, Math.max(0, Math.round(Number(event.target.value) || 0))),
-                        })}
-                    />
-                </label>
-                <p className="text-xs text-muted">
-                    0 disables the guardrail. When set, transcode outputs that shrink the file by less than this percent are discarded and the original is kept (job completes as skipped).
-                </p>
                 <label className="block max-w-lg text-xs uppercase tracking-wide font-bold text-muted">
                     Dolby Vision handling
                     <div className="mt-2">
@@ -328,6 +310,233 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                 <p className="text-xs text-muted">
                     Preserve forces Main10/P010 on HEVC/AV1 and writes color + mastering/MaxCLL tags when ffprobe reports them (best on CPU x265).
                 </p>
+            </section>
+
+            <section className="glass-card-sm p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                    <Percent className="w-5 h-5 text-plex" />
+                    <h4 className="font-bold text-text">ROI & niche gates</h4>
+                </div>
+                <p className="text-sm text-muted">
+                    Skip low-value work before (and after) encode. 0 disables each numeric gate unless noted.
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted" htmlFor="media-automation-min-savings">
+                        Minimum savings (%)
+                        <input
+                            id="media-automation-min-savings"
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={95}
+                            disabled={!enabled}
+                            value={config.minSavingsPercent ?? 0}
+                            onChange={(event) => update({
+                                minSavingsPercent: Math.min(95, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Pre-filters via estimate and discards finished encodes below this %.
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Min reclaim (GB)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={1000}
+                            step={0.1}
+                            disabled={!enabled}
+                            value={config.minReclaimGb ?? 0}
+                            onChange={(event) => update({
+                                minReclaimGb: Math.min(1000, Math.max(0, Number(event.target.value) || 0)),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Skip when estimated bytes saved is below this.
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Min source size (GB)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={1000}
+                            step={0.1}
+                            disabled={!enabled}
+                            value={config.minSourceGb ?? 0}
+                            onChange={(event) => update({
+                                minSourceGb: Math.min(1000, Math.max(0, Number(event.target.value) || 0)),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Ignore files smaller than this.
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Min bitrate (kbps)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={200000}
+                            disabled={!enabled}
+                            value={config.minBitrateKbps ?? 0}
+                            onChange={(event) => update({
+                                minBitrateKbps: Math.min(200000, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Skip already-compact sources.
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Min file age (days)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={3650}
+                            disabled={!enabled}
+                            value={config.minFileAgeDays ?? 0}
+                            onChange={(event) => update({
+                                minFileAgeDays: Math.min(3650, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Let new downloads settle before encode.
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Sample gate min size (GB)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={1000}
+                            step={0.1}
+                            disabled={!enabled || config.sampleGateEnabled !== true}
+                            value={config.sampleGateMinSizeGb ?? 2}
+                            onChange={(event) => update({
+                                sampleGateMinSizeGb: Math.min(1000, Math.max(0, Number(event.target.value) || 0)),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Only sample-encode files at least this large.
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Free-space ROI floor (%)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={95}
+                            disabled={!enabled}
+                            value={config.freeSpaceRoiMinPercent ?? 0}
+                            onChange={(event) => update({
+                                freeSpaceRoiMinPercent: Math.min(95, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            When disk is low, raise min savings to at least this.
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Daytime extra savings (%)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={50}
+                            disabled={!enabled}
+                            value={config.daytimeExtraSavingsPercent ?? 0}
+                            onChange={(event) => update({
+                                daytimeExtraSavingsPercent: Math.min(50, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Add to threshold outside quiet hours.
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Max watch count
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={100000}
+                            disabled={!enabled}
+                            value={config.maxWatchCount ?? 0}
+                            onChange={(event) => update({
+                                maxWatchCount: Math.min(100000, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Skip heavily watched titles (0 = off).
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Skip watched within (days)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={3650}
+                            disabled={!enabled}
+                            value={config.skipWatchedWithinDays ?? 0}
+                            onChange={(event) => update({
+                                skipWatchedWithinDays: Math.min(3650, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Protect recently watched media.
+                        </span>
+                    </label>
+                    <label className="block text-xs uppercase tracking-wide font-bold text-muted">
+                        Season match min (%)
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={0}
+                            max={100}
+                            disabled={!enabled}
+                            value={config.seasonMatchMinPercent ?? 0}
+                            onChange={(event) => update({
+                                seasonMatchMinPercent: Math.min(100, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                            })}
+                        />
+                        <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
+                            Hold mixed seasons until this % already match.
+                        </span>
+                    </label>
+                </div>
+                <SettingsToggleRow
+                    title="Sample encode gate"
+                    description="Before a full transcode, run a short sample and abort if projected savings miss the ROI thresholds."
+                    checked={config.sampleGateEnabled === true}
+                    onChange={(sampleGateEnabled) => update({ sampleGateEnabled })}
+                    disabled={!enabled}
+                    border={false}
+                />
+                <SettingsToggleRow
+                    title="Replace quality guard"
+                    description="Block replace commits that drop resolution class or HDR signaling."
+                    checked={config.replaceQualityGuard !== false}
+                    onChange={(replaceQualityGuard) => update({ replaceQualityGuard })}
+                    disabled={!enabled}
+                    border={false}
+                />
+                <SettingsToggleRow
+                    title="Audio cleanup only if video already matches"
+                    description="Audio-only pipelines require source video to already be HEVC/AV1."
+                    checked={config.audioOnlyIfVideoMatches === true}
+                    onChange={(audioOnlyIfVideoMatches) => update({ audioOnlyIfVideoMatches })}
+                    disabled={!enabled}
+                    border={false}
+                />
             </section>
 
             <section className="glass-card-sm p-5 space-y-4">

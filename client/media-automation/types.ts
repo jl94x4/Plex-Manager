@@ -115,6 +115,7 @@ export type MediaAutomationScanHistoryEntry = {
     skipped?: number;
     errors?: unknown[];
     skippedDetails?: Array<{ filePath?: string; reason?: string; videoCodec?: string | null }>;
+    sampleSkips?: Array<{ filePath?: string; reason?: string; videoCodec?: string | null }>;
 };
 
 export type MediaAutomationHistoryEntry = {
@@ -169,6 +170,7 @@ export type MediaAutomationStatus = {
         skipped?: number;
         errors?: unknown[];
         skippedDetails?: Array<{ filePath?: string; reason?: string; videoCodec?: string | null }>;
+        sampleSkips?: Array<{ filePath?: string; reason?: string; videoCodec?: string | null }>;
         at?: string;
     } | null;
     libraryScanEnabled?: boolean;
@@ -202,6 +204,19 @@ export type MediaAutomationStatus = {
     pauseWhenStreamingLanes?: 'gpu' | 'all';
     arrRescanEnabled?: boolean;
     minSavingsPercent?: number;
+    minReclaimGb?: number;
+    minSourceGb?: number;
+    minBitrateKbps?: number;
+    minFileAgeDays?: number;
+    sampleGateEnabled?: boolean;
+    sampleGateMinSizeGb?: number;
+    replaceQualityGuard?: boolean;
+    freeSpaceRoiMinPercent?: number;
+    daytimeExtraSavingsPercent?: number;
+    maxWatchCount?: number;
+    skipWatchedWithinDays?: number;
+    seasonMatchMinPercent?: number;
+    audioOnlyIfVideoMatches?: boolean;
     dolbyVisionHandling?: 'skip' | 'preserve' | 'strip';
     hdr10Handling?: 'preserve' | 'strip' | 'skip';
     watch?: {
@@ -437,6 +452,8 @@ export type MediaAutomationPipeline = {
     /** inherit = use global Settings. */
     dolbyVisionHandling?: 'inherit' | 'skip' | 'preserve' | 'strip';
     hdr10Handling?: 'inherit' | 'preserve' | 'strip' | 'skip';
+    /** inherit / null = use global Settings minSavingsPercent. */
+    minSavingsPercent?: number | 'inherit' | null;
     rules: MediaAutomationRules;
     steps: MediaAutomationStep[];
     [key: string]: unknown;
@@ -486,8 +503,34 @@ export type MediaAutomationSettingsConfig = {
     pauseWhenStreamingLanes?: 'gpu' | 'all';
     /** Ask Sonarr/Radarr to rescan the affected item after replace or delivery. */
     arrRescanEnabled?: boolean;
-    /** 0 disables. Discard transcode outputs saving less than this percent. */
+    /** 0 disables. Discard outputs / skip enqueue when estimated savings is below this %. */
     minSavingsPercent?: number;
+    /** 0 disables. Skip when estimated reclaim is below this many GB. */
+    minReclaimGb?: number;
+    /** 0 disables. Skip sources smaller than this many GB. */
+    minSourceGb?: number;
+    /** 0 disables. Skip sources whose bitrate is below this kbps. */
+    minBitrateKbps?: number;
+    /** 0 disables. Skip files newer than this many days. */
+    minFileAgeDays?: number;
+    /** Run a short sample encode before full transcode and abort if ROI fails. */
+    sampleGateEnabled?: boolean;
+    /** Only run sample gate when source is at least this many GB. */
+    sampleGateMinSizeGb?: number;
+    /** Block replace commits that drop resolution class or HDR signaling. */
+    replaceQualityGuard?: boolean;
+    /** When free disk is low, raise effective min savings to at least this % (0 = off). */
+    freeSpaceRoiMinPercent?: number;
+    /** During daytime (outside quiet hours), add this % to the savings threshold (0 = off). */
+    daytimeExtraSavingsPercent?: number;
+    /** 0 disables. Skip when Plex/Jellyfin viewCount exceeds this. */
+    maxWatchCount?: number;
+    /** 0 disables. Skip when last viewed within this many days. */
+    skipWatchedWithinDays?: number;
+    /** 0 disables. Skip mixed season folders until ≥ this % match target. */
+    seasonMatchMinPercent?: number;
+    /** Audio-only cleanup pipelines require source video already HEVC/AV1. */
+    audioOnlyIfVideoMatches?: boolean;
     /** Dolby Vision re-encodes: skip (default), strip, or preserve (best-effort, often lossy). */
     dolbyVisionHandling?: 'skip' | 'preserve' | 'strip';
     /** HDR10/HLG: preserve metadata + 10-bit (default), strip, or skip. */
@@ -522,6 +565,19 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     pauseWhenStreamingLanes: 'gpu',
     arrRescanEnabled: false,
     minSavingsPercent: 0,
+    minReclaimGb: 0,
+    minSourceGb: 0,
+    minBitrateKbps: 0,
+    minFileAgeDays: 0,
+    sampleGateEnabled: false,
+    sampleGateMinSizeGb: 2,
+    replaceQualityGuard: true,
+    freeSpaceRoiMinPercent: 0,
+    daytimeExtraSavingsPercent: 0,
+    maxWatchCount: 0,
+    skipWatchedWithinDays: 0,
+    seasonMatchMinPercent: 0,
+    audioOnlyIfVideoMatches: false,
     dolbyVisionHandling: 'skip',
     hdr10Handling: 'preserve',
     workerPaused: true,
@@ -572,6 +628,7 @@ export const emptyPipeline = (): MediaAutomationPipeline => ({
     samplePath: '',
     dolbyVisionHandling: 'inherit',
     hdr10Handling: 'inherit',
+    minSavingsPercent: 'inherit',
     rules: {
         operator: 'AND',
         conditions: [{

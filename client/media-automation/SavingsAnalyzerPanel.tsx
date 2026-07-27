@@ -7,6 +7,7 @@ import type {
     MediaAutomationAnalyzeRow,
     MediaAutomationLibrary,
     MediaAutomationPipeline,
+    MediaAutomationStatus,
 } from './types';
 
 const cardClass = 'rounded-2xl border border-border bg-card/70 shadow-sm';
@@ -39,6 +40,7 @@ const confidenceClass = (value?: string | null) => {
 type Props = {
     libraries: MediaAutomationLibrary[];
     pipelines: MediaAutomationPipeline[];
+    status?: MediaAutomationStatus | null;
     toast: (message: string, tone?: 'success' | 'error') => void;
     onEnqueued?: () => void | Promise<void>;
 };
@@ -46,9 +48,11 @@ type Props = {
 export const SavingsAnalyzerPanel: React.FC<Props> = ({
     libraries,
     pipelines,
+    status,
     toast,
     onEnqueued,
 }) => {
+    const defaultMinPercent = Math.min(95, Math.max(0, Math.round(Number(status?.minSavingsPercent) || 20)));
     const [libraryId, setLibraryId] = useState('');
     const [pipelineId, setPipelineId] = useState('');
     const [force, setForce] = useState(false);
@@ -60,6 +64,8 @@ export const SavingsAnalyzerPanel: React.FC<Props> = ({
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const [sortKey, setSortKey] = useState<SortKey>('savings');
     const [matchedOnly, setMatchedOnly] = useState(true);
+    const [enqueueMinPercentEnabled, setEnqueueMinPercentEnabled] = useState(false);
+    const [enqueueMinPercent, setEnqueueMinPercent] = useState(String(defaultMinPercent));
 
     const rows = useMemo(() => {
         const list = Array.isArray(result?.rows) ? [...result.rows] : [];
@@ -72,6 +78,13 @@ export const SavingsAnalyzerPanel: React.FC<Props> = ({
         });
         return filtered;
     }, [matchedOnly, result?.rows, sortKey]);
+
+    const minEnqueuePercent = Math.min(95, Math.max(0, Math.round(Number(enqueueMinPercent) || 0)));
+
+    const passesEnqueuePercentGate = (row: MediaAutomationAnalyzeRow) => {
+        if (!enqueueMinPercentEnabled) return true;
+        return (Number(row.estimatedSavingsPercent) || 0) >= minEnqueuePercent;
+    };
 
     const selectedRows = useMemo(
         () => rows.filter((row) => selected.has(row.path)),
@@ -110,7 +123,7 @@ export const SavingsAnalyzerPanel: React.FC<Props> = ({
     };
 
     const toggleAllVisible = () => {
-        const enqueueable = rows.filter((row) => row.matched);
+        const enqueueable = rows.filter((row) => row.matched && passesEnqueuePercentGate(row));
         const allSelected = enqueueable.length > 0 && enqueueable.every((row) => selected.has(row.path));
         if (allSelected) {
             setSelected(new Set());
@@ -120,9 +133,16 @@ export const SavingsAnalyzerPanel: React.FC<Props> = ({
     };
 
     const enqueueSelected = async () => {
-        const paths = selectedRows.filter((row) => row.matched).map((row) => row.path);
+        const paths = selectedRows
+            .filter((row) => row.matched && passesEnqueuePercentGate(row))
+            .map((row) => row.path);
         if (!paths.length) {
-            toast('Select one or more matched files to enqueue.', 'error');
+            toast(
+                enqueueMinPercentEnabled
+                    ? `Select matched files estimated ≥ ${minEnqueuePercent}% savings.`
+                    : 'Select one or more matched files to enqueue.',
+                'error',
+            );
             return;
         }
         setEnqueueBusy(true);
@@ -269,19 +289,40 @@ export const SavingsAnalyzerPanel: React.FC<Props> = ({
                                 />
                                 Matched only
                             </label>
-                            <button type="button" className={buttonClass} onClick={toggleAllVisible} disabled={!rows.some((row) => row.matched)}>
-                                {rows.filter((row) => row.matched).every((row) => selected.has(row.path)) && rows.some((row) => row.matched)
+                            <label className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm text-text">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-border bg-background text-plex focus:ring-plex"
+                                    checked={enqueueMinPercentEnabled}
+                                    onChange={(event) => setEnqueueMinPercentEnabled(event.target.checked)}
+                                />
+                                Only enqueue estimated ≥
+                                <input
+                                    className="w-16 rounded border border-border bg-background px-2 py-1 text-sm text-text outline-none focus:border-plex"
+                                    type="number"
+                                    min={0}
+                                    max={95}
+                                    disabled={!enqueueMinPercentEnabled}
+                                    value={enqueueMinPercent}
+                                    onChange={(event) => setEnqueueMinPercent(event.target.value)}
+                                    aria-label="Minimum estimated savings percent"
+                                />
+                                %
+                            </label>
+                            <button type="button" className={buttonClass} onClick={toggleAllVisible} disabled={!rows.some((row) => row.matched && passesEnqueuePercentGate(row))}>
+                                {rows.filter((row) => row.matched && passesEnqueuePercentGate(row)).every((row) => selected.has(row.path))
+                                    && rows.some((row) => row.matched && passesEnqueuePercentGate(row))
                                     ? 'Clear selection'
                                     : 'Select matched'}
                             </button>
                             <button
                                 type="button"
                                 className={primaryButtonClass}
-                                disabled={enqueueBusy || selectedRows.filter((row) => row.matched).length === 0}
+                                disabled={enqueueBusy || selectedRows.filter((row) => row.matched && passesEnqueuePercentGate(row)).length === 0}
                                 onClick={() => void enqueueSelected()}
                             >
                                 {enqueueBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                                Enqueue selected ({selectedRows.filter((row) => row.matched).length})
+                                Enqueue selected ({selectedRows.filter((row) => row.matched && passesEnqueuePercentGate(row)).length})
                             </button>
                         </div>
                     </div>

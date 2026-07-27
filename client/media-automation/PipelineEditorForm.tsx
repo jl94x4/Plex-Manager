@@ -154,6 +154,46 @@ export const PipelineEditorForm: React.FC<Props> = ({
                             ]}
                         />
                     </label>
+                    <label className="space-y-2 text-sm font-semibold text-text">
+                        Min savings %
+                        <CustomSelect
+                            value={
+                                pipelineDraft.minSavingsPercent == null
+                                || String(pipelineDraft.minSavingsPercent).toLowerCase() === 'inherit'
+                                    ? 'inherit'
+                                    : 'custom'
+                            }
+                            onChange={(mode) => setPipelineDraft({
+                                ...pipelineDraft,
+                                minSavingsPercent: mode === 'inherit'
+                                    ? 'inherit'
+                                    : Math.min(95, Math.max(0, Math.round(Number(pipelineDraft.minSavingsPercent) || 0))),
+                            })}
+                            options={[
+                                { value: 'inherit', label: 'Use global setting' },
+                                { value: 'custom', label: 'Override' },
+                            ]}
+                        />
+                    </label>
+                    {!(
+                        pipelineDraft.minSavingsPercent == null
+                        || String(pipelineDraft.minSavingsPercent).toLowerCase() === 'inherit'
+                    ) && (
+                        <label className="space-y-2 text-sm font-semibold text-text">
+                            Override value (%)
+                            <input
+                                className={fieldClass}
+                                type="number"
+                                min={0}
+                                max={95}
+                                value={Math.min(95, Math.max(0, Math.round(Number(pipelineDraft.minSavingsPercent) || 0)))}
+                                onChange={(event) => setPipelineDraft({
+                                    ...pipelineDraft,
+                                    minSavingsPercent: Math.min(95, Math.max(0, Math.round(Number(event.target.value) || 0))),
+                                })}
+                            />
+                        </label>
+                    )}
                 </div>
                 {pipelineDraft.outputMode === 'dry-run' && (
                     <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">

@@ -259,14 +259,30 @@ const jobIsDryRun = (job: MediaAutomationJob | null | undefined) => {
 const jobQueueOutcomeSummary = (job: MediaAutomationJob | null | undefined) => {
     if (!job) return null;
     const state = String(job.state || job.status || '').toLowerCase();
-    if (!['completed', 'succeeded', 'success', 'done'].includes(state)) return null;
+    if (!['completed', 'succeeded', 'success', 'done', 'skipped'].includes(state)) return null;
     if (jobIsDryRun(job)) return null;
+
+    const result = job.result && typeof job.result === 'object'
+        ? job.result as {
+            skipped?: boolean | string;
+            reason?: string;
+            sourceBytes?: number;
+            outputBytes?: number;
+            bytesSaved?: number;
+        }
+        : null;
+    const skipReason = result?.skipped === true
+        ? String(result.reason || 'skipped')
+        : (typeof result?.skipped === 'string' && result.skipped
+            ? String(result.skipped)
+            : (state === 'skipped' ? String(result?.reason || 'skipped') : ''));
+    if (skipReason) {
+        return { skipped: true as const, skipReason, codecLine: null, sizeLine: null, savedLine: null, savingsPercent: null };
+    }
+    if (!['completed', 'succeeded', 'success', 'done'].includes(state)) return null;
 
     const before = jobSourceSummary(job);
     const after = jobOutputSummary(job);
-    const result = job.result && typeof job.result === 'object'
-        ? job.result as { sourceBytes?: number; outputBytes?: number; bytesSaved?: number }
-        : null;
     const sourceBytes = Number(result?.sourceBytes || 0) || before?.sizeBytes || 0;
     const outputBytes = Number(result?.outputBytes || 0) || after?.sizeBytes || 0;
     const reportedSaved = Number(result?.bytesSaved);
@@ -290,8 +306,35 @@ const jobQueueOutcomeSummary = (job: MediaAutomationJob | null | undefined) => {
     const savedLine = formatMediaBytes(savedBytes);
 
     if (!codecLine && !sizeLine && !savedLine) return null;
-    return { codecLine, sizeLine, savedLine, savingsPercent };
+    return { skipped: false as const, skipReason: null, codecLine, sizeLine, savedLine, savingsPercent };
 };
+
+const formatSkipReasonLabel = (reason?: string | null) => {
+    const raw = String(reason || 'skipped').trim();
+    if (!raw) return 'skipped';
+    return raw.replace(/-/g, ' ');
+};
+
+const SKIP_REASON_CHIP_CLASS: Record<string, string> = {
+    'below-savings-estimate': 'border-amber-500/40 bg-amber-500/15 text-amber-100',
+    'below-reclaim-estimate': 'border-amber-500/40 bg-amber-500/15 text-amber-100',
+    'insufficient-savings': 'border-amber-500/40 bg-amber-500/15 text-amber-100',
+    'too-small': 'border-sky-500/40 bg-sky-500/15 text-sky-100',
+    'too-new': 'border-sky-500/40 bg-sky-500/15 text-sky-100',
+    'bitrate-too-low': 'border-sky-500/40 bg-sky-500/15 text-sky-100',
+    'sample-rejected': 'border-amber-500/40 bg-amber-500/15 text-amber-100',
+    'watch-score': 'border-violet-500/40 bg-violet-500/15 text-violet-100',
+    'recently-watched': 'border-violet-500/40 bg-violet-500/15 text-violet-100',
+    'season-incomplete': 'border-violet-500/40 bg-violet-500/15 text-violet-100',
+    'audio-requires-hevc': 'border-violet-500/40 bg-violet-500/15 text-violet-100',
+    'quality-regression': 'border-red-500/40 bg-red-500/15 text-red-100',
+    'denied-path': 'border-red-500/40 bg-red-500/15 text-red-100',
+};
+
+const skipReasonChipClass = (reason?: string | null) => (
+    SKIP_REASON_CHIP_CLASS[String(reason || '')]
+    || 'border-border/70 bg-background/40 text-muted'
+);
 
 const jobDryRunReason = (job: MediaAutomationJob | null | undefined) => {
     if (!jobIsDryRun(job) || !job?.result || typeof job.result !== 'object') return '';
@@ -350,6 +393,8 @@ type ScanNowResponse = {
     planOnly?: boolean;
     result?: MediaAutomationStatus['lastScanResult'];
     status?: MediaAutomationStatus;
+    skippedDetails?: Array<{ filePath?: string; reason?: string; videoCodec?: string | null }>;
+    sampleSkips?: Array<{ filePath?: string; reason?: string; videoCodec?: string | null }>;
 };
 
 const jobFinalPath = (job: MediaAutomationJob | null | undefined) => {
@@ -813,7 +858,15 @@ export const MediaAutomationDashboard: React.FC = () => {
             const response = await mediaAutomationApi.scanNow(options) as ScanNowResponse;
             const result = (response?.result || response) as ScanNowResponse;
             if (options.preview || options.planOnly) {
-                toast(`Would enqueue ${result.wouldEnqueue ?? 0}, would skip ${result.wouldSkip ?? 0}.`);
+                const sampleSkips = result.sampleSkips
+                    || result.result?.sampleSkips
+                    || [];
+                const roiSkips = sampleSkips.filter((entry) => String(entry.reason || '') === 'below-savings-estimate').length;
+                toast(
+                    `Would enqueue ${result.wouldEnqueue ?? 0}, would skip ${result.wouldSkip ?? 0}`
+                    + (roiSkips > 0 ? ` (${roiSkips} below savings estimate)` : '')
+                    + '.',
+                );
             } else if (!options.libraryId) {
                 setScanPreview(result || null);
                 toast(`Scan finished: ${result.enqueued ?? 0} queued, ${result.skipped ?? 0} skipped.`);
@@ -1558,7 +1611,16 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <div className="mt-3 space-y-2">
                                 {((scanPreview || status.lastScanResult)?.skippedDetails || []).slice(0, 12).map((entry, index) => (
                                     <div key={`${entry.filePath}-${index}`} className="rounded-lg border border-border/60 bg-background/30 px-3 py-2 text-xs">
-                                        <p className="font-semibold text-plex">{String(entry.reason || 'skipped').replace(/-/g, ' ')}</p>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${skipReasonChipClass(entry.reason)}`}>
+                                                {formatSkipReasonLabel(entry.reason)}
+                                            </span>
+                                            {entry.videoCodec && (
+                                                <span className="rounded-md border border-border/60 bg-background/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">
+                                                    {entry.videoCodec}
+                                                </span>
+                                            )}
+                                        </div>
                                         <p className="mt-1 truncate font-mono text-muted" title={entry.filePath}>{entry.filePath}</p>
                                     </div>
                                 ))}
@@ -2191,6 +2253,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     {(() => {
                                                         const outcome = jobQueueOutcomeSummary(job);
                                                         if (!outcome) return null;
+                                                        if (outcome.skipped) {
+                                                            return (
+                                                                <p className="mt-1 text-xs font-semibold text-amber-300">
+                                                                    Skipped: {formatSkipReasonLabel(outcome.skipReason)}
+                                                                </p>
+                                                            );
+                                                        }
                                                         const parts = [outcome.codecLine, outcome.sizeLine].filter(Boolean);
                                                         return (
                                                             <p className="mt-1 text-xs text-muted">
@@ -2736,6 +2805,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                 <SavingsAnalyzerPanel
                     libraries={libraries}
                     pipelines={pipelines}
+                    status={status}
                     toast={toast}
                     onEnqueued={() => load(true)}
                 />
@@ -3033,6 +3103,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             </div>
                                         )}
                                         <p className="break-all font-semibold text-text">{selectedJob?.path || selectedJob?.sourcePath || 'Path not reported'}</p>
+                                        {(() => {
+                                            const outcome = jobQueueOutcomeSummary(selectedJob);
+                                            if (!outcome?.skipped) return null;
+                                            return (
+                                                <div className="rounded-lg border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-sm font-semibold text-amber-100">
+                                                    Skipped: {formatSkipReasonLabel(outcome.skipReason)}
+                                                </div>
+                                            );
+                                        })()}
                                         {jobFinalPath(selectedJob) && (
                                             <div className="rounded-lg border border-border/70 bg-background/30 p-3 text-sm">
                                                 <p className="text-xs text-muted">{jobIsDryRun(selectedJob) ? 'Planned output path' : 'Output path'}</p>

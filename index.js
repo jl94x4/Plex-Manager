@@ -369,6 +369,18 @@ const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
     const hdr10Handling = ['preserve', 'strip', 'skip', 'inherit'].includes(String(value.hdr10Handling || '').toLowerCase())
         ? String(value.hdr10Handling).toLowerCase()
         : 'inherit';
+    const minSavingsRaw = value.minSavingsPercent;
+    let minSavingsPercent = null;
+    if (minSavingsRaw != null && minSavingsRaw !== '') {
+        if (String(minSavingsRaw).toLowerCase() === 'inherit') {
+            minSavingsPercent = 'inherit';
+        } else {
+            const parsed = Number(minSavingsRaw);
+            minSavingsPercent = Number.isFinite(parsed)
+                ? Math.min(95, Math.max(0, Math.round(parsed)))
+                : null;
+        }
+    }
     const action = {
         mode: firstStep.type,
         videoCodec: firstStep.videoCodec,
@@ -401,6 +413,7 @@ const normalizeMediaAutomationPipelineInput = (value = {}, id) => {
         samplePath,
         dolbyVisionHandling,
         hdr10Handling,
+        minSavingsPercent,
         rules: ruleGroup,
         steps,
         compiledRules: [{
@@ -18555,6 +18568,8 @@ mediaAutomationService = createMediaAutomation({
     getConfig: getMediaAutomationServiceConfig,
     logger: console,
     getActiveStreamCount: countActiveMediaStreams,
+    // Watch gates need Plex/Jellyfin path→item lookup; leave null so season/size/bitrate/savings gates still work.
+    getWatchStats: async (_filePath) => null,
     onMediaCommitted: async (event) => {
         try {
             const config = await loadFile(CONFIG_PATH, {});
