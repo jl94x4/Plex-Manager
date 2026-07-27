@@ -270,6 +270,13 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     checked={config.arrRescanEnabled === true}
                     onChange={(arrRescanEnabled) => update({ arrRescanEnabled })}
                     disabled={!enabled}
+                />
+                <SettingsToggleRow
+                    title="Refresh Plex after changes"
+                    description="After Replace/Copy (or delivery) succeeds, ask Plex to partially refresh the parent folder so the new file metadata shows up. Uses your portal Plex URL/token."
+                    checked={config.plexRescanEnabled === true}
+                    onChange={(plexRescanEnabled) => update({ plexRescanEnabled })}
+                    disabled={!enabled}
                     border={false}
                 />
                 <label className="block max-w-lg text-xs uppercase tracking-wide font-bold text-muted">

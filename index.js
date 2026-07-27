@@ -38,6 +38,7 @@ import {
     buildScansFromPaths,
     parseAutoscanYaml,
     buildTargets,
+    createPlexTarget,
 } from './lib/scanner/index.js';
 import {
     buildStepPlan,
@@ -18563,6 +18564,27 @@ const triggerArrRescanForPath = async (config, filePath) => {
     return results;
 };
 
+const triggerPlexRescanForPath = async (config, filePath) => {
+    const targetPath = String(filePath || '').trim();
+    if (!targetPath) return { skipped: true, reason: 'missing-path' };
+    const url = String(config.plexServerUrl || config.plexUrl || '').trim();
+    const token = String(config.plexToken || '').trim();
+    if (!url || !token) return { skipped: true, reason: 'plex-not-configured' };
+    const scanner = normalizeScannerConfig(config.scanner, getDefaultScannerConfig());
+    const plexRows = Array.isArray(scanner?.targets?.plex) ? scanner.targets.plex : [];
+    const rewriteRow = plexRows.find((entry) => entry?.enabled !== false && Array.isArray(entry?.rewrite) && entry.rewrite.length)
+        || plexRows.find((entry) => Array.isArray(entry?.rewrite) && entry.rewrite.length)
+        || null;
+    const target = createPlexTarget({
+        url,
+        token,
+        rewrite: rewriteRow?.rewrite || [],
+    });
+    const folder = path.dirname(targetPath);
+    const result = await target.scan(folder);
+    return result;
+};
+
 mediaAutomationService = createMediaAutomation({
     dataDir: MEDIA_AUTOMATION_DIR,
     queuePath: MEDIA_AUTOMATION_QUEUE_PATH,
@@ -18575,32 +18597,59 @@ mediaAutomationService = createMediaAutomation({
         logger: console,
     }).getWatchStats,
     onMediaCommitted: async (event) => {
-        try {
-            const config = await loadFile(CONFIG_PATH, {});
-            const runtime = mediaAutomationRuntimeConfig(config);
-            if (!runtime.arrRescanEnabled) return;
-            // Delivered to a mapped Sonarr drop folder: ask Sonarr to import it properly.
-            if (event.deliveredPath && event.deliveryTargetId) {
-                const target = (runtime.deliveryTargets || []).find((entry) => String(entry.id) === String(event.deliveryTargetId));
-                const instance = target?.sonarrInstanceId ? getArrInstance(config, target.sonarrInstanceId) : null;
-                if (instance && isArrInstanceReady(instance)) {
-                    const response = await postArrCommand(instance, {
-                        name: 'DownloadedEpisodesScan',
-                        path: event.deliveredPath,
-                        importMode: 'Move',
-                    });
-                    log(`[media-automation] Sonarr drop-folder import ${response?.ok ? 'requested' : 'failed'}: ${event.deliveredPath}`);
-                    return;
+        const config = await loadFile(CONFIG_PATH, {});
+        const runtime = mediaAutomationRuntimeConfig(config);
+
+        if (runtime.arrRescanEnabled) {
+            try {
+                // Delivered to a mapped Sonarr drop folder: ask Sonarr to import it properly.
+                if (event.deliveredPath && event.deliveryTargetId) {
+                    const target = (runtime.deliveryTargets || []).find((entry) => String(entry.id) === String(event.deliveryTargetId));
+                    const instance = target?.sonarrInstanceId ? getArrInstance(config, target.sonarrInstanceId) : null;
+                    if (instance && isArrInstanceReady(instance)) {
+                        const response = await postArrCommand(instance, {
+                            name: 'DownloadedEpisodesScan',
+                            path: event.deliveredPath,
+                            importMode: 'Move',
+                        });
+                        log(`[media-automation] Sonarr drop-folder import ${response?.ok ? 'requested' : 'failed'}: ${event.deliveredPath}`);
+                    } else {
+                        const targetPath = event.finalPath || event.sourcePath;
+                        if (targetPath) {
+                            const results = await triggerArrRescanForPath(config, targetPath);
+                            if (results.length) {
+                                log(`[media-automation] Arr rescan requested for ${path.basename(targetPath)}: ${results.map((entry) => `${entry.type}:${entry.title}${entry.ok ? '' : ' (failed)'}`).join(', ')}`);
+                            }
+                        }
+                    }
+                } else {
+                    const targetPath = event.finalPath || event.sourcePath;
+                    if (targetPath) {
+                        const results = await triggerArrRescanForPath(config, targetPath);
+                        if (results.length) {
+                            log(`[media-automation] Arr rescan requested for ${path.basename(targetPath)}: ${results.map((entry) => `${entry.type}:${entry.title}${entry.ok ? '' : ' (failed)'}`).join(', ')}`);
+                        }
+                    }
                 }
+            } catch (error) {
+                log(`[media-automation] Arr rescan hook failed: ${error.message}`);
             }
-            const targetPath = event.finalPath || event.sourcePath;
-            if (!targetPath) return;
-            const results = await triggerArrRescanForPath(config, targetPath);
-            if (results.length) {
-                log(`[media-automation] Arr rescan requested for ${path.basename(targetPath)}: ${results.map((entry) => `${entry.type}:${entry.title}${entry.ok ? '' : ' (failed)'}`).join(', ')}`);
+        }
+
+        if (runtime.plexRescanEnabled) {
+            try {
+                const targetPath = event.deliveredPath || event.finalPath || event.sourcePath;
+                if (!targetPath) return;
+                const result = await triggerPlexRescanForPath(config, targetPath);
+                if (result?.skipped) {
+                    log(`[media-automation] Plex refresh skipped for ${path.basename(String(targetPath))}: ${result.reason || 'unknown'}`);
+                } else {
+                    const libraries = (result?.results || []).map((entry) => entry.library || entry.id).filter(Boolean);
+                    log(`[media-automation] Plex refresh requested for ${path.dirname(String(targetPath))}${libraries.length ? ` (${libraries.join(', ')})` : ''}`);
+                }
+            } catch (error) {
+                log(`[media-automation] Plex refresh hook failed: ${error.message}`);
             }
-        } catch (error) {
-            log(`[media-automation] Arr rescan hook failed: ${error.message}`);
         }
     },
     resolveDeliveryNaming: async ({ target, sourcePath } = {}) => {
@@ -18697,6 +18746,8 @@ mediaAutomationService = createMediaAutomation({
         try {
             const config = await loadFile(CONFIG_PATH, {});
             if (!config.scannerEnabled) return;
+            // Direct Plex refresh already handled in onMediaCommitted when this is on.
+            if (mediaAutomationRuntimeConfig(config).plexRescanEnabled) return;
             await enqueueScans([{
                 folder: outputPath,
                 priority: 10,
