@@ -739,6 +739,16 @@ const sanitizeIntegrationUrl = (rawUrl) => {
     return normalizeExternalBaseUrl(rawUrl, { allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS, allowHttp: true });
 };
 
+/** Hostname + DNS-rebinding checks for URLs newly typed into Settings / setup tests. */
+const sanitizeNewlySubmittedIntegrationUrl = async (rawUrl) => {
+    const normalized = sanitizeIntegrationUrl(rawUrl);
+    if (!normalized) return '';
+    await assertResolvedAddressesAllowed(new URL(normalized).hostname, {
+        allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+    });
+    return normalized;
+};
+
 // For server-side calls to an already-configured integration (Tautulli, Sonarr,
 // Radarr, request apps), the host is trusted admin input and is typically a LAN
 // address. We still validate URL format/scheme but allow private/local hosts so
@@ -4330,7 +4340,7 @@ app.post('/api/config/test-gotify', requireAdmin, async (req, res) => {
         const incomingUrl = String(gotifyUrl || '').trim();
         safeGotifyUrl = incomingUrl === String(storedConfig.gotifyUrl || '').trim()
             ? resolveIntegrationUrlForFetch(storedConfig.gotifyUrl || incomingUrl)
-            : sanitizeIntegrationUrl(incomingUrl);
+            : await sanitizeNewlySubmittedIntegrationUrl(incomingUrl);
     } catch (e) {
         return res.status(400).json({ error: `Invalid Gotify URL: ${e.message}` });
     }
@@ -4362,13 +4372,13 @@ const resolveTestCredential = (incoming, existing) => {
     return String(incoming);
 };
 
-const resolveIntegrationUrlForTest = (incoming, existing) => {
+const resolveIntegrationUrlForTest = async (incoming, existing) => {
     const url = resolveTestCredential(incoming, existing);
     if (!url) return '';
     const trimmedIncoming = typeof incoming === 'string' ? incoming.trim() : '';
     const trimmedExisting = typeof existing === 'string' ? existing.trim() : '';
     if (trimmedIncoming !== '' && trimmedIncoming !== trimmedExisting) {
-        return sanitizeIntegrationUrl(trimmedIncoming);
+        return sanitizeNewlySubmittedIntegrationUrl(trimmedIncoming);
     }
     return resolveIntegrationUrlForFetch(url);
 };
@@ -4507,7 +4517,15 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
             if (!plexToken || !serverId) return res.status(400).json({ error: 'Plex token and server identifier are required.' });
             cachedPlexConnectionUri = null;
             lastPlexConnectionUriFetch = 0;
-            const directUrl = resolveTestCredential(plexServerUrl, stored.plexServerUrl);
+            const directUrlRaw = resolveTestCredential(plexServerUrl, stored.plexServerUrl);
+            let directUrl = '';
+            if (directUrlRaw) {
+                const incomingDirect = typeof plexServerUrl === 'string' ? plexServerUrl.trim() : '';
+                const storedDirect = String(stored.plexServerUrl || '').trim();
+                directUrl = (incomingDirect && incomingDirect !== storedDirect)
+                    ? await sanitizeNewlySubmittedIntegrationUrl(incomingDirect)
+                    : resolveIntegrationUrlForFetch(directUrlRaw);
+            }
             const testConfig = { ...stored, plexToken, serverIdentifier: serverId, ...(directUrl ? { plexServerUrl: directUrl } : {}) };
             const uri = await getPlexConnectionUri(testConfig);
             const identityRes = await fetchWithTimeout(`${uri}/identity?X-Plex-Token=${encodeURIComponent(plexToken)}`, {
@@ -4525,7 +4543,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
 
         if (type === 'jellyfin' || type === 'emby') {
             const label = type === 'emby' ? 'Emby' : 'Jellyfin';
-            const url = resolveIntegrationUrlForTest(jellyfinUrl, stored.jellyfinUrl);
+            const url = await resolveIntegrationUrlForTest(jellyfinUrl, stored.jellyfinUrl);
             const apiKey = resolveTestCredential(jellyfinApiKey, stored.jellyfinApiKey);
             if (!url || !apiKey) return res.status(400).json({ error: `${label} URL and API key are required.` });
             const infoRes = await fetchWithTimeout(`${url}/System/Info`, {
@@ -4547,7 +4565,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
             const storedUrl = arrType === 'sonarr' ? stored.sonarrUrl : arrType === 'radarr' ? stored.radarrUrl : '';
             const storedKey = arrType === 'sonarr' ? stored.sonarrApiKey : arrType === 'radarr' ? stored.radarrApiKey : '';
             const labelBase = ({ sonarr: 'Sonarr', radarr: 'Radarr', lidarr: 'Lidarr', bazarr: 'Bazarr' })[arrType] || 'ARR';
-            const url = resolveIntegrationUrlForTest(
+            const url = await resolveIntegrationUrlForTest(
                 legacyUrl || instanceFromId?.url,
                 instanceFromId?.url || defaultInstance?.url || storedUrl
             );
@@ -4584,7 +4602,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
                 id: String(downloadClientId || existing?.id || 'test'),
                 type: clientType,
                 name: existing?.name || downloadClientLabel(clientType),
-                url: resolveIntegrationUrlForTest(downloadClientUrl, existing?.url),
+                url: await resolveIntegrationUrlForTest(downloadClientUrl, existing?.url),
                 username: String(downloadClientUsername ?? existing?.username ?? ''),
                 password: resolveTestCredential(downloadClientPassword, existing?.password || ''),
                 enabled: true,
@@ -4599,7 +4617,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
         }
 
         if (type === 'tautulli') {
-            const url = resolveIntegrationUrlForTest(tautulliUrl, stored.tautulliUrl);
+            const url = await resolveIntegrationUrlForTest(tautulliUrl, stored.tautulliUrl);
             const apiKey = resolveTestCredential(tautulliApiKey, stored.tautulliApiKey);
             if (!url || !apiKey) return res.status(400).json({ error: 'Tautulli URL and API key are required.' });
             const infoRes = await fetchWithTimeout(`${url}/api/v2?apikey=${encodeURIComponent(apiKey)}&cmd=get_server_info`, {
@@ -4613,7 +4631,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
         }
 
         if (type === 'jellystat') {
-            const url = resolveIntegrationUrlForTest(jellystatUrl, stored.jellystatUrl);
+            const url = await resolveIntegrationUrlForTest(jellystatUrl, stored.jellystatUrl);
             const apiKey = resolveTestCredential(jellystatApiKey, stored.jellystatApiKey);
             if (!url || !apiKey) return res.status(400).json({ error: 'Jellystat URL and API key are required.' });
             const statsRes = await fetchWithTimeout(`${url}/stats/getViewsByLibraryType?days=30`, {
@@ -4626,13 +4644,18 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
 
         if (type === 'requestApp') {
             const appType = String(resolveTestCredential(requestAppType, stored.requestAppType) || 'none').toLowerCase();
-            const publicUrl = resolveIntegrationUrlForTest(requestAppUrl, stored.requestAppUrl);
+            const publicUrl = await resolveIntegrationUrlForTest(requestAppUrl, stored.requestAppUrl);
             const fetchUrlInput = resolveTestCredential(requestAppFetchUrl, stored.requestAppFetchUrl);
-            const fetchUrl = fetchUrlInput
-                ? sanitizeIntegrationUrl(String(fetchUrlInput).trim())
-                : (process.env.REQUEST_APP_INTERNAL_URL
-                    ? resolveIntegrationUrlForFetch(process.env.REQUEST_APP_INTERNAL_URL)
-                    : publicUrl);
+            let fetchUrl = publicUrl;
+            if (fetchUrlInput) {
+                const incomingFetch = typeof requestAppFetchUrl === 'string' ? requestAppFetchUrl.trim() : '';
+                const storedFetch = String(stored.requestAppFetchUrl || '').trim();
+                fetchUrl = (incomingFetch && incomingFetch !== storedFetch)
+                    ? await sanitizeNewlySubmittedIntegrationUrl(incomingFetch)
+                    : resolveIntegrationUrlForFetch(fetchUrlInput);
+            } else if (process.env.REQUEST_APP_INTERNAL_URL) {
+                fetchUrl = resolveIntegrationUrlForFetch(process.env.REQUEST_APP_INTERNAL_URL);
+            }
             const apiKey = resolveTestCredential(requestAppApiKey, stored.requestAppApiKey);
             if (appType === 'none') return res.status(400).json({ error: 'Request app type must be selected.' });
             if (!publicUrl || !apiKey) return res.status(400).json({ error: 'Request app URL and API key are required.' });
