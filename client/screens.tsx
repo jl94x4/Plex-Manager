@@ -9639,13 +9639,14 @@ interface NavigationProps {
     pendingRequestCount?: number;
     watchingCount?: number;
     downloadCount?: number;
+    mediaAutomationActiveCount?: number;
     showDashboardWatchingBadge?: boolean;
     sessionInfo?: any;
     mediaServerType?: string;
     sidebarIdentityPosition?: 'top' | 'bottom';
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, watchingCount = 0, downloadCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom' }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom' }) => {
     const serverIcon = customLogoUrl ? resolvePortalAssetUrl(customLogoUrl) : (adminThumb ? (adminThumb.startsWith('http') ? adminThumb : portalUrl(`/api/plex/image?path=${encodeURIComponent(adminThumb)}&width=256&height=256`)) : logoUrl());
     const providerName = String(mediaServerType || 'plex').toLowerCase() === 'jellyfin'
         ? 'Jellyfin'
@@ -9852,6 +9853,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         if (key === 'requests') return pendingRequestCount;
         if (key === 'discover' && showDashboardWatchingBadge) return watchingCount;
         if (key === 'downloads') return downloadCount;
+        if (key === 'media-automation') return mediaAutomationActiveCount;
         return 0;
     };
 

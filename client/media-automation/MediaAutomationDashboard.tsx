@@ -230,6 +230,15 @@ const jobOutputSummary = (job: MediaAutomationJob | null | undefined) => {
     return summary;
 };
 
+const formatMediaBytes = (value?: number | null) => {
+    const bytes = Number(value || 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) return null;
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 ** 3) return `${(bytes / (1024 ** 2)).toFixed(1)} MB`;
+    return `${(bytes / (1024 ** 3)).toFixed(2)} GB`;
+};
+
 const formatBitrate = (kbps: number | null) => {
     if (kbps == null || !Number.isFinite(kbps) || kbps <= 0) return null;
     if (kbps >= 1000) return `${(kbps / 1000).toFixed(1)} Mbps`;
@@ -244,6 +253,44 @@ const jobIsDryRun = (job: MediaAutomationJob | null | undefined) => {
         return true;
     }
     return false;
+};
+
+/** Compact before→after line for completed (non-dry-run) queue rows. */
+const jobQueueOutcomeSummary = (job: MediaAutomationJob | null | undefined) => {
+    if (!job) return null;
+    const state = String(job.state || job.status || '').toLowerCase();
+    if (!['completed', 'succeeded', 'success', 'done'].includes(state)) return null;
+    if (jobIsDryRun(job)) return null;
+
+    const before = jobSourceSummary(job);
+    const after = jobOutputSummary(job);
+    const result = job.result && typeof job.result === 'object'
+        ? job.result as { sourceBytes?: number; outputBytes?: number; bytesSaved?: number }
+        : null;
+    const sourceBytes = Number(result?.sourceBytes || 0) || before?.sizeBytes || 0;
+    const outputBytes = Number(result?.outputBytes || 0) || after?.sizeBytes || 0;
+    const reportedSaved = Number(result?.bytesSaved);
+    const savedBytes = Number.isFinite(reportedSaved) && reportedSaved > 0
+        ? reportedSaved
+        : (sourceBytes > 0 && outputBytes > 0 ? Math.max(0, sourceBytes - outputBytes) : 0);
+    const savingsPercent = sourceBytes > 0 && outputBytes > 0
+        ? Math.round((1 - outputBytes / sourceBytes) * 1000) / 10
+        : null;
+
+    const codecFrom = before?.videoCodec ? String(before.videoCodec).toUpperCase() : null;
+    const codecTo = after?.videoCodec ? String(after.videoCodec).toUpperCase() : null;
+    const sizeFrom = formatMediaBytes(sourceBytes);
+    const sizeTo = formatMediaBytes(outputBytes);
+    const codecLine = codecFrom && codecTo
+        ? (codecFrom === codecTo ? codecFrom : `${codecFrom} → ${codecTo}`)
+        : (codecTo || codecFrom);
+    const sizeLine = sizeFrom && sizeTo
+        ? `${sizeFrom} → ${sizeTo}`
+        : (sizeFrom || sizeTo);
+    const savedLine = formatMediaBytes(savedBytes);
+
+    if (!codecLine && !sizeLine && !savedLine) return null;
+    return { codecLine, sizeLine, savedLine, savingsPercent };
 };
 
 const jobDryRunReason = (job: MediaAutomationJob | null | undefined) => {
@@ -2141,6 +2188,25 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     )}
                                                     <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
                                                     <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.createdAt)}</p>
+                                                    {(() => {
+                                                        const outcome = jobQueueOutcomeSummary(job);
+                                                        if (!outcome) return null;
+                                                        const parts = [outcome.codecLine, outcome.sizeLine].filter(Boolean);
+                                                        return (
+                                                            <p className="mt-1 text-xs text-muted">
+                                                                {parts.join(' · ')}
+                                                                {outcome.savedLine && (
+                                                                    <span className="text-emerald-300">
+                                                                        {parts.length ? ' · ' : ''}
+                                                                        saved {outcome.savedLine}
+                                                                        {outcome.savingsPercent != null && outcome.savingsPercent > 0
+                                                                            ? ` (${outcome.savingsPercent}%)`
+                                                                            : ''}
+                                                                    </span>
+                                                                )}
+                                                            </p>
+                                                        );
+                                                    })()}
                                                     {progressMeta.elapsedLabel && (
                                                         <p className="mt-1 text-xs text-muted">Encoded {progressMeta.elapsedLabel}</p>
                                                     )}

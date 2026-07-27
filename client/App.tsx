@@ -22,6 +22,7 @@ import { useWatchingCount } from './shared/useWatchingCount';
 import { useDownloadCount } from './shared/useDownloadCount';
 import { useAppDynamicTheme } from './shared/useAppDynamicTheme';
 import { useOpenIssueCount } from './requests/useOpenIssueCount';
+import { useMediaAutomationActiveCount } from './media-automation/useMediaAutomationActiveCount';
 const UpgraderDashboard = lazy(() => import('./upgrader/UpgraderDashboard').then(m => ({ default: m.UpgraderDashboard })));
 const CollexionsDashboard = lazy(() => import('./collexions/CollexionsDashboard').then(m => ({ default: m.CollexionsDashboard })));
 const ScannerDashboard = lazy(() => import('./scanner/ScannerDashboard').then(m => ({ default: m.ScannerDashboard })));
@@ -407,6 +408,8 @@ export const MainApp: React.FC = () => {
         !!sessionInfo?.session?.isAdmin || sessionInfo?.navFeatures?.downloads !== false
     );
     const { downloadCount } = useDownloadCount(downloadsNavEnabled, 15);
+    const mediaAutomationNavEnabled = !!sessionInfo?.session?.isAdmin && !!sessionInfo?.navFeatures?.mediaAutomation;
+    const { activeCount: mediaAutomationActiveCount } = useMediaAutomationActiveCount(mediaAutomationNavEnabled, 15);
     const { openCount: openIssueCount, refresh: refreshOpenIssueCount } = useOpenIssueCount(requestsQueueEnabled);
     const queueBadgeCount = pendingRequestCount + openIssueCount;
     const refreshQueueCounts = useCallback(() => {
@@ -483,7 +486,7 @@ export const MainApp: React.FC = () => {
                     onDismiss={dismissWhatsNew}
                 />
             )}
-            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'media-automation', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'logs', 'settings', 'logout']} navHiddenKeys={sessionInfo?.navHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} watchingCount={watchingCount} downloadCount={downloadCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} />}
+            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'media-automation', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'logs', 'settings', 'logout']} navHiddenKeys={sessionInfo?.navHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} />}
             <div id="main-scroll-container" className={`relative z-10 flex-1 min-w-0 min-h-0 flex flex-col items-center px-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:px-8 md:pb-8 overflow-x-visible md:overflow-y-auto custom-scrollbar ${isPublicView ? '!pb-8' : ''}`}>
                 {isImpersonating && (
                     <div className="w-full max-w-[100%] pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-0 md:sticky md:top-0 md:z-30">
