@@ -490,9 +490,9 @@ const QUEUE_PAGE_SIZE_OPTIONS = [25, 50, 75, 100, 200] as const;
 const QUEUE_PAGE_SIZE_KEY = 'media-automation-queue-page-size';
 const QUEUE_JOBS_FETCH_LIMIT = 1000;
 const QUEUE_FILTER_KEY = 'media-automation.queueFilters';
-const QUEUE_FILTER_IDS = ['queued', 'active', 'dry-run', 'failed', 'completed'] as const;
+const QUEUE_FILTER_IDS = ['active', 'queued', 'dry-run', 'failed', 'completed'] as const;
 type QueueFilterId = typeof QUEUE_FILTER_IDS[number];
-const DEFAULT_QUEUE_FILTERS: QueueFilterId[] = ['queued', 'active', 'dry-run', 'failed'];
+const DEFAULT_QUEUE_FILTERS: QueueFilterId[] = ['active', 'queued', 'dry-run', 'failed'];
 
 const isQueueFilterId = (value: string): value is QueueFilterId => (
     (QUEUE_FILTER_IDS as readonly string[]).includes(value)
@@ -1186,7 +1186,7 @@ export const MediaAutomationDashboard: React.FC = () => {
         const query = queueSearch.trim().toLowerCase();
         const errorQuery = queueErrorFilter.trim().toLowerCase();
         const activeFilters = queueFilters.size ? queueFilters : new Set(DEFAULT_QUEUE_FILTERS);
-        return jobs.filter((job) => {
+        const list = jobs.filter((job) => {
             const matchesStatus = [...activeFilters].some((filterId) => jobMatchesQueueFilter(job, filterId));
             if (!matchesStatus) return false;
             if (queueLibraryFilter) {
@@ -1209,6 +1209,15 @@ export const MediaAutomationDashboard: React.FC = () => {
             const haystack = `${job.path || ''} ${job.sourcePath || ''} ${job.pipelineName || ''} ${job.id} ${(job as { libraryName?: string }).libraryName || ''}`.toLowerCase();
             return haystack.includes(query);
         });
+        // Keep running encodes visible first whenever Active is in the filter set.
+        if (activeFilters.has('active')) {
+            list.sort((left, right) => {
+                const leftActive = ACTIVE_QUEUE_STATES.has(jobStateValue(left)) ? 0 : 1;
+                const rightActive = ACTIVE_QUEUE_STATES.has(jobStateValue(right)) ? 0 : 1;
+                return leftActive - rightActive;
+            });
+        }
+        return list;
     }, [jobs, queueFilters, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter]);
 
     const queuePageCount = Math.max(1, Math.ceil(filteredJobs.length / queuePageSize));
@@ -2098,8 +2107,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             All
                                         </button>
                                         {([
-                                            ['queued', 'Queued', queueCounts.queued],
                                             ['active', 'Active', queueCounts.active],
+                                            ['queued', 'Queued', queueCounts.queued],
                                             ['dry-run', 'Dry-run', queueCounts.dryRun],
                                             ['failed', 'Failed', queueCounts.failed],
                                             ['completed', 'Completed', queueCounts.completed],
