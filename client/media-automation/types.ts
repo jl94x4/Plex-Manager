@@ -212,6 +212,8 @@ export type MediaAutomationStatus = {
     sampleGateEnabled?: boolean;
     sampleGateMinSizeGb?: number;
     replaceQualityGuard?: boolean;
+    /** When true, Replace writes name [SMP].ext and deletes the original path. */
+    replaceForceNewFilename?: boolean;
     freeSpaceRoiMinPercent?: number;
     daytimeExtraSavingsPercent?: number;
     maxWatchCount?: number;
@@ -522,6 +524,8 @@ export type MediaAutomationSettingsConfig = {
     sampleGateMinSizeGb?: number;
     /** Block replace commits that drop resolution class or HDR signaling. */
     replaceQualityGuard?: boolean;
+    /** When true, Replace writes name [SMP].ext and deletes the original path. */
+    replaceForceNewFilename?: boolean;
     /** When free disk is low, raise effective min savings to at least this % (0 = off). */
     freeSpaceRoiMinPercent?: number;
     /** During daytime (outside quiet hours), add this % to the savings threshold (0 = off). */
@@ -576,6 +580,7 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     sampleGateEnabled: false,
     sampleGateMinSizeGb: 2,
     replaceQualityGuard: true,
+    replaceForceNewFilename: true,
     freeSpaceRoiMinPercent: 0,
     daytimeExtraSavingsPercent: 0,
     maxWatchCount: 0,

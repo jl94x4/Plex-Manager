@@ -535,6 +535,13 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     checked={config.replaceQualityGuard !== false}
                     onChange={(replaceQualityGuard) => update({ replaceQualityGuard })}
                     disabled={!enabled}
+                />
+                <SettingsToggleRow
+                    title="Append [SMP] on Replace"
+                    description="Write name [SMP].ext and remove the original path so Plex sees a new file instead of reusing stale media info."
+                    checked={config.replaceForceNewFilename !== false}
+                    onChange={(replaceForceNewFilename) => update({ replaceForceNewFilename })}
+                    disabled={!enabled}
                     border={false}
                 />
                 <SettingsToggleRow
