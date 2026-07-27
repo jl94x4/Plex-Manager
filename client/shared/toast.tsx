@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { ToastMessage } from './types';
 
 export const MAX_VISIBLE_TOASTS = 3;
+/** Success/error toasts auto-dismiss after this many ms (timer must not reset on parent re-renders). */
+export const TOAST_DISMISS_MS = 2500;
 
 export const pushToast = (prev: ToastMessage[], message: string, type: 'success' | 'error'): ToastMessage[] => {
     const next = [...prev, { id: Date.now() + Math.random(), message, type }];
@@ -11,15 +13,19 @@ export const pushToast = (prev: ToastMessage[], message: string, type: 'success'
 
 export const Toast: React.FC<{ message: string; type: 'success' | 'error'; onDismiss: () => void }> = ({ message, type, onDismiss }) => {
     const [isVisible, setIsVisible] = useState(false);
+    const onDismissRef = useRef(onDismiss);
+    onDismissRef.current = onDismiss;
 
     useEffect(() => {
         const animTimer = setTimeout(() => setIsVisible(true), 50);
-        const timer = setTimeout(onDismiss, 5000);
+        // Intentionally empty deps: Media Automation (and others) re-render often while polling;
+        // tying the timer to onDismiss would reset it forever and leave toasts stuck on screen.
+        const timer = setTimeout(() => onDismissRef.current(), TOAST_DISMISS_MS);
         return () => {
             clearTimeout(animTimer);
             clearTimeout(timer);
         };
-    }, [onDismiss]);
+    }, []);
 
     return (
         <div
