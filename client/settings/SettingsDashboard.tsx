@@ -58,7 +58,6 @@ import {
     type SettingsIndexEntry,
     type SettingsTabId,
 } from './settingsIndex';
-import { SettingsSearchPanel } from './SettingsSearchPanel';
 import { UPGRADER_PRESET_SELECT_OPTIONS } from '../upgrader/presets';
 import { MediaAutomationSettings } from '../media-automation/MediaAutomationSettings';
 import {
@@ -311,10 +310,6 @@ export const SettingsDashboard: React.FC = () => {
     const initialHash = parseSettingsHash(window.location.hash);
     const [activeSectionId, setActiveSectionId] = useState<string | null>(initialHash.sectionId);
     const [scrollToSection, setScrollToSection] = useState<string | null>(initialHash.sectionId);
-    const [activeSettingId, setActiveSettingId] = useState<string | null>(() => {
-        if (initialHash.tabId && initialHash.sectionId) return `${initialHash.tabId}/${initialHash.sectionId}`;
-        return initialHash.tabId || 'branding';
-    });
     const [highlightMaintenanceToggle, setHighlightMaintenanceToggle] = useState(false);
 
     const settingsTabGroups = useMemo(() => {
@@ -332,7 +327,6 @@ export const SettingsDashboard: React.FC = () => {
         setActiveTab(entry.tabId);
         setActiveSectionId(entry.sectionId || null);
         setScrollToSection(entry.sectionId || null);
-        setActiveSettingId(entry.id);
         recordRecentSetting(entry.id);
     }, []);
 
@@ -350,12 +344,10 @@ export const SettingsDashboard: React.FC = () => {
                 setActiveTab(tabId);
                 setActiveSectionId(sectionId);
                 setScrollToSection(sectionId);
-                setActiveSettingId(sectionId ? `${tabId}/${sectionId}` : tabId);
             } else if (!window.location.hash) {
                 setActiveTab('branding');
                 setActiveSectionId(null);
                 setScrollToSection(null);
-                setActiveSettingId('branding');
             }
         };
         window.addEventListener('hashchange', syncTabFromHash);
@@ -383,7 +375,6 @@ export const SettingsDashboard: React.FC = () => {
         setHighlightMaintenanceToggle(true);
         setActiveSectionId('maintenance');
         setScrollToSection('maintenance');
-        setActiveSettingId('system/maintenance');
         const timer = window.setTimeout(() => setHighlightMaintenanceToggle(false), 4200);
         url.searchParams.delete('focus');
         const nextUrl = `${url.pathname}${url.search}${url.hash || ''}`;
@@ -1651,7 +1642,6 @@ export const SettingsDashboard: React.FC = () => {
                     {/* Mobile Dropdown Category Select */}
                     <div className="block md:hidden mb-6 space-y-4">
                         <h1 className="text-xl font-bold text-plex">Settings</h1>
-                        <SettingsSearchPanel onSelect={navigateToSetting} activeEntryId={activeSettingId} />
                         <div>
                         <label htmlFor="settings-tab-select" className="text-muted text-xs uppercase tracking-wider font-bold mb-2 block">Settings Category</label>
                         <CustomSelect
@@ -1674,22 +1664,22 @@ export const SettingsDashboard: React.FC = () => {
                     </div>
 
                     {/* Desktop Sidebar Navigation — sticky within the main scroll area */}
-                    <aside className="hidden md:flex md:flex-col w-72 shrink-0 sticky top-0 self-start glass-card nav-shell px-3 py-3 shadow-2xl z-10">
-                        <SettingsSearchPanel onSelect={navigateToSetting} activeEntryId={activeSettingId} />
-                        <div className="mt-2">
+                    <aside className="hidden md:flex md:flex-col w-72 shrink-0 sticky top-0 self-start glass-card nav-shell p-4 shadow-2xl z-10">
+                        <h1 className="text-2xl font-bold text-plex px-2 mb-3 shrink-0">Settings</h1>
+                        <div className="mt-2.5">
                         {visibleTabGroups.length === 0 ? (
                             <p className="text-xs text-muted px-2 py-2">No settings sections found.</p>
                         ) : (
-                            <div className="space-y-1.5">
+                            <div className="space-y-2">
                                 {visibleTabGroups.map(group => (
                                     <div key={group.title}>
-                                        <p className="text-[10px] uppercase tracking-wider font-bold text-plex px-2 mb-0.5 leading-none">{group.title}</p>
+                                        <p className="text-[10px] uppercase tracking-wider font-bold text-plex px-2 mb-0.5">{group.title}</p>
                                         <div className="space-y-0.5">
                                             {group.tabs.map(tab => (
                                                 <button
                                                     key={tab.id}
                                                     onClick={() => navigateToSetting({ id: tab.id, tabId: tab.id as SettingsTabId, label: tab.label, group: group.title, keywords: tab.keywords || [] })}
-                                                    className={`w-full text-left px-2 py-1 rounded-md text-sm leading-snug font-medium transition-all flex items-center gap-2 ${activeTab === tab.id
+                                                    className={`w-full text-left px-2 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTab === tab.id
                                                         ? 'nav-item-active'
                                                         : 'text-muted hover:text-text hover:bg-white/5'
                                                         }`}
