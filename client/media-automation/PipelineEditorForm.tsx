@@ -9,6 +9,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import { CustomSelect, SettingsSwitch } from '../shared/ui';
+import { askConfirm } from '../shared/confirm';
 import { PathBrowserField } from './PathBrowserField';
 import { summarizeMatchRules } from './pipelineUi';
 import type {
@@ -26,9 +27,10 @@ const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounde
 
 const asText = (value: unknown, fallback = '-') => value === undefined || value === null || value === '' ? fallback : String(value);
 
-const confirmReplaceOutputMode = () => window.confirm(
+const confirmReplaceOutputMode = () => askConfirm(
     'Replace mode atomically promotes verified output over the source file. '
     + 'The original is moved to quarantine after verify. Continue?',
+    { title: 'Replace original files?', confirmLabel: 'Use Replace', cancelLabel: 'Keep current mode' },
 );
 
 type Props = {
@@ -95,10 +97,12 @@ export const PipelineEditorForm: React.FC<Props> = ({
                         <CustomSelect
                             value={pipelineDraft.outputMode}
                             onChange={(outputMode) => {
-                                if (outputMode === 'replace' && pipelineDraft.outputMode !== 'replace' && !confirmReplaceOutputMode()) {
-                                    return;
-                                }
-                                setPipelineDraft({ ...pipelineDraft, outputMode: outputMode as OutputMode });
+                                void (async () => {
+                                    if (outputMode === 'replace' && pipelineDraft.outputMode !== 'replace') {
+                                        if (!(await confirmReplaceOutputMode())) return;
+                                    }
+                                    setPipelineDraft({ ...pipelineDraft, outputMode: outputMode as OutputMode });
+                                })();
                             }}
                             options={[
                                 { value: 'dry-run', label: 'Plan only (safe)' },

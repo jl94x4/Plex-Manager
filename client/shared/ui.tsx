@@ -202,16 +202,36 @@ export const SettingsToggleRow: React.FC<{
     </div>
 );
 
-export const ConfirmModal: React.FC<{ isOpen: boolean; message: string; onConfirm: () => void; onCancel: () => void; }> = ({ isOpen, message, onConfirm, onCancel }) => {
+export const ConfirmModal: React.FC<{
+    isOpen: boolean;
+    message: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+    title?: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    hideCancel?: boolean;
+}> = ({
+    isOpen,
+    message,
+    onConfirm,
+    onCancel,
+    title = 'Are you sure?',
+    confirmLabel = 'Confirm',
+    cancelLabel = 'Cancel',
+    hideCancel = false,
+}) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in">
-            <div className="modal-glass animate-slide-up max-w-md w-full">
-                <h3 className="text-xl font-black mb-4 text-text tracking-tight">Are you sure?</h3>
+            <div className="modal-glass animate-slide-up max-w-md w-full" role="dialog" aria-modal="true" aria-labelledby="portal-confirm-title">
+                <h3 id="portal-confirm-title" className="text-xl font-black mb-4 text-text tracking-tight">{title}</h3>
                 <p className="text-muted mb-8 text-sm leading-relaxed whitespace-pre-line">{message}</p>
                 <div className="flex gap-3 justify-end">
-                    <button type="button" className="btn-secondary px-4 py-2.5 text-sm" onClick={onCancel}>Cancel</button>
-                    <button type="button" className="btn-primary px-4 py-2.5 text-sm" onClick={onConfirm}>Confirm</button>
+                    {!hideCancel && (
+                        <button type="button" className="btn-secondary px-4 py-2.5 text-sm" onClick={onCancel}>{cancelLabel}</button>
+                    )}
+                    <button type="button" className="btn-primary px-4 py-2.5 text-sm" onClick={onConfirm}>{confirmLabel}</button>
                 </div>
             </div>
         </div>

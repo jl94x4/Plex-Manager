@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 const SettingsDashboard = lazy(() => import('./settings/SettingsDashboard').then(m => ({ default: m.SettingsDashboard })));
-import { bindAppConfirm } from './shared/confirm';
+import { bindAppConfirm, bindAskConfirm, bindAppAlert, type AskConfirmOptions } from './shared/confirm';
 import { apiFetch } from './shared/api';
 import { getPublicOrigin, portalUrl, resolvePortalAssetUrl, stripBasePath } from './shared/basePath';
 import { ConfirmModal } from './shared/ui';
@@ -46,7 +46,16 @@ import {
 import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
 
 export const MainApp: React.FC = () => {
-    const [confirmState, setConfirmState] = useState<{ isOpen: boolean, message: string, onConfirm: () => void }>({ isOpen: false, message: '', onConfirm: () => { } });
+    const [confirmState, setConfirmState] = useState<{
+        isOpen: boolean;
+        message: string;
+        title?: string;
+        confirmLabel?: string;
+        cancelLabel?: string;
+        hideCancel?: boolean;
+        onConfirm: () => void;
+        onCancel: () => void;
+    }>({ isOpen: false, message: '', onConfirm: () => { }, onCancel: () => { } });
 
     const [activeTheme, setActiveTheme] = useState(() => {
         if (typeof window !== 'undefined') {
@@ -62,15 +71,59 @@ export const MainApp: React.FC = () => {
     });
 
     useEffect(() => {
+        const openConfirm = (
+            message: string,
+            onConfirm: () => void,
+            onCancel: () => void = () => { },
+            options: AskConfirmOptions & { hideCancel?: boolean } = {},
+        ) => {
+            setConfirmState({
+                isOpen: true,
+                message,
+                title: options.title,
+                confirmLabel: options.confirmLabel,
+                cancelLabel: options.cancelLabel,
+                hideCancel: options.hideCancel === true,
+                onConfirm,
+                onCancel,
+            });
+        };
+
         bindAppConfirm((message, onConfirm) => {
-            setConfirmState({ isOpen: true, message, onConfirm });
+            openConfirm(message, onConfirm, () => { });
         });
+
+        bindAskConfirm((message, options = {}) => new Promise<boolean>((resolve) => {
+            openConfirm(
+                message,
+                () => resolve(true),
+                () => resolve(false),
+                options,
+            );
+        }));
+
+        bindAppAlert((message, options = {}) => new Promise<void>((resolve) => {
+            openConfirm(
+                message,
+                () => resolve(),
+                () => resolve(),
+                {
+                    title: options.title || 'Notice',
+                    confirmLabel: options.confirmLabel || 'OK',
+                    hideCancel: true,
+                },
+            );
+        }));
     }, []);
 
 
-    const closeConfirm = () => setConfirmState(s => ({ ...s, isOpen: false }));
+    const closeConfirm = () => setConfirmState((s) => ({ ...s, isOpen: false }));
     const handleConfirm = () => {
         confirmState.onConfirm();
+        closeConfirm();
+    };
+    const handleCancel = () => {
+        confirmState.onCancel();
         closeConfirm();
     };
 
@@ -478,7 +531,16 @@ export const MainApp: React.FC = () => {
         <DiscoverI18nProvider>
         <div className="relative flex w-full min-h-screen md:h-dvh md:overflow-hidden">
             <AppAmbientBackground backgroundImageUrl={publicConfig?.backgroundImageUrl} />
-            <ConfirmModal isOpen={confirmState.isOpen} message={confirmState.message} onConfirm={handleConfirm} onCancel={closeConfirm} />
+            <ConfirmModal
+                isOpen={confirmState.isOpen}
+                message={confirmState.message}
+                title={confirmState.title}
+                confirmLabel={confirmState.confirmLabel}
+                cancelLabel={confirmState.cancelLabel}
+                hideCancel={confirmState.hideCancel}
+                onConfirm={handleConfirm}
+                onCancel={handleCancel}
+            />
             {showWhatsNew && releaseNotes && (
                 <WhatsNewModal
                     notes={releaseNotes}

@@ -1,3 +1,4 @@
+import { askConfirm } from '../../shared/confirm';
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
 import {
@@ -66,13 +67,17 @@ const JobsPage: React.FC = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (window.confirm(`Are you sure you want to stop auto-syncing "${jobs[id].name}"?`)) {
-            try {
-                await api.deleteJob(id);
-                await fetchJobs();
-            } catch (e) {
-                console.error("Failed to delete job", e);
-            }
+        const ok = await askConfirm(`Are you sure you want to stop auto-syncing "${jobs[id].name}"?`, {
+            title: 'Stop auto-sync?',
+            confirmLabel: 'Stop syncing',
+            cancelLabel: 'Keep',
+        });
+        if (!ok) return;
+        try {
+            await api.deleteJob(id);
+            await fetchJobs();
+        } catch (e) {
+            console.error("Failed to delete job", e);
         }
     };
 

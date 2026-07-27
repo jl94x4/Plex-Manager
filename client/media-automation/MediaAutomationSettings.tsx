@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock3, Cpu, FolderSearch, Gauge, Percent, PlayCircle, Radar, Server, ShieldCheck, Tags } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
+import { askConfirm } from '../shared/confirm';
 import type {
     HardwareMode,
     MediaAutomationDeliveryTarget,
@@ -851,14 +852,19 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     <CustomSelect
                         value={config.fallback.outputMode}
                         onChange={(outputMode) => {
-                            if (outputMode === 'replace'
-                                && !window.confirm('Replace mode permanently overwrites originals after verify. Continue?')) {
-                                return;
-                            }
-                            update({
-                                outputMode: outputMode as OutputMode,
-                                fallback: { ...config.fallback, outputMode: outputMode as OutputMode },
-                            });
+                            void (async () => {
+                                if (outputMode === 'replace') {
+                                    const ok = await askConfirm(
+                                        'Replace mode permanently overwrites originals after verify. Continue?',
+                                        { title: 'Replace originals?', confirmLabel: 'Use Replace', cancelLabel: 'Keep current' },
+                                    );
+                                    if (!ok) return;
+                                }
+                                update({
+                                    outputMode: outputMode as OutputMode,
+                                    fallback: { ...config.fallback, outputMode: outputMode as OutputMode },
+                                });
+                            })();
                         }}
                         options={[
                             { value: 'dry-run', label: 'Dry run (safest)' },

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Copy, ChevronUp, ChevronDown } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { CustomSelect } from '../shared/ui';
+import { appAlert } from '../shared/confirm';
 import type { User, AuditEntry, DeletedUser } from '../shared/types';
 import { formatDateTime, formatEventName, hexToRgb, getDaysUntilExpiry, addMonths, addYears, formatDate } from '../shared/format';
 export const BroadcastSettingsTab: React.FC<{ selectedUserIds: string[]; users: User[]; }> = ({ selectedUserIds, users }) => {
@@ -23,9 +24,9 @@ export const BroadcastSettingsTab: React.FC<{ selectedUserIds: string[]; users: 
                 method: 'POST',
                 body: JSON.stringify({ subject, body, recipientFilter: finalFilter, selectedUserIds: finalSelectedIds })
             });
-            alert(res.message);
+            void appAlert(res.message);
         } catch (e: any) {
-            alert(e.message || 'Failed to send broadcast');
+            void appAlert(e.message || 'Failed to send broadcast');
         } finally {
             setIsSending(false);
         }
@@ -38,9 +39,9 @@ export const BroadcastSettingsTab: React.FC<{ selectedUserIds: string[]; users: 
                 method: 'POST',
                 body: JSON.stringify({ subject, body })
             });
-            alert(res.message);
+            void appAlert(res.message);
         } catch (e: any) {
-            alert(e.message || 'Failed to send test broadcast');
+            void appAlert(e.message || 'Failed to send test broadcast');
         } finally {
             setIsSendingTest(false);
         }

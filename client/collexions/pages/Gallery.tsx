@@ -1,3 +1,4 @@
+import { askConfirm, appAlert } from '../../shared/confirm';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { api, collexionsImageUrl } from '../api';
 import { PlexCollection } from '../types';
@@ -225,15 +226,16 @@ const Gallery: React.FC = () => {
                 ));
             }
         } catch (e) {
-            alert('Action failed. Check Plex connection.');
+            void appAlert('Action failed. Check Plex connection.');
         } finally {
             setPinningId(null);
         }
     };
 
     const handleDelete = async (coll: PlexCollection) => {
-        const ok = window.confirm(
+        const ok = await askConfirm(
             `Delete "${coll.title}" from Plex?\n\nThis permanently removes the collection from "${coll.library}" (titles stay in your library). Any Collexions auto-sync job for it will also be removed.`,
+            { title: 'Delete collection?', confirmLabel: 'Delete', cancelLabel: 'Keep' },
         );
         if (!ok) return;
         const id = collId(coll);
@@ -247,7 +249,7 @@ const Gallery: React.FC = () => {
                 return next;
             });
         } catch (e: any) {
-            alert(e?.message || 'Delete failed. Check Plex connection.');
+            void appAlert(e?.message || 'Delete failed. Check Plex connection.');
         } finally {
             setDeletingId(null);
         }
@@ -259,15 +261,15 @@ const Gallery: React.FC = () => {
         try {
             const res = await api.fixCollectionArt(coll.library, coll.title, true);
             if (!res.ok_count) {
-                alert('Could not find a poster source for this collection (need TMDB key or items with artwork).');
+                void appAlert('Could not find a poster source for this collection (need TMDB key or items with artwork).');
             }
             await fetchCollections(true);
         } catch (e: any) {
             const msg = String(e?.message || '');
             if (/504|timed out|timeout/i.test(msg)) {
-                alert('Poster refresh timed out. Try again — large collections can take a moment.');
+                void appAlert('Poster refresh timed out. Try again — large collections can take a moment.');
             } else {
-                alert(msg || 'Failed to set collection art.');
+                void appAlert(msg || 'Failed to set collection art.');
             }
         } finally {
             setFixingArtId(null);
@@ -331,10 +333,10 @@ const Gallery: React.FC = () => {
             exitSelectMode();
             await fetchCollections(true);
             if (okCount < items.length) {
-                alert(`Set posters on ${okCount} of ${items.length}. Some need a TMDB key or items with artwork.`);
+                void appAlert(`Set posters on ${okCount} of ${items.length}. Some need a TMDB key or items with artwork.`);
             }
         } catch (e: any) {
-            alert(e?.message || 'Bulk fix art failed.');
+            void appAlert(e?.message || 'Bulk fix art failed.');
         } finally {
             setBulkBusy(false);
         }
@@ -346,8 +348,9 @@ const Gallery: React.FC = () => {
             .map(c => ({ title: c.title, library: c.library }));
         if (!items.length) return;
         if (action === 'delete') {
-            const ok = window.confirm(
+            const ok = await askConfirm(
                 `Permanently delete ${items.length} collection${items.length === 1 ? '' : 's'} from Plex?\n\nTitles stay in your libraries. Matching Collexions auto-sync jobs will also be removed.`,
+                { title: 'Delete collections?', confirmLabel: 'Delete', cancelLabel: 'Keep' },
             );
             if (!ok) return;
         }
@@ -374,10 +377,10 @@ const Gallery: React.FC = () => {
             }
             exitSelectMode();
             if (result.ok_count < items.length) {
-                alert(`${action === 'delete' ? 'Deleted' : 'Updated'} ${result.ok_count} of ${items.length}. Some actions failed.`);
+                void appAlert(`${action === 'delete' ? 'Deleted' : 'Updated'} ${result.ok_count} of ${items.length}. Some actions failed.`);
             }
         } catch (e) {
-            alert('Bulk action failed. Check Plex connection.');
+            void appAlert('Bulk action failed. Check Plex connection.');
         } finally {
             setBulkBusy(false);
         }

@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { CustomSelect, SettingsSwitch } from '../shared/ui';
 import { ModalPortal } from '../shared/ModalPortal';
+import { askConfirm } from '../shared/confirm';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { portalUrl } from '../shared/basePath';
 import { mediaAutomationApi } from './api';
@@ -365,9 +366,10 @@ const pathDirname = (filePath: string) => {
     return idx > 0 ? normalized.slice(0, idx) : normalized;
 };
 
-const confirmReplaceOutputMode = () => window.confirm(
+const confirmReplaceOutputMode = () => askConfirm(
     'Replace mode atomically promotes verified output over the source file. '
     + 'The original is moved to quarantine after verify. Continue?',
+    { title: 'Replace original files?', confirmLabel: 'Use Replace', cancelLabel: 'Keep current mode' },
 );
 
 const workerStatusLabel = (workerStatus: MediaAutomationStatus) => {
@@ -445,26 +447,28 @@ const isBroadLibraryRoot = (rootPath: string) => {
     return meaningful.length <= 3 && BROAD_LIBRARY_BASENAMES.has(base);
 };
 
-const confirmBroadLibrarySave = (rootPath: string) => {
+const confirmBroadLibrarySave = async (rootPath: string) => {
     if (!isBroadLibraryRoot(rootPath)) return true;
-    return window.confirm(
+    return askConfirm(
         `This root looks like a whole library:\n\n${rootPath}\n\n`
         + 'Scans will walk everything under it and queue matching files for encode. '
         + 'Prefer a narrower folder (one show/season) if you only meant a small test.\n\n'
         + 'Save this library root anyway?',
+        { title: 'Broad library root', confirmLabel: 'Save anyway', cancelLabel: 'Go back' },
     );
 };
 
-const confirmBroadLibraryScan = (roots: string[]) => {
+const confirmBroadLibraryScan = async (roots: string[]) => {
     const broad = roots.filter(isBroadLibraryRoot);
     if (!broad.length) return true;
     const listed = broad.slice(0, 8).join('\n');
     const extra = broad.length > 8 ? `\n…and ${broad.length - 8} more` : '';
-    return window.confirm(
+    return askConfirm(
         'Scan will walk broad library root(s) and may queue a lot of files:\n\n'
         + `${listed}${extra}\n\n`
         + 'Encoding still needs Start if the worker is paused, but the queue can fill quickly.\n\n'
         + 'Run Scan now anyway?',
+        { title: 'Scan broad libraries?', confirmLabel: 'Scan now', cancelLabel: 'Cancel' },
     );
 };
 
@@ -845,9 +849,26 @@ export const MediaAutomationDashboard: React.FC = () => {
         }
     };
 
-    const cancelScanWithConfirm = () => {
-        const clearQueued = window.confirm('Clear queued jobs from this scan batch too?');
-        return mediaAutomationApi.cancelScan({ clearQueued });
+    const cancelScanWithConfirm = async () => {
+        // Stuck banner after a finished scan: clear progress without the queue confirm.
+        if (!status.scanning) {
+            const result = await mediaAutomationApi.cancelScan({ clearQueued: false });
+            setStatus((current) => ({ ...current, scanning: false, scanProgress: null }));
+            return result;
+        }
+        const shouldCancel = await askConfirm(
+            'Stop the in-progress library scan? Encoding jobs already queued will keep running unless you clear them next.',
+            { title: 'Cancel scan?', confirmLabel: 'Cancel scan', cancelLabel: 'Keep scanning' },
+        );
+        if (!shouldCancel) return;
+        const clearQueued = await askConfirm(
+            'Also clear queued jobs from this scan batch?',
+            { title: 'Clear queued jobs?', confirmLabel: 'Clear queue too', cancelLabel: 'Leave queue' },
+        );
+        const result = await mediaAutomationApi.cancelScan({ clearQueued });
+        // Drop the banner immediately — the worker may still be unwinding a blocked probe.
+        setStatus((current) => ({ ...current, scanning: false, scanProgress: null }));
+        return result;
     };
 
     const runScanNow = async (
@@ -867,7 +888,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         .filter(Boolean))
                 : []
         );
-        if (!options.preview && !options.planOnly && roots.length && !confirmBroadLibraryScan(roots)) {
+        if (!options.preview && !options.planOnly && roots.length && !(await confirmBroadLibraryScan(roots))) {
             return;
         }
         setBusy('scan-now');
@@ -907,8 +928,8 @@ export const MediaAutomationDashboard: React.FC = () => {
             toast('Library name and root path are required.', 'error');
             return;
         }
-        if (!confirmBroadLibrarySave(libraryDraft.rootPath)) return;
-        if (libraryDraft.outputMode === 'replace' && !confirmReplaceOutputMode()) return;
+        if (!(await confirmBroadLibrarySave(libraryDraft.rootPath))) return;
+        if (libraryDraft.outputMode === 'replace' && !(await confirmReplaceOutputMode())) return;
         setSavingEditor(true);
         try {
             if (libraryDraft.id !== undefined) await mediaAutomationApi.updateLibrary(libraryDraft.id, libraryDraft);
@@ -928,7 +949,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             toast('Pipeline name is required.', 'error');
             return;
         }
-        if (pipelineDraft.outputMode === 'replace' && !confirmReplaceOutputMode()) return;
+        if (pipelineDraft.outputMode === 'replace' && !(await confirmReplaceOutputMode())) return;
         setSavingEditor(true);
         try {
             const payload = { ...pipelineDraft };
@@ -2609,7 +2630,17 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         </div>
                                         <div className="flex gap-1">
                                             <button type="button" className={buttonClass} onClick={() => openPipelineEditor(pipeline)}><Pencil className="h-4 w-4" /></button>
-                                            <button type="button" className={buttonClass} disabled={pipeline.id === undefined || busy !== null} onClick={() => { if (pipeline.id !== undefined && window.confirm(`Delete pipeline "${pipeline.name}"?`)) runAction(`delete-pipeline-${pipeline.id}`, () => mediaAutomationApi.deletePipeline(pipeline.id!), 'Pipeline deleted.'); }}><Trash2 className="h-4 w-4 text-red-300" /></button>
+                                            <button type="button" className={buttonClass} disabled={pipeline.id === undefined || busy !== null} onClick={() => {
+                                                if (pipeline.id === undefined) return;
+                                                void askConfirm(`Delete pipeline "${pipeline.name}"?`, {
+                                                    title: 'Delete pipeline?',
+                                                    confirmLabel: 'Delete',
+                                                    cancelLabel: 'Keep',
+                                                }).then((ok) => {
+                                                    if (!ok) return;
+                                                    void runAction(`delete-pipeline-${pipeline.id}`, () => mediaAutomationApi.deletePipeline(pipeline.id!), 'Pipeline deleted.');
+                                                });
+                                            }}><Trash2 className="h-4 w-4 text-red-300" /></button>
                                         </div>
                                     </div>
                                     {samplePath ? (
@@ -2801,8 +2832,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     type="button"
                                                     className={buttonClass}
                                                     disabled={library.id === undefined || busy !== null}
-                                                    onClick={() => {
-                                                        if (library.id !== undefined && window.confirm(`Delete library "${library.name}"?`)) {
+                                                    onClick={async () => {
+                                                        const ok = library.id !== undefined && await askConfirm(`Delete library "${library.name}"?`, {
+                                                            title: 'Delete library?',
+                                                            confirmLabel: 'Delete',
+                                                            cancelLabel: 'Keep',
+                                                        });
+                                                        if (ok) {
                                                             runAction(`delete-library-${library.id}`, () => mediaAutomationApi.deleteLibrary(library.id!), 'Library deleted.');
                                                         }
                                                     }}
