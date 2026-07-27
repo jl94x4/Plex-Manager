@@ -781,7 +781,7 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     />
                     <p className="text-xs text-muted">
                         Used by Sonarr, Radarr, and Lidarr webhook callers via HTTP Basic Auth at <code className="text-plex">/triggers/media-automation/*</code>.
-                        Copyable URLs are on the Media Automation Overview tab. ARR host path rewrites live under{' '}
+                        ARR host path rewrites live under{' '}
                         <a className="text-plex hover:underline" href={portalUrl('/settings#scanner')}>Settings → Scanner</a>.
                     </p>
                 </div>

@@ -19750,16 +19750,18 @@ app.post('/api/media-automation/analyze', requireAdmin, requireMediaAutomation, 
             limit: req.body?.limit,
             minSizeBytes: req.body?.minSizeBytes,
             concurrency: req.body?.concurrency,
+            rootPath: req.body?.rootPath ?? req.body?.path ?? null,
         });
         await appendAuditLog('media_automation_analyze', req.user, null, {
             libraryId: result.libraryId,
             pipelineId: result.pipelineId,
+            rootPath: result.rootPath || null,
             analyzed: result.totals?.analyzed || 0,
             estimatedBytesSaved: result.totals?.estimatedBytesSaved || 0,
         });
         res.json(result);
     } catch (error) {
-        const status = ['LIBRARY_NOT_FOUND', 'PIPELINE_NOT_FOUND'].includes(error?.code) ? 400 : 500;
+        const status = ['LIBRARY_NOT_FOUND', 'PIPELINE_NOT_FOUND', 'OUTSIDE_LIBRARY'].includes(error?.code) ? 400 : 500;
         res.status(status).json({ error: error.message || 'Analyze failed', code: error?.code || null });
     }
 });

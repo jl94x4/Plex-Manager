@@ -138,6 +138,7 @@ export const mediaAutomationApi = {
         force?: boolean;
         limit?: number;
         minSizeBytes?: number;
+        rootPath?: string | null;
     } = {}) => apiFetch(`${ROOT}/analyze`, json(options)) as Promise<MediaAutomationAnalyzeResult>,
     testWorker: () => apiFetch(`${ROOT}/worker/test`, json({})),
     control: (action: string) => apiFetch(`${ROOT}/control`, json({ action })),

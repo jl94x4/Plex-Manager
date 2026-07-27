@@ -7,14 +7,13 @@ import {
     ChevronDown,
     CirclePause,
     CirclePlay,
-    Copy,
     Cpu,
+    FileBarChart2,
     FolderCog,
     FolderSearch,
     Gauge,
     History,
     Layers3,
-    Link2,
     ListRestart,
     Loader2,
     Pencil,
@@ -45,6 +44,7 @@ import { MediaAutomationSetupChecklist } from './MediaAutomationSetupChecklist';
 import { PipelineEditorForm } from './PipelineEditorForm';
 import { MediaAutomationGoLiveWizard } from './MediaAutomationGoLiveWizard';
 import { SavingsAnalyzerPanel } from './SavingsAnalyzerPanel';
+import { ReportModal, type ReportModalSeed } from './ReportModal';
 import {
     buildEncodeProfilePack,
     downloadEncodeProfilePack,
@@ -410,13 +410,6 @@ const jobFinalPath = (job: MediaAutomationJob | null | undefined) => {
     return String(job.outputPath || '');
 };
 
-const MA_WEBHOOK_PATHS = [
-    { label: 'Sonarr', path: '/triggers/media-automation/sonarr', tone: 'text-sky-300' },
-    { label: 'Radarr', path: '/triggers/media-automation/radarr', tone: 'text-amber-300' },
-    { label: 'Lidarr', path: '/triggers/media-automation/lidarr', tone: 'text-violet-300' },
-    { label: 'Manual', path: '/triggers/media-automation/manual', tone: 'text-emerald-300' },
-] as const;
-
 const jobStateValue = (job: MediaAutomationJob) => String(job.state || job.status || '').toLowerCase();
 const isTerminalJob = (job: MediaAutomationJob) => (
     ['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'success'].includes(jobStateValue(job))
@@ -553,8 +546,14 @@ const statusTone = (status?: string) => {
     return 'border-white/10 bg-white/5 text-muted';
 };
 
-const StatusPill: React.FC<{ value?: string }> = ({ value }) => (
-    <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${statusTone(value)}`}>
+const StatusPill: React.FC<{ value?: string; size?: 'sm' | 'md' }> = ({ value, size = 'sm' }) => (
+    <span
+        className={`inline-flex items-center justify-center border font-bold uppercase tracking-wide ${
+            size === 'md'
+                ? 'rounded-xl px-3 py-2 text-sm font-semibold'
+                : 'rounded-full px-2.5 py-1 text-[11px]'
+        } ${statusTone(value)}`}
+    >
         {value || 'unknown'}
     </span>
 );
@@ -772,6 +771,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [editorMatchAdvancedOpen, setEditorMatchAdvancedOpen] = useState(false);
     const [forceSampleSection, setForceSampleSection] = useState(false);
     const [libraryPathHealth, setLibraryPathHealth] = useState<Record<string, { ok: boolean; message: string }>>({});
+    const [reportSeed, setReportSeed] = useState<ReportModalSeed | null>(null);
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
@@ -1162,15 +1162,6 @@ export const MediaAutomationDashboard: React.FC = () => {
         if (queuePage > queuePageCount) setQueuePage(queuePageCount);
     }, [queuePage, queuePageCount]);
 
-    const copyText = async (text: string, success = 'Copied to clipboard.') => {
-        try {
-            await navigator.clipboard.writeText(text);
-            toast(success);
-        } catch {
-            toast(text, 'error');
-        }
-    };
-
     const activityPageCount = Math.max(1, Math.ceil(filteredActivity.length / activityPageSize));
     const pagedActivity = useMemo(() => {
         const start = (activityPage - 1) * activityPageSize;
@@ -1374,14 +1365,14 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 self-start lg:self-auto">
-                        <StatusPill value={workerStatusLabel(status)} />
+                        <StatusPill value={workerStatusLabel(status)} size="md" />
                         {status.quietHoursActive && (
-                            <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-sky-200">
+                            <span className="inline-flex items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-sky-200">
                                 Quiet hours
                             </span>
                         )}
                         {status.streamingPauseActive && (
-                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-200">
+                            <span className="inline-flex items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-amber-200">
                                 Paused - {Number(status.activeStreamCount) || 0} stream{(Number(status.activeStreamCount) || 0) === 1 ? '' : 's'} active
                             </span>
                         )}
@@ -1938,32 +1929,6 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </div>
                         </section>
                     </div>
-                    <section className={`${cardClass} p-5`}>
-                        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <h2 className="text-lg font-bold tracking-tight text-text">ARR webhooks</h2>
-                                <p className="mt-0.5 text-xs text-muted">
-                                    Point Sonarr / Radarr / Lidarr Connect webhooks here (HTTP Basic Auth from Settings). Path rewrites are shared with{' '}
-                                    <a className="text-plex hover:underline" href={portalUrl('/settings#scanner')}>Settings → Scanner</a>.
-                                </p>
-                            </div>
-                            <Link2 className="hidden h-5 w-5 text-plex sm:block" />
-                        </div>
-                        <div className="space-y-2">
-                            {MA_WEBHOOK_PATHS.map((row) => {
-                                const full = `${typeof window !== 'undefined' ? window.location.origin : ''}${portalUrl(row.path)}`;
-                                return (
-                                    <div key={row.path} className="flex flex-col gap-2 rounded-xl border border-border/70 bg-background/30 p-3 sm:flex-row sm:items-center">
-                                        <span className={`shrink-0 text-xs font-bold uppercase tracking-wide ${row.tone}`}>{row.label}</span>
-                                        <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted" title={full}>{full}</code>
-                                        <button type="button" className={buttonClass} onClick={() => void copyText(full, `${row.label} webhook URL copied.`)}>
-                                            <Copy className="h-4 w-4" /> Copy
-                                        </button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </section>
                 </div>
             )}
 
@@ -1989,7 +1954,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                                <StatusPill value={workerStatusLabel(status)} />
+                                <StatusPill value={workerStatusLabel(status)} size="md" />
                                 <button
                                     type="button"
                                     className={primaryButtonClass}
@@ -2668,10 +2633,36 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     {busy === `test-pipeline-${pipeline.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                                                     Dry-run
                                                 </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={pipeline.id === undefined}
+                                                    onClick={() => setReportSeed({
+                                                        pipelineId: pipeline.id,
+                                                        forcePipeline: true,
+                                                    })}
+                                                >
+                                                    <FileBarChart2 className="h-4 w-4" />
+                                                    Report
+                                                </button>
                                             </div>
                                         </div>
                                     ) : (
-                                        <p className="mt-3 text-xs text-muted">No sample file saved yet - edit the pipeline and set one for one-click queueing.</p>
+                                        <div className="mt-3 space-y-2">
+                                            <p className="text-xs text-muted">No sample file saved yet - edit the pipeline and set one for one-click queueing.</p>
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={pipeline.id === undefined}
+                                                onClick={() => setReportSeed({
+                                                    pipelineId: pipeline.id,
+                                                    forcePipeline: true,
+                                                })}
+                                            >
+                                                <FileBarChart2 className="h-4 w-4" />
+                                                Report
+                                            </button>
+                                        </div>
                                     )}
                                 </article>
                                 );
@@ -2935,6 +2926,19 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 >
                                                     {busy === `test-library-${library.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                                                     Test path
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    onClick={() => setReportSeed({
+                                                        libraryId: library.id,
+                                                        libraryRoot: library.rootPath,
+                                                        pipelineId: library.pipelineId ?? null,
+                                                        forcePipeline: false,
+                                                    })}
+                                                >
+                                                    <FileBarChart2 className="h-4 w-4" />
+                                                    Report
                                                 </button>
                                                 {health && (
                                                     <p className={`text-xs ${health.ok ? 'text-emerald-300' : 'text-red-300'}`}>{health.message}</p>
@@ -3609,6 +3613,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                         setGoLiveOpen(false);
                     }
                 }}
+            />
+            <ReportModal
+                open={reportSeed !== null}
+                seed={reportSeed}
+                libraries={libraries}
+                pipelines={pipelines}
+                onClose={() => setReportSeed(null)}
+                toast={toast}
+                onEnqueued={() => load(true)}
             />
         </div>
     );

@@ -23,6 +23,7 @@ export type MediaAutomationAnalyzeRow = {
     estimatedOutputBytes?: number | null;
     estimatedBytesSaved?: number | null;
     estimatedSavingsPercent?: number | null;
+    targetCodec?: string | null;
 };
 
 export type MediaAutomationAnalyzeResult = {
@@ -30,6 +31,7 @@ export type MediaAutomationAnalyzeResult = {
     estimateMode?: string;
     libraryId?: string | number | null;
     pipelineId?: string | number | null;
+    rootPath?: string | null;
     force?: boolean;
     truncated?: boolean;
     limit?: number;
@@ -41,6 +43,12 @@ export type MediaAutomationAnalyzeResult = {
         matched?: number;
         estimatedBytesSaved?: number;
         sourceBytes?: number;
+        matchedSourceBytes?: number;
+        matchedDurationSeconds?: number;
+        estimatedOutputBytes?: number;
+        estimatedEncodeMs?: number | null;
+        etaSource?: string;
+        estimatedSavingsPercent?: number | null;
     };
     rows?: MediaAutomationAnalyzeRow[];
     error?: string;
