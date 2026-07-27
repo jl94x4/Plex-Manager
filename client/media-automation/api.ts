@@ -142,6 +142,7 @@ export const mediaAutomationApi = {
     testWorker: () => apiFetch(`${ROOT}/worker/test`, json({})),
     control: (action: string) => apiFetch(`${ROOT}/control`, json({ action })),
     scanNow: () => apiFetch(`${ROOT}/scan`, json({})),
+    cancelScan: () => apiFetch(`${ROOT}/scan/cancel`, json({})),
     testPending: (path: string) => apiFetch(`${ROOT}/pending/test`, json({ path })) as Promise<MediaAutomationPendingTest>,
     cancelJob: (id: string | number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/cancel`, json({})),
     bulkCancelJobs: (ids?: Array<string | number>) => apiFetch(`${ROOT}/jobs/bulk`, json({

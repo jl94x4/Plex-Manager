@@ -19401,6 +19401,16 @@ app.post('/api/media-automation/scan', requireAdmin, requireMediaAutomation, asy
     }
 });
 
+app.post('/api/media-automation/scan/cancel', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const result = await mediaAutomationService.cancelScan();
+        await appendAuditLog('media_automation_scan_cancel', req.user, null, result || {});
+        res.json({ ok: true, ...result, status: await mediaAutomationService.status() });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to cancel library scan' });
+    }
+});
+
 app.post('/api/media-automation/pending/test', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
         const sourcePath = String(req.body?.path || '').trim();

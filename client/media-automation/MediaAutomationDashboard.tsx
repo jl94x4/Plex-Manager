@@ -1281,7 +1281,18 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         {status.scanProgress?.discovered || 0} discovered · {status.scanProgress?.enqueued || 0} queued · {status.scanProgress?.skipped || 0} skipped
                                     </p>
                                 </div>
-                                <Loader2 className="h-5 w-5 animate-spin text-plex" />
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null}
+                                        onClick={() => runAction('cancel-scan', () => mediaAutomationApi.cancelScan(), 'Scan cancel requested.')}
+                                    >
+                                        {busy === 'cancel-scan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                                        Cancel scan
+                                    </button>
+                                    <Loader2 className="h-5 w-5 animate-spin text-plex" />
+                                </div>
                             </div>
                             <div className="h-2 overflow-hidden rounded-full bg-white/10">
                                 <div className="h-full w-1/3 animate-pulse rounded-full bg-plex/70" />
@@ -2203,11 +2214,20 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <button
                                     type="button"
                                     className={buttonClass}
-                                    disabled={busy !== null}
+                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
                                     onClick={() => runAction('scan-now', mediaAutomationApi.scanNow, 'Library scan completed.')}
                                 >
                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />}
                                     Scan now
+                                </button>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null || !(status.scanning || status.scanProgress?.running)}
+                                    onClick={() => runAction('cancel-scan', () => mediaAutomationApi.cancelScan(), 'Scan cancel requested.')}
+                                >
+                                    {busy === 'cancel-scan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                                    Cancel scan
                                 </button>
                                 <button type="button" className={primaryButtonClass} onClick={() => setLibraryDraft(emptyLibrary())}>
                                     <Plus className="h-4 w-4" /> New library
