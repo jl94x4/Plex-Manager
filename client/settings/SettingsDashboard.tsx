@@ -2657,7 +2657,13 @@ export const SettingsDashboard: React.FC = () => {
                                         <SettingsToggleRow title="Request series" checked={portalAllowRequestTv} onChange={setPortalAllowRequestTv} border={false} />
                                         <SettingsToggleRow title="Request 4K movies" checked={portalAllowRequest4kMovies} onChange={setPortalAllowRequest4kMovies} border={false} />
                                         <SettingsToggleRow title="Request 4K series" checked={portalAllowRequest4kTv} onChange={setPortalAllowRequest4kTv} border={false} />
-                                        <SettingsToggleRow title="Advanced requests (root folder / profile)" checked={portalAllowAdvancedRequests} onChange={setPortalAllowAdvancedRequests} border={false} />
+                                        <SettingsToggleRow
+                                            title="Allow advanced request options"
+                                            description="When off, members only submit Request Movie/Show (plus seasons or HD/4K if needed). Destination server, quality profile, root folder, and tags stay hidden and *arr defaults are used."
+                                            checked={portalAllowAdvancedRequests}
+                                            onChange={setPortalAllowAdvancedRequests}
+                                            border={false}
+                                        />
                                         <SettingsToggleRow title="Show recently added on Discover home" checked={portalShowRecentlyAdded} onChange={setPortalShowRecentlyAdded} border={false} />
                                         <SettingsToggleRow title="Show Plex watchlist on Discover home" checked={portalShowWatchlist} onChange={setPortalShowWatchlist} border={false} />
                                     </div>

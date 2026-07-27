@@ -78,7 +78,7 @@ export const RequestModal: React.FC<Props> = ({
     const [selectedQualities, setSelectedQualities] = useState<Set<QualityKey>>(() => new Set(['hd']));
     const [advancedQuality, setAdvancedQuality] = useState<QualityKey>('hd');
     const [selectedSeasons, setSelectedSeasons] = useState<number[]>([]);
-    const [showAdvanced, setShowAdvanced] = useState(true);
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const [qualityForms, setQualityForms] = useState<Record<QualityKey, QualityFormState>>({
         hd: emptyQualityForm(),
         '4k': emptyQualityForm(),
@@ -286,8 +286,8 @@ export const RequestModal: React.FC<Props> = ({
             else initial.add('hd');
             setSelectedQualities(initial);
             setAdvancedQuality(initial.has('hd') ? 'hd' : '4k');
-            // Beta: keep Advanced open so quality / language profiles are visible for HD + 4K.
-            setShowAdvanced(true);
+            // Keep Advanced collapsed — Destination / profile / root stay optional.
+            setShowAdvanced(false);
 
             if (payload.mediaType === 'tv' && Array.isArray(payload.seasons)) {
                 setSelectedSeasons(
@@ -310,12 +310,12 @@ export const RequestModal: React.FC<Props> = ({
         }
     }, [mediaId, mediaType]);
 
-    // Preload only the active quality first — load the other when the user switches tabs.
+    // Load *arr routing options only when the member opens Advanced.
     useEffect(() => {
-        if (!open || !options?.canRequestAdvanced) return undefined;
+        if (!open || !options?.canRequestAdvanced || !showAdvanced) return undefined;
         void loadAdvancedForQuality(options, advancedQuality);
         return undefined;
-    }, [open, options, advancedQuality, loadAdvancedForQuality]);
+    }, [open, options, advancedQuality, showAdvanced, loadAdvancedForQuality]);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -564,7 +564,8 @@ export const RequestModal: React.FC<Props> = ({
             || (options.servers || []).find((server) => server.isDefault)
             || (options.servers || [])[0]
             || null;
-        if (options.canRequestAdvanced && form.loaded) {
+        // Only send profile / root / tags when Advanced was opened and options loaded.
+        if (options.canRequestAdvanced && showAdvanced && form.loaded) {
             if (form.serverId != null) body.serverId = form.serverId;
             else if (fallbackServer?.id != null) body.serverId = fallbackServer.id;
             if (form.profileId != null) body.profileId = form.profileId;
@@ -588,8 +589,8 @@ export const RequestModal: React.FC<Props> = ({
             onError('Select at least one season to request.');
             return;
         }
-        // Only enforce Advanced fields when that quality's options were actually loaded/edited.
-        if (options.canRequestAdvanced) {
+        // Only enforce Advanced fields when the member opened Advanced and options loaded.
+        if (options.canRequestAdvanced && showAdvanced) {
             for (const quality of qualities) {
                 const form = qualityForms[quality];
                 if (form.loaded && !form.rootFolder) {
@@ -650,10 +651,9 @@ export const RequestModal: React.FC<Props> = ({
     // (so members still see the dual picker when permissions are on).
     const showQualityPicker = !!options?.has4kServer || !!options?.canRequest4k
         || ((options?.servers || []).length > 1);
-    const advancedLoading = showAdvancedSection && activeForm.loading && !activeForm.loaded;
+    const advancedLoading = showAdvancedSection && showAdvanced && activeForm.loading && !activeForm.loaded;
     const bothQualitiesSelected = selectedQualities.has('hd') && selectedQualities.has('4k');
-    // Surface Destination / Quality / Root with the active *arr options (not buried only in Advanced).
-    const showRoutingSection = showAdvancedSection && !advancedLoading && (
+    const showRoutingFields = !advancedLoading && (
         filteredServers.length > 0
         || (activeForm.serviceOptions?.rootFolders || []).length > 0
         || (activeForm.serviceOptions?.profiles || []).length > 0
@@ -910,105 +910,6 @@ export const RequestModal: React.FC<Props> = ({
                                 </div>
                             )}
 
-                            {showRoutingSection && (
-                                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 flex flex-col gap-3">
-                                    {bothQualitiesSelected && (
-                                        <div className="flex gap-1">
-                                            {(['hd', '4k'] as QualityKey[]).map((q) => (
-                                                <button
-                                                    key={q}
-                                                    type="button"
-                                                    onClick={() => setAdvancedQuality(q)}
-                                                    className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wide border transition-colors ${
-                                                        advancedQuality === q
-                                                            ? 'bg-white/10 border-white/20 text-white'
-                                                            : 'bg-transparent border-transparent text-white/40 hover:text-white/70'
-                                                    }`}
-                                                >
-                                                    {q === '4k' ? '4K options' : 'HD options'}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {(filteredServers.length > 0) && (
-                                        <div>
-                                            <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
-                                                Destination Server
-                                            </label>
-                                            {filteredServers.length === 1 ? (
-                                                <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white/80">
-                                                    {filteredServers[0].isDefault
-                                                        ? `${filteredServers[0].name} (Default)`
-                                                        : filteredServers[0].name}
-                                                </p>
-                                            ) : (
-                                                <CustomSelect
-                                                    value={String(activeForm.serverId ?? '')}
-                                                    onChange={(val) => {
-                                                        const nextId = Number(val);
-                                                        updateQualityForm(advancedQuality, { serverId: nextId });
-                                                        if (options) {
-                                                            loadServiceOptions(options, advancedQuality, nextId, null, {
-                                                                preserveSelections: false,
-                                                            });
-                                                        }
-                                                    }}
-                                                    options={filteredServers.map((server) => ({
-                                                        value: String(server.id),
-                                                        label: server.isDefault ? `${server.name} (Default)` : server.name,
-                                                    }))}
-                                                />
-                                            )}
-                                        </div>
-                                    )}
-
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
-                                            Quality Profile
-                                        </label>
-                                        {(activeForm.serviceOptions?.profiles || []).length > 0 ? (
-                                            <CustomSelect
-                                                value={String(activeForm.profileId ?? '')}
-                                                onChange={(val) => updateQualityForm(advancedQuality, {
-                                                    profileId: Number(val),
-                                                })}
-                                                options={(activeForm.serviceOptions?.profiles || []).map((profile) => ({
-                                                    value: String(profile.id),
-                                                    label: profile.name,
-                                                }))}
-                                            />
-                                        ) : (
-                                            <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-                                                No quality profiles returned from Sonarr/Radarr for this server.
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
-                                            Root Folder
-                                        </label>
-                                        {(activeForm.serviceOptions?.rootFolders || []).length > 0 ? (
-                                            <CustomSelect
-                                                value={activeForm.rootFolder}
-                                                onChange={(val) => updateQualityForm(advancedQuality, {
-                                                    rootFolder: val,
-                                                })}
-                                                options={(activeForm.serviceOptions?.rootFolders || []).map((folder) => ({
-                                                    value: folder.path,
-                                                    label: rootFolderLabel(folder),
-                                                }))}
-                                            />
-                                        ) : (
-                                            <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-                                                No root folders returned from Sonarr/Radarr for this server.
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
                             {options.canRequest && !showAdvancedSection && (
                                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/70">
                                     {mediaType === 'tv'
@@ -1042,11 +943,13 @@ export const RequestModal: React.FC<Props> = ({
                                     >
                                         <span className="min-w-0 flex flex-col gap-0.5">
                                             <span className="text-xs font-bold uppercase tracking-wider text-white/50">Advanced</span>
-                                            {!showAdvanced && activeForm.profileId != null ? (
+                                            {!showAdvanced ? (
                                                 <span className="text-[11px] font-medium normal-case tracking-normal text-white/35 truncate">
-                                                    {(activeForm.serviceOptions?.profiles || [])
-                                                        .find((profile) => Number(profile.id) === Number(activeForm.profileId))
-                                                        ?.name || 'Quality profile'}
+                                                    {activeForm.loaded && activeForm.profileId != null
+                                                        ? ((activeForm.serviceOptions?.profiles || [])
+                                                            .find((profile) => Number(profile.id) === Number(activeForm.profileId))
+                                                            ?.name || 'Quality profile')
+                                                        : 'Optional — uses *arr defaults when closed'}
                                                 </span>
                                             ) : null}
                                         </span>
@@ -1083,7 +986,87 @@ export const RequestModal: React.FC<Props> = ({
                                                         </div>
                                                     )}
 
-                                                    <div className={bothQualitiesSelected ? '' : 'pt-3'}>
+                                                    {showRoutingFields && (
+                                                        <div className={`flex flex-col gap-3 ${bothQualitiesSelected ? '' : 'pt-3'}`}>
+                                                            {(filteredServers.length > 0) && (
+                                                                <div>
+                                                                    <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
+                                                                        Destination Server
+                                                                    </label>
+                                                                    {filteredServers.length === 1 ? (
+                                                                        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white/80">
+                                                                            {filteredServers[0].isDefault
+                                                                                ? `${filteredServers[0].name} (Default)`
+                                                                                : filteredServers[0].name}
+                                                                        </p>
+                                                                    ) : (
+                                                                        <CustomSelect
+                                                                            value={String(activeForm.serverId ?? '')}
+                                                                            onChange={(val) => {
+                                                                                const nextId = Number(val);
+                                                                                updateQualityForm(advancedQuality, { serverId: nextId });
+                                                                                if (options) {
+                                                                                    loadServiceOptions(options, advancedQuality, nextId, null, {
+                                                                                        preserveSelections: false,
+                                                                                    });
+                                                                                }
+                                                                            }}
+                                                                            options={filteredServers.map((server) => ({
+                                                                                value: String(server.id),
+                                                                                label: server.isDefault ? `${server.name} (Default)` : server.name,
+                                                                            }))}
+                                                                        />
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            <div>
+                                                                <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
+                                                                    Quality Profile
+                                                                </label>
+                                                                {(activeForm.serviceOptions?.profiles || []).length > 0 ? (
+                                                                    <CustomSelect
+                                                                        value={String(activeForm.profileId ?? '')}
+                                                                        onChange={(val) => updateQualityForm(advancedQuality, {
+                                                                            profileId: Number(val),
+                                                                        })}
+                                                                        options={(activeForm.serviceOptions?.profiles || []).map((profile) => ({
+                                                                            value: String(profile.id),
+                                                                            label: profile.name,
+                                                                        }))}
+                                                                    />
+                                                                ) : (
+                                                                    <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                                                                        No quality profiles returned from Sonarr/Radarr for this server.
+                                                                    </p>
+                                                                )}
+                                                            </div>
+
+                                                            <div>
+                                                                <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
+                                                                    Root Folder
+                                                                </label>
+                                                                {(activeForm.serviceOptions?.rootFolders || []).length > 0 ? (
+                                                                    <CustomSelect
+                                                                        value={activeForm.rootFolder}
+                                                                        onChange={(val) => updateQualityForm(advancedQuality, {
+                                                                            rootFolder: val,
+                                                                        })}
+                                                                        options={(activeForm.serviceOptions?.rootFolders || []).map((folder) => ({
+                                                                            value: folder.path,
+                                                                            label: rootFolderLabel(folder),
+                                                                        }))}
+                                                                    />
+                                                                ) : (
+                                                                    <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                                                                        No root folders returned from Sonarr/Radarr for this server.
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <div className={showRoutingFields || bothQualitiesSelected ? '' : 'pt-3'}>
                                                         <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
                                                             Tags
                                                         </label>

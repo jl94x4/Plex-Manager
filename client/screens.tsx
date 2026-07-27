@@ -522,7 +522,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                         {permSelect('Request series', allowRequestTv, setAllowRequestTv)}
                         {permSelect('Request 4K movies', allowRequest4kMovies, setAllowRequest4kMovies)}
                         {permSelect('Request 4K series', allowRequest4kTv, setAllowRequest4kTv)}
-                        {permSelect('Advanced requests', allowAdvancedRequests, setAllowAdvancedRequests)}
+                        {permSelect('Allow advanced request options', allowAdvancedRequests, setAllowAdvancedRequests)}
                     </div>
                 </div>
 
