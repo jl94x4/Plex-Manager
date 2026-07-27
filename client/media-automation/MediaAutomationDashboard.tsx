@@ -751,6 +751,10 @@ export const MediaAutomationDashboard: React.FC = () => {
         0,
     ), [jobs]);
     const finishedJobs = useMemo(() => jobs.filter(isTerminalJob), [jobs]);
+    const retryableJobs = useMemo(
+        () => jobs.filter((job) => ['failed', 'cancelled', 'canceled', 'error'].includes(jobStateValue(job))),
+        [jobs],
+    );
     const allJobIds = useMemo(() => jobs.map((job) => String(job.id)), [jobs]);
     const allSelected = allJobIds.length > 0 && allJobIds.every((id) => selectedJobIds.has(id));
     const selectedCancellableIds = useMemo(
@@ -760,6 +764,10 @@ export const MediaAutomationDashboard: React.FC = () => {
     const selectedFinishedIds = useMemo(
         () => finishedJobs.map((job) => String(job.id)).filter((id) => selectedJobIds.has(id)),
         [finishedJobs, selectedJobIds],
+    );
+    const selectedRetryableIds = useMemo(
+        () => retryableJobs.map((job) => String(job.id)).filter((id) => selectedJobIds.has(id)),
+        [retryableJobs, selectedJobIds],
     );
 
     useEffect(() => {
@@ -1793,10 +1801,29 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             {busy === 'clear-finished' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                             {selectedFinishedIds.length > 0 ? `Clear selected (${selectedFinishedIds.length})` : `Clear finished (${finishedJobs.length})`}
                                         </button>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null || (selectedRetryableIds.length === 0 && retryableJobs.length === 0)}
+                                            onClick={() => {
+                                                const ids = selectedRetryableIds.length > 0 ? selectedRetryableIds : undefined;
+                                                const count = ids ? ids.length : retryableJobs.length;
+                                                return runAction(
+                                                    'retry-failed',
+                                                    () => mediaAutomationApi.bulkRetryJobs(ids),
+                                                    `Queued ${count} job${count === 1 ? '' : 's'} for retry.`,
+                                                ).then(() => setSelectedJobIds(new Set()));
+                                            }}
+                                        >
+                                            {busy === 'retry-failed' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                                            {selectedRetryableIds.length > 0
+                                                ? `Retry selected (${selectedRetryableIds.length})`
+                                                : `Retry all failed (${retryableJobs.length})`}
+                                        </button>
                                     </div>
                                 </div>
                                 <p className="mt-2 text-xs text-muted">
-                                    Dry-run / completed jobs cannot be cancelled - use Clear finished to remove them. Cancel all active stops queued and running work.
+                                    Dry-run / completed jobs cannot be cancelled - use Clear finished to remove them. Cancel all active stops queued and running work. Retry all failed re-queues failed and cancelled jobs.
                                 </p>
                             </section>
                             {filteredJobs.length === 0 ? (

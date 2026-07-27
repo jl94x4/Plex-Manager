@@ -153,6 +153,11 @@ export const mediaAutomationApi = {
         terminalOnly: true,
         ...(ids?.length ? { ids } : {}),
     })),
+    bulkRetryJobs: (ids?: Array<string | number>) => apiFetch(`${ROOT}/jobs/bulk`, json({
+        action: 'retry',
+        resetAttempts: true,
+        ...(ids?.length ? { ids } : {}),
+    })),
     skipJob: (id: string | number, reason = 'skipped') => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/skip`, json({ reason })),
     setPriority: (id: string | number, priority: number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/priority`, json({ priority })),
     retryJob: (id: string | number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/retry`, json({})),

@@ -19377,7 +19377,18 @@ app.post('/api/media-automation/jobs/bulk', requireAdmin, requireMediaAutomation
             });
             return res.json({ ok: true, action: 'remove', count: removed });
         }
-        return res.status(400).json({ error: 'action must be cancel or remove' });
+        if (action === 'retry') {
+            const retried = await mediaAutomationService.retryJobs({
+                ids,
+                resetAttempts: req.body?.resetAttempts !== false,
+            });
+            await appendAuditLog('media_automation_jobs_bulk_retried', req.user, null, {
+                count: retried.length,
+                ids: retried.map((job) => job.id),
+            });
+            return res.json({ ok: true, action: 'retry', count: retried.length, jobs: retried });
+        }
+        return res.status(400).json({ error: 'action must be cancel, remove, or retry' });
     } catch (error) {
         return res.status(error.status || 400).json({ error: error.message || 'Bulk job action failed' });
     }
