@@ -18581,8 +18581,20 @@ const triggerPlexRescanForPath = async (config, filePath) => {
         rewrite: rewriteRow?.rewrite || [],
     });
     const folder = path.dirname(targetPath);
-    const result = await target.scan(folder);
-    return result;
+    const refresh = await target.scan(folder);
+    // Same-path Replace keeps the filename — folder refresh alone often leaves stale codec metadata.
+    // Analyze the item so Media Info updates (e.g. H264 → HEVC) like a manual Analyze in Plex.
+    let analyze = null;
+    try {
+        analyze = await target.analyzeFile(targetPath, { retries: 1, retryDelayMs: 2000 });
+    } catch (error) {
+        analyze = { skipped: true, reason: error.message || 'analyze-failed', analyzed: [] };
+    }
+    return {
+        ...refresh,
+        analyze,
+        analyzed: analyze?.analyzed || [],
+    };
 };
 
 mediaAutomationService = createMediaAutomation({
@@ -18641,11 +18653,17 @@ mediaAutomationService = createMediaAutomation({
                 const targetPath = event.deliveredPath || event.finalPath || event.sourcePath;
                 if (!targetPath) return;
                 const result = await triggerPlexRescanForPath(config, targetPath);
-                if (result?.skipped) {
+                if (result?.skipped && !(result?.analyzed || []).length) {
                     log(`[media-automation] Plex refresh skipped for ${path.basename(String(targetPath))}: ${result.reason || 'unknown'}`);
                 } else {
                     const libraries = (result?.results || []).map((entry) => entry.library || entry.id).filter(Boolean);
+                    const analyzedKeys = (result?.analyzed || []).map((entry) => entry.ratingKey).filter(Boolean);
                     log(`[media-automation] Plex refresh requested for ${path.dirname(String(targetPath))}${libraries.length ? ` (${libraries.join(', ')})` : ''}`);
+                    if (analyzedKeys.length) {
+                        log(`[media-automation] Plex analyze requested for ${path.basename(String(targetPath))} (ratingKey ${analyzedKeys.join(', ')})`);
+                    } else if (result?.analyze?.skipped) {
+                        log(`[media-automation] Plex analyze skipped for ${path.basename(String(targetPath))}: ${result.analyze.reason || 'unknown'}`);
+                    }
                 }
             } catch (error) {
                 log(`[media-automation] Plex refresh hook failed: ${error.message}`);

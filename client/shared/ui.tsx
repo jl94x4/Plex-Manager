@@ -223,8 +223,18 @@ export const ConfirmModal: React.FC<{
 }) => {
     if (!isOpen || typeof document === 'undefined') return null;
     return ReactDOM.createPortal(
-        <div className="fixed inset-0 z-[2500] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in">
-            <div className="modal-glass animate-slide-up max-w-md w-full" role="dialog" aria-modal="true" aria-labelledby="portal-confirm-title">
+        <div
+            className="pointer-events-auto fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in"
+            role="presentation"
+            onMouseDown={(event) => event.stopPropagation()}
+        >
+            <div
+                className="modal-glass animate-slide-up max-w-md w-full pointer-events-auto"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="portal-confirm-title"
+                onMouseDown={(event) => event.stopPropagation()}
+            >
                 <h3 id="portal-confirm-title" className="text-xl font-black mb-4 text-text tracking-tight">{title}</h3>
                 <p className="text-muted mb-8 text-sm leading-relaxed whitespace-pre-line">{message}</p>
                 <div className="flex gap-3 justify-end">
