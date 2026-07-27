@@ -54,6 +54,7 @@ import {
     selectMediaAdapter,
     spawnCommand,
 } from './lib/media-automation/index.js';
+import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
 const resolveAppVersion = () => {
     const pkgVersion = resolvePackageVersion();
@@ -18568,8 +18569,11 @@ mediaAutomationService = createMediaAutomation({
     getConfig: getMediaAutomationServiceConfig,
     logger: console,
     getActiveStreamCount: countActiveMediaStreams,
-    // Watch gates need Plex/Jellyfin path→item lookup; leave null so season/size/bitrate/savings gates still work.
-    getWatchStats: async (_filePath) => null,
+    // Cheap path→watchCount lookup from maintenance-media-index.json (no live Plex calls).
+    getWatchStats: createWatchStatsLookup({
+        indexPath: MAINTENANCE_MEDIA_INDEX_PATH,
+        logger: console,
+    }).getWatchStats,
     onMediaCommitted: async (event) => {
         try {
             const config = await loadFile(CONFIG_PATH, {});

@@ -475,7 +475,7 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                             })}
                         />
                         <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
-                            Skip heavily watched titles (0 = off).
+                            Skip heavily watched titles (0 = off). Uses the Cleaner/Upgrader media index path map — rebuild that index if watch gates look stale.
                         </span>
                     </label>
                     <label className="block text-xs uppercase tracking-wide font-bold text-muted">
@@ -492,7 +492,7 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                             })}
                         />
                         <span className="mt-1 block text-xs font-normal normal-case tracking-normal text-muted">
-                            Protect recently watched media.
+                            Protect recently watched media (same index; 0 = off).
                         </span>
                     </label>
                     <label className="block text-xs uppercase tracking-wide font-bold text-muted">
