@@ -219,6 +219,11 @@ const mediaAutomationConfigForApi = (config = {}) => {
         watchEnvEnabled: mediaAutomationWatchOptIn(),
         libraryWatchConfigured: config.mediaAutomation?.libraryWatchEnabled === true,
         notifyOnJobFailed: runtime.notifyOnJobFailed === true,
+        notifyOnScanComplete: runtime.notifyOnScanComplete === true,
+        notifyOnFailBurst: runtime.notifyOnFailBurst === true,
+        minFreeDiskGb: runtime.minFreeDiskGb ?? 20,
+        autoPauseQueueDepth: runtime.autoPauseQueueDepth || 0,
+        pathDenyList: Array.isArray(runtime.pathDenyList) ? runtime.pathDenyList : [],
         quietHoursEnabled: runtime.quietHoursEnabled === true,
         quietHoursStart: runtime.quietHoursStart,
         quietHoursEnd: runtime.quietHoursEnd,
@@ -18628,8 +18633,45 @@ mediaAutomationService = createMediaAutomation({
                         8,
                     );
                 }
+                if (config.mediaAutomation?.notifyOnFailBurst) {
+                    const now = Date.now();
+                    if (!globalThis.__maFailBurst) {
+                        globalThis.__maFailBurst = { times: [], lastDigestAt: 0 };
+                    }
+                    const burst = globalThis.__maFailBurst;
+                    burst.times = burst.times.filter((ts) => now - ts < 15 * 60_000);
+                    burst.times.push(now);
+                    if (burst.times.length >= 5 && now - burst.lastDigestAt > 15 * 60_000) {
+                        burst.lastDigestAt = now;
+                        await sendGotifyAlert(
+                            config,
+                            'Media Automation failure burst',
+                            `${burst.times.length} jobs failed in the last 15 minutes.`,
+                            8,
+                        );
+                    }
+                }
             } catch (error) {
                 log(`[media-automation] Gotify notify failed: ${error.message}`);
+            }
+        }
+        if (entry.type === 'library.scan.completed' || entry.type === 'library.scan.cancelled') {
+            try {
+                const config = await loadFile(CONFIG_PATH, {});
+                if (config.mediaAutomation?.notifyOnScanComplete) {
+                    const data = entry.data || {};
+                    await sendGotifyAlert(
+                        config,
+                        entry.type === 'library.scan.cancelled'
+                            ? 'Media Automation scan cancelled'
+                            : 'Media Automation scan complete',
+                        entry.message
+                            || `discovered ${data.discovered || 0}, queued ${data.enqueued || 0}, skipped ${data.skipped || 0}`,
+                        5,
+                    );
+                }
+            } catch (error) {
+                log(`[media-automation] Gotify scan notify failed: ${error.message}`);
             }
         }
         if (entry.type !== 'job.completed' || !outputPath) return;
@@ -19279,9 +19321,12 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
             enabled: true,
             paused: status.workerPaused !== false,
             workerPaused: status.workerPaused !== false,
-            workerState: status.workerPaused !== false
-                ? 'paused'
-                : (status.running ? 'running' : 'stopped'),
+            workerState: status.autoPausedForQueueDepth
+                ? 'auto-paused'
+                : (status.workerPaused !== false
+                    ? 'paused'
+                    : (status.running ? 'running' : 'stopped')),
+            autoPausedForQueueDepth: !!status.autoPausedForQueueDepth,
             activeJobs: jobs.filter((job) => job.state === 'running').length,
             queuedJobs: jobs.filter((job) => job.state === 'queued').length,
             completedJobs: jobs.filter((job) => job.state === 'succeeded').length,
@@ -19289,6 +19334,13 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
             watchEnvEnabled: mediaAutomationWatchOptIn(),
             libraryWatchConfigured: config.mediaAutomation?.libraryWatchEnabled === true,
             notifyOnJobFailed: config.mediaAutomation?.notifyOnJobFailed === true,
+            notifyOnScanComplete: config.mediaAutomation?.notifyOnScanComplete === true,
+            notifyOnFailBurst: config.mediaAutomation?.notifyOnFailBurst === true,
+            minFreeDiskGb: Number(config.mediaAutomation?.minFreeDiskGb ?? status.minFreeDiskGb ?? 20),
+            autoPauseQueueDepth: Number(config.mediaAutomation?.autoPauseQueueDepth ?? status.autoPauseQueueDepth ?? 0),
+            pathDenyList: Array.isArray(config.mediaAutomation?.pathDenyList)
+                ? config.mediaAutomation.pathDenyList
+                : (status.pathDenyList || []),
             quietHoursEnabled: config.mediaAutomation?.quietHoursEnabled === true
                 || status.quietHoursEnabled === true,
             quietHoursStart: config.mediaAutomation?.quietHoursStart || status.quietHoursStart || '23:00',
@@ -19393,17 +19445,32 @@ app.post('/api/media-automation/control', requireAdmin, requireMediaAutomation, 
 
 app.post('/api/media-automation/scan', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
-        const result = await mediaAutomationService.scanNow();
-        await appendAuditLog('media_automation_scan', req.user, null, result || {});
+        const preview = req.body?.preview === true || req.body?.preview === 1 || req.body?.preview === '1';
+        const planOnly = req.body?.planOnly === true || req.body?.planOnly === 1 || req.body?.planOnly === '1';
+        const libraryId = req.body?.libraryId == null || req.body?.libraryId === ''
+            ? null
+            : req.body.libraryId;
+        const result = await mediaAutomationService.scanNow({ preview, planOnly, libraryId });
+        await appendAuditLog('media_automation_scan', req.user, null, {
+            preview,
+            planOnly,
+            libraryId,
+            ...(result || {}),
+        });
         res.json({ ok: true, result, status: await mediaAutomationService.status() });
     } catch (error) {
-        res.status(500).json({ error: error.message || 'Library scan failed' });
+        const status = error?.code === 'DISK_SPACE_LOW' || error?.code === 'LIBRARY_NOT_FOUND' ? 400 : 500;
+        res.status(status).json({ error: error.message || 'Library scan failed', code: error?.code || null });
     }
 });
 
 app.post('/api/media-automation/scan/cancel', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
-        const result = await mediaAutomationService.cancelScan();
+        const clearQueued = req.body?.clearQueued !== false
+            && req.body?.clearQueued !== 0
+            && req.body?.clearQueued !== '0'
+            && req.body?.clearQueued !== 'false';
+        const result = await mediaAutomationService.cancelScan({ clearQueued });
         await appendAuditLog('media_automation_scan_cancel', req.user, null, result || {});
         res.json({ ok: true, ...result, status: await mediaAutomationService.status() });
     } catch (error) {
@@ -19493,19 +19560,46 @@ app.post('/api/media-automation/jobs/bulk', requireAdmin, requireMediaAutomation
             return res.json({ ok: true, action: 'remove', count: removed });
         }
         if (action === 'retry') {
+            const forceCpu = req.body?.forceCpu === true || req.body?.forceCpu === 1 || req.body?.forceCpu === '1';
             const retried = await mediaAutomationService.retryJobs({
                 ids,
                 resetAttempts: req.body?.resetAttempts !== false,
+                forceCpu,
             });
             await appendAuditLog('media_automation_jobs_bulk_retried', req.user, null, {
                 count: retried.length,
                 ids: retried.map((job) => job.id),
+                forceCpu,
             });
             return res.json({ ok: true, action: 'retry', count: retried.length, jobs: retried });
         }
         return res.status(400).json({ error: 'action must be cancel, remove, or retry' });
     } catch (error) {
         return res.status(error.status || 400).json({ error: error.message || 'Bulk job action failed' });
+    }
+});
+
+app.post('/api/media-automation/path-deny', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const incoming = Array.isArray(req.body?.paths)
+            ? req.body.paths
+            : (req.body?.path != null ? [req.body.path] : []);
+        const additions = incoming.map((entry) => String(entry || '').trim()).filter(Boolean);
+        if (!additions.length) return res.status(400).json({ error: 'paths are required' });
+        const config = await loadFile(CONFIG_PATH, {});
+        const existing = Array.isArray(config.mediaAutomation?.pathDenyList)
+            ? config.mediaAutomation.pathDenyList
+            : [];
+        const next = [...new Set([...existing, ...additions].map((entry) => String(entry || '').trim()).filter(Boolean))].slice(0, 200);
+        config.mediaAutomation = {
+            ...(config.mediaAutomation && typeof config.mediaAutomation === 'object' ? config.mediaAutomation : {}),
+            pathDenyList: next,
+        };
+        await saveFile(CONFIG_PATH, config);
+        await appendAuditLog('media_automation_path_deny', req.user, null, { added: additions, total: next.length });
+        res.json({ ok: true, pathDenyList: next });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to update path deny list' });
     }
 });
 
@@ -19565,9 +19659,10 @@ app.post('/api/media-automation/jobs/:id/priority', requireAdmin, requireMediaAu
 
 app.post('/api/media-automation/jobs/:id/retry', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
-        const job = await mediaAutomationService.retryJob(req.params.id, { resetAttempts: true });
+        const forceCpu = req.body?.forceCpu === true || req.body?.forceCpu === 1 || req.body?.forceCpu === '1';
+        const job = await mediaAutomationService.retryJob(req.params.id, { resetAttempts: true, forceCpu });
         if (!job) return res.status(404).json({ error: 'Job not found' });
-        await appendAuditLog('media_automation_job_retried', req.user, null, { jobId: req.params.id });
+        await appendAuditLog('media_automation_job_retried', req.user, null, { jobId: req.params.id, forceCpu });
         res.json({ ok: true, job });
     } catch (error) {
         res.status(400).json({ error: error.message || 'Job cannot be retried' });

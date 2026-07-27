@@ -102,6 +102,9 @@ export type MediaAutomationScanProgress = {
     currentPath?: string | null;
     startedAt?: string;
     updatedAt?: string;
+    percent?: number | null;
+    totalEstimate?: number | null;
+    scanBatchId?: string | null;
 };
 
 export type MediaAutomationScanHistoryEntry = {
@@ -146,6 +149,10 @@ export type MediaAutomationStatus = {
     paused?: boolean;
     /** Persisted encode gate: true = queue only, false = worker may claim jobs. */
     workerPaused?: boolean;
+    autoPausedForQueueDepth?: boolean;
+    autoPauseQueueDepth?: number;
+    minFreeDiskGb?: number;
+    pathDenyList?: string[];
     activeJobs?: number;
     queuedJobs?: number;
     completedJobs?: number;
@@ -170,6 +177,8 @@ export type MediaAutomationStatus = {
     watchEnvEnabled?: boolean;
     libraryWatchConfigured?: boolean;
     notifyOnJobFailed?: boolean;
+    notifyOnScanComplete?: boolean;
+    notifyOnFailBurst?: boolean;
     quietHoursEnabled?: boolean;
     quietHoursStart?: string;
     quietHoursEnd?: string;
@@ -288,7 +297,7 @@ export type MediaAutomationJob = {
     startedAt?: string;
     completedAt?: string;
     finishedAt?: string;
-    error?: string | { code?: string; message?: string };
+    error?: string | { code?: string; message?: string; stderr?: string };
     outputPath?: string;
     result?: Record<string, unknown> | null;
     metadata?: Record<string, unknown>;
@@ -458,6 +467,16 @@ export type MediaAutomationSettingsConfig = {
     customCommandAllowlist: string[];
     /** Send Gotify when a job fails (requires portal Gotify settings). */
     notifyOnJobFailed?: boolean;
+    /** Gotify when a library scan finishes or is cancelled. */
+    notifyOnScanComplete?: boolean;
+    /** Gotify digest when ≥5 jobs fail within 15 minutes. */
+    notifyOnFailBurst?: boolean;
+    /** Block scan/encode when free space is below this many GB (0 = off). */
+    minFreeDiskGb?: number;
+    /** Auto-pause encode claims when queued depth ≥ N (0 = off). */
+    autoPauseQueueDepth?: number;
+    /** Path prefixes/globs that must never be enqueued. */
+    pathDenyList?: string[];
     quietHoursEnabled?: boolean;
     quietHoursStart?: string;
     quietHoursEnd?: string;
@@ -490,6 +509,11 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     libraryWatchDebounceMs: 5000,
     customCommandAllowlist: ['ffmpeg', 'ffprobe'],
     notifyOnJobFailed: false,
+    notifyOnScanComplete: false,
+    notifyOnFailBurst: false,
+    minFreeDiskGb: 20,
+    autoPauseQueueDepth: 0,
+    pathDenyList: [],
     quietHoursEnabled: false,
     quietHoursStart: '23:00',
     quietHoursEnd: '07:00',
@@ -1414,4 +1438,9 @@ export const PIPELINE_PRESETS: Array<{
 ];
 
 /** Featured empty-state starters (subset of PIPELINE_PRESETS). */
-export const PIPELINE_STARTER_IDS = ['balanced-hevc', 'remux-mkv', 'strip-subtitles'] as const;
+export const PIPELINE_STARTER_IDS = [
+    'remux-mkv',
+    'hevc-nvenc-balanced',
+    'balanced-hevc',
+    'aac-audio-normalize',
+] as const;

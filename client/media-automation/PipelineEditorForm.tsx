@@ -26,6 +26,11 @@ const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounde
 
 const asText = (value: unknown, fallback = '-') => value === undefined || value === null || value === '' ? fallback : String(value);
 
+const confirmReplaceOutputMode = () => window.confirm(
+    'Replace mode atomically promotes verified output over the source file. '
+    + 'The original is moved to quarantine after verify. Continue?',
+);
+
 type Props = {
     pipelineDraft: MediaAutomationPipeline;
     setPipelineDraft: React.Dispatch<React.SetStateAction<MediaAutomationPipeline | null>>;
@@ -89,7 +94,12 @@ export const PipelineEditorForm: React.FC<Props> = ({
                         When it writes
                         <CustomSelect
                             value={pipelineDraft.outputMode}
-                            onChange={(outputMode) => setPipelineDraft({ ...pipelineDraft, outputMode: outputMode as OutputMode })}
+                            onChange={(outputMode) => {
+                                if (outputMode === 'replace' && pipelineDraft.outputMode !== 'replace' && !confirmReplaceOutputMode()) {
+                                    return;
+                                }
+                                setPipelineDraft({ ...pipelineDraft, outputMode: outputMode as OutputMode });
+                            }}
                             options={[
                                 { value: 'dry-run', label: 'Plan only (safe)' },
                                 { value: 'copy', label: 'Write a copy' },

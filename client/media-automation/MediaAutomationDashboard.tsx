@@ -264,6 +264,47 @@ const jobErrorText = (error: MediaAutomationJob['error']) => {
     return error.message || error.code || '';
 };
 
+const jobErrorStderr = (error: MediaAutomationJob['error']) => {
+    if (!error || typeof error === 'string') return '';
+    return String(error.stderr || '');
+};
+
+const pathDirname = (filePath: string) => {
+    const normalized = filePath.replace(/\\/g, '/');
+    const idx = normalized.lastIndexOf('/');
+    return idx > 0 ? normalized.slice(0, idx) : normalized;
+};
+
+const confirmReplaceOutputMode = () => window.confirm(
+    'Replace mode atomically promotes verified output over the source file. '
+    + 'The original is moved to quarantine after verify. Continue?',
+);
+
+const workerStatusLabel = (workerStatus: MediaAutomationStatus) => {
+    if (workerStatus.autoPausedForQueueDepth || String(workerStatus.workerState || '').toLowerCase() === 'auto-paused') {
+        return 'Auto-paused (queue depth)';
+    }
+    if ((workerStatus.workerPaused ?? workerStatus.paused) !== false) {
+        return 'Paused — queue only';
+    }
+    if (String(workerStatus.workerState || workerStatus.state || '').toLowerCase() === 'running') {
+        return 'Encoding';
+    }
+    return asText(workerStatus.workerState || workerStatus.state, 'stopped');
+};
+
+type ScanNowResponse = {
+    wouldEnqueue?: number;
+    wouldSkip?: number;
+    enqueued?: number;
+    skipped?: number;
+    discovered?: number;
+    preview?: boolean;
+    planOnly?: boolean;
+    result?: MediaAutomationStatus['lastScanResult'];
+    status?: MediaAutomationStatus;
+};
+
 const jobFinalPath = (job: MediaAutomationJob | null | undefined) => {
     if (!job) return '';
     const result = job.result;
@@ -600,6 +641,9 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [queueFilter, setQueueFilter] = useState<'all' | 'queued' | 'active' | 'failed' | 'dry-run' | 'completed'>('all');
     const [queueSearch, setQueueSearch] = useState('');
+    const [queueLibraryFilter, setQueueLibraryFilter] = useState('');
+    const [queuePipelineFilter, setQueuePipelineFilter] = useState('');
+    const [queueErrorFilter, setQueueErrorFilter] = useState('');
     const [workerTestResult, setWorkerTestResult] = useState<MediaAutomationCapabilities | null>(null);
     const [workerTestError, setWorkerTestError] = useState('');
     const [goLiveOpen, setGoLiveOpen] = useState(false);
@@ -692,12 +736,59 @@ export const MediaAutomationDashboard: React.FC = () => {
         }
     };
 
+    const cancelScanWithConfirm = () => {
+        const clearQueued = window.confirm('Clear queued jobs from this scan batch too?');
+        return mediaAutomationApi.cancelScan({ clearQueued });
+    };
+
+    const runScanNow = async (
+        options: { preview?: boolean; planOnly?: boolean; libraryId?: string | number | null } = {},
+        rootsForConfirm?: string[],
+    ) => {
+        const roots = rootsForConfirm ?? (
+            !options.preview && !options.planOnly
+                ? (options.libraryId != null
+                    ? libraries
+                        .filter((library) => String(library.id) === String(options.libraryId))
+                        .map((library) => String(library.rootPath || '').trim())
+                        .filter(Boolean)
+                    : libraries
+                        .filter((library) => library.enabled !== false)
+                        .map((library) => String(library.rootPath || '').trim())
+                        .filter(Boolean))
+                : []
+        );
+        if (!options.preview && !options.planOnly && roots.length && !confirmBroadLibraryScan(roots)) {
+            return;
+        }
+        setBusy('scan-now');
+        try {
+            const response = await mediaAutomationApi.scanNow(options) as ScanNowResponse;
+            const result = (response?.result || response) as ScanNowResponse;
+            if (options.preview || options.planOnly) {
+                toast(`Would enqueue ${result.wouldEnqueue ?? 0}, would skip ${result.wouldSkip ?? 0}.`);
+            } else if (!options.libraryId) {
+                setScanPreview(result || null);
+                toast(`Scan finished: ${result.enqueued ?? 0} queued, ${result.skipped ?? 0} skipped.`);
+            } else {
+                toast(`Scan finished: ${result.enqueued ?? 0} queued, ${result.skipped ?? 0} skipped.`);
+            }
+            if (response?.status) setStatus(response.status);
+            await load(true);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Library scan failed', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
     const saveLibrary = async () => {
         if (!libraryDraft?.name.trim() || !libraryDraft.rootPath.trim()) {
             toast('Library name and root path are required.', 'error');
             return;
         }
         if (!confirmBroadLibrarySave(libraryDraft.rootPath)) return;
+        if (libraryDraft.outputMode === 'replace' && !confirmReplaceOutputMode()) return;
         setSavingEditor(true);
         try {
             if (libraryDraft.id !== undefined) await mediaAutomationApi.updateLibrary(libraryDraft.id, libraryDraft);
@@ -717,6 +808,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             toast('Pipeline name is required.', 'error');
             return;
         }
+        if (pipelineDraft.outputMode === 'replace' && !confirmReplaceOutputMode()) return;
         setSavingEditor(true);
         try {
             const payload = { ...pipelineDraft };
@@ -813,6 +905,40 @@ export const MediaAutomationDashboard: React.FC = () => {
         () => retryableJobs.map((job) => String(job.id)).filter((id) => selectedJobIds.has(id)),
         [retryableJobs, selectedJobIds],
     );
+    const selectedDenyPaths = useMemo(() => {
+        const paths = new Set<string>();
+        jobs.filter((job) => selectedJobIds.has(String(job.id))).forEach((job) => {
+            const source = String(job.sourcePath || job.path || '').trim();
+            if (!source) return;
+            const dir = pathDirname(source);
+            paths.add(dir || source);
+        });
+        return [...paths];
+    }, [jobs, selectedJobIds]);
+    const queueLibraryOptions = useMemo(() => {
+        const map = new Map<string, string>();
+        jobs.forEach((job) => {
+            const id = job.libraryId != null ? String(job.libraryId) : '';
+            const name = String((job as { libraryName?: string }).libraryName || id);
+            if (id) map.set(id, name || id);
+        });
+        libraries.forEach((library) => {
+            if (library.id != null) map.set(String(library.id), library.name);
+        });
+        return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    }, [jobs, libraries]);
+    const queuePipelineOptions = useMemo(() => {
+        const map = new Map<string, string>();
+        jobs.forEach((job) => {
+            const id = job.pipelineId != null ? String(job.pipelineId) : '';
+            const name = String(job.pipelineName || id);
+            if (id) map.set(id, name || id);
+        });
+        pipelines.forEach((pipeline) => {
+            if (pipeline.id != null) map.set(String(pipeline.id), pipeline.name);
+        });
+        return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    }, [jobs, pipelines]);
 
     useEffect(() => {
         const alive = new Set(allJobIds);
@@ -850,6 +976,7 @@ export const MediaAutomationDashboard: React.FC = () => {
 
     const filteredJobs = useMemo(() => {
         const query = queueSearch.trim().toLowerCase();
+        const errorQuery = queueErrorFilter.trim().toLowerCase();
         return jobs.filter((job) => {
             const state = jobStateValue(job);
             const dryRunJob = jobIsDryRun(job);
@@ -858,11 +985,27 @@ export const MediaAutomationDashboard: React.FC = () => {
             if (queueFilter === 'failed' && !['failed', 'error'].includes(state)) return false;
             if (queueFilter === 'completed' && !['completed', 'succeeded', 'success', 'done'].includes(state)) return false;
             if (queueFilter === 'dry-run' && !dryRunJob) return false;
+            if (queueLibraryFilter) {
+                const libraryId = job.libraryId != null ? String(job.libraryId) : '';
+                const libraryName = String((job as { libraryName?: string }).libraryName || '').toLowerCase();
+                const filter = queueLibraryFilter.toLowerCase();
+                if (libraryId !== queueLibraryFilter && !libraryName.includes(filter)) return false;
+            }
+            if (queuePipelineFilter) {
+                const pipelineId = job.pipelineId != null ? String(job.pipelineId) : '';
+                const pipelineName = String(job.pipelineName || '').toLowerCase();
+                const filter = queuePipelineFilter.toLowerCase();
+                if (pipelineId !== queuePipelineFilter && !pipelineName.includes(filter)) return false;
+            }
+            if (errorQuery) {
+                const errorHaystack = `${jobErrorText(job.error)} ${jobErrorStderr(job.error)}`.toLowerCase();
+                if (!errorHaystack.includes(errorQuery)) return false;
+            }
             if (!query) return true;
-            const haystack = `${job.path || ''} ${job.sourcePath || ''} ${job.pipelineName || ''} ${job.id}`.toLowerCase();
+            const haystack = `${job.path || ''} ${job.sourcePath || ''} ${job.pipelineName || ''} ${job.id} ${(job as { libraryName?: string }).libraryName || ''}`.toLowerCase();
             return haystack.includes(query);
         });
-    }, [jobs, queueFilter, queueSearch]);
+    }, [jobs, queueFilter, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter]);
 
     const copyText = async (text: string, success = 'Copied to clipboard.') => {
         try {
@@ -983,7 +1126,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             return;
         }
         if (action === 'scan') {
-            void runAction('scan-now', () => mediaAutomationApi.scanNow(), 'Library scan started.');
+            void runScanNow();
         }
     };
 
@@ -1064,15 +1207,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 self-start lg:self-auto">
-                        <StatusPill
-                            value={
-                                (status.workerPaused ?? status.paused) !== false
-                                    ? 'Paused — queue only'
-                                    : (String(status.workerState || status.state || '').toLowerCase() === 'running'
-                                        ? 'Encoding'
-                                        : asText(status.workerState || status.state, 'stopped'))
-                            }
-                        />
+                        <StatusPill value={workerStatusLabel(status)} />
                         {status.quietHoursActive && (
                             <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-sky-200">
                                 Quiet hours
@@ -1279,6 +1414,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     <h2 className="font-bold text-text">Scan in progress</h2>
                                     <p className="mt-1 text-sm text-muted">
                                         {status.scanProgress?.discovered || 0} discovered · {status.scanProgress?.enqueued || 0} queued · {status.scanProgress?.skipped || 0} skipped
+                                        {status.scanProgress?.percent != null ? ` · ${Math.round(status.scanProgress.percent)}%` : ''}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1286,7 +1422,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         type="button"
                                         className={buttonClass}
                                         disabled={busy !== null}
-                                        onClick={() => runAction('cancel-scan', () => mediaAutomationApi.cancelScan(), 'Scan cancel requested.')}
+                                        onClick={() => runAction('cancel-scan', cancelScanWithConfirm, 'Scan cancel requested.')}
                                     >
                                         {busy === 'cancel-scan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
                                         Cancel scan
@@ -1295,7 +1431,14 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 </div>
                             </div>
                             <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                                <div className="h-full w-1/3 animate-pulse rounded-full bg-plex/70" />
+                                {status.scanProgress?.percent != null ? (
+                                    <div
+                                        className="h-full rounded-full bg-plex/70 transition-all"
+                                        style={{ width: `${Math.max(2, Math.min(100, status.scanProgress.percent))}%` }}
+                                    />
+                                ) : (
+                                    <div className="h-full w-1/3 animate-pulse rounded-full bg-plex/70" />
+                                )}
                             </div>
                             {status.scanProgress?.currentPath && (
                                 <p className="truncate font-mono text-xs text-muted" title={status.scanProgress.currentPath}>
@@ -1384,9 +1527,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <div>
                                     <h2 className="text-lg font-bold tracking-tight text-text">Worker</h2>
                                     <p className="mt-0.5 text-xs text-muted">
-                                        {(status.workerPaused ?? status.paused) !== false
-                                            ? 'Paused — queue only. Jobs can be queued while paused. Start when you want encodes to run.'
-                                            : 'Encoding — worker may claim queued jobs.'}
+                                        {workerStatusLabel(status) === 'Auto-paused (queue depth)'
+                                            ? 'Auto-paused because queue depth exceeded the configured limit. Jobs stay queued until depth drops or you adjust Settings.'
+                                            : (status.workerPaused ?? status.paused) !== false
+                                                ? 'Paused — queue only. Jobs can be queued while paused. Start when you want encodes to run.'
+                                                : 'Encoding — worker may claim queued jobs.'}
                                     </p>
                                 </div>
                                 <Cpu className="h-5 w-5 text-plex" />
@@ -1422,31 +1567,31 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     type="button"
                                     className={buttonClass}
                                     disabled={busy !== null}
-                                    onClick={async () => {
+                                    onClick={() => {
                                         const enabledRoots = libraries
                                             .filter((library) => library.enabled !== false)
                                             .map((library) => String(library.rootPath || '').trim())
                                             .filter(Boolean);
-                                        if (!confirmBroadLibraryScan(enabledRoots)) return;
-                                        setBusy('scan-now');
-                                        try {
-                                            const response = await mediaAutomationApi.scanNow() as {
-                                                result?: MediaAutomationStatus['lastScanResult'];
-                                                status?: MediaAutomationStatus;
-                                            };
-                                            const result = response?.result || response as MediaAutomationStatus['lastScanResult'];
-                                            setScanPreview(result || null);
-                                            if (response?.status) setStatus(response.status);
-                                            toast(`Scan finished: ${result?.enqueued || 0} queued, ${result?.skipped || 0} skipped.`);
-                                            await load(true);
-                                        } catch (error) {
-                                            toast(error instanceof Error ? error.message : 'Library scan failed', 'error');
-                                        } finally {
-                                            setBusy(null);
-                                        }
+                                        void runScanNow({}, enabledRoots);
                                     }}
                                 >
                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />} Scan now
+                                </button>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null}
+                                    onClick={() => void runScanNow({ preview: true })}
+                                >
+                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />} Preview scan
+                                </button>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null}
+                                    onClick={() => void runScanNow({ planOnly: true })}
+                                >
+                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Plan only
                                 </button>
                                 <button
                                     type="button"
@@ -1660,9 +1805,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                                <StatusPill
-                                    value={(status.workerPaused ?? status.paused) !== false ? 'Paused — queue only' : 'Encoding'}
-                                />
+                                <StatusPill value={workerStatusLabel(status)} />
                                 <button
                                     type="button"
                                     className={primaryButtonClass}
@@ -1767,7 +1910,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             title="Queue is empty"
                             detail="Enqueue a path, run Scan now, or wait for the library watcher to discover matching media."
                             actionLabel="Scan now"
-                            onAction={() => runAction('scan-now', () => mediaAutomationApi.scanNow(), 'Library scan started.')}
+                            onAction={() => void runScanNow()}
                         />
                     ) : (
                         <div className="space-y-3">
@@ -1801,6 +1944,34 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             placeholder="Search path or pipeline…"
                                         />
                                     </label>
+                                </div>
+                                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                                    <CustomSelect
+                                        className="min-w-[10rem]"
+                                        compact
+                                        value={queueLibraryFilter}
+                                        onChange={setQueueLibraryFilter}
+                                        options={[
+                                            { value: '', label: 'All libraries' },
+                                            ...queueLibraryOptions.map(([id, name]) => ({ value: id, label: name })),
+                                        ]}
+                                    />
+                                    <CustomSelect
+                                        className="min-w-[10rem]"
+                                        compact
+                                        value={queuePipelineFilter}
+                                        onChange={setQueuePipelineFilter}
+                                        options={[
+                                            { value: '', label: 'All pipelines' },
+                                            ...queuePipelineOptions.map(([id, name]) => ({ value: id, label: name })),
+                                        ]}
+                                    />
+                                    <input
+                                        className={`${fieldClass} sm:max-w-xs`}
+                                        value={queueErrorFilter}
+                                        onChange={(event) => setQueueErrorFilter(event.target.value)}
+                                        placeholder="Filter by error text…"
+                                    />
                                 </div>
                             </section>
                             <section className={`${cardClass} p-4`}>
@@ -1880,6 +2051,38 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 ? `Retry selected (${selectedRetryableIds.length})`
                                                 : `Retry all failed (${retryableJobs.length})`}
                                         </button>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null || (selectedRetryableIds.length === 0 && retryableJobs.length === 0)}
+                                            onClick={() => {
+                                                const ids = selectedRetryableIds.length > 0 ? selectedRetryableIds : undefined;
+                                                const count = ids ? ids.length : retryableJobs.length;
+                                                return runAction(
+                                                    'retry-cpu-failed',
+                                                    () => mediaAutomationApi.bulkRetryJobs(ids, { forceCpu: true }),
+                                                    `Queued ${count} job${count === 1 ? '' : 's'} for CPU retry.`,
+                                                ).then(() => setSelectedJobIds(new Set()));
+                                            }}
+                                        >
+                                            {busy === 'retry-cpu-failed' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cpu className="h-4 w-4" />}
+                                            {selectedRetryableIds.length > 0
+                                                ? `Retry (CPU) selected (${selectedRetryableIds.length})`
+                                                : `Retry (CPU) all failed (${retryableJobs.length})`}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null || selectedDenyPaths.length === 0}
+                                            onClick={() => runAction(
+                                                'deny-paths',
+                                                () => mediaAutomationApi.denyPaths(selectedDenyPaths),
+                                                `Denied ${selectedDenyPaths.length} path${selectedDenyPaths.length === 1 ? '' : 's'}.`,
+                                            ).then(() => setSelectedJobIds(new Set()))}
+                                        >
+                                            {busy === 'deny-paths' ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                                            Deny selected paths ({selectedDenyPaths.length})
+                                        </button>
                                     </div>
                                 </div>
                                 <p className="mt-2 text-xs text-muted">
@@ -1888,7 +2091,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </section>
                             {filteredJobs.length === 0 ? (
                                 <div className={`${cardClass} p-6 text-center text-sm text-muted`}>
-                                    No jobs match this filter{queueSearch.trim() ? ' / search' : ''}.
+                                    No jobs match this filter{queueSearch.trim() || queueLibraryFilter || queuePipelineFilter || queueErrorFilter.trim() ? ' / filters' : ''}.
                                 </div>
                             ) : filteredJobs.map((job) => {
                                 const jobId = job.id;
@@ -2215,7 +2418,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     type="button"
                                     className={buttonClass}
                                     disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
-                                    onClick={() => runAction('scan-now', mediaAutomationApi.scanNow, 'Library scan completed.')}
+                                    onClick={() => {
+                                        const enabledRoots = libraries
+                                            .filter((library) => library.enabled !== false)
+                                            .map((library) => String(library.rootPath || '').trim())
+                                            .filter(Boolean);
+                                        void runScanNow({}, enabledRoots);
+                                    }}
                                 >
                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />}
                                     Scan now
@@ -2223,8 +2432,26 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <button
                                     type="button"
                                     className={buttonClass}
+                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
+                                    onClick={() => void runScanNow({ preview: true })}
+                                >
+                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
+                                    Preview
+                                </button>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
+                                    onClick={() => void runScanNow({ planOnly: true })}
+                                >
+                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                    Plan only
+                                </button>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
                                     disabled={busy !== null || !(status.scanning || status.scanProgress?.running)}
-                                    onClick={() => runAction('cancel-scan', () => mediaAutomationApi.cancelScan(), 'Scan cancel requested.')}
+                                    onClick={() => runAction('cancel-scan', cancelScanWithConfirm, 'Scan cancel requested.')}
                                 >
                                     {busy === 'cancel-scan' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
                                     Cancel scan
@@ -2239,7 +2466,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <dt className="text-xs font-bold uppercase tracking-wide text-muted">Last scan</dt>
                                 <dd className="mt-1 font-semibold text-text">
                                     {status.scanning || status.scanProgress?.running
-                                        ? `Scanning… ${status.scanProgress?.discovered || 0} discovered`
+                                        ? `Scanning… ${status.scanProgress?.discovered || 0} discovered${status.scanProgress?.percent != null ? ` · ${Math.round(status.scanProgress.percent)}%` : ''}`
                                         : formatTime(status.lastScanAt)}
                                     {!status.scanning && status.lastScanResult ? ` · ${status.lastScanResult.enqueued || 0} queued` : ''}
                                 </dd>
@@ -2364,6 +2591,33 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         </div>
                                         {library.id !== undefined && (
                                             <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
+                                                    onClick={() => void runScanNow({ preview: true, libraryId: library.id })}
+                                                >
+                                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
+                                                    Preview
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
+                                                    onClick={() => void runScanNow({ planOnly: true, libraryId: library.id })}
+                                                >
+                                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                                    Plan only
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
+                                                    onClick={() => void runScanNow({ libraryId: library.id }, [String(library.rootPath || '').trim()].filter(Boolean))}
+                                                >
+                                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />}
+                                                    Scan
+                                                </button>
                                                 <button
                                                     type="button"
                                                     className={buttonClass}
@@ -2687,9 +2941,14 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     </button>
                                                 )}
                                                 {['failed', 'cancelled', 'canceled', 'error'].includes(jobStateValue(selectedJob)) && (
-                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`retry-${selectedJobId}`, () => mediaAutomationApi.retryJob(selectedJobId!), 'Job queued for retry.').then(() => openJobDetail(selectedJobId!))}>
-                                                        <RotateCcw className="h-4 w-4" /> Retry
-                                                    </button>
+                                                    <>
+                                                        <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`retry-${selectedJobId}`, () => mediaAutomationApi.retryJob(selectedJobId!), 'Job queued for retry.').then(() => openJobDetail(selectedJobId!))}>
+                                                            <RotateCcw className="h-4 w-4" /> Retry
+                                                        </button>
+                                                        <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`retry-cpu-${selectedJobId}`, () => mediaAutomationApi.retryJob(selectedJobId!, { forceCpu: true }), 'Job queued for CPU retry.').then(() => openJobDetail(selectedJobId!))}>
+                                                            <Cpu className="h-4 w-4" /> Retry (CPU)
+                                                        </button>
+                                                    </>
                                                 )}
                                                 {jobIsDryRun(selectedJob) && String(selectedJob.path || selectedJob.sourcePath || '').trim() && (
                                                     <button
@@ -2834,6 +3093,25 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             <div><dt className="text-muted">Finished</dt><dd className="mt-1 text-text">{formatTime(selectedJob?.finishedAt || selectedJob?.completedAt)}</dd></div>
                                         </dl>
                                         {jobErrorText(selectedJob?.error) && <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{jobErrorText(selectedJob?.error)}</p>}
+                                        {jobErrorStderr(selectedJob?.error) && (
+                                            <details className="rounded-lg border border-border/70 bg-background/30 p-3 text-sm">
+                                                <summary className="cursor-pointer font-semibold text-text">FFmpeg output</summary>
+                                                <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px] text-muted custom-scrollbar">{jobErrorStderr(selectedJob?.error)}</pre>
+                                            </details>
+                                        )}
+                                        {Array.isArray(selectedJob?.metadata?.timeline) && (selectedJob.metadata.timeline as Array<{ phase?: string; at?: string }>).length > 0 && (
+                                            <div className="rounded-xl border border-border bg-background/30 p-4">
+                                                <h3 className="font-bold text-text">Timeline</h3>
+                                                <ol className="mt-3 space-y-2 border-l border-border/60 pl-4">
+                                                    {(selectedJob.metadata.timeline as Array<{ phase?: string; at?: string }>).map((entry, index) => (
+                                                        <li key={`${entry.phase}-${entry.at}-${index}`} className="text-sm">
+                                                            <span className="font-semibold text-text">{entry.phase || 'phase'}</span>
+                                                            <span className="ml-2 text-xs text-muted">{formatTime(entry.at)}</span>
+                                                        </li>
+                                                    ))}
+                                                </ol>
+                                            </div>
+                                        )}
                                         {jobLiveCommand(selectedJob) && (
                                             <div className="rounded-xl border border-plex/30 bg-plex/10 p-4">
                                                 <h3 className="font-bold text-text">{jobIsDryRun(selectedJob) ? 'Planned command (not executed)' : 'Live command'}</h3>

@@ -141,8 +141,11 @@ export const mediaAutomationApi = {
     } = {}) => apiFetch(`${ROOT}/analyze`, json(options)) as Promise<MediaAutomationAnalyzeResult>,
     testWorker: () => apiFetch(`${ROOT}/worker/test`, json({})),
     control: (action: string) => apiFetch(`${ROOT}/control`, json({ action })),
-    scanNow: () => apiFetch(`${ROOT}/scan`, json({})),
-    cancelScan: () => apiFetch(`${ROOT}/scan/cancel`, json({})),
+    scanNow: (options: { preview?: boolean; planOnly?: boolean; libraryId?: string | number | null } = {}) =>
+        apiFetch(`${ROOT}/scan`, json(options)),
+    cancelScan: (options: { clearQueued?: boolean } = {}) =>
+        apiFetch(`${ROOT}/scan/cancel`, json({ clearQueued: options.clearQueued !== false })),
+    denyPaths: (paths: string[]) => apiFetch(`${ROOT}/path-deny`, json({ paths })),
     testPending: (path: string) => apiFetch(`${ROOT}/pending/test`, json({ path })) as Promise<MediaAutomationPendingTest>,
     cancelJob: (id: string | number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/cancel`, json({})),
     bulkCancelJobs: (ids?: Array<string | number>) => apiFetch(`${ROOT}/jobs/bulk`, json({
@@ -154,14 +157,16 @@ export const mediaAutomationApi = {
         terminalOnly: true,
         ...(ids?.length ? { ids } : {}),
     })),
-    bulkRetryJobs: (ids?: Array<string | number>) => apiFetch(`${ROOT}/jobs/bulk`, json({
+    bulkRetryJobs: (ids?: Array<string | number>, options: { forceCpu?: boolean } = {}) => apiFetch(`${ROOT}/jobs/bulk`, json({
         action: 'retry',
         resetAttempts: true,
+        forceCpu: options.forceCpu === true,
         ...(ids?.length ? { ids } : {}),
     })),
     skipJob: (id: string | number, reason = 'skipped') => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/skip`, json({ reason })),
     setPriority: (id: string | number, priority: number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/priority`, json({ priority })),
-    retryJob: (id: string | number) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/retry`, json({})),
+    retryJob: (id: string | number, options: { forceCpu?: boolean } = {}) =>
+        apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}/retry`, json({ forceCpu: options.forceCpu === true })),
     estimate: (path: string, pipelineId?: string | number | null, sampleSeconds?: number) => apiFetch(
         `${ROOT}/estimate`,
         json({ path, pipelineId: pipelineId ?? null, ...(sampleSeconds ? { sampleSeconds } : {}) }),

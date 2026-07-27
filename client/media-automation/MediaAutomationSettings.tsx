@@ -99,6 +99,79 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     disabled={!enabled}
                     border={false}
                 />
+                <SettingsToggleRow
+                    title="Gotify on scan complete"
+                    description="Alert when a library scan finishes or is cancelled, including queued/skipped counts."
+                    checked={config.notifyOnScanComplete === true}
+                    onChange={(notifyOnScanComplete) => update({ notifyOnScanComplete })}
+                    disabled={!enabled}
+                    border={false}
+                />
+                <SettingsToggleRow
+                    title="Gotify on failure burst"
+                    description="Send one digest if 5 or more jobs fail within 15 minutes (debounced)."
+                    checked={config.notifyOnFailBurst === true}
+                    onChange={(notifyOnFailBurst) => update({ notifyOnFailBurst })}
+                    disabled={!enabled}
+                    border={false}
+                />
+            </section>
+
+            <section className="glass-card-sm p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-plex" />
+                    <h4 className="font-bold text-text">Queue safety</h4>
+                </div>
+                <label className="block space-y-2 text-sm font-semibold text-text">
+                    Minimum free disk (GB)
+                    <input
+                        className={fieldClass}
+                        type="number"
+                        min={0}
+                        max={10000}
+                        value={config.minFreeDiskGb ?? 20}
+                        onChange={(event) => {
+                            const next = Number(event.target.value);
+                            update({ minFreeDiskGb: Number.isFinite(next) ? Math.min(10000, Math.max(0, Math.round(next))) : 20 });
+                        }}
+                        disabled={!enabled}
+                    />
+                    <span className="block text-xs font-normal text-muted">Blocks non-preview scans and encode claims when free space on the library root is below this value. 0 disables.</span>
+                </label>
+                <label className="block space-y-2 text-sm font-semibold text-text">
+                    Auto-pause queue depth
+                    <input
+                        className={fieldClass}
+                        type="number"
+                        min={0}
+                        max={100000}
+                        value={config.autoPauseQueueDepth ?? 0}
+                        onChange={(event) => {
+                            const next = Number(event.target.value);
+                            update({ autoPauseQueueDepth: Number.isFinite(next) ? Math.min(100000, Math.max(0, Math.round(next))) : 0 });
+                        }}
+                        disabled={!enabled}
+                    />
+                    <span className="block text-xs font-normal text-muted">When queued jobs reach this depth, encoding claims pause automatically without flipping Start/Pause. 0 disables.</span>
+                </label>
+                <label className="block space-y-2 text-sm font-semibold text-text">
+                    Path deny list
+                    <textarea
+                        className={`${fieldClass} min-h-28 font-mono text-xs`}
+                        value={(config.pathDenyList || []).join('\n')}
+                        placeholder={'/media/keep\n**/sample*'}
+                        onChange={(event) => update({
+                            pathDenyList: [...new Set(
+                                event.target.value
+                                    .split(/\r?\n/)
+                                    .map((entry) => entry.trim())
+                                    .filter(Boolean),
+                            )].slice(0, 200),
+                        })}
+                        disabled={!enabled}
+                    />
+                    <span className="block text-xs font-normal text-muted">One path prefix or glob per line. Matching files are never enqueued (skip reason: denied-path).</span>
+                </label>
             </section>
 
             <section className="glass-card-sm p-5 space-y-4">
@@ -561,10 +634,16 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     />
                     <CustomSelect
                         value={config.fallback.outputMode}
-                        onChange={(outputMode) => update({
-                            outputMode: outputMode as OutputMode,
-                            fallback: { ...config.fallback, outputMode: outputMode as OutputMode },
-                        })}
+                        onChange={(outputMode) => {
+                            if (outputMode === 'replace'
+                                && !window.confirm('Replace mode permanently overwrites originals after verify. Continue?')) {
+                                return;
+                            }
+                            update({
+                                outputMode: outputMode as OutputMode,
+                                fallback: { ...config.fallback, outputMode: outputMode as OutputMode },
+                            });
+                        }}
                         options={[
                             { value: 'dry-run', label: 'Dry run (safest)' },
                             { value: 'copy', label: 'Copy beside source' },
