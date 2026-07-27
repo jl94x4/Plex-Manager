@@ -528,6 +528,62 @@ const sanitizeUserForApi = (user) => {
 };
 const sanitizeUsersForApi = (users) => (Array.isArray(users) ? users.map(sanitizeUserForApi) : users);
 
+/** AES-GCM envelope for member Plex tokens stored in users.json (never return via API). */
+const PLEX_TOKEN_ENC_PREFIX = 'enc:v1:';
+const getPlexTokenEncryptionKey = () => createHash('sha256')
+    .update(`plex-user-token:v1:${String(JWT_SECRET)}`)
+    .digest();
+
+const encryptPlexAuthToken = (plaintext) => {
+    const raw = String(plaintext || '').trim();
+    if (!raw) return '';
+    if (raw.startsWith(PLEX_TOKEN_ENC_PREFIX)) return raw;
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', getPlexTokenEncryptionKey(), iv);
+    const ciphertext = Buffer.concat([cipher.update(Buffer.from(raw, 'utf8')), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return [
+        PLEX_TOKEN_ENC_PREFIX.slice(0, -1), // enc:v1
+        iv.toString('base64url'),
+        tag.toString('base64url'),
+        ciphertext.toString('base64url'),
+    ].join(':');
+};
+
+const decryptPlexAuthToken = (stored) => {
+    const raw = String(stored || '').trim();
+    if (!raw) return null;
+    if (!raw.startsWith(PLEX_TOKEN_ENC_PREFIX)) return raw; // legacy plaintext
+    const parts = raw.split(':');
+    // enc:v1:<iv>:<tag>:<ciphertext>
+    if (parts.length !== 5 || parts[0] !== 'enc' || parts[1] !== 'v1') return null;
+    try {
+        const iv = Buffer.from(parts[2], 'base64url');
+        const tag = Buffer.from(parts[3], 'base64url');
+        const ciphertext = Buffer.from(parts[4], 'base64url');
+        const decipher = createDecipheriv('aes-256-gcm', getPlexTokenEncryptionKey(), iv);
+        decipher.setAuthTag(tag);
+        return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+    } catch {
+        return null;
+    }
+};
+
+/** One-shot upgrade of legacy plaintext plexAuthToken values in users.json. */
+const migratePlexAuthTokensAtRest = async () => {
+    const users = await loadFile(USERS_PATH, []);
+    if (!Array.isArray(users) || !users.length) return 0;
+    let changed = 0;
+    for (const user of users) {
+        const raw = String(user?.plexAuthToken || '').trim();
+        if (!raw || raw.startsWith(PLEX_TOKEN_ENC_PREFIX)) continue;
+        user.plexAuthToken = encryptPlexAuthToken(raw);
+        changed += 1;
+    }
+    if (changed) await saveFile(USERS_PATH, users);
+    return changed;
+};
+
 const isLoopbackAddress = (ip = '') => {
     const normalizedIp = String(ip || '').replace('::ffff:', '').toLowerCase();
     return normalizedIp === '127.0.0.1' || normalizedIp === '::1' || normalizedIp === 'localhost';
@@ -924,6 +980,9 @@ const SPEED_TEST_CHUNK_SIZE = 4 * 1024 * 1024;
 /** Incompressible chunk so transfer size ≈ measured bytes (also gzip-excluded above). */
 const SPEED_TEST_BUFFER = randomBytes(SPEED_TEST_CHUNK_SIZE);
 const SPEED_TEST_MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
+/** Cap endless stream=1 downloads so members cannot hold open forever-streams. */
+const SPEED_TEST_STREAM_MAX_MS = 30_000;
+const SPEED_TEST_STREAM_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 /** Per-request upload cap for duration tests (client aborts sooner; needs room for multi-gig). */
 const SPEED_TEST_MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024;
 
@@ -1589,7 +1648,7 @@ const touchUserLastLogin = (users, sessionUser, at = new Date().toISOString(), e
     existingUser.lastLogin = at;
     if (!existingUser.plexId && sessionUser.plexId) existingUser.plexId = sessionUser.plexId;
     if (!existingUser.jellyfinId && sessionUser.jellyfinId) existingUser.jellyfinId = sessionUser.jellyfinId;
-    if (extras.plexAuthToken) existingUser.plexAuthToken = String(extras.plexAuthToken);
+    if (extras.plexAuthToken) existingUser.plexAuthToken = encryptPlexAuthToken(extras.plexAuthToken);
     return existingUser;
 };
 
@@ -6257,7 +6316,17 @@ const getPortalWatchlistService = (config) => createPortalWatchlistService({
         const local = users.find((user) => (
             String(user?.id) === key || String(user?.plexId) === plexId
         ));
-        if (local?.plexAuthToken) return String(local.plexAuthToken);
+        if (local?.plexAuthToken) {
+            const token = decryptPlexAuthToken(local.plexAuthToken);
+            if (token) {
+                // Lazily upgrade legacy plaintext tokens on next watchlist use.
+                if (!String(local.plexAuthToken).startsWith(PLEX_TOKEN_ENC_PREFIX)) {
+                    local.plexAuthToken = encryptPlexAuthToken(token);
+                    await saveFile(USERS_PATH, users);
+                }
+                return token;
+            }
+        }
         // Admin token as last resort only for admin sessions.
         if (sessionUser?.isAdmin && config?.plexToken && config.plexToken !== SECRET_MASK) {
             return String(config.plexToken);
@@ -12290,19 +12359,32 @@ app.get('/api/speedtest/ping', requireAuth, requireMember, speedtestRateLimit, (
 app.get('/api/speedtest/download', requireAuth, requireMember, speedtestRateLimit, (req, res) => {
     const streamForever = String(req.query.stream || '') === '1';
     const parsedBytes = parseInt(req.query.bytes, 10);
+    // Even stream=1 is bounded — client aborts after ~10.5s; hard caps stop bandwidth DoS.
     const bytes = streamForever
-        ? null
+        ? SPEED_TEST_STREAM_MAX_BYTES
         : Math.max(1, Math.min(Number.isFinite(parsedBytes) ? parsedBytes : SPEED_TEST_CHUNK_SIZE, SPEED_TEST_MAX_DOWNLOAD_BYTES));
+    const maxMs = streamForever ? SPEED_TEST_STREAM_MAX_MS : 0;
 
     res.set('Content-Type', 'application/octet-stream');
     res.set('Cache-Control', 'no-store, no-transform');
     res.set('Content-Encoding', 'identity');
     res.set('X-Content-Type-Options', 'nosniff');
-    if (bytes != null) res.set('Content-Length', String(bytes));
+    if (!streamForever) res.set('Content-Length', String(bytes));
 
     let destroyed = false;
     let sent = 0;
-    const cleanup = () => { destroyed = true; };
+    const cleanup = () => {
+        destroyed = true;
+        if (limitTimer) clearTimeout(limitTimer);
+    };
+    const limitTimer = maxMs > 0
+        ? setTimeout(() => {
+            if (destroyed || res.writableEnded) return;
+            destroyed = true;
+            try { res.end(); } catch { /* ignore */ }
+        }, maxMs)
+        : null;
+    limitTimer?.unref?.();
     req.on('close', cleanup);
     res.on('close', cleanup);
 
@@ -12311,11 +12393,11 @@ app.get('/api/speedtest/download', requireAuth, requireMember, speedtestRateLimi
         if (destroyed || res.writableEnded) return;
         let ok = true;
         while (ok && !destroyed && !res.writableEnded) {
-            if (bytes != null && sent >= bytes) {
+            if (sent >= bytes) {
                 res.end();
                 return;
             }
-            const chunk = (bytes != null && (bytes - sent) < SPEED_TEST_CHUNK_SIZE)
+            const chunk = ((bytes - sent) < SPEED_TEST_CHUNK_SIZE)
                 ? SPEED_TEST_BUFFER.subarray(0, bytes - sent)
                 : SPEED_TEST_BUFFER;
             ok = res.write(chunk);
@@ -21274,6 +21356,14 @@ app.listen(PORT, BIND_HOST, async () => {
     }
 
     await migrateConfigFiles((message) => log(`[config] ${message}`));
+    try {
+        const migratedTokens = await migratePlexAuthTokensAtRest();
+        if (migratedTokens > 0) {
+            log(`[security] Encrypted ${migratedTokens} legacy member Plex token(s) at rest`);
+        }
+    } catch (error) {
+        log(`[security] Plex token encryption migrate failed: ${error.message}`);
+    }
 
     // Ensure unique, *stable* CLIENT_ID per installation (survives Docker recreates).
     // Without this, PMS may register the container hostname (e.g. 151a94f8…) as a new device each restart.
