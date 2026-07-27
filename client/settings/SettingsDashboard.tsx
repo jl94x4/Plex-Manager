@@ -1132,6 +1132,15 @@ export const SettingsDashboard: React.FC = () => {
                             return Number.isFinite(next) ? Math.min(16, Math.max(0, Math.round(next))) : 1;
                         })(),
                     },
+                    // Keep flat mirrors aligned with nested concurrency (save used to prefer stale flat values).
+                    cpuConcurrency: (() => {
+                        const next = Number(saved.concurrency?.cpu ?? saved.cpuConcurrency ?? saved.concurrency);
+                        return Number.isFinite(next) ? Math.min(32, Math.max(0, Math.round(next))) : 1;
+                    })(),
+                    gpuConcurrency: (() => {
+                        const next = Number(saved.concurrency?.gpu ?? saved.gpuConcurrency);
+                        return Number.isFinite(next) ? Math.min(16, Math.max(0, Math.round(next))) : 1;
+                    })(),
                     libraryScanEnabled: saved.libraryScanEnabled !== false,
                     libraryScanIntervalMinutes: Math.min(
                         10080,
@@ -1466,6 +1475,13 @@ export const SettingsDashboard: React.FC = () => {
                 enabled: mediaAutomationEnabled,
                 outputMode: mediaAutomation.fallback?.outputMode || mediaAutomation.outputMode || 'dry-run',
                 hardwareAcceleration: mediaAutomation.fallback?.hardware || mediaAutomation.hardwareAcceleration || 'cpu',
+                // Keep flat + nested concurrency in sync so the scheduler always sees the UI values.
+                cpuConcurrency: Number(mediaAutomation.concurrency?.cpu ?? mediaAutomation.cpuConcurrency ?? 1) || 0,
+                gpuConcurrency: Number(mediaAutomation.concurrency?.gpu ?? mediaAutomation.gpuConcurrency ?? 1) || 0,
+                concurrency: {
+                    cpu: Number(mediaAutomation.concurrency?.cpu ?? mediaAutomation.cpuConcurrency ?? 1) || 0,
+                    gpu: Number(mediaAutomation.concurrency?.gpu ?? mediaAutomation.gpuConcurrency ?? 1) || 0,
+                },
                 fallback: {
                     hardware: mediaAutomation.fallback?.hardware || 'cpu',
                     outputMode: mediaAutomation.fallback?.outputMode || 'dry-run',

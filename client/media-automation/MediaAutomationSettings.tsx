@@ -41,6 +41,17 @@ export const MediaAutomationSettings: React.FC<Props> = ({
     onConfigChange,
 }) => {
     const update = (patch: Partial<MediaAutomationSettingsConfig>) => onConfigChange({ ...config, ...patch });
+    const setConcurrency = (lane: 'cpu' | 'gpu', value: number) => {
+        const next = {
+            ...config.concurrency,
+            [lane]: value,
+        };
+        update({
+            concurrency: next,
+            cpuConcurrency: next.cpu,
+            gpuConcurrency: next.gpu,
+        } as Partial<MediaAutomationSettingsConfig>);
+    };
     const globalDryRun = config.fallback.outputMode === 'dry-run';
     const quietDays = Array.isArray(config.quietHoursDays) ? config.quietHoursDays : [];
     const workerGroups = Array.isArray(config.workerGroups) ? config.workerGroups : [];
@@ -792,12 +803,10 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                                 value={config.concurrency.cpu}
                                 onChange={(event) => {
                                     const next = Number(event.target.value);
-                                    update({
-                                        concurrency: {
-                                            ...config.concurrency,
-                                            cpu: Number.isFinite(next) ? Math.min(32, Math.max(0, Math.round(next))) : 0,
-                                        },
-                                    });
+                                    setConcurrency(
+                                        'cpu',
+                                        Number.isFinite(next) ? Math.min(32, Math.max(0, Math.round(next))) : 0,
+                                    );
                                 }}
                             />
                         </label>
@@ -812,17 +821,24 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                                 value={config.concurrency.gpu}
                                 onChange={(event) => {
                                     const next = Number(event.target.value);
-                                    update({
-                                        concurrency: {
-                                            ...config.concurrency,
-                                            gpu: Number.isFinite(next) ? Math.min(16, Math.max(0, Math.round(next))) : 0,
-                                        },
-                                    });
+                                    setConcurrency(
+                                        'gpu',
+                                        Number.isFinite(next) ? Math.min(16, Math.max(0, Math.round(next))) : 0,
+                                    );
                                 }}
                             />
                         </label>
                     </div>
-                    <p className="text-xs text-muted">CPU and GPU queues are limited independently. Set a lane to 0 to pause new jobs on that lane. Worker groups override this when configured.</p>
+                    <p className="text-xs text-muted">
+                        CPU and GPU queues are limited independently. Set a lane to 0 to pause new jobs on that lane.
+                        {(config.workerGroups || []).some((group) => group.enabled !== false) ? (
+                            <span className="mt-1 block text-amber-200/90">
+                                Worker groups are enabled — each group’s own GPU concurrency is what the scheduler uses, not this Global GPU jobs value. Set GPU concurrency on the worker group(s) above to 2.
+                            </span>
+                        ) : (
+                            <span className="mt-1 block">Save Settings after changing these, then keep encoding started.</span>
+                        )}
+                    </p>
                 </div>
 
                 <div className="glass-card-sm p-5 space-y-4">

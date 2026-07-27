@@ -472,6 +472,9 @@ export type MediaAutomationSettingsConfig = {
         cpu: number;
         gpu: number;
     };
+    /** Flat mirrors of concurrency — kept in sync so saves do not prefer a stale value. */
+    cpuConcurrency?: number;
+    gpuConcurrency?: number;
     fallback: {
         hardware: HardwareMode;
         outputMode: OutputMode;
@@ -610,7 +613,7 @@ export const emptyWorkerGroup = (): MediaAutomationWorkerGroup => ({
     name: 'Worker group',
     tags: [],
     cpuConcurrency: 1,
-    gpuConcurrency: 0,
+    gpuConcurrency: 1,
     priorityBias: 0,
     enabled: true,
 });
