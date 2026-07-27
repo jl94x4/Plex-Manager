@@ -221,9 +221,9 @@ export const ConfirmModal: React.FC<{
     cancelLabel = 'Cancel',
     hideCancel = false,
 }) => {
-    if (!isOpen) return null;
-    return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-fade-in">
+    if (!isOpen || typeof document === 'undefined') return null;
+    return ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[2500] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in">
             <div className="modal-glass animate-slide-up max-w-md w-full" role="dialog" aria-modal="true" aria-labelledby="portal-confirm-title">
                 <h3 id="portal-confirm-title" className="text-xl font-black mb-4 text-text tracking-tight">{title}</h3>
                 <p className="text-muted mb-8 text-sm leading-relaxed whitespace-pre-line">{message}</p>
@@ -234,7 +234,8 @@ export const ConfirmModal: React.FC<{
                     <button type="button" className="btn-primary px-4 py-2.5 text-sm" onClick={onConfirm}>{confirmLabel}</button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 };
 

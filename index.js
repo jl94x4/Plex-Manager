@@ -19863,7 +19863,7 @@ app.get('/api/media-automation/browse', requireAdmin, requireMediaAutomation, as
             ...listing,
             message: listing.roots.length
                 ? undefined
-                : 'No media mounts found in the container. Add Host→Container path mappings (e.g. /media, /movies) and restart.',
+                : 'No browsable mounts found. Map a host share into the container (e.g. /media or /output), or type an existing container path.',
         });
     } catch (error) {
         res.status(error.status || 400).json({ error: error.message || 'Failed to browse directories' });

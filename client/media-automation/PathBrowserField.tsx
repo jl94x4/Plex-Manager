@@ -250,14 +250,25 @@ export const PathBrowserField: React.FC<Props> = ({
                             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Refresh
                         </button>
                         {!pickFiles && (
-                            <button
-                                type="button"
-                                className={primaryButtonClass}
-                                disabled={!cursor}
-                                onClick={() => cursor && selectPath(cursor)}
-                            >
-                                Use this folder
-                            </button>
+                            <>
+                                <button
+                                    type="button"
+                                    className={primaryButtonClass}
+                                    disabled={!cursor}
+                                    onClick={() => cursor && selectPath(cursor)}
+                                >
+                                    Use this folder
+                                </button>
+                                {!!String(value || '').trim() && (
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        onClick={() => selectPath(String(value).trim())}
+                                    >
+                                        Use typed path
+                                    </button>
+                                )}
+                            </>
                         )}
                         {optional && value && (
                             <button type="button" className={buttonClass} onClick={() => onChange('')}>
@@ -293,13 +304,13 @@ export const PathBrowserField: React.FC<Props> = ({
                     {!listing?.path && (listing?.roots?.length || 0) > 0 && (
                         <p className="text-xs text-muted">
                             {pickFiles
-                                ? 'Open a mounted root, then click a media file. Use container paths (e.g. /media/...), not Unraid /mnt/… paths.'
-                                : 'Select a mounted root to browse. Use container paths (e.g. /media), not Unraid /mnt/… paths.'}
+                                ? 'Open a mount, then click a media file. Use container paths (e.g. /media or /output), not Unraid /mnt/… paths.'
+                                : 'Pick a mount below, or type any existing container path (e.g. /output) and Use typed path.'}
                         </p>
                     )}
                     {!listing?.path && !(listing?.roots?.length) && !busy && (
                         <p className="text-xs text-amber-200">
-                            No mounts found. Map media into the portal container first (e.g. host share → /media).
+                            No mounts discovered yet. Type a container path that exists (e.g. /output or /media/processed) and use Use typed path.
                         </p>
                     )}
                     <div className="max-h-64 overflow-y-auto rounded-lg border border-border/60 bg-card/40 custom-scrollbar">
