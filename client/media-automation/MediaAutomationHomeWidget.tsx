@@ -47,7 +47,7 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
                     </div>
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Media Automation</p>
-                        <p className="font-bold text-text">{paused ? 'Paused — queue only' : 'Encoding'}</p>
+                        <p className="font-bold text-text">{paused ? 'Paused (queue only)' : 'Encoding'}</p>
                     </div>
                 </div>
                 {error && !status ? (
@@ -65,7 +65,7 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
                 <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${paused ? 'border-amber-500/30 text-amber-300' : 'border-emerald-500/30 text-emerald-300'}`}>
-                            {paused ? 'Paused — queue only' : 'Encoding'}
+                            {paused ? 'Paused (queue only)' : 'Encoding'}
                         </span>
                         {dryRun && (
                             <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-200">

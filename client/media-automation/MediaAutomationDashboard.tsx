@@ -69,7 +69,6 @@ import {
     type MediaAutomationHistoryEntry,
     type MediaAutomationJob,
     type MediaAutomationLibrary,
-    type MediaAutomationPendingTest,
     type MediaAutomationPipeline,
     type MediaAutomationPipelinePreview,
     type MediaAutomationRuleCondition,
@@ -377,7 +376,7 @@ const workerStatusLabel = (workerStatus: MediaAutomationStatus) => {
         return 'Auto-paused (queue depth)';
     }
     if ((workerStatus.workerPaused ?? workerStatus.paused) !== false) {
-        return 'Paused — queue only';
+        return 'Paused (queue only)';
     }
     if (String(workerStatus.workerState || workerStatus.state || '').toLowerCase() === 'running') {
         return 'Encoding';
@@ -490,6 +489,52 @@ const ACTIVITY_PAGE_SIZE_KEY = 'media-automation-activity-page-size';
 const QUEUE_PAGE_SIZE_OPTIONS = [25, 50, 75, 100, 200] as const;
 const QUEUE_PAGE_SIZE_KEY = 'media-automation-queue-page-size';
 const QUEUE_JOBS_FETCH_LIMIT = 1000;
+const QUEUE_FILTER_KEY = 'media-automation.queueFilters';
+const QUEUE_FILTER_IDS = ['queued', 'active', 'dry-run', 'failed', 'completed'] as const;
+type QueueFilterId = typeof QUEUE_FILTER_IDS[number];
+const DEFAULT_QUEUE_FILTERS: QueueFilterId[] = ['queued', 'active', 'dry-run', 'failed'];
+
+const isQueueFilterId = (value: string): value is QueueFilterId => (
+    (QUEUE_FILTER_IDS as readonly string[]).includes(value)
+);
+
+const readQueueFilters = (): Set<QueueFilterId> => {
+    try {
+        const raw = localStorage.getItem(QUEUE_FILTER_KEY);
+        if (!raw) return new Set(DEFAULT_QUEUE_FILTERS);
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return new Set(DEFAULT_QUEUE_FILTERS);
+        const next = parsed.filter((entry): entry is QueueFilterId => typeof entry === 'string' && isQueueFilterId(entry));
+        return next.length ? new Set(next) : new Set(DEFAULT_QUEUE_FILTERS);
+    } catch {
+        return new Set(DEFAULT_QUEUE_FILTERS);
+    }
+};
+
+const writeQueueFilters = (filters: Set<QueueFilterId>) => {
+    try {
+        localStorage.setItem(QUEUE_FILTER_KEY, JSON.stringify([...filters]));
+    } catch {
+        // ignore quota / private mode
+    }
+};
+
+const ACTIVE_QUEUE_STATES = new Set([
+    'running', 'processing', 'active', 'probing', 'planning', 'planned', 'verifying', 'committing',
+]);
+const COMPLETED_QUEUE_STATES = new Set(['completed', 'succeeded', 'success', 'done']);
+const FAILED_QUEUE_STATES = new Set(['failed', 'error', 'cancelled', 'canceled']);
+
+const jobMatchesQueueFilter = (job: MediaAutomationJob, filterId: QueueFilterId) => {
+    const state = jobStateValue(job);
+    const dryRunJob = jobIsDryRun(job);
+    if (filterId === 'dry-run') return dryRunJob;
+    if (filterId === 'queued') return state === 'queued' || state === 'pending' || state === 'waiting';
+    if (filterId === 'active') return ACTIVE_QUEUE_STATES.has(state);
+    if (filterId === 'failed') return FAILED_QUEUE_STATES.has(state);
+    if (filterId === 'completed') return COMPLETED_QUEUE_STATES.has(state);
+    return false;
+};
 
 const readActivityPageSize = (): typeof ACTIVITY_PAGE_SIZE_OPTIONS[number] => {
     try {
@@ -742,15 +787,13 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [selectedJob, setSelectedJob] = useState<MediaAutomationJob | null>(null);
     const [jobLogs, setJobLogs] = useState<MediaAutomationActivity[]>([]);
     const [jobDetailBusy, setJobDetailBusy] = useState(false);
-    const [pendingPath, setPendingPath] = useState('');
-    const [pendingResult, setPendingResult] = useState<MediaAutomationPendingTest | null>(null);
     const [activityFilter, setActivityFilter] = useState<'all' | 'job' | 'scan' | 'watch' | 'trigger'>('all');
     const [activityPageSize, setActivityPageSize] = useState<typeof ACTIVITY_PAGE_SIZE_OPTIONS[number]>(() => readActivityPageSize());
     const [activityPage, setActivityPage] = useState(1);
     const [queuePageSize, setQueuePageSize] = useState<typeof QUEUE_PAGE_SIZE_OPTIONS[number]>(() => readQueuePageSize());
     const [queuePage, setQueuePage] = useState(1);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
-    const [queueFilter, setQueueFilter] = useState<'all' | 'queued' | 'active' | 'failed' | 'dry-run' | 'completed'>('all');
+    const [queueFilters, setQueueFilters] = useState<Set<QueueFilterId>>(() => readQueueFilters());
     const [queueSearch, setQueueSearch] = useState('');
     const [queueLibraryFilter, setQueueLibraryFilter] = useState('');
     const [queuePipelineFilter, setQueuePipelineFilter] = useState('');
@@ -1011,17 +1054,41 @@ export const MediaAutomationDashboard: React.FC = () => {
     ), [availableHardware, capabilities.details, configuredHardware]);
 
     const queueCounts = useMemo(() => {
-        const counts = { queued: 0, active: 0, completed: 0, failed: 0 };
+        const counts = { queued: 0, active: 0, completed: 0, failed: 0, dryRun: 0 };
         jobs.forEach((job) => {
             const value = jobStateValue(job);
-            if (['running', 'processing', 'active'].includes(value)) counts.active += 1;
-            else if (['completed', 'succeeded', 'success', 'done'].includes(value)) counts.completed += 1;
-            else if (['failed', 'error', 'cancelled', 'canceled'].includes(value)) counts.failed += 1;
+            if (jobIsDryRun(job)) counts.dryRun += 1;
+            if (ACTIVE_QUEUE_STATES.has(value)) counts.active += 1;
+            else if (COMPLETED_QUEUE_STATES.has(value)) counts.completed += 1;
+            else if (FAILED_QUEUE_STATES.has(value)) counts.failed += 1;
             else counts.queued += 1;
         });
         return counts;
     }, [jobs]);
 
+    const allQueueFiltersSelected = QUEUE_FILTER_IDS.every((id) => queueFilters.has(id));
+
+    const toggleQueueFilter = (id: QueueFilterId) => {
+        setQueueFilters((current) => {
+            const next = new Set(current);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            if (next.size === 0) {
+                DEFAULT_QUEUE_FILTERS.forEach((entry) => next.add(entry));
+            }
+            writeQueueFilters(next);
+            return next;
+        });
+    };
+
+    const toggleAllQueueFilters = () => {
+        setQueueFilters((current) => {
+            const fullySelected = QUEUE_FILTER_IDS.every((id) => current.has(id));
+            const next = new Set<QueueFilterId>(fullySelected ? DEFAULT_QUEUE_FILTERS : QUEUE_FILTER_IDS);
+            writeQueueFilters(next);
+            return next;
+        });
+    };
     const cancellableJobs = useMemo(() => jobs.filter(isCancellableJob), [jobs]);
     const queuedTopPriority = useMemo(() => jobs.reduce(
         (max, job) => (jobStateValue(job) === 'queued' ? Math.max(max, Number(job.priority) || 0) : max),
@@ -1118,14 +1185,10 @@ export const MediaAutomationDashboard: React.FC = () => {
     const filteredJobs = useMemo(() => {
         const query = queueSearch.trim().toLowerCase();
         const errorQuery = queueErrorFilter.trim().toLowerCase();
+        const activeFilters = queueFilters.size ? queueFilters : new Set(DEFAULT_QUEUE_FILTERS);
         return jobs.filter((job) => {
-            const state = jobStateValue(job);
-            const dryRunJob = jobIsDryRun(job);
-            if (queueFilter === 'queued' && state !== 'queued') return false;
-            if (queueFilter === 'active' && !['running', 'processing', 'active', 'probing', 'planning', 'planned', 'verifying', 'committing'].includes(state)) return false;
-            if (queueFilter === 'failed' && !['failed', 'error'].includes(state)) return false;
-            if (queueFilter === 'completed' && !['completed', 'succeeded', 'success', 'done'].includes(state)) return false;
-            if (queueFilter === 'dry-run' && !dryRunJob) return false;
+            const matchesStatus = [...activeFilters].some((filterId) => jobMatchesQueueFilter(job, filterId));
+            if (!matchesStatus) return false;
             if (queueLibraryFilter) {
                 const libraryId = job.libraryId != null ? String(job.libraryId) : '';
                 const libraryName = String((job as { libraryName?: string }).libraryName || '').toLowerCase();
@@ -1146,7 +1209,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             const haystack = `${job.path || ''} ${job.sourcePath || ''} ${job.pipelineName || ''} ${job.id} ${(job as { libraryName?: string }).libraryName || ''}`.toLowerCase();
             return haystack.includes(query);
         });
-    }, [jobs, queueFilter, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter]);
+    }, [jobs, queueFilters, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter]);
 
     const queuePageCount = Math.max(1, Math.ceil(filteredJobs.length / queuePageSize));
     const pagedJobs = useMemo(() => {
@@ -1156,7 +1219,7 @@ export const MediaAutomationDashboard: React.FC = () => {
 
     useEffect(() => {
         setQueuePage(1);
-    }, [queueFilter, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter, queuePageSize]);
+    }, [queueFilters, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter, queuePageSize]);
 
     useEffect(() => {
         if (queuePage > queuePageCount) setQueuePage(queuePageCount);
@@ -1705,7 +1768,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         {workerStatusLabel(status) === 'Auto-paused (queue depth)'
                                             ? 'Auto-paused because queue depth exceeded the configured limit. Jobs stay queued until depth drops or you adjust Settings.'
                                             : (status.workerPaused ?? status.paused) !== false
-                                                ? 'Paused — queue only. Jobs can be queued while paused. Start when you want encodes to run.'
+                                                ? 'Paused (queue only). Jobs can be queued while paused. Start when you want encodes to run.'
                                                 : 'Encoding — worker may claim queued jobs.'}
                                     </p>
                                 </div>
@@ -1945,16 +2008,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </div>
                         </div>
                     )}
-                    <section className={`${cardClass} p-5`}>
-                        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
+                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                        <section className={`${cardClass} p-5`}>
+                            <div className="mb-4">
                                 <h2 className="font-bold text-text">Encode control</h2>
                                 <p className="mt-1 text-xs text-muted">
                                     Jobs can be queued while paused. Start when you want encodes to run.
                                 </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                                <StatusPill value={workerStatusLabel(status)} size="md" />
                                 <button
                                     type="button"
                                     className={primaryButtonClass}
@@ -1967,92 +2029,54 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     type="button"
                                     className={buttonClass}
                                     disabled={busy !== null || (status.workerPaused ?? status.paused) !== false}
-                                    onClick={() => runAction('control-pause', () => mediaAutomationApi.control('pause'), 'Encoding paused — queue only.')}
+                                    onClick={() => runAction('control-pause', () => mediaAutomationApi.control('pause'), 'Encoding paused (queue only).')}
                                 >
                                     {busy === 'control-pause' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CirclePause className="h-4 w-4" />} Pause
                                 </button>
                             </div>
-                        </div>
-                    </section>
-                    <section className={`${cardClass} p-5`}>
-                        <h2 className="mb-4 font-bold text-text">Enqueue a path</h2>
-                        <div className="space-y-3">
-                            <PathBrowserField
-                                label="Media file"
-                                mode="file"
-                                value={enqueuePath}
-                                onChange={setEnqueuePath}
-                                placeholder="/media/Movies/example.mkv"
-                                hint="Use container paths under your library root (e.g. /media/...), not Unraid /mnt/remotes/… paths."
-                            />
-                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto]">
-                                <CustomSelect
-                                    value={enqueuePipelineId}
-                                    onChange={(value) => {
-                                        setEnqueuePipelineId(value);
-                                        const match = pipelines.find((pipeline) => String(pipeline.id ?? '') === value);
-                                        const sample = String(match?.samplePath || '').trim();
-                                        if (sample) setEnqueuePath(sample);
-                                    }}
-                                    options={[{ value: '', label: 'Automatic pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
+                        </section>
+                        <section className={`${cardClass} p-5`}>
+                            <h2 className="mb-4 font-bold text-text">Enqueue a path</h2>
+                            <div className="space-y-3">
+                                <PathBrowserField
+                                    label="Media file"
+                                    mode="file"
+                                    value={enqueuePath}
+                                    onChange={setEnqueuePath}
+                                    placeholder="/media/Movies/example.mkv"
+                                    hint="Use container paths under your library root (e.g. /media/...), not Unraid /mnt/remotes/… paths."
                                 />
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null || !enqueuePipelineId || !pipelines.some((pipeline) => String(pipeline.id ?? '') === enqueuePipelineId && String(pipeline.samplePath || '').trim())}
-                                    onClick={() => {
-                                        const match = pipelines.find((pipeline) => String(pipeline.id ?? '') === enqueuePipelineId);
-                                        if (match) void queuePipelineSample(match);
-                                    }}
-                                >
-                                    {busy?.startsWith('queue-sample-') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                                    Queue sample
-                                </button>
-                                <button type="button" className={primaryButtonClass} disabled={!enqueuePath.trim() || busy !== null} onClick={() => runAction('enqueue', () => mediaAutomationApi.enqueue(enqueuePath.trim(), enqueuePipelineId || undefined), 'Path added to queue.').then(() => setEnqueuePath(''))}>
-                                    {busy === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Enqueue
-                                </button>
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                                    <CustomSelect
+                                        value={enqueuePipelineId}
+                                        onChange={(value) => {
+                                            setEnqueuePipelineId(value);
+                                            const match = pipelines.find((pipeline) => String(pipeline.id ?? '') === value);
+                                            const sample = String(match?.samplePath || '').trim();
+                                            if (sample) setEnqueuePath(sample);
+                                        }}
+                                        options={[{ value: '', label: 'Automatic pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
+                                    />
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null || !enqueuePipelineId || !pipelines.some((pipeline) => String(pipeline.id ?? '') === enqueuePipelineId && String(pipeline.samplePath || '').trim())}
+                                        onClick={() => {
+                                            const match = pipelines.find((pipeline) => String(pipeline.id ?? '') === enqueuePipelineId);
+                                            if (match) void queuePipelineSample(match);
+                                        }}
+                                    >
+                                        {busy?.startsWith('queue-sample-') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                                        Queue sample
+                                    </button>
+                                    <button type="button" className={primaryButtonClass} disabled={!enqueuePath.trim() || busy !== null} onClick={() => runAction('enqueue', () => mediaAutomationApi.enqueue(enqueuePath.trim(), enqueuePipelineId || undefined), 'Path added to queue.').then(() => setEnqueuePath(''))}>
+                                        {busy === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Enqueue
+                                    </button>
+                                </div>
+                                <p className="text-xs text-muted">Pick a pipeline with a saved sample file to auto-fill the path, or use Queue sample for one click.</p>
                             </div>
-                            <p className="text-xs text-muted">Pick a pipeline with a saved sample file to auto-fill the path, or use Queue sample for one click.</p>
-                        </div>
-                    </section>
-                    <section className={`${cardClass} p-5`}>
-                        <h2 className="mb-4 font-bold text-text">Test candidate (no enqueue)</h2>
-                        <div className="space-y-3">
-                            <PathBrowserField
-                                label="Media file"
-                                mode="file"
-                                value={pendingPath}
-                                onChange={setPendingPath}
-                                placeholder="/media/Movies/example.mkv"
-                            />
-                            <button
-                                type="button"
-                                className={buttonClass}
-                                disabled={!pendingPath.trim() || busy !== null}
-                                onClick={async () => {
-                                    setBusy('pending-test');
-                                    try {
-                                        const result = await mediaAutomationApi.testPending(pendingPath.trim());
-                                        setPendingResult(result);
-                                        toast(result.matched ? `Matched ${result.pipelineName || 'pipeline'}` : 'No matching pipeline rule');
-                                    } catch (error) {
-                                        toast(error instanceof Error ? error.message : 'Pending test failed', 'error');
-                                    } finally {
-                                        setBusy(null);
-                                    }
-                                }}
-                            >
-                                {busy === 'pending-test' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Test file
-                            </button>
-                        </div>
-                        {pendingResult && (
-                            <div className="mt-3 rounded-lg bg-background/40 p-3 text-xs text-muted">
-                                <p className="font-semibold text-text">{pendingResult.matched ? 'Would queue' : 'Would skip'} · {pendingResult.reason}</p>
-                                {pendingResult.pipelineName && <p className="mt-1">Pipeline: {pendingResult.pipelineName}</p>}
-                                {pendingResult.probe && <p className="mt-1">{asText(pendingResult.probe.format)} · {asText(pendingResult.probe.videoCodec)} / {asText(pendingResult.probe.audioCodec)}</p>}
-                            </div>
-                        )}
-                    </section>
+                        </section>
+                    </div>
                     {jobs.length === 0 ? (
                         <EmptyState
                             icon={ListRestart}
@@ -2066,21 +2090,28 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <section className={`${cardClass} p-4`}>
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                     <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            className={`${buttonClass} ${allQueueFiltersSelected ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
+                                            onClick={toggleAllQueueFilters}
+                                        >
+                                            All
+                                        </button>
                                         {([
-                                            ['all', 'All'],
-                                            ['queued', 'Queued'],
-                                            ['active', 'Active'],
-                                            ['dry-run', 'Dry-run'],
-                                            ['failed', 'Failed'],
-                                            ['completed', 'Completed'],
-                                        ] as const).map(([id, label]) => (
+                                            ['queued', 'Queued', queueCounts.queued],
+                                            ['active', 'Active', queueCounts.active],
+                                            ['dry-run', 'Dry-run', queueCounts.dryRun],
+                                            ['failed', 'Failed', queueCounts.failed],
+                                            ['completed', 'Completed', queueCounts.completed],
+                                        ] as const).map(([id, label, count]) => (
                                             <button
                                                 key={id}
                                                 type="button"
-                                                className={`${buttonClass} ${queueFilter === id ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
-                                                onClick={() => setQueueFilter(id)}
+                                                className={`${buttonClass} ${queueFilters.has(id) ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
+                                                onClick={() => toggleQueueFilter(id)}
+                                                aria-pressed={queueFilters.has(id)}
                                             >
-                                                {label}
+                                                {label} ({count})
                                             </button>
                                         ))}
                                     </div>
