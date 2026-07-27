@@ -1171,7 +1171,6 @@ export const SettingsDashboard: React.FC = () => {
                     sampleGateEnabled: saved.sampleGateEnabled === true,
                     sampleGateMinSizeGb: Math.min(1000, Math.max(0, Number(saved.sampleGateMinSizeGb ?? DEFAULT_MEDIA_AUTOMATION_SETTINGS.sampleGateMinSizeGb))),
                     replaceQualityGuard: saved.replaceQualityGuard !== false,
-                    replaceForceNewFilename: saved.replaceForceNewFilename !== false,
                     freeSpaceRoiMinPercent: Math.min(95, Math.max(0, Math.round(Number(saved.freeSpaceRoiMinPercent) || 0))),
                     daytimeExtraSavingsPercent: Math.min(50, Math.max(0, Math.round(Number(saved.daytimeExtraSavingsPercent) || 0))),
                     maxWatchCount: Math.min(100000, Math.max(0, Math.round(Number(saved.maxWatchCount) || 0))),

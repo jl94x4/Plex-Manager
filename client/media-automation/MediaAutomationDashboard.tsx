@@ -3541,13 +3541,16 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <section className="space-y-4 border-t border-border/60 pt-4">
                             <div>
                                 <h3 className="text-sm font-bold text-text">Destinations</h3>
-                                <p className="mt-1 text-xs text-muted">Leave blank to use pipeline defaults. Quarantine is used on Replace after verify.</p>
+                                <p className="mt-1 text-xs text-muted">
+                                    Output: Copy final destination, or Replace encode staging (then moves back to the original filename).
+                                    Quarantine is used on Replace after verify.
+                                </p>
                             </div>
                             <PathBrowserField
                                 label="Output path"
                                 value={libraryDraft.outputPath || ''}
                                 onChange={(outputPath) => setLibraryDraft({ ...libraryDraft, outputPath })}
-                                placeholder="/media/processed"
+                                placeholder="/media/processed or /mnt/ssd/encode-staging"
                                 optional
                             />
                             <PathBrowserField
