@@ -512,6 +512,46 @@ const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bo
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
 
 const asText = (value: unknown, fallback = '-') => value === undefined || value === null || value === '' ? fallback : String(value);
+
+const historyEntryToJobClient = (entry: MediaAutomationHistoryEntry): MediaAutomationJob => {
+    const sourcePath = String(entry.sourcePath || '');
+    const state = String(entry.state || 'succeeded');
+    return {
+        id: entry.id,
+        sourcePath,
+        path: sourcePath,
+        pipelineId: entry.pipelineId ?? null,
+        pipelineName: entry.pipelineName || '',
+        libraryId: entry.libraryId ?? null,
+        state,
+        status: state,
+        phase: state,
+        lane: entry.lane === 'gpu' ? 'gpu' : 'cpu',
+        createdAt: entry.createdAt || null,
+        startedAt: entry.startedAt || null,
+        finishedAt: entry.finishedAt || null,
+        completedAt: entry.finishedAt || null,
+        error: entry.error || null,
+        metadata: {
+            tags: Array.isArray(entry.tags) ? entry.tags : [],
+            fromHistory: true,
+        },
+        result: {
+            sourceBytes: Number(entry.sourceBytes || 0) || 0,
+            outputBytes: Number(entry.outputBytes || 0) || 0,
+            bytesSaved: Number(entry.bytesSaved || 0) || 0,
+            durationMs: Number(entry.durationMs || 0) || 0,
+            adapter: entry.adapter || null,
+            adapterLabel: entry.adapterLabel || null,
+            dryRun: entry.dryRun === true,
+            delivery: entry.delivery || null,
+            output: {
+                finalPath: entry.finalPath || null,
+                quarantinedPath: entry.quarantinedPath || null,
+            },
+        },
+    };
+};
 const formatTime = (value?: string) => {
     if (!value) return '-';
     const date = new Date(value);
@@ -1295,16 +1335,21 @@ export const MediaAutomationDashboard: React.FC = () => {
     const openJobDetail = async (jobId: string | number) => {
         setSelectedJobId(jobId);
         setJobDetailBusy(true);
+        const fromJobs = jobs.find((entry) => String(entry.id) === String(jobId)) || null;
+        const fromHistory = historyEntries.find((entry) => String(entry.id) === String(jobId)) || null;
+        const historyAsJob = fromHistory ? historyEntryToJobClient(fromHistory) : null;
+        if (fromJobs) setSelectedJob(fromJobs);
+        else if (historyAsJob) setSelectedJob(historyAsJob);
         try {
             const [job, logs] = await Promise.all([
-                mediaAutomationApi.getJob(jobId),
-                mediaAutomationApi.jobLogs(jobId),
+                mediaAutomationApi.getJob(jobId).catch(() => null),
+                mediaAutomationApi.jobLogs(jobId).catch(() => [] as MediaAutomationActivity[]),
             ]);
-            setSelectedJob(job || jobs.find((entry) => String(entry.id) === String(jobId)) || null);
+            setSelectedJob(job || fromJobs || historyAsJob || null);
             setJobLogs(logs);
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load job details', 'error');
-            setSelectedJob(jobs.find((entry) => String(entry.id) === String(jobId)) || null);
+            setSelectedJob(fromJobs || historyAsJob || null);
             setJobLogs([]);
         } finally {
             setJobDetailBusy(false);
@@ -3190,7 +3235,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     <button
                                         type="button"
                                         className={`${buttonClass} text-xs`}
-                                        onClick={() => setSelectedJobId(entry.id)}
+                                        onClick={() => void openJobDetail(entry.id)}
                                     >
                                         Open job detail
                                     </button>

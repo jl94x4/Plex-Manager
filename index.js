@@ -19804,8 +19804,7 @@ app.get('/api/media-automation/jobs/:id', requireAdmin, requireMediaAutomation, 
 });
 
 app.get('/api/media-automation/jobs/:id/logs', requireAdmin, requireMediaAutomation, async (req, res) => {
-    const job = await mediaAutomationService.getJob(req.params.id);
-    if (!job) return res.status(404).json({ error: 'Job not found' });
+    // Activity logs may outlive pruned queue rows; do not require a live job.
     const entries = await mediaAutomationService.listActivity({
         jobId: req.params.id,
         limit: Math.min(500, Math.max(1, Number(req.query.limit) || 100)),
