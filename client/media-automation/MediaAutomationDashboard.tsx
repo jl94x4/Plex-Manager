@@ -460,6 +460,24 @@ const pathBasename = (value: string) => {
     return parts[parts.length - 1] || value;
 };
 
+/** Whole-library folder names that usually mean “scan everything under here”. */
+const BROAD_LIBRARY_BASENAMES = new Set([
+    'media', 'movies', 'movie', 'films', 'film', 'tv', 'tvs', 'shows', 'show',
+    'television', 'series', 'anime', 'music', 'videos', 'video', 'library',
+    'tv shows', 'tv-shows', 'tv_shows', 'tvshows',
+]);
+
+const SEASON_FOLDER_RE = /^(season[\s._-]?\d+|specials|extras)$/i;
+
+/** Pull "Love Island" from "Love Island - S13E46 - Episode 46.mkv". */
+const parseSeriesNameFromFile = (fileName: string) => {
+    const base = String(fileName || '').replace(/\.[^.]+$/, '');
+    const match = base.match(/^(.*?)[\s._-]+[Ss](\d{1,4})[Ee](\d{1,4})\b/);
+    if (!match) return null;
+    const name = match[1].replace(/[._]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return name || null;
+};
+
 /** Sonarr-style relative path under a library root (falls back to absolute). */
 const toDisplayPath = (
     fullPath: string,
@@ -518,28 +536,32 @@ const toDisplayPath = (
             break;
         }
     }
+    if (!relativePath || relativePath === '.' || relativePath === abs) return relativePath;
 
-    // If we still start at Season/Specials, keep the parent show folder in the display path.
-    if (relativePath && relativePath !== '.' && relativePath !== abs) {
-        const first = relativePath.split('/')[0] || '';
-        if (/^(season[\s._-]?\d+|specials|extras)$/i.test(first)) {
-            const absParts = normalized.split('/').filter(Boolean);
-            const relParts = relativePath.split('/').filter(Boolean);
-            const seasonAt = absParts.length - relParts.length;
-            if (seasonAt > 0) {
-                relativePath = `${absParts[seasonAt - 1]}/${relativePath}`;
-            }
+    const parts = relativePath.split('/').filter(Boolean);
+    // Drop leading junk like media/ when the real layout is media/Season 13/file.mkv
+    while (
+        parts.length >= 2
+        && BROAD_LIBRARY_BASENAMES.has(parts[0].toLowerCase())
+        && SEASON_FOLDER_RE.test(parts[1])
+    ) {
+        parts.shift();
+    }
+
+    if (parts.length >= 1 && SEASON_FOLDER_RE.test(parts[0])) {
+        const fromFile = parseSeriesNameFromFile(parts[parts.length - 1] || '');
+        if (fromFile) {
+            return [fromFile, ...parts].join('/');
+        }
+        const absParts = normalized.split('/').filter(Boolean);
+        const seasonAt = absParts.length - parts.length;
+        const parent = seasonAt > 0 ? absParts[seasonAt - 1] : '';
+        if (parent && !BROAD_LIBRARY_BASENAMES.has(parent.toLowerCase())) {
+            return [parent, ...parts].join('/');
         }
     }
-    return relativePath;
+    return parts.join('/');
 };
-
-/** Whole-library folder names that usually mean “scan everything under here”. */
-const BROAD_LIBRARY_BASENAMES = new Set([
-    'media', 'movies', 'movie', 'films', 'film', 'tv', 'tvs', 'shows', 'show',
-    'television', 'series', 'anime', 'music', 'videos', 'video', 'library',
-    'tv shows', 'tv-shows', 'tv_shows', 'tvshows',
-]);
 
 /** True when a library root looks like an entire media tree, not a show/season folder. */
 const isBroadLibraryRoot = (rootPath: string) => {
