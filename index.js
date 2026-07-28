@@ -46,6 +46,7 @@ import {
     buildRuleContext,
     collectBrowseRoots,
     createMediaAutomation,
+    collectHostMetrics,
     detectFfmpegCapabilities,
     getDefaultMediaAutomationConfig,
     listBrowseDirectory,
@@ -19590,6 +19591,24 @@ app.get('/api/media-automation/capabilities', requireAdmin, async (req, res) => 
             hardware: [],
             error: error.message || 'FFmpeg capability detection failed',
         });
+    }
+});
+
+app.get('/api/media-automation/metrics', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const runtime = mediaAutomationRuntimeConfig(config);
+        const status = await mediaAutomationService.status();
+        const metrics = await collectHostMetrics({
+            vaapiDevice: runtime.vaapiDevice,
+            activeEncodes: {
+                cpu: Number(status?.lanes?.cpu?.active) || 0,
+                gpu: Number(status?.lanes?.gpu?.active) || 0,
+            },
+        });
+        res.json(metrics);
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to collect host metrics' });
     }
 });
 

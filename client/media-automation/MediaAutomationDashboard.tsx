@@ -41,6 +41,7 @@ import { mediaAutomationApi } from './api';
 import { PathBrowserField } from './PathBrowserField';
 import { PipelineTemplatePicker } from './PipelineTemplatePicker';
 import { MediaAutomationSetupChecklist } from './MediaAutomationSetupChecklist';
+import { MediaAutomationSystemPanel } from './MediaAutomationSystemPanel';
 import { PipelineEditorForm } from './PipelineEditorForm';
 import { MediaAutomationGoLiveWizard } from './MediaAutomationGoLiveWizard';
 import { SavingsAnalyzerPanel } from './SavingsAnalyzerPanel';
@@ -678,7 +679,7 @@ const createRuleCondition = (): MediaAutomationRuleCondition => ({
     value: '',
 });
 const normalizeRules = normalizePipelineRules;
-const MEDIA_AUTOMATION_TABS: MediaAutomationTab[] = ['overview', 'queue', 'pipelines', 'libraries', 'analyzer', 'history', 'activity'];
+const MEDIA_AUTOMATION_TABS: MediaAutomationTab[] = ['overview', 'queue', 'pipelines', 'libraries', 'analyzer', 'history', 'system', 'activity'];
 const ACTIVITY_PAGE_SIZE_OPTIONS = [20, 50, 75, 100] as const;
 const ACTIVITY_PAGE_SIZE_KEY = 'media-automation-activity-page-size';
 const QUEUE_PAGE_SIZE_OPTIONS = [25, 50, 75, 100, 200] as const;
@@ -1651,6 +1652,7 @@ export const MediaAutomationDashboard: React.FC = () => {
         { id: 'libraries', label: 'Libraries', icon: FolderCog },
         { id: 'analyzer', label: 'Analyzer', icon: ScanSearch },
         { id: 'history', label: 'History', icon: History },
+        { id: 'system', label: 'System', icon: ServerCog },
         { id: 'activity', label: 'Activity', icon: Activity },
     ];
 
@@ -3466,6 +3468,10 @@ export const MediaAutomationDashboard: React.FC = () => {
                         )}
                     </div>
                 </div>
+            )}
+
+            {tab === 'system' && (
+                <MediaAutomationSystemPanel toast={toast} />
             )}
 
             {tab === 'activity' && (

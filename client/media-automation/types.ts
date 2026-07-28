@@ -1,4 +1,61 @@
-export type MediaAutomationTab = 'overview' | 'queue' | 'pipelines' | 'libraries' | 'analyzer' | 'history' | 'activity';
+export type MediaAutomationTab = 'overview' | 'queue' | 'pipelines' | 'libraries' | 'analyzer' | 'history' | 'system' | 'activity';
+
+export type MediaAutomationHostMetrics = {
+    at?: string;
+    host?: string;
+    platform?: string;
+    arch?: string;
+    uptimeSec?: number;
+    process?: {
+        pid?: number;
+        rssBytes?: number;
+        heapUsedBytes?: number;
+        heapTotalBytes?: number;
+    };
+    memory?: {
+        totalBytes?: number;
+        freeBytes?: number;
+        usedBytes?: number;
+        usedPercent?: number | null;
+    };
+    cpu?: {
+        cores?: number;
+        model?: string | null;
+        load1?: number;
+        load5?: number;
+        load15?: number;
+        usedPercent?: number | null;
+    };
+    gpu?: {
+        nvidia?: {
+            available?: boolean;
+            error?: string | null;
+            gpus?: Array<{
+                index?: number;
+                name?: string;
+                utilizationPercent?: number;
+                memoryUsedMb?: number;
+                memoryTotalMb?: number;
+                temperatureC?: number;
+                vendor?: string;
+            }>;
+        };
+        intelOrAmd?: {
+            available?: boolean;
+            note?: string;
+            dri?: {
+                present?: boolean;
+                readable?: boolean;
+                device?: string | null;
+            } | null;
+            vendors?: string[];
+        };
+        activeEncodes?: {
+            cpu?: number;
+            gpu?: number;
+        };
+    };
+};
 
 export type MediaAutomationAnalyzeRow = {
     path: string;

@@ -4,6 +4,7 @@ import type {
     MediaAutomationAnalyzeResult,
     MediaAutomationCapabilities,
     MediaAutomationHistoryEntry,
+    MediaAutomationHostMetrics,
     MediaAutomationJob,
     MediaAutomationLibrary,
     MediaAutomationPendingTest,
@@ -70,6 +71,7 @@ export type MediaAutomationEstimate = {
 export const mediaAutomationApi = {
     status: () => apiFetch(`${ROOT}/status`) as Promise<MediaAutomationStatus>,
     capabilities: () => apiFetch(`${ROOT}/capabilities`) as Promise<MediaAutomationCapabilities>,
+    metrics: () => apiFetch(`${ROOT}/metrics`) as Promise<MediaAutomationHostMetrics>,
     jobs: async (limit = 1000) => asList<MediaAutomationJob>(
         await apiFetch(`${ROOT}/jobs?limit=${limit}`),
         ['jobs', 'items', 'results'],
