@@ -2458,6 +2458,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 const jobState = dryRunJob && ['completed', 'succeeded', 'success'].includes(state)
                                     ? 'dry-run'
                                     : (job.phase || job.state || job.status);
+                                const terminal = isTerminalJob(job);
                                 const percent = jobProgressPercent(job);
                                 const progressMeta = jobProgressMeta(job);
                                 const errorText = jobErrorText(job.error);
@@ -2488,10 +2489,10 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         ))}
                                                         <span className="text-xs text-muted">#{jobId}</span>
                                                         {job.priority != null && <span className="text-xs text-muted">P{job.priority}</span>}
-                                                        {percent != null && <span className="text-xs font-semibold text-plex">{Math.round(percent)}%</span>}
-                                                        {progressMeta.etaLabel && <span className="text-xs text-amber-300">ETA {progressMeta.etaLabel}</span>}
-                                                        {progressMeta.speedLabel && <span className="text-xs text-muted">{progressMeta.speedLabel}</span>}
-                                                        {progressMeta.fpsLabel && <span className="text-xs text-muted">{progressMeta.fpsLabel}</span>}
+                                                        {!terminal && percent != null && <span className="text-xs font-semibold text-plex">{Math.round(percent)}%</span>}
+                                                        {!terminal && progressMeta.etaLabel && <span className="text-xs text-amber-300">ETA {progressMeta.etaLabel}</span>}
+                                                        {!terminal && progressMeta.speedLabel && <span className="text-xs text-muted">{progressMeta.speedLabel}</span>}
+                                                        {!terminal && progressMeta.fpsLabel && <span className="text-xs text-muted">{progressMeta.fpsLabel}</span>}
                                                     </div>
                                                     {jobHardwareInfo(job)?.fallback && (
                                                         <p className="mt-1 text-xs text-amber-300">
@@ -2499,7 +2500,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         </p>
                                                     )}
                                                     <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
-                                                    <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.createdAt)}</p>
+                                                    <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.finishedAt || job.completedAt || job.createdAt)}</p>
                                                     {(() => {
                                                         const outcome = jobQueueOutcomeSummary(job);
                                                         if (!outcome) return null;
@@ -2526,7 +2527,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                             </p>
                                                         );
                                                     })()}
-                                                    {progressMeta.elapsedLabel && (
+                                                    {!terminal && progressMeta.elapsedLabel && (
                                                         <p className="mt-1 text-xs text-muted">Encoded {progressMeta.elapsedLabel}</p>
                                                     )}
                                                     {isActive && percent == null && (
@@ -2535,7 +2536,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     {dryRunJob && ['completed', 'succeeded', 'success'].includes(state) && (
                                                         <p className="mt-1 text-xs text-amber-300">{jobDryRunReason(job)}</p>
                                                     )}
-                                                    {jobLiveCommand(job) && (
+                                                    {!terminal && jobLiveCommand(job) && (
                                                         <p className="mt-1 truncate font-mono text-[11px] text-muted" title={jobLiveCommand(job)}>{jobLiveCommand(job)}</p>
                                                     )}
                                                     {errorText && <p className="mt-2 text-xs text-red-300">{errorText}</p>}
@@ -2568,7 +2569,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 )}
                                             </div>
                                         </div>
-                                        {(percent != null || isActive) && (
+                                        {!terminal && (percent != null || isActive) && (
                                             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-background">
                                                 <div
                                                     className={`h-full rounded-full bg-plex transition-all ${percent == null ? 'animate-pulse w-1/5' : ''}`}
