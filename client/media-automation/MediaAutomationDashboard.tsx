@@ -460,6 +460,38 @@ const pathBasename = (value: string) => {
     return parts[parts.length - 1] || value;
 };
 
+/** Sonarr-style relative path under a library root (falls back to absolute). */
+const toDisplayPath = (
+    fullPath: string,
+    {
+        relative = false,
+        libraryRoot,
+        libraryRoots = [],
+    }: {
+        relative?: boolean;
+        libraryRoot?: string | null;
+        libraryRoots?: string[];
+    } = {},
+) => {
+    const abs = String(fullPath || '').trim();
+    if (!abs) return '';
+    if (!relative) return abs;
+    const normalized = abs.replace(/\\/g, '/');
+    const roots = [libraryRoot, ...libraryRoots]
+        .map((root) => String(root || '').trim().replace(/\\/g, '/').replace(/\/+$/, ''))
+        .filter(Boolean)
+        .sort((left, right) => right.length - left.length);
+    for (const root of roots) {
+        const rootLower = root.toLowerCase();
+        const pathLower = normalized.toLowerCase();
+        if (pathLower === rootLower) return '.';
+        if (pathLower.startsWith(`${rootLower}/`)) {
+            return normalized.slice(root.length + 1);
+        }
+    }
+    return abs;
+};
+
 /** Whole-library folder names that usually mean “scan everything under here”. */
 const BROAD_LIBRARY_BASENAMES = new Set([
     'media', 'movies', 'movie', 'films', 'film', 'tv', 'tvs', 'shows', 'show',
@@ -570,6 +602,7 @@ const ACTIVITY_PAGE_SIZE_OPTIONS = [20, 50, 75, 100] as const;
 const ACTIVITY_PAGE_SIZE_KEY = 'media-automation-activity-page-size';
 const QUEUE_PAGE_SIZE_OPTIONS = [25, 50, 75, 100, 200] as const;
 const QUEUE_PAGE_SIZE_KEY = 'media-automation-queue-page-size';
+const RELATIVE_PATHS_KEY = 'media-automation-relative-paths';
 const QUEUE_JOBS_FETCH_LIMIT = 1000;
 const QUEUE_FILTER_KEY = 'media-automation.queueFilters';
 const QUEUE_FILTER_IDS = ['active', 'queued', 'dry-run', 'failed', 'completed'] as const;
@@ -637,6 +670,16 @@ const readQueuePageSize = (): typeof QUEUE_PAGE_SIZE_OPTIONS[number] => {
             : 50;
     } catch {
         return 50;
+    }
+};
+
+const readRelativePathsPref = (): boolean => {
+    try {
+        const raw = localStorage.getItem(RELATIVE_PATHS_KEY);
+        if (raw == null) return true;
+        return raw === '1' || raw === 'true';
+    } catch {
+        return true;
     }
 };
 
@@ -900,6 +943,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [activityPage, setActivityPage] = useState(1);
     const [queuePageSize, setQueuePageSize] = useState<typeof QUEUE_PAGE_SIZE_OPTIONS[number]>(() => readQueuePageSize());
     const [queuePage, setQueuePage] = useState(1);
+    const [relativePaths, setRelativePaths] = useState(() => readRelativePathsPref());
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [queueFilters, setQueueFilters] = useState<Set<QueueFilterId>>(() => readQueueFilters());
     const [queueSearch, setQueueSearch] = useState('');
@@ -2329,6 +2373,22 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         onChange={(event) => setQueueErrorFilter(event.target.value)}
                                         placeholder="Filter by error text…"
                                     />
+                                    <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+                                        <span className="whitespace-nowrap" title="Show paths relative to the library root (Sonarr-style)">
+                                            Relative paths
+                                        </span>
+                                        <SettingsSwitch
+                                            checked={relativePaths}
+                                            onChange={(next) => {
+                                                setRelativePaths(next);
+                                                try {
+                                                    localStorage.setItem(RELATIVE_PATHS_KEY, next ? '1' : '0');
+                                                } catch {
+                                                    // ignore
+                                                }
+                                            }}
+                                        />
+                                    </label>
                                     <label className="flex items-center gap-2 text-xs font-semibold text-muted sm:ml-auto">
                                         <span className="whitespace-nowrap">Per page</span>
                                         <CustomSelect
@@ -2522,7 +2582,16 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                             Hardware fell back to CPU{jobHardwareInfo(job)?.requested ? ` (wanted ${jobHardwareInfo(job)?.requested})` : ''}. Check /dev/dri and Capabilities after Test worker.
                                                         </p>
                                                     )}
-                                                    <p className="mt-2 truncate font-semibold text-text">{job.path || job.sourcePath || 'Path not reported'}</p>
+                                                    <p
+                                                        className="mt-2 truncate font-semibold text-text"
+                                                        title={String(job.path || job.sourcePath || '')}
+                                                    >
+                                                        {toDisplayPath(String(job.path || job.sourcePath || ''), {
+                                                            relative: relativePaths,
+                                                            libraryRoot: typeof job.libraryRoot === 'string' ? job.libraryRoot : null,
+                                                            libraryRoots: libraries.map((library) => library.rootPath),
+                                                        }) || 'Path not reported'}
+                                                    </p>
                                                     <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.finishedAt || job.completedAt || job.createdAt)}</p>
                                                     {(() => {
                                                         const outcome = jobQueueOutcomeSummary(job);
@@ -3185,7 +3254,23 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <h2 className="text-lg font-bold text-text">Task history</h2>
                             <p className="mt-1 text-sm text-muted">Durable record of completed, failed, cancelled, and dry-run jobs beyond the rotating queue.</p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+                                <span className="whitespace-nowrap" title="Show paths relative to the library root (Sonarr-style)">
+                                    Relative paths
+                                </span>
+                                <SettingsSwitch
+                                    checked={relativePaths}
+                                    onChange={(next) => {
+                                        setRelativePaths(next);
+                                        try {
+                                            localStorage.setItem(RELATIVE_PATHS_KEY, next ? '1' : '0');
+                                        } catch {
+                                            // ignore
+                                        }
+                                    }}
+                                />
+                            </label>
                             {(['all', 'completed', 'failed', 'cancelled', 'dry-run'] as const).map((value) => (
                                 <button
                                     key={value}
@@ -3231,8 +3316,24 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 <article key={entry.id} className={`${cardClass} space-y-2 p-4`}>
                                     <div className="flex flex-wrap items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                            <p className="truncate font-semibold text-text" title={entry.sourcePath}>{pathBasename(entry.sourcePath || entry.id)}</p>
-                                            <p className="mt-1 truncate font-mono text-xs text-muted" title={entry.sourcePath}>{entry.sourcePath}</p>
+                                            <p
+                                                className="truncate font-semibold text-text"
+                                                title={entry.sourcePath}
+                                            >
+                                                {pathBasename(entry.sourcePath || entry.id)}
+                                            </p>
+                                            <p
+                                                className="mt-1 truncate font-mono text-xs text-muted"
+                                                title={entry.sourcePath}
+                                            >
+                                                {toDisplayPath(String(entry.sourcePath || ''), {
+                                                    relative: relativePaths,
+                                                    libraryRoot: entry.libraryId
+                                                        ? (libraries.find((library) => String(library.id) === String(entry.libraryId))?.rootPath || undefined)
+                                                        : undefined,
+                                                    libraryRoots: libraries.map((library) => library.rootPath),
+                                                }) || entry.sourcePath}
+                                            </p>
                                         </div>
                                         <div className="flex shrink-0 flex-col items-end gap-1">
                                             <StatusPill value={entry.dryRun ? 'dry-run' : asText(entry.state, 'unknown')} />
