@@ -2057,8 +2057,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </div>
                         </div>
                     )}
-                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-start">
-                        <section className={`${cardClass} p-5`}>
+                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                        <section className={`${cardClass} flex h-full flex-col p-5`}>
                             {(() => {
                                 const encodingPaused = (status.workerPaused ?? status.paused) !== false;
                                 const title = encodeControlTitle(status);
@@ -2085,17 +2085,17 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 }
                                 return (
                                     <>
-                                        <div className="mb-4">
+                                        <div className="mb-4 shrink-0">
                                             <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
                                                 Encode control
                                             </div>
                                             <h2 className="text-lg font-bold tracking-tight text-text">{title}</h2>
                                             <p className="mt-1 text-xs leading-relaxed text-muted">{subtitle}</p>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid min-h-0 flex-1 grid-cols-2 gap-3">
                                             <button
                                                 type="button"
-                                                className={`${encodingPaused ? primaryButtonClass : buttonClass} min-h-[3.25rem] px-4 py-3 text-base`}
+                                                className={`${encodingPaused ? primaryButtonClass : buttonClass} h-full min-h-[3.25rem] px-4 py-3 text-base`}
                                                 disabled={busy !== null || !encodingPaused}
                                                 onClick={() => runAction('control-start', () => mediaAutomationApi.control('start'), 'Encoding started.')}
                                             >
@@ -2106,7 +2106,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             </button>
                                             <button
                                                 type="button"
-                                                className={`${!encodingPaused ? primaryButtonClass : buttonClass} min-h-[3.25rem] px-4 py-3 text-base`}
+                                                className={`${!encodingPaused ? primaryButtonClass : buttonClass} h-full min-h-[3.25rem] px-4 py-3 text-base`}
                                                 disabled={busy !== null || encodingPaused}
                                                 onClick={() => runAction('control-pause', () => mediaAutomationApi.control('pause'), 'Encoding paused (queue only).')}
                                             >
@@ -2117,7 +2117,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             </button>
                                         </div>
                                         {holdGates.length > 0 && (
-                                            <div className="mt-4 flex flex-wrap gap-2">
+                                            <div className="mt-4 flex shrink-0 flex-wrap gap-2">
                                                 {holdGates.map((gate) => (
                                                     <span
                                                         key={gate.id}
@@ -2132,7 +2132,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 );
                             })()}
                         </section>
-                        <section className={`${cardClass} p-5`}>
+                        <section className={`${cardClass} h-full p-5`}>
                             <h2 className="mb-4 font-bold text-text">Enqueue a path</h2>
                             <div className="space-y-3">
                                 <PathBrowserField
