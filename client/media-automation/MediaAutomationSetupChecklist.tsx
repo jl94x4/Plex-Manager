@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronRight, ListChecks, X } from 'lucide-react';
+import { CheckCircle2, ChevronRight, CirclePause, ListChecks, X } from 'lucide-react';
 import type { MediaAutomationLibrary, MediaAutomationPipeline, MediaAutomationStatus } from './types';
 import {
     buildSetupChecklist,
@@ -34,6 +34,10 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
     );
     const complete = setupChecklistComplete(steps);
     const doneCount = steps.filter((step) => step.done && !step.warn).length;
+    const setupReadyExceptEncoding = steps
+        .filter((step) => step.id !== 'worker')
+        .every((step) => step.done && !step.warn);
+    const encodingPaused = (status.workerPaused ?? status.paused) !== false;
     const [dismissed, setDismissed] = useState(false);
 
     useEffect(() => {
@@ -46,6 +50,41 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
             setDismissed(false);
         }
     }, [complete, dismissed]);
+
+    // Paused + earlier setup done ⇒ treat as configured; show a reminder, not the checklist.
+    if (setupReadyExceptEncoding && encodingPaused) {
+        const queued = Number(status.queuedJobs);
+        const queuedLabel = Number.isFinite(queued) && queued > 0
+            ? `${queued} job${queued === 1 ? '' : 's'} waiting in queue`
+            : 'Jobs can still be queued and scanned';
+        return (
+            <section className={`${cardClass} border-amber-500/30 p-5`}>
+                <div className={`flex flex-col gap-4 ${compact ? '' : 'sm:flex-row sm:items-center sm:justify-between'}`}>
+                    <div className="min-w-0 flex items-start gap-3">
+                        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/15 text-amber-200">
+                            <CirclePause className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                            <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-300/90">
+                                Encoding paused
+                            </div>
+                            <h2 className="text-lg font-bold tracking-tight text-text">Paused (queue only)</h2>
+                            <p className="mt-1 text-sm leading-relaxed text-muted">
+                                Setup looks complete. {queuedLabel}. Start when you want encodes to run — nothing will rewrite media until then.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        className={primaryButtonClass}
+                        onClick={() => onAction('start-worker')}
+                    >
+                        Start encoding <ChevronRight className="h-4 w-4" />
+                    </button>
+                </div>
+            </section>
+        );
+    }
 
     if (dismissed && complete) return null;
 

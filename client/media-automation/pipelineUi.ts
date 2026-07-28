@@ -200,8 +200,8 @@ export const buildSetupChecklist = ({
     const pipelineWrites = enabledPipelines.some((pipeline) => pipeline.outputMode === 'copy' || pipeline.outputMode === 'replace');
     const globalDryRun = !!(status.dryRun || status.outputMode === 'dry-run');
     const hasSample = enabledPipelines.some((pipeline) => String(pipeline.samplePath || '').trim());
-    const workerRunning = ['running', 'online', 'healthy'].includes(String(status.workerState || status.state || '').toLowerCase())
-        && !status.paused;
+    const workerPaused = (status.workerPaused ?? status.paused) !== false;
+    const workerRunning = !workerPaused;
 
     return [
         {
