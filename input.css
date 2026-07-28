@@ -1181,3 +1181,47 @@ html.branded-skeleton .skeleton-base::after {
     background-color: rgb(var(--color-plex) / 0.08);
   }
 }
+
+@keyframes ma-live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgb(52 211 153 / 0.55); }
+  50% { opacity: 0.7; transform: scale(0.92); box-shadow: 0 0 0 8px rgb(52 211 153 / 0); }
+}
+
+@keyframes ma-meter-sheen {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(220%); }
+}
+
+.ma-live-dot {
+  animation: ma-live-pulse 1.6s ease-out infinite;
+}
+
+.ma-meter-fill {
+  position: relative;
+  overflow: hidden;
+  transition: width 0.85s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ma-meter-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.35), transparent);
+  animation: ma-meter-sheen 2.4s ease-in-out infinite;
+}
+
+.ma-gauge-arc {
+  transition: stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ma-live-dot,
+  .ma-meter-fill::after {
+    animation: none;
+  }
+  .ma-meter-fill,
+  .ma-gauge-arc {
+    transition: none;
+  }
+}
