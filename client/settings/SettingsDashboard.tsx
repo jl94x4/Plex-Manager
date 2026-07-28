@@ -1665,8 +1665,7 @@ export const SettingsDashboard: React.FC = () => {
 
                     {/* Desktop Sidebar Navigation — sticky within the main scroll area */}
                     <aside className="hidden md:flex md:flex-col w-72 shrink-0 sticky top-0 self-start glass-card nav-shell p-4 shadow-2xl z-10">
-                        <h1 className="text-2xl font-bold text-plex px-2 mb-3 shrink-0">Settings</h1>
-                        <div className="mt-2.5">
+                        <div>
                         {visibleTabGroups.length === 0 ? (
                             <p className="text-xs text-muted px-2 py-2">No settings sections found.</p>
                         ) : (
