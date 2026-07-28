@@ -211,6 +211,7 @@ export type MediaAutomationStatus = {
     pauseWhenStreamingEnabled?: boolean;
     pauseWhenStreamingLanes?: 'gpu' | 'all';
     arrRescanEnabled?: boolean;
+    scannerRefreshEnabled?: boolean;
     plexRescanEnabled?: boolean;
     minSavingsPercent?: number;
     minReclaimGb?: number;
@@ -517,7 +518,9 @@ export type MediaAutomationSettingsConfig = {
     pauseWhenStreamingLanes?: 'gpu' | 'all';
     /** Ask Sonarr/Radarr to rescan the affected item after replace or delivery. */
     arrRescanEnabled?: boolean;
-    /** Ask Plex to partially refresh the parent folder after replace, copy, or delivery. */
+    /** Queue Scanner parent-folder refresh after a real copy/replace into a library root (not Output/). */
+    scannerRefreshEnabled?: boolean;
+    /** Ask Plex to partially refresh / Analyze after replace, copy, or delivery. */
     plexRescanEnabled?: boolean;
     /** 0 disables. Discard outputs / skip enqueue when estimated savings is below this %. */
     minSavingsPercent?: number;
@@ -580,6 +583,7 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     pauseWhenStreamingEnabled: false,
     pauseWhenStreamingLanes: 'gpu',
     arrRescanEnabled: false,
+    scannerRefreshEnabled: false,
     plexRescanEnabled: false,
     minSavingsPercent: 0,
     minReclaimGb: 0,

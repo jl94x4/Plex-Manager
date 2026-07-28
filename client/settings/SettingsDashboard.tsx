@@ -1162,6 +1162,7 @@ export const SettingsDashboard: React.FC = () => {
                     pauseWhenStreamingEnabled: saved.pauseWhenStreamingEnabled === true,
                     pauseWhenStreamingLanes: saved.pauseWhenStreamingLanes === 'all' ? 'all' : 'gpu',
                     arrRescanEnabled: saved.arrRescanEnabled === true,
+                    scannerRefreshEnabled: saved.scannerRefreshEnabled === true,
                     plexRescanEnabled: saved.plexRescanEnabled === true,
                     minSavingsPercent: Math.min(95, Math.max(0, Math.round(Number(saved.minSavingsPercent) || 0))),
                     minReclaimGb: Math.min(1000, Math.max(0, Number(saved.minReclaimGb) || 0)),

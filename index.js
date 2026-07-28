@@ -18583,6 +18583,51 @@ const collectScannerPathRewrites = (scanner) => {
 };
 
 /**
+ * Only queue Scanner when the finished file lives under a library root (Plex-visible),
+ * never under a library Output/ staging folder.
+ */
+const resolveScannerRefreshFilePath = async (event = {}) => {
+    const mode = String(event.outputMode || '').toLowerCase();
+    if (mode !== 'copy' && mode !== 'replace') return null;
+
+    let libraries = [];
+    try {
+        libraries = await mediaAutomationService?.libraries?.list?.() || [];
+    } catch {
+        libraries = [];
+    }
+    const roots = libraries
+        .filter((library) => library?.enabled !== false)
+        .map((library) => path.resolve(String(library.rootPath || '').trim()))
+        .filter(Boolean);
+    const outputDirs = libraries
+        .map((library) => String(library.outputPath || '').trim())
+        .filter(Boolean)
+        .map((entry) => path.resolve(entry));
+
+    const under = (candidate, root) => {
+        const abs = path.resolve(String(candidate || ''));
+        const base = path.resolve(String(root || ''));
+        if (!abs || !base) return false;
+        return abs === base || abs.startsWith(`${base}${path.sep}`);
+    };
+
+    // Prefer the library-side file: replace → original/final; copy → final only if it landed in-library.
+    const candidates = mode === 'replace'
+        ? [event.finalPath, event.sourcePath]
+        : [event.finalPath, event.deliveredPath];
+
+    for (const candidate of candidates) {
+        const filePath = String(candidate || '').trim();
+        if (!filePath) continue;
+        if (outputDirs.some((dir) => under(filePath, dir))) continue;
+        if (!roots.some((root) => under(filePath, root))) continue;
+        return filePath;
+    }
+    return null;
+};
+
+/**
  * Same path Vik proved works: refresh the parent (season) folder through Scanner,
  * with Sonarr/Plex rewrites applied, processed immediately (no waiting on the UI).
  */
@@ -18712,24 +18757,31 @@ mediaAutomationService = createMediaAutomation({
             }
         }
 
+        if (runtime.scannerRefreshEnabled) {
+            try {
+                const libraryFile = await resolveScannerRefreshFilePath(event);
+                if (!libraryFile) {
+                    log('[media-automation] Scanner refresh skipped: finished file is not under a library root (Output/completed paths are ignored)');
+                } else {
+                    const queued = await enqueueInstantLibraryRefresh(config, libraryFile, {
+                        reason: 'Media Automation library write — Scanner refresh',
+                        title: path.basename(String(libraryFile)),
+                    });
+                    if (!queued.skipped) {
+                        log(`[media-automation] Scanner refresh queued: ${(queued.folders || []).join(', ')}`);
+                    } else if (queued.reason && queued.reason !== 'scanner-disabled') {
+                        log(`[media-automation] Scanner refresh skipped: ${queued.reason}`);
+                    }
+                }
+            } catch (error) {
+                log(`[media-automation] Scanner refresh failed: ${error.message}`);
+            }
+        }
+
         if (runtime.plexRescanEnabled) {
             try {
                 const targetPath = event.deliveredPath || event.finalPath || event.sourcePath;
                 if (!targetPath) return;
-                // Instant season-folder refresh via Scanner pipeline (proved to update HEVC after same-name Replace).
-                try {
-                    const queued = await enqueueInstantLibraryRefresh(config, targetPath, {
-                        reason: 'Media Automation replace/copy — instant library refresh',
-                        title: path.basename(String(targetPath)),
-                    });
-                    if (!queued.skipped) {
-                        log(`[media-automation] Instant library refresh queued: ${(queued.folders || []).join(', ')}`);
-                    } else if (queued.reason && queued.reason !== 'scanner-disabled') {
-                        log(`[media-automation] Instant library refresh skipped: ${queued.reason}`);
-                    }
-                } catch (error) {
-                    log(`[media-automation] Instant library refresh failed: ${error.message}`);
-                }
                 const result = await triggerPlexRescanForPath(config, targetPath);
                 if (result?.skipped && !(result?.analyzed || []).length) {
                     log(`[media-automation] Plex refresh skipped for ${path.basename(String(targetPath))}: ${result.reason || 'unknown'}`);
@@ -18855,8 +18907,9 @@ mediaAutomationService = createMediaAutomation({
         try {
             const config = await loadFile(CONFIG_PATH, {});
             if (!config.scannerEnabled) return;
-            // Direct Plex refresh already handled in onMediaCommitted when this is on.
-            if (mediaAutomationRuntimeConfig(config).plexRescanEnabled) return;
+            const runtime = mediaAutomationRuntimeConfig(config);
+            // Dedicated toggle + library-root gate live in onMediaCommitted.
+            if (runtime.plexRescanEnabled || runtime.scannerRefreshEnabled) return;
             await enqueueScans([{
                 folder: outputPath,
                 priority: 10,

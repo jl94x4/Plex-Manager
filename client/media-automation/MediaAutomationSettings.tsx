@@ -365,8 +365,15 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     disabled={!enabled}
                 />
                 <SettingsToggleRow
+                    title="Queue Scanner refresh after library writes"
+                    description="After Copy or Replace into a library root (not your Output folder), queue an instant Scanner refresh for that season/parent folder with your Scanner path rewrites. Leave off if completed files live outside Plex library paths."
+                    checked={config.scannerRefreshEnabled === true}
+                    onChange={(scannerRefreshEnabled) => update({ scannerRefreshEnabled })}
+                    disabled={!enabled}
+                />
+                <SettingsToggleRow
                     title="Refresh Plex after changes"
-                    description="After Replace/Copy (or delivery) succeeds, instantly refresh the parent season/folder through Scanner (same path rewrite as a manual trigger), then Analyze the item so codec/bitrate metadata updates when the filename stays the same. Uses your portal Plex URL/token and Scanner rewrites."
+                    description="After Replace/Copy (or delivery) succeeds, partially refresh the parent folder and Analyze the item so codec/bitrate metadata updates when the filename stays the same. Uses your portal Plex URL/token (does not queue Scanner)."
                     checked={config.plexRescanEnabled === true}
                     onChange={(plexRescanEnabled) => update({ plexRescanEnabled })}
                     disabled={!enabled}
