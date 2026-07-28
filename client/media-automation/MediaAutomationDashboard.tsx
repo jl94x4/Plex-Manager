@@ -532,6 +532,7 @@ const historyEntryToJobClient = (entry: MediaAutomationHistoryEntry): MediaAutom
         finishedAt: entry.finishedAt || null,
         completedAt: entry.finishedAt || null,
         error: entry.error || null,
+        archived: true,
         metadata: {
             tags: Array.isArray(entry.tags) ? entry.tags : [],
             fromHistory: true,
@@ -1332,24 +1333,31 @@ export const MediaAutomationDashboard: React.FC = () => {
         if (activityPage > activityPageCount) setActivityPage(activityPageCount);
     }, [activityPage, activityPageCount]);
 
-    const openJobDetail = async (jobId: string | number) => {
+    const openJobDetail = async (
+        jobId: string | number,
+        options: { historyEntry?: MediaAutomationHistoryEntry | null } = {},
+    ) => {
         setSelectedJobId(jobId);
         setJobDetailBusy(true);
         const fromJobs = jobs.find((entry) => String(entry.id) === String(jobId)) || null;
-        const fromHistory = historyEntries.find((entry) => String(entry.id) === String(jobId)) || null;
+        const fromHistory = options.historyEntry
+            || historyEntries.find((entry) => String(entry.id) === String(jobId))
+            || null;
         const historyAsJob = fromHistory ? historyEntryToJobClient(fromHistory) : null;
-        if (fromJobs) setSelectedJob(fromJobs);
-        else if (historyAsJob) setSelectedJob(historyAsJob);
+        const initial = fromJobs || historyAsJob;
+        if (initial) setSelectedJob(initial);
         try {
             const [job, logs] = await Promise.all([
                 mediaAutomationApi.getJob(jobId).catch(() => null),
                 mediaAutomationApi.jobLogs(jobId).catch(() => [] as MediaAutomationActivity[]),
             ]);
-            setSelectedJob(job || fromJobs || historyAsJob || null);
+            // Live queue wins; archived/history payloads fill gaps after prune.
+            const resolved = job && job.archived !== true ? job : (job || initial || null);
+            setSelectedJob(resolved);
             setJobLogs(logs);
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load job details', 'error');
-            setSelectedJob(fromJobs || historyAsJob || null);
+            setSelectedJob(initial || null);
             setJobLogs([]);
         } finally {
             setJobDetailBusy(false);
@@ -3235,7 +3243,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     <button
                                         type="button"
                                         className={`${buttonClass} text-xs`}
-                                        onClick={() => void openJobDetail(entry.id)}
+                                        onClick={() => void openJobDetail(entry.id, { historyEntry: entry })}
                                     >
                                         Open job detail
                                     </button>
@@ -3375,23 +3383,27 @@ export const MediaAutomationDashboard: React.FC = () => {
                             <div className="space-y-5 p-5">
                                 {jobDetailBusy && !selectedJob ? (
                                     <div className="flex justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-plex" /></div>
+                                ) : !selectedJob ? (
+                                    <p className="rounded-lg border border-border/60 bg-white/[0.03] p-4 text-sm text-muted">
+                                        This job is no longer in the live queue and no history snapshot was found. It may have been pruned before history was recorded.
+                                    </p>
                                 ) : (
                                     <>
                                         <div className="flex flex-wrap items-center gap-2">
                                             <StatusPill
                                                 value={
-                                                    selectedJob && isCancelPendingJob(selectedJob)
+                                                    isCancelPendingJob(selectedJob)
                                                         ? 'cancelling'
                                                         : (
                                                             jobIsDryRun(selectedJob)
-                                                            && ['completed', 'succeeded', 'success'].includes(String(selectedJob?.state || selectedJob?.status || '').toLowerCase())
+                                                            && ['completed', 'succeeded', 'success'].includes(String(selectedJob.state || selectedJob.status || '').toLowerCase())
                                                                 ? 'dry-run'
-                                                                : (selectedJob?.phase || selectedJob?.state || selectedJob?.status)
+                                                                : (selectedJob.phase || selectedJob.state || selectedJob.status)
                                                         )
                                                 }
                                             />
-                                            {selectedJob && <HardwareBadge job={selectedJob} />}
-                                            {selectedJob?.priority != null && (
+                                            <HardwareBadge job={selectedJob} />
+                                            {selectedJob.priority != null && (
                                                 <label className="flex items-center gap-2 text-xs text-muted">
                                                     Priority
                                                     {['queued', 'running'].includes(String(selectedJob.state || selectedJob.status || '').toLowerCase()) ? (
