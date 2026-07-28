@@ -676,17 +676,40 @@ const statusTone = (status?: string) => {
     return 'border-white/10 bg-white/5 text-muted';
 };
 
-const StatusPill: React.FC<{ value?: string; size?: 'sm' | 'md' }> = ({ value, size = 'sm' }) => (
-    <span
-        className={`inline-flex items-center justify-center border font-bold uppercase tracking-wide ${
-            size === 'md'
-                ? 'rounded-xl px-3 py-2 text-sm font-semibold'
-                : 'rounded-full px-2.5 py-1 text-[11px]'
-        } ${statusTone(value)}`}
-    >
-        {value || 'unknown'}
-    </span>
-);
+const StatusPill: React.FC<{ value?: string; size?: 'sm' | 'md' }> = ({ value, size = 'sm' }) => {
+    const label = value || 'unknown';
+    const completed = ['completed', 'succeeded', 'success', 'dry-run', 'dry run'].some((key) => (
+        String(label).toLowerCase().includes(key)
+    ));
+    return (
+        <span
+            className={`inline-flex items-center justify-center gap-1 border font-bold uppercase tracking-wide ${
+                size === 'md'
+                    ? 'rounded-xl px-3 py-2 text-sm font-semibold'
+                    : 'rounded-full px-2.5 py-1 text-[11px]'
+            } ${statusTone(value)}`}
+        >
+            {completed ? <CheckCircle2 className={size === 'md' ? 'h-4 w-4' : 'h-3 w-3'} /> : null}
+            {label}
+        </span>
+    );
+};
+
+/** Soft left rail so finished jobs read as done / failed / cancelled at a glance. */
+const terminalJobCardTone = (job: MediaAutomationJob) => {
+    if (!isTerminalJob(job)) return '';
+    const state = jobStateValue(job);
+    if (jobIsDryRun(job) && ['completed', 'succeeded', 'success'].includes(state)) {
+        return 'border-l-2 border-l-amber-400/70 bg-amber-500/[0.04]';
+    }
+    if (['failed', 'error'].includes(state)) {
+        return 'border-l-2 border-l-red-400/70 bg-red-500/[0.05]';
+    }
+    if (['cancelled', 'canceled'].includes(state)) {
+        return 'border-l-2 border-l-white/25 bg-white/[0.02]';
+    }
+    return 'border-l-2 border-l-emerald-400/80 bg-emerald-500/[0.06]';
+};
 
 const StatCard: React.FC<{
     label: string;
@@ -2469,7 +2492,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 const canSkip = state === 'queued' && !cancelPending;
                                 const selected = selectedJobIds.has(String(jobId));
                                 return (
-                                    <article key={String(jobId)} className={`${listCardClass} cursor-pointer p-4 ${selected ? 'border-plex/50' : ''}`} onClick={() => openJobDetail(jobId)}>
+                                    <article key={String(jobId)} className={`${listCardClass} cursor-pointer p-4 ${selected ? 'border-plex/50' : ''} ${terminalJobCardTone(job)}`} onClick={() => openJobDetail(jobId)}>
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div className="flex min-w-0 gap-3">
                                                 <input
