@@ -6,6 +6,7 @@ import {
     ChevronRight,
     Clock3,
     Copy,
+    Cpu,
     FileMinus2,
     FolderInput,
     Layers,
@@ -25,6 +26,7 @@ import {
     scannerActionStyles,
     sourceAppIconUrl,
     sourceAppKey,
+    type ScannerSourceAppKey,
 } from './eventMeta';
 import { ScannerSourceBadge } from './ScannerSourceBadge';
 
@@ -34,7 +36,7 @@ type ScannerStatus = {
     remaining: number;
     processed: number;
     targetCount: number;
-    configuredSources?: Array<'sonarr' | 'radarr' | 'lidarr'>;
+    configuredSources?: Array<'sonarr' | 'radarr' | 'lidarr' | 'media-automation'>;
     showWebhooks?: boolean;
     showManualPath?: boolean;
     webhookPaths: {
@@ -42,6 +44,7 @@ type ScannerStatus = {
         sonarr: string[];
         radarr: string[];
         lidarr: string[];
+        mediaAutomation?: string[];
     };
 };
 
@@ -79,7 +82,12 @@ const SOURCE_LABELS: Record<string, string> = {
     sonarr: 'Sonarr',
     radarr: 'Radarr',
     lidarr: 'Lidarr',
+    'media-automation': 'Media Automation',
 };
+const CONFIGURED_SOURCE_KEYS = new Set<ScannerSourceAppKey>(['sonarr', 'radarr', 'lidarr', 'media-automation']);
+const isConfiguredSourceKey = (source: string): source is Exclude<ScannerSourceAppKey, '' | 'manual'> => (
+    CONFIGURED_SOURCE_KEYS.has(source as ScannerSourceAppKey)
+);
 
 const readManualPathCollapsed = () => {
     try {
@@ -96,9 +104,9 @@ const ActionIcon: React.FC<{ action?: string; className?: string }> = ({ action,
     if (key === 'rename') return <Wand2 className={className} />;
     if (key === 'manual') return <FolderInput className={className} />;
     if (key === 'import') return <FolderInput className={className} />;
+    if (key === 'refresh') return <Radar className={className} />;
     return <Radar className={className} />;
 };
-
 const StatCard: React.FC<{
     label: string;
     value: React.ReactNode;
@@ -171,9 +179,7 @@ export const ScannerDashboard: React.FC = () => {
         const configured = status?.configuredSources || [];
         const observed = log
             .map((entry) => sourceAppKey(entry.source))
-            .filter((source): source is 'sonarr' | 'radarr' | 'lidarr' => (
-                source === 'sonarr' || source === 'radarr' || source === 'lidarr'
-            ));
+            .filter(isConfiguredSourceKey);
         return [...new Set([...configured, ...observed])];
     }, [status?.configuredSources, log]);
     const activitySourceOptions = useMemo(() => [
@@ -189,6 +195,8 @@ export const ScannerDashboard: React.FC = () => {
                     loading="lazy"
                     referrerPolicy="no-referrer"
                 />
+            ) : source === 'media-automation' ? (
+                <Cpu className="w-4 h-4 shrink-0 text-plex" />
             ) : undefined,
         })),
     ], [configuredSources]);
@@ -208,7 +216,7 @@ export const ScannerDashboard: React.FC = () => {
     useEffect(() => {
         if (
             activitySource !== 'all'
-            && !configuredSources.includes(activitySource as 'sonarr' | 'radarr' | 'lidarr')
+            && !configuredSources.includes(activitySource as Exclude<ScannerSourceAppKey, '' | 'manual'>)
         ) {
             setActivitySource('all');
         }
@@ -262,6 +270,7 @@ export const ScannerDashboard: React.FC = () => {
         ...(status?.webhookPaths?.sonarr || ['/triggers/sonarr']).map((p) => ({ label: 'Sonarr', key: 'sonarr', tone: 'text-sky-300', path: p })),
         ...(status?.webhookPaths?.radarr || ['/triggers/radarr']).map((p) => ({ label: 'Radarr', key: 'radarr', tone: 'text-amber-300', path: p })),
         ...(status?.webhookPaths?.lidarr || ['/triggers/lidarr']).map((p) => ({ label: 'Lidarr', key: 'lidarr', tone: 'text-violet-300', path: p })),
+        ...(status?.webhookPaths?.mediaAutomation || []).map((p) => ({ label: 'Media Automation', key: 'media-automation', tone: 'text-plex', path: p })),
         { label: 'Manual', key: 'manual', tone: 'text-emerald-300', path: status?.webhookPaths?.manual || '/triggers/manual' },
     ];
 

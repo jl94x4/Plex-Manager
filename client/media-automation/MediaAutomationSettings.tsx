@@ -366,7 +366,7 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                 />
                 <SettingsToggleRow
                     title="Refresh Plex after changes"
-                    description="After Replace/Copy (or delivery) succeeds, partially refresh the parent folder and Analyze the item so codec/bitrate metadata updates (needed when the filename stays the same). Uses your portal Plex URL/token."
+                    description="After Replace/Copy (or delivery) succeeds, instantly refresh the parent season/folder through Scanner (same path rewrite as a manual trigger), then Analyze the item so codec/bitrate metadata updates when the filename stays the same. Uses your portal Plex URL/token and Scanner rewrites."
                     checked={config.plexRescanEnabled === true}
                     onChange={(plexRescanEnabled) => update({ plexRescanEnabled })}
                     disabled={!enabled}

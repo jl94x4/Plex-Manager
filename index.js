@@ -18564,6 +18564,53 @@ const triggerArrRescanForPath = async (config, filePath) => {
     return results;
 };
 
+const collectScannerPathRewrites = (scanner) => {
+    const rules = [];
+    const pushRows = (rows) => {
+        for (const row of rows || []) {
+            for (const rule of Array.isArray(row?.rewrite) ? row.rewrite : []) {
+                const from = String(rule?.from || '').trim();
+                if (!from) continue;
+                rules.push({ from, to: String(rule?.to || '') });
+            }
+        }
+    };
+    pushRows(scanner?.targets?.plex);
+    pushRows(scanner?.triggers?.sonarr);
+    pushRows(scanner?.triggers?.radarr);
+    pushRows(scanner?.triggers?.lidarr);
+    return rules;
+};
+
+/**
+ * Same path Vik proved works: refresh the parent (season) folder through Scanner,
+ * with Sonarr/Plex rewrites applied, processed immediately (no waiting on the UI).
+ */
+const enqueueInstantLibraryRefresh = async (config, filePath, {
+    reason = 'Media Automation completed',
+    title = null,
+} = {}) => {
+    if (!config.scannerEnabled) return { skipped: true, reason: 'scanner-disabled' };
+    const folder = path.dirname(String(filePath || '').trim());
+    if (!folder || folder === '.' || folder === '/' || folder === '\\') {
+        return { skipped: true, reason: 'missing-folder' };
+    }
+    const scanner = normalizeScannerConfig(config.scanner, getDefaultScannerConfig());
+    const scans = buildScansFromPaths([folder], {
+        priority: 20,
+        source: 'media-automation',
+        rewrite: collectScannerPathRewrites(scanner),
+        eventType: 'Processed',
+        action: 'refresh',
+        reason,
+        title: title || path.basename(String(filePath || '')),
+    });
+    if (!scans.length) return { skipped: true, reason: 'no-scans' };
+    await enqueueScans(scans);
+    void processOne(scannerPortalConfig(config), scanner);
+    return { skipped: false, folders: scans.map((entry) => entry.folder) };
+};
+
 const triggerPlexRescanForPath = async (config, filePath) => {
     const targetPath = String(filePath || '').trim();
     if (!targetPath) return { skipped: true, reason: 'missing-path' };
@@ -18571,26 +18618,37 @@ const triggerPlexRescanForPath = async (config, filePath) => {
     const token = String(config.plexToken || '').trim();
     if (!url || !token) return { skipped: true, reason: 'plex-not-configured' };
     const scanner = normalizeScannerConfig(config.scanner, getDefaultScannerConfig());
-    const plexRows = Array.isArray(scanner?.targets?.plex) ? scanner.targets.plex : [];
-    const rewriteRow = plexRows.find((entry) => entry?.enabled !== false && Array.isArray(entry?.rewrite) && entry.rewrite.length)
-        || plexRows.find((entry) => Array.isArray(entry?.rewrite) && entry.rewrite.length)
-        || null;
+    const rewrites = collectScannerPathRewrites(scanner);
     const target = createPlexTarget({
         url,
         token,
-        rewrite: rewriteRow?.rewrite || [],
+        rewrite: rewrites,
     });
+    // Season/show parent folder — same scope as a successful Scanner manual trigger.
     const folder = path.dirname(targetPath);
     const refresh = await target.scan(folder);
-    // Same-path Replace keeps the filename — folder refresh alone often leaves stale codec metadata.
-    // Analyze the item so Media Info updates (e.g. H264 → HEVC) like a manual Analyze in Plex.
-    // Wait briefly after refresh: Plex lookup can lag, and ?file= responses often omit Part.file.
+    // Same-path Replace keeps the filename — folder refresh alone can still leave stale codec metadata.
+    // Analyze the episode/movie leaf and wait until Plex Media Info matches ffprobe when possible.
+    let expectedVideoCodec = null;
+    try {
+        const runtime = mediaAutomationRuntimeConfig(config);
+        const probe = await probeMedia(targetPath, {
+            ffprobePath: runtime.ffprobePath || 'ffprobe',
+            timeoutMs: 30_000,
+        });
+        const video = (probe.streams || []).find((stream) => stream.codec_type === 'video');
+        expectedVideoCodec = String(video?.codec_name || '').trim() || null;
+    } catch {
+        expectedVideoCodec = null;
+    }
     let analyze = null;
     try {
         analyze = await target.analyzeFile(targetPath, {
-            initialDelayMs: 2500,
-            retries: 4,
+            initialDelayMs: 3000,
+            retries: 5,
             retryDelayMs: 2500,
+            expectedVideoCodec,
+            verifyTimeoutMs: 60_000,
         });
     } catch (error) {
         analyze = { skipped: true, reason: error.message || 'analyze-failed', analyzed: [] };
@@ -18599,6 +18657,7 @@ const triggerPlexRescanForPath = async (config, filePath) => {
         ...refresh,
         analyze,
         analyzed: analyze?.analyzed || [],
+        expectedVideoCodec,
     };
 };
 
@@ -18657,6 +18716,20 @@ mediaAutomationService = createMediaAutomation({
             try {
                 const targetPath = event.deliveredPath || event.finalPath || event.sourcePath;
                 if (!targetPath) return;
+                // Instant season-folder refresh via Scanner pipeline (proved to update HEVC after same-name Replace).
+                try {
+                    const queued = await enqueueInstantLibraryRefresh(config, targetPath, {
+                        reason: 'Media Automation replace/copy — instant library refresh',
+                        title: path.basename(String(targetPath)),
+                    });
+                    if (!queued.skipped) {
+                        log(`[media-automation] Instant library refresh queued: ${(queued.folders || []).join(', ')}`);
+                    } else if (queued.reason && queued.reason !== 'scanner-disabled') {
+                        log(`[media-automation] Instant library refresh skipped: ${queued.reason}`);
+                    }
+                } catch (error) {
+                    log(`[media-automation] Instant library refresh failed: ${error.message}`);
+                }
                 const result = await triggerPlexRescanForPath(config, targetPath);
                 if (result?.skipped && !(result?.analyzed || []).length) {
                     log(`[media-automation] Plex refresh skipped for ${path.basename(String(targetPath))}: ${result.reason || 'unknown'}`);
@@ -18665,7 +18738,17 @@ mediaAutomationService = createMediaAutomation({
                     const analyzedKeys = (result?.analyzed || []).map((entry) => entry.ratingKey).filter(Boolean);
                     log(`[media-automation] Plex refresh requested for ${path.dirname(String(targetPath))}${libraries.length ? ` (${libraries.join(', ')})` : ''}`);
                     if (analyzedKeys.length) {
-                        log(`[media-automation] Plex analyze requested for ${path.basename(String(targetPath))} (ratingKey ${analyzedKeys.join(', ')})`);
+                        const codecBits = (result?.analyzed || [])
+                            .map((entry) => {
+                                if (!entry?.ratingKey) return null;
+                                if (entry.codecMatched === true) return `${entry.ratingKey}:${entry.videoCodec || 'ok'}`;
+                                if (entry.codecMatched === false) {
+                                    return `${entry.ratingKey}:still-${entry.videoCodec || 'unknown'}(want ${result.expectedVideoCodec || '?'})`;
+                                }
+                                return String(entry.ratingKey);
+                            })
+                            .filter(Boolean);
+                        log(`[media-automation] Plex analyze requested for ${path.basename(String(targetPath))} (${codecBits.join(', ')})`);
                     } else if (result?.analyze?.skipped) {
                         const candidates = Array.isArray(result.analyze.candidates) && result.analyze.candidates.length
                             ? ` (tried ${result.analyze.candidates.join(' | ')})`
@@ -19139,6 +19222,7 @@ app.get('/api/scanner/status', requireAdmin, requireScanner, async (req, res) =>
                 .map((instance) => String(instance.type || '').toLowerCase())
                 .filter((type) => ['sonarr', 'radarr', 'lidarr'].includes(type))
         )];
+        if (config.mediaAutomationEnabled) configuredSources.push('media-automation');
         res.json({
             enabled: true,
             minimumAge: scanner.minimumAge,
@@ -19173,6 +19257,9 @@ app.get('/api/scanner/status', requireAdmin, requireScanner, async (req, res) =>
                 sonarr: (scanner.triggers.sonarr || []).map((t) => `/triggers/${t.name}`),
                 radarr: (scanner.triggers.radarr || []).map((t) => `/triggers/${t.name}`),
                 lidarr: (scanner.triggers.lidarr || []).map((t) => `/triggers/${t.name}`),
+                mediaAutomation: config.mediaAutomationEnabled
+                    ? ['/triggers/media-automation/manual']
+                    : [],
             },
         });
     } catch (e) {

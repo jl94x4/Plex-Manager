@@ -76,6 +76,12 @@ export const scannerActionStyles = (action?: string, isUpgrade?: boolean): {
                 className: 'bg-sky-500/15 text-sky-300 border-sky-400/30',
                 iconTone: 'text-sky-300',
             };
+        case 'refresh':
+            return {
+                label: 'Refresh',
+                className: 'bg-plex/15 text-plex border-plex/30',
+                iconTone: 'text-plex',
+            };
         default:
             return {
                 label: 'Refresh',
@@ -112,6 +118,7 @@ export const sourceAppLabel = (source?: string) => {
     if (/^radarr$/i.test(head)) return 'Radarr';
     if (/^lidarr$/i.test(head)) return 'Lidarr';
     if (/^manual/i.test(head)) return 'Manual';
+    if (/^media-automation$/i.test(head) || /^media_automation$/i.test(head)) return 'Automation';
     return head;
 };
 
@@ -122,19 +129,22 @@ const SOURCE_APP_ICONS: Record<string, string> = {
     lidarr: 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/lidarr.svg',
 };
 
-export const sourceAppKey = (source?: string): 'sonarr' | 'radarr' | 'lidarr' | 'manual' | '' => {
+export type ScannerSourceAppKey = 'sonarr' | 'radarr' | 'lidarr' | 'manual' | 'media-automation' | '';
+
+export const sourceAppKey = (source?: string): ScannerSourceAppKey => {
     if (!source) return '';
     const head = String(source).split(':')[0].toLowerCase();
     if (head === 'sonarr') return 'sonarr';
     if (head === 'radarr') return 'radarr';
     if (head === 'lidarr') return 'lidarr';
+    if (head === 'media-automation' || head === 'media_automation') return 'media-automation';
     if (head.startsWith('manual')) return 'manual';
     return '';
 };
 
 export const sourceAppIconUrl = (source?: string): string | null => {
     const key = sourceAppKey(source);
-    if (!key || key === 'manual') return null;
+    if (!key || key === 'manual' || key === 'media-automation') return null;
     return SOURCE_APP_ICONS[key] || null;
 };
 

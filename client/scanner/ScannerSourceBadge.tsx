@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderInput } from 'lucide-react';
+import { Cpu, FolderInput } from 'lucide-react';
 import { sourceAppIconUrl, sourceAppKey, sourceAppLabel } from './eventMeta';
 
 type Props = {
@@ -25,6 +25,8 @@ export const ScannerSourceBadge: React.FC<Props> = ({ source, className = '' }) 
                 />
             ) : key === 'manual' ? (
                 <FolderInput className="w-3.5 h-3.5 shrink-0 text-sky-300/90" />
+            ) : key === 'media-automation' ? (
+                <Cpu className="w-3.5 h-3.5 shrink-0 text-plex" />
             ) : null}
             {label}
         </span>
