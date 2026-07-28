@@ -651,6 +651,17 @@ const jobMatchesQueueFilter = (job: MediaAutomationJob, filterId: QueueFilterId)
     return false;
 };
 
+/** Lower = higher in the queue list. Completed sinks to the bottom on All. */
+const queueListSortRank = (job: MediaAutomationJob) => {
+    const state = jobStateValue(job);
+    if (ACTIVE_QUEUE_STATES.has(state) || job.cancelRequested) return 0;
+    if (state === 'queued' || state === 'pending' || state === 'waiting') return 1;
+    if (FAILED_QUEUE_STATES.has(state)) return 2;
+    if (jobIsDryRun(job)) return 3;
+    if (COMPLETED_QUEUE_STATES.has(state)) return 4;
+    return 3;
+};
+
 const readActivityPageSize = (): typeof ACTIVITY_PAGE_SIZE_OPTIONS[number] => {
     try {
         const raw = Number(localStorage.getItem(ACTIVITY_PAGE_SIZE_KEY));
@@ -1361,14 +1372,8 @@ export const MediaAutomationDashboard: React.FC = () => {
             const haystack = `${job.path || ''} ${job.sourcePath || ''} ${job.pipelineName || ''} ${job.id} ${(job as { libraryName?: string }).libraryName || ''}`.toLowerCase();
             return haystack.includes(query);
         });
-        // Keep running encodes visible first whenever Active is in the filter set.
-        if (activeFilters.has('active')) {
-            list.sort((left, right) => {
-                const leftActive = ACTIVE_QUEUE_STATES.has(jobStateValue(left)) ? 0 : 1;
-                const rightActive = ACTIVE_QUEUE_STATES.has(jobStateValue(right)) ? 0 : 1;
-                return leftActive - rightActive;
-            });
-        }
+        // Active → queued → failed → dry-run → completed (completed stays at the bottom on All).
+        list.sort((left, right) => queueListSortRank(left) - queueListSortRank(right));
         return list;
     }, [jobs, queueFilters, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter]);
 
