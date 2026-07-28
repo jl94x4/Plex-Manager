@@ -9867,11 +9867,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         const badgeCount = options.badgeCount || 0;
         const baseClass = options.mobile
             ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
-            : `flex items-center gap-2.5 px-3 py-2 no-underline rounded-lg transition-all text-sm font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
+            : `flex items-center gap-2.5 px-3 py-2 no-underline rounded-lg transition-all text-[15px] font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
 
         if (item.href) {
             return (
-                <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : 'flex items-center gap-2.5 px-3 py-2 text-muted no-underline rounded-lg transition-all text-sm font-medium hover:bg-white/5 hover:text-text'}>
+                <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : 'flex items-center gap-2.5 px-3 py-2 text-muted no-underline rounded-lg transition-all text-[15px] font-medium hover:bg-white/5 hover:text-text'}>
                     <Icon className="w-5 h-5 flex-shrink-0" /> {label}
                 </a>
             );
