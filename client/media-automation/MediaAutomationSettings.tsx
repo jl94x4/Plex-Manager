@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Clock3, Cpu, FolderSearch, Gauge, Minus, Percent, PlayCircle, Plus, Radar, Server, ShieldCheck, Tags } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
@@ -11,6 +11,12 @@ import type {
 } from './types';
 import { emptyDeliveryTarget, emptyWorkerGroup } from './types';
 import { portalUrl } from '../shared/basePath';
+import {
+    readSystemMetricsRefreshMs,
+    SYSTEM_METRICS_REFRESH_OPTIONS,
+    writeSystemMetricsRefreshMs,
+    type SystemMetricsRefreshMs,
+} from './systemMetricsRefresh';
 
 type Props = {
     enabled: boolean;
@@ -121,6 +127,12 @@ export const MediaAutomationSettings: React.FC<Props> = ({
     config,
     onConfigChange,
 }) => {
+    const [systemMetricsRefreshMs, setSystemMetricsRefreshMs] = useState<SystemMetricsRefreshMs>(() => readSystemMetricsRefreshMs());
+
+    useEffect(() => {
+        setSystemMetricsRefreshMs(readSystemMetricsRefreshMs());
+    }, []);
+
     const update = (patch: Partial<MediaAutomationSettingsConfig>) => onConfigChange({ ...config, ...patch });
     const setConcurrency = (lane: 'cpu' | 'gpu', value: number) => {
         const next = {
@@ -208,6 +220,25 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     disabled={!enabled}
                     border={false}
                 />
+                <div className="border-t border-white/5 pt-4">
+                    <div className="flex items-center gap-2">
+                        <Gauge className="h-4 w-4 text-plex" />
+                        <h4 className="font-bold text-text">System metrics refresh</h4>
+                    </div>
+                    <p className="mt-1 text-sm text-muted">
+                        How often Media Automation → System polls CPU, memory, and GPU. Maximum (1 ms) refreshes as fast as the host can respond.
+                    </p>
+                    <div className="mt-3 max-w-sm">
+                        <CustomSelect
+                            value={String(systemMetricsRefreshMs)}
+                            onChange={(value) => setSystemMetricsRefreshMs(writeSystemMetricsRefreshMs(Number(value)))}
+                            options={SYSTEM_METRICS_REFRESH_OPTIONS.map((option) => ({
+                                value: String(option.value),
+                                label: option.label,
+                            }))}
+                        />
+                    </div>
+                </div>
             </section>
 
             <section className="glass-card-sm p-5 space-y-4">

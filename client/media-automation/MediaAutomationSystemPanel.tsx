@@ -1,11 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Cpu, Gauge, Loader2, MemoryStick, RefreshCw, ServerCog, Activity } from 'lucide-react';
+import { CustomSelect } from '../shared/ui';
 import { mediaAutomationApi } from './api';
 import type { MediaAutomationHostMetrics } from './types';
+import {
+    formatSystemMetricsRefreshLabel,
+    readSystemMetricsRefreshMs,
+    SYSTEM_METRICS_REFRESH_EVENT,
+    SYSTEM_METRICS_REFRESH_OPTIONS,
+    writeSystemMetricsRefreshMs,
+    type SystemMetricsRefreshMs,
+} from './systemMetricsRefresh';
 
 const cardClass = 'glass-card shadow-xl';
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
-const POLL_MS = 2_000;
 const HISTORY_LEN = 36;
 
 const formatBytes = (value?: number) => {
@@ -204,8 +212,11 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [live, setLive] = useState(true);
+    const [refreshMs, setRefreshMs] = useState<SystemMetricsRefreshMs>(() => readSystemMetricsRefreshMs());
     const [history, setHistory] = useState<HistoryState>({ cpu: [], mem: [], gpu: [] });
     const inFlight = useRef(false);
+    const refreshMsRef = useRef(refreshMs);
+    refreshMsRef.current = refreshMs;
 
     const pushHistory = useCallback((next: MediaAutomationHostMetrics) => {
         const cpu = clampPercent(next.cpu?.usedPercent);
@@ -240,10 +251,42 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
     }, [pushHistory, toast]);
 
     useEffect(() => {
-        void load();
-        const timer = window.setInterval(() => { void load(true); }, POLL_MS);
-        return () => window.clearInterval(timer);
-    }, [load]);
+        const sync = () => setRefreshMs(readSystemMetricsRefreshMs());
+        const onCustom = (event: Event) => {
+            const detail = Number((event as CustomEvent).detail);
+            if (Number.isFinite(detail)) setRefreshMs(detail as SystemMetricsRefreshMs);
+            else sync();
+        };
+        window.addEventListener('storage', sync);
+        window.addEventListener(SYSTEM_METRICS_REFRESH_EVENT, onCustom as EventListener);
+        return () => {
+            window.removeEventListener('storage', sync);
+            window.removeEventListener(SYSTEM_METRICS_REFRESH_EVENT, onCustom as EventListener);
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        let timer: number | null = null;
+
+        const schedule = () => {
+            if (cancelled) return;
+            timer = window.setTimeout(async () => {
+                await load(true);
+                schedule();
+            }, refreshMsRef.current);
+        };
+
+        void (async () => {
+            await load(false);
+            schedule();
+        })();
+
+        return () => {
+            cancelled = true;
+            if (timer != null) window.clearTimeout(timer);
+        };
+    }, [load, refreshMs]);
 
     const cpuSmooth = useSmoothNumber(metrics?.cpu?.usedPercent, 1);
     const memSmooth = useSmoothNumber(metrics?.memory?.usedPercent, 1);
@@ -266,9 +309,9 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <h2 className="text-lg font-bold text-text">System</h2>
                         <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
                             live
@@ -280,13 +323,27 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                         </span>
                     </div>
                     <p className="mt-1 text-sm text-muted">
-                        Streaming host CPU, memory, and GPU usage — refreshed every {POLL_MS / 1000}s.
+                        Streaming host CPU, memory, and GPU usage — {formatSystemMetricsRefreshLabel(refreshMs).toLowerCase()} refresh.
                     </p>
                 </div>
-                <button type="button" className={buttonClass} disabled={refreshing} onClick={() => void load(true)}>
-                    {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                    Refresh
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <label className="min-w-[12rem] space-y-1 text-xs font-bold uppercase tracking-wide text-muted">
+                        Refresh interval
+                        <CustomSelect
+                            value={String(refreshMs)}
+                            onChange={(value) => setRefreshMs(writeSystemMetricsRefreshMs(Number(value)))}
+                            options={SYSTEM_METRICS_REFRESH_OPTIONS.map((option) => ({
+                                value: String(option.value),
+                                label: option.label,
+                            }))}
+                            compact
+                        />
+                    </label>
+                    <button type="button" className={`${buttonClass} sm:mt-5`} disabled={refreshing} onClick={() => void load(true)}>
+                        {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        Refresh
+                    </button>
+                </div>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">
