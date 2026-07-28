@@ -1,5 +1,5 @@
-import React from 'react';
-import { Clock3, Cpu, FolderSearch, Gauge, Percent, PlayCircle, Radar, Server, ShieldCheck, Tags } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock3, Cpu, FolderSearch, Gauge, Minus, Percent, PlayCircle, Plus, Radar, Server, ShieldCheck, Tags } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
 import type {
@@ -22,6 +22,87 @@ type Props = {
 };
 
 const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-text outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
+const stepperBtnClass = 'inline-flex h-[42px] w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-text transition hover:border-plex/50 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
+
+/** Mobile-friendly concurrency field: +/- steppers + draft text so clearing does not force 0 → 02. */
+const ConcurrencyCountInput: React.FC<{
+    id?: string;
+    value: number;
+    min?: number;
+    max: number;
+    disabled?: boolean;
+    onChange: (value: number) => void;
+}> = ({ id, value, min = 0, max, disabled = false, onChange }) => {
+    const [draft, setDraft] = useState<string | null>(null);
+    const clamped = Math.min(max, Math.max(min, Math.round(Number(value) || 0)));
+
+    const commit = (raw: string) => {
+        const trimmed = String(raw || '').trim();
+        if (trimmed === '') {
+            onChange(min);
+            setDraft(null);
+            return;
+        }
+        const next = Number(trimmed);
+        if (!Number.isFinite(next)) {
+            setDraft(null);
+            return;
+        }
+        onChange(Math.min(max, Math.max(min, Math.round(next))));
+        setDraft(null);
+    };
+
+    return (
+        <div className="mt-2 flex items-stretch gap-2">
+            <button
+                type="button"
+                className={stepperBtnClass}
+                disabled={disabled || clamped <= min}
+                aria-label="Decrease"
+                onClick={() => {
+                    setDraft(null);
+                    onChange(Math.max(min, clamped - 1));
+                }}
+            >
+                <Minus className="h-4 w-4" />
+            </button>
+            <input
+                id={id}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
+                disabled={disabled}
+                className={`${fieldClass} text-center tabular-nums`}
+                value={draft !== null ? draft : String(clamped)}
+                onFocus={() => setDraft(String(clamped))}
+                onChange={(event) => {
+                    const raw = event.target.value;
+                    if (raw === '' || /^\d{0,3}$/.test(raw)) setDraft(raw);
+                }}
+                onBlur={() => commit(draft !== null ? draft : String(clamped))}
+                onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        (event.target as HTMLInputElement).blur();
+                    }
+                }}
+            />
+            <button
+                type="button"
+                className={stepperBtnClass}
+                disabled={disabled || clamped >= max}
+                aria-label="Increase"
+                onClick={() => {
+                    setDraft(null);
+                    onChange(Math.min(max, clamped + 1));
+                }}
+            >
+                <Plus className="h-4 w-4" />
+            </button>
+        </div>
+    );
+};
 const WEEKDAYS = [
     { value: 1, label: 'Mon' },
     { value: 2, label: 'Tue' },
@@ -604,30 +685,22 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                             </label>
                             <label className="block text-xs uppercase tracking-wide font-bold text-muted">
                                 CPU concurrency
-                                <input
-                                    className={`${fieldClass} mt-2`}
-                                    type="number"
+                                <ConcurrencyCountInput
+                                    value={group.cpuConcurrency}
                                     min={0}
                                     max={32}
-                                    value={group.cpuConcurrency}
                                     disabled={!enabled}
-                                    onChange={(event) => updateWorkerGroup(index, {
-                                        cpuConcurrency: Math.min(32, Math.max(0, Number(event.target.value) || 0)),
-                                    })}
+                                    onChange={(cpuConcurrency) => updateWorkerGroup(index, { cpuConcurrency })}
                                 />
                             </label>
                             <label className="block text-xs uppercase tracking-wide font-bold text-muted">
                                 GPU concurrency
-                                <input
-                                    className={`${fieldClass} mt-2`}
-                                    type="number"
+                                <ConcurrencyCountInput
+                                    value={group.gpuConcurrency}
                                     min={0}
                                     max={16}
-                                    value={group.gpuConcurrency}
                                     disabled={!enabled}
-                                    onChange={(event) => updateWorkerGroup(index, {
-                                        gpuConcurrency: Math.min(16, Math.max(0, Number(event.target.value) || 0)),
-                                    })}
+                                    onChange={(gpuConcurrency) => updateWorkerGroup(index, { gpuConcurrency })}
                                 />
                             </label>
                             <label className="block text-xs uppercase tracking-wide font-bold text-muted">
@@ -791,41 +864,25 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                         <Gauge className="w-5 h-5 text-plex" />
                         <h4 className="font-bold text-text">Concurrency</h4>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <label className="block text-xs uppercase tracking-wide font-bold text-muted" htmlFor="media-automation-cpu-concurrency">
                             CPU jobs
-                            <input
+                            <ConcurrencyCountInput
                                 id="media-automation-cpu-concurrency"
-                                className={`${fieldClass} mt-2`}
-                                type="number"
+                                value={config.concurrency.cpu}
                                 min={0}
                                 max={32}
-                                value={config.concurrency.cpu}
-                                onChange={(event) => {
-                                    const next = Number(event.target.value);
-                                    setConcurrency(
-                                        'cpu',
-                                        Number.isFinite(next) ? Math.min(32, Math.max(0, Math.round(next))) : 0,
-                                    );
-                                }}
+                                onChange={(next) => setConcurrency('cpu', next)}
                             />
                         </label>
                         <label className="block text-xs uppercase tracking-wide font-bold text-muted" htmlFor="media-automation-gpu-concurrency">
                             GPU jobs
-                            <input
+                            <ConcurrencyCountInput
                                 id="media-automation-gpu-concurrency"
-                                className={`${fieldClass} mt-2`}
-                                type="number"
+                                value={config.concurrency.gpu}
                                 min={0}
                                 max={16}
-                                value={config.concurrency.gpu}
-                                onChange={(event) => {
-                                    const next = Number(event.target.value);
-                                    setConcurrency(
-                                        'gpu',
-                                        Number.isFinite(next) ? Math.min(16, Math.max(0, Math.round(next))) : 0,
-                                    );
-                                }}
+                                onChange={(next) => setConcurrency('gpu', next)}
                             />
                         </label>
                     </div>
