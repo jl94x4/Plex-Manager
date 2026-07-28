@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Cpu, Gauge, Loader2, MemoryStick, RefreshCw, ServerCog, Activity } from 'lucide-react';
+import { Cpu, Gauge, Loader2, MemoryStick, RefreshCw, ServerCog, Activity, X } from 'lucide-react';
 import { CustomSelect } from '../shared/ui';
+import { ModalPortal } from '../shared/ModalPortal';
 import { mediaAutomationApi } from './api';
 import type { MediaAutomationHostMetrics } from './types';
 import {
@@ -122,15 +123,27 @@ const ArcGauge: React.FC<{
     subtext?: string;
     icon: React.ReactNode;
     history: number[];
-}> = ({ label, percent, valueText, subtext, icon, history }) => {
+    onClick?: () => void;
+    hint?: string;
+}> = ({ label, percent, valueText, subtext, icon, history, onClick, hint }) => {
     const tone = toneFor(percent);
     const radius = 54;
     const circumference = Math.PI * radius;
     const offset = circumference - (((percent ?? 0) / 100) * circumference);
     const sparkId = label.toLowerCase().replace(/\s+/g, '-');
+    const interactive = typeof onClick === 'function';
+    const Wrapper: React.ElementType = interactive ? 'button' : 'div';
 
     return (
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-black/30 p-5">
+        <Wrapper
+            type={interactive ? 'button' : undefined}
+            onClick={onClick}
+            className={`relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-black/30 p-5 text-left transition ${
+                interactive
+                    ? 'cursor-pointer hover:border-plex/40 hover:bg-white/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-plex/50'
+                    : ''
+            }`}
+        >
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgb(var(--color-plex)_/_0.12),transparent_55%)]" />
             <div className="relative flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-muted">
@@ -163,9 +176,107 @@ const ArcGauge: React.FC<{
                 <div className="absolute inset-x-0 bottom-1 text-center">
                     <p className={`text-3xl font-black tracking-tight ${tone.text}`}>{valueText}</p>
                     {subtext ? <p className="mt-1 text-[11px] text-muted">{subtext}</p> : null}
+                    {hint ? <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-plex/80">{hint}</p> : null}
                 </div>
             </div>
+        </Wrapper>
+    );
+};
+
+const CoreBar: React.FC<{ index: number; percent: number | null | undefined }> = ({ index, percent }) => {
+    const width = clampPercent(percent) ?? 0;
+    const tone = toneFor(clampPercent(percent));
+    return (
+        <div className="rounded-xl border border-white/10 bg-black/25 p-2.5">
+            <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Core {index}</p>
+                <p className="text-xs font-semibold tabular-nums text-text">
+                    {percent == null ? '—' : `${Number(percent).toFixed(0)}%`}
+                </p>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                    className={`ma-meter-fill h-full rounded-full bg-gradient-to-r ${tone.bar}`}
+                    style={{ width: `${width}%`, boxShadow: `0 0 12px ${tone.stroke}44` }}
+                />
+            </div>
         </div>
+    );
+};
+
+const CpuCoresModal: React.FC<{
+    open: boolean;
+    onClose: () => void;
+    cpu: MediaAutomationHostMetrics['cpu'] | undefined;
+}> = ({ open, onClose, cpu }) => {
+    useEffect(() => {
+        if (!open) return undefined;
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [open, onClose]);
+
+    const cores = cpu?.perCore || [];
+    const busy = cores.filter((core) => Number(core.usedPercent) >= 50).length;
+    const hot = cores.filter((core) => Number(core.usedPercent) >= 90).length;
+
+    return (
+        <ModalPortal open={open}>
+            <div
+                className="pointer-events-auto fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-fade-in"
+                role="presentation"
+                onMouseDown={onClose}
+            >
+                <div
+                    className="modal-glass animate-slide-up flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="cpu-cores-title"
+                    onMouseDown={(event) => event.stopPropagation()}
+                >
+                    <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
+                        <div>
+                            <h3 id="cpu-cores-title" className="flex items-center gap-2 text-lg font-black text-text">
+                                <Cpu className="h-5 w-5 text-plex" />
+                                Per-core CPU
+                            </h3>
+                            <p className="mt-1 text-sm text-muted">
+                                {cpu?.model || 'Host CPU'} · {cpu?.cores ?? cores.length} cores
+                                {cpu?.usedPercent != null ? ` · overall ${cpu.usedPercent.toFixed(1)}%` : ''}
+                            </p>
+                            <p className="mt-1 text-xs text-muted">
+                                Busy (≥50%): {busy} · Hot (≥90%): {hot} · Live while this panel is open
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            className="rounded-xl border border-white/10 bg-black/20 p-2 text-muted transition hover:border-plex/40 hover:text-text"
+                            onClick={onClose}
+                            aria-label="Close"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                    <div className="overflow-y-auto p-5 custom-scrollbar">
+                        {cores.length === 0 ? (
+                            <p className="text-sm text-muted">Per-core samples are not available yet. Wait for the next refresh.</p>
+                        ) : (
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8">
+                                {cores.map((core) => (
+                                    <CoreBar
+                                        key={core.index}
+                                        index={Number(core.index) || 0}
+                                        percent={core.usedPercent}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </ModalPortal>
     );
 };
 
@@ -214,6 +325,7 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
     const [live, setLive] = useState(true);
     const [refreshMs, setRefreshMs] = useState<SystemMetricsRefreshMs>(() => readSystemMetricsRefreshMs());
     const [history, setHistory] = useState<HistoryState>({ cpu: [], mem: [], gpu: [] });
+    const [cpuCoresOpen, setCpuCoresOpen] = useState(false);
     const inFlight = useRef(false);
     const refreshMsRef = useRef(refreshMs);
     refreshMsRef.current = refreshMs;
@@ -354,6 +466,8 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                     valueText={cpu?.usedPercent != null ? `${cpuSmooth}%` : '…'}
                     subtext={`${cpu?.cores ?? '—'} cores`}
                     history={history.cpu}
+                    onClick={() => setCpuCoresOpen(true)}
+                    hint="Click for per-core"
                 />
                 <ArcGauge
                     label="Memory"
@@ -372,6 +486,12 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                     history={history.gpu}
                 />
             </div>
+
+            <CpuCoresModal
+                open={cpuCoresOpen}
+                onClose={() => setCpuCoresOpen(false)}
+                cpu={cpu}
+            />
 
             <div className={`${cardClass} grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4`}>
                 <div className="rounded-xl border border-white/10 bg-black/20 p-3">

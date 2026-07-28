@@ -25,6 +25,11 @@ export type MediaAutomationHostMetrics = {
         load5?: number;
         load15?: number;
         usedPercent?: number | null;
+        perCore?: Array<{
+            index?: number;
+            usedPercent?: number | null;
+            model?: string | null;
+        }>;
     };
     gpu?: {
         nvidia?: {
