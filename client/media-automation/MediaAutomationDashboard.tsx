@@ -1683,7 +1683,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </span>
                             Media Automation
                         </div>
-                        <h1 className="text-3xl font-black tracking-tight text-text md:text-4xl">Transcode with control</h1>
+                        <h1 className="text-3xl font-black tracking-tight text-text md:text-4xl">Encode with control</h1>
                         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted md:text-[15px]">
                             Native FFmpeg pipelines for remux, HEVC, and cleanup - with a durable queue, hardware lanes, and safe dry-run until you are ready to encode.
                         </p>
