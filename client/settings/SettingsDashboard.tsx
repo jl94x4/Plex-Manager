@@ -1150,6 +1150,7 @@ export const SettingsDashboard: React.FC = () => {
                     notifyOnFailBurst: saved.notifyOnFailBurst === true,
                     minFreeDiskGb: Math.min(10000, Math.max(0, Math.round(Number(saved.minFreeDiskGb ?? DEFAULT_MEDIA_AUTOMATION_SETTINGS.minFreeDiskGb)))),
                     autoPauseQueueDepth: Math.min(100000, Math.max(0, Math.round(Number(saved.autoPauseQueueDepth) || 0))),
+                    pauseEncodingOnScan: saved.pauseEncodingOnScan !== false,
                     pathDenyList: Array.isArray(saved.pathDenyList)
                         ? [...new Set(saved.pathDenyList.map((entry: unknown) => String(entry || '').trim()).filter(Boolean))].slice(0, 200)
                         : [],

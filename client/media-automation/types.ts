@@ -508,6 +508,10 @@ export type MediaAutomationSettingsConfig = {
     minFreeDiskGb?: number;
     /** Auto-pause encode claims when queued depth ≥ N (0 = off). */
     autoPauseQueueDepth?: number;
+    /**
+     * After a library scan queues jobs, keep encoding paused until Start is pressed.
+     */
+    pauseEncodingOnScan?: boolean;
     /** Path prefixes/globs that must never be enqueued. */
     pathDenyList?: string[];
     quietHoursEnabled?: boolean;
@@ -576,6 +580,7 @@ export const DEFAULT_MEDIA_AUTOMATION_SETTINGS: MediaAutomationSettingsConfig = 
     notifyOnFailBurst: false,
     minFreeDiskGb: 20,
     autoPauseQueueDepth: 0,
+    pauseEncodingOnScan: true,
     pathDenyList: [],
     quietHoursEnabled: false,
     quietHoursStart: '23:00',

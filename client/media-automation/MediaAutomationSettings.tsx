@@ -247,6 +247,13 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     />
                     <span className="block text-xs font-normal text-muted">When queued jobs reach this depth, encoding claims pause automatically without flipping Start/Pause. 0 disables.</span>
                 </label>
+                <SettingsToggleRow
+                    title="Pause encoding after library scans"
+                    description="When a scan queues jobs, encoding flips to Paused so nothing encodes until you press Start. Turn off to let a running worker pick up scan results immediately."
+                    checked={config.pauseEncodingOnScan !== false}
+                    onChange={(pauseEncodingOnScan) => update({ pauseEncodingOnScan })}
+                    disabled={!enabled}
+                />
                 <label className="block space-y-2 text-sm font-semibold text-text">
                     Path deny list
                     <textarea

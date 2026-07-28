@@ -3157,7 +3157,18 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             <p className="truncate font-semibold text-text" title={entry.sourcePath}>{pathBasename(entry.sourcePath || entry.id)}</p>
                                             <p className="mt-1 truncate font-mono text-xs text-muted" title={entry.sourcePath}>{entry.sourcePath}</p>
                                         </div>
-                                        <StatusPill value={entry.dryRun ? 'dry-run' : asText(entry.state, 'unknown')} />
+                                        <div className="flex shrink-0 flex-col items-end gap-1">
+                                            <StatusPill value={entry.dryRun ? 'dry-run' : asText(entry.state, 'unknown')} />
+                                            <time
+                                                className="text-xs text-muted"
+                                                dateTime={entry.finishedAt || entry.startedAt || entry.createdAt || undefined}
+                                                title={entry.startedAt && entry.finishedAt
+                                                    ? `Started ${formatTime(entry.startedAt)} · Finished ${formatTime(entry.finishedAt)}`
+                                                    : undefined}
+                                            >
+                                                {formatTime(entry.finishedAt || entry.startedAt || entry.createdAt)}
+                                            </time>
+                                        </div>
                                     </div>
                                     <div className="flex flex-wrap gap-2 text-[11px] text-muted">
                                         <span>{formatBytes(entry.sourceBytes)} in</span>

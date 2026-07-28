@@ -18705,6 +18705,7 @@ mediaAutomationService = createMediaAutomation({
     getConfig: getMediaAutomationServiceConfig,
     logger: console,
     getActiveStreamCount: countActiveMediaStreams,
+    setWorkerPaused: setMediaAutomationWorkerPaused,
     // Cheap path→watchCount lookup from maintenance-media-index.json (no live Plex calls).
     getWatchStats: createWatchStatsLookup({
         indexPath: MAINTENANCE_MEDIA_INDEX_PATH,
