@@ -39,6 +39,7 @@ import {
     parseAutoscanYaml,
     buildTargets,
     createPlexTarget,
+    collectMountRewrites,
 } from './lib/scanner/index.js';
 import {
     buildStepPlan,
@@ -18564,23 +18565,12 @@ const triggerArrRescanForPath = async (config, filePath) => {
     return results;
 };
 
-const collectScannerPathRewrites = (scanner) => {
-    const rules = [];
-    const pushRows = (rows) => {
-        for (const row of rows || []) {
-            for (const rule of Array.isArray(row?.rewrite) ? row.rewrite : []) {
-                const from = String(rule?.from || '').trim();
-                if (!from) continue;
-                rules.push({ from, to: String(rule?.to || '') });
-            }
-        }
-    };
-    pushRows(scanner?.targets?.plex);
-    pushRows(scanner?.triggers?.sonarr);
-    pushRows(scanner?.triggers?.radarr);
-    pushRows(scanner?.triggers?.lidarr);
-    return rules;
-};
+const collectScannerPathRewrites = (scanner) => collectMountRewrites(
+    scanner?.targets?.plex,
+    scanner?.triggers?.sonarr,
+    scanner?.triggers?.radarr,
+    scanner?.triggers?.lidarr,
+);
 
 /**
  * Only queue Scanner when the finished file lives under a library root (Plex-visible),
@@ -18628,8 +18618,9 @@ const resolveScannerRefreshFilePath = async (event = {}) => {
 };
 
 /**
- * Same path Vik proved works: refresh the parent (season) folder through Scanner,
- * with Sonarr/Plex rewrites applied, processed immediately (no waiting on the UI).
+ * Queue a season/parent-folder Scanner refresh for a Media Automation library write.
+ * Keep the real library path (no from→to at enqueue). Plex/Jellyfin targets expand
+ * rewrite candidates at process time so host and container layouts both match.
  */
 const enqueueInstantLibraryRefresh = async (config, filePath, {
     reason = 'Media Automation completed',
@@ -18644,7 +18635,9 @@ const enqueueInstantLibraryRefresh = async (config, filePath, {
     const scans = buildScansFromPaths([folder], {
         priority: 20,
         source: 'media-automation',
-        rewrite: collectScannerPathRewrites(scanner),
+        // Never apply Sonarr/Plex from→to here — that forced one mount layout and
+        // broke the other. Targets try original + forward + inverted forms.
+        rewrite: [],
         eventType: 'Processed',
         action: 'refresh',
         reason,
@@ -18669,7 +18662,7 @@ const triggerPlexRescanForPath = async (config, filePath) => {
         token,
         rewrite: rewrites,
     });
-    // Season/show parent folder — same scope as a successful Scanner manual trigger.
+    // Season/show parent folder — Plex target expands rewrite candidates itself.
     const folder = path.dirname(targetPath);
     const refresh = await target.scan(folder);
     // Same-path Replace keeps the filename — folder refresh alone can still leave stale codec metadata.
