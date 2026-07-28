@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronRight, CirclePause, ListChecks, X } from 'lucide-react';
+import { CheckCircle2, ChevronRight, CirclePause, ListChecks } from 'lucide-react';
 import type { MediaAutomationLibrary, MediaAutomationPipeline, MediaAutomationStatus } from './types';
 import {
     buildSetupChecklist,
@@ -38,18 +38,22 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
         .filter((step) => step.id !== 'worker')
         .every((step) => step.done && !step.warn);
     const encodingPaused = (status.workerPaused ?? status.paused) !== false;
-    const [dismissed, setDismissed] = useState(false);
+    const [dismissed, setDismissed] = useState(() => isSetupChecklistDismissed());
 
+    // Once every step is green, hide for good (until core setup is broken).
     useEffect(() => {
-        setDismissed(isSetupChecklistDismissed());
-    }, []);
+        if (!complete) return;
+        setSetupChecklistDismissed(true);
+        setDismissed(true);
+    }, [complete]);
 
+    // Only resurrect the checklist if libraries/pipelines/writes/etc. regress — not when encoding is paused.
     useEffect(() => {
-        if (!complete && dismissed) {
+        if (!setupReadyExceptEncoding && dismissed) {
             setSetupChecklistDismissed(false);
             setDismissed(false);
         }
-    }, [complete, dismissed]);
+    }, [setupReadyExceptEncoding, dismissed]);
 
     // Paused + earlier setup done ⇒ treat as configured; show a reminder, not the checklist.
     if (setupReadyExceptEncoding && encodingPaused) {
@@ -86,7 +90,9 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
         );
     }
 
-    if (dismissed && complete) return null;
+    // Dismissed after a successful setup — stay gone while encoding (and after).
+    if (dismissed && setupReadyExceptEncoding) return null;
+    if (complete) return null;
 
     const visible = compact ? steps.filter((step) => !step.done || step.warn) : steps;
     if (compact && visible.length === 0 && complete) return null;
@@ -102,26 +108,11 @@ export const MediaAutomationSetupChecklist: React.FC<Props> = ({
                             {doneCount}/{steps.length}
                         </span>
                     </div>
-                    <h2 className="text-lg font-bold tracking-tight text-text">{complete ? 'Ready to process media' : 'Get a pipeline running'}</h2>
+                    <h2 className="text-lg font-bold tracking-tight text-text">Get a pipeline running</h2>
                     <p className="mt-1 text-sm leading-relaxed text-muted">
-                        {complete
-                            ? 'Checklist complete. Queue a sample or run Scan now when you are ready.'
-                            : 'Work top to bottom - missing any step usually looks like “job completed but nothing changed.”'}
+                        Work top to bottom - missing any step usually looks like “job completed but nothing changed.”
                     </p>
                 </div>
-                {complete && (
-                    <button
-                        type="button"
-                        className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text"
-                        aria-label="Dismiss setup checklist"
-                        onClick={() => {
-                            setSetupChecklistDismissed(true);
-                            setDismissed(true);
-                        }}
-                    >
-                        <X className="h-4 w-4" />
-                    </button>
-                )}
             </div>
             <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-white/5">
                 <div
