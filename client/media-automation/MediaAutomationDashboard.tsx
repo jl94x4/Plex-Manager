@@ -469,9 +469,14 @@ const BROAD_LIBRARY_BASENAMES = new Set([
 
 const SEASON_FOLDER_RE = /^(season[\s._-]?\d+|specials|extras)$/i;
 
-/** Pull "Love Island" from "Love Island - S13E46 - Episode 46.mkv". */
+/** Pull "Love Island All Stars (2024)" from episode filenames. */
 const parseSeriesNameFromFile = (fileName: string) => {
     const base = String(fileName || '').replace(/\.[^.]+$/, '');
+    // Prefer titles that already include (YYYY) before SxxExx.
+    const withYear = base.match(/^(.*?\(\d{4}\))[\s._-]+[Ss](\d{1,4})[Ee](\d{1,4})\b/);
+    if (withYear) {
+        return withYear[1].replace(/[._]+/g, ' ').replace(/\s+/g, ' ').trim() || null;
+    }
     const match = base.match(/^(.*?)[\s._-]+[Ss](\d{1,4})[Ee](\d{1,4})\b/);
     if (!match) return null;
     const name = match[1].replace(/[._]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -549,16 +554,28 @@ const toDisplayPath = (
     }
 
     if (parts.length >= 1 && SEASON_FOLDER_RE.test(parts[0])) {
-        const fromFile = parseSeriesNameFromFile(parts[parts.length - 1] || '');
-        if (fromFile) {
-            return [fromFile, ...parts].join('/');
-        }
         const absParts = normalized.split('/').filter(Boolean);
-        const seasonAt = absParts.length - parts.length;
-        const parent = seasonAt > 0 ? absParts[seasonAt - 1] : '';
-        if (parent && !BROAD_LIBRARY_BASENAMES.has(parent.toLowerCase())) {
-            return [parent, ...parts].join('/');
+        const relJoined = parts.join('/');
+        // Find the Season folder in the absolute path that lines up with this relative tail.
+        let seasonAt = -1;
+        for (let i = 0; i < absParts.length; i += 1) {
+            if (!SEASON_FOLDER_RE.test(absParts[i])) continue;
+            if (absParts.slice(i).join('/').toLowerCase() === relJoined.toLowerCase()) {
+                seasonAt = i;
+                break;
+            }
         }
+        if (seasonAt < 0) seasonAt = Math.max(0, absParts.length - parts.length);
+        // Prefer a real series folder (often includes the year) over parsing the filename.
+        for (let i = seasonAt - 1; i >= 0; i -= 1) {
+            const candidate = absParts[i];
+            if (!candidate) continue;
+            if (BROAD_LIBRARY_BASENAMES.has(candidate.toLowerCase())) continue;
+            if (SEASON_FOLDER_RE.test(candidate)) continue;
+            return [candidate, ...parts].join('/');
+        }
+        const fromFile = parseSeriesNameFromFile(parts[parts.length - 1] || '');
+        if (fromFile) return [fromFile, ...parts].join('/');
     }
     return parts.join('/');
 };
