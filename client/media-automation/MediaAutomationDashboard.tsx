@@ -467,29 +467,71 @@ const toDisplayPath = (
         relative = false,
         libraryRoot,
         libraryRoots = [],
+        libraryId,
+        libraries = [],
     }: {
         relative?: boolean;
         libraryRoot?: string | null;
         libraryRoots?: string[];
+        libraryId?: string | number | null;
+        libraries?: Array<{ id?: string | number; rootPath?: string }>;
     } = {},
 ) => {
     const abs = String(fullPath || '').trim();
     if (!abs) return '';
     if (!relative) return abs;
     const normalized = abs.replace(/\\/g, '/');
-    const roots = [libraryRoot, ...libraryRoots]
-        .map((root) => String(root || '').trim().replace(/\\/g, '/').replace(/\/+$/, ''))
-        .filter(Boolean)
-        .sort((left, right) => right.length - left.length);
-    for (const root of roots) {
+    const normalizeRoot = (root: string) => String(root || '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+    const catalogRoot = libraryId != null
+        ? normalizeRoot(String(libraries.find((library) => String(library.id) === String(libraryId))?.rootPath || ''))
+        : '';
+    // Prefer the mapped library root (e.g. /media/TV SHOWS) so show folders stay visible.
+    // job.libraryRoot can be deeper and would incorrectly strip the series name.
+    const roots = [
+        catalogRoot,
+        ...libraryRoots.map(normalizeRoot),
+        normalizeRoot(String(libraryRoot || '')),
+    ].filter(Boolean);
+    const seen = new Set<string>();
+    const uniqueRoots = roots.filter((root) => {
+        const key = root.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+    // Prefer the catalog root when it matches; otherwise longest configured match.
+    const ordered = catalogRoot
+        ? [catalogRoot, ...uniqueRoots.filter((root) => root.toLowerCase() !== catalogRoot.toLowerCase())
+            .sort((left, right) => right.length - left.length)]
+        : [...uniqueRoots].sort((left, right) => right.length - left.length);
+
+    let relativePath = abs;
+    for (const root of ordered) {
         const rootLower = root.toLowerCase();
         const pathLower = normalized.toLowerCase();
-        if (pathLower === rootLower) return '.';
+        if (pathLower === rootLower) {
+            relativePath = '.';
+            break;
+        }
         if (pathLower.startsWith(`${rootLower}/`)) {
-            return normalized.slice(root.length + 1);
+            relativePath = normalized.slice(root.length + 1);
+            break;
         }
     }
-    return abs;
+
+    // If we still start at Season/Specials, keep the parent show folder in the display path.
+    if (relativePath && relativePath !== '.' && relativePath !== abs) {
+        const first = relativePath.split('/')[0] || '';
+        if (/^(season[\s._-]?\d+|specials|extras)$/i.test(first)) {
+            const absParts = normalized.split('/').filter(Boolean);
+            const relParts = relativePath.split('/').filter(Boolean);
+            const seasonAt = absParts.length - relParts.length;
+            if (seasonAt > 0) {
+                relativePath = `${absParts[seasonAt - 1]}/${relativePath}`;
+            }
+        }
+    }
+    return relativePath;
 };
 
 /** Whole-library folder names that usually mean “scan everything under here”. */
@@ -2594,6 +2636,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         {toDisplayPath(String(job.path || job.sourcePath || ''), {
                                                             relative: relativePaths,
                                                             libraryRoot: typeof job.libraryRoot === 'string' ? job.libraryRoot : null,
+                                                            libraryId: job.libraryId,
+                                                            libraries,
                                                             libraryRoots: libraries.map((library) => library.rootPath),
                                                         }) || 'Path not reported'}
                                                     </p>
@@ -3333,9 +3377,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             >
                                                 {toDisplayPath(String(entry.sourcePath || ''), {
                                                     relative: relativePaths,
-                                                    libraryRoot: entry.libraryId
-                                                        ? (libraries.find((library) => String(library.id) === String(entry.libraryId))?.rootPath || undefined)
-                                                        : undefined,
+                                                    libraryId: entry.libraryId,
+                                                    libraries,
                                                     libraryRoots: libraries.map((library) => library.rootPath),
                                                 }) || entry.sourcePath}
                                             </p>
