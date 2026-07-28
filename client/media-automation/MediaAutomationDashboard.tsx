@@ -453,7 +453,8 @@ const jobStateValue = (job: MediaAutomationJob) => String(job.state || job.statu
 const isTerminalJob = (job: MediaAutomationJob) => (
     ['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'success'].includes(jobStateValue(job))
 );
-const isCancellableJob = (job: MediaAutomationJob) => !isTerminalJob(job);
+const isCancellableJob = (job: MediaAutomationJob) => !isTerminalJob(job) && !job.cancelRequested;
+const isCancelPendingJob = (job: MediaAutomationJob) => !isTerminalJob(job) && !!job.cancelRequested;
 const pathBasename = (value: string) => {
     const parts = value.replace(/\\/g, '/').split('/').filter(Boolean);
     return parts[parts.length - 1] || value;
@@ -624,6 +625,9 @@ const statusTone = (status?: string) => {
     }
     if (['failed', 'error', 'offline', 'stopped', 'cancelled', 'canceled', 'disabled'].some((key) => value.includes(key))) {
         return 'border-red-500/30 bg-red-500/10 text-red-300';
+    }
+    if (['cancelling', 'canceling'].some((key) => value.includes(key))) {
+        return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
     }
     if (['paused', 'queued', 'pending', 'probing', 'planning'].some((key) => value.includes(key))) {
         return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
@@ -2295,7 +2299,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             onClick={() => runAction(
                                                 'cancel-selected',
                                                 () => mediaAutomationApi.bulkCancelJobs(selectedCancellableIds),
-                                                `Cancelled ${selectedCancellableIds.length} job${selectedCancellableIds.length === 1 ? '' : 's'}.`,
+                                                `Cancelled ${selectedCancellableIds.length} job${selectedCancellableIds.length === 1 ? '' : 's'} (stopping active encodes…).`,
                                             ).then(() => setSelectedJobIds(new Set()))}
                                         >
                                             {busy === 'cancel-selected' ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
@@ -2308,7 +2312,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             onClick={() => runAction(
                                                 'cancel-all',
                                                 () => mediaAutomationApi.bulkCancelJobs(),
-                                                `Cancelled ${cancellableJobs.length} active job${cancellableJobs.length === 1 ? '' : 's'}.`,
+                                                `Cancelled ${cancellableJobs.length} active job${cancellableJobs.length === 1 ? '' : 's'} (stopping encodes…).`,
                                             ).then(() => setSelectedJobIds(new Set()))}
                                         >
                                             {busy === 'cancel-all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
@@ -2405,9 +2409,10 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 const progressMeta = jobProgressMeta(job);
                                 const errorText = jobErrorText(job.error);
                                 const canCancel = isCancellableJob(job);
-                                const isActive = canCancel && ['running', 'processing', 'active', 'probing', 'planning', 'planned', 'verifying', 'committing'].includes(String(job.phase || state).toLowerCase());
+                                const cancelPending = isCancelPendingJob(job);
+                                const isActive = (canCancel || cancelPending) && ['running', 'processing', 'active', 'probing', 'planning', 'planned', 'verifying', 'committing', 'cancelling'].includes(String(job.phase || state).toLowerCase());
                                 const canRetry = ['failed', 'cancelled', 'canceled', 'error'].includes(state);
-                                const canSkip = state === 'queued';
+                                const canSkip = state === 'queued' && !cancelPending;
                                 const selected = selectedJobIds.has(String(jobId));
                                 return (
                                     <article key={String(jobId)} className={`${listCardClass} cursor-pointer p-4 ${selected ? 'border-plex/50' : ''}`} onClick={() => openJobDetail(jobId)}>
@@ -2423,7 +2428,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 />
                                                 <div className="min-w-0">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <StatusPill value={jobState} />
+                                                        <StatusPill value={cancelPending ? 'cancelling' : jobState} />
                                                         <HardwareBadge job={job} />
                                                         {(Array.isArray(job.metadata?.tags) ? job.metadata.tags : []).map((tag: string) => (
                                                             <span key={tag} className="rounded border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-plex">{tag}</span>
@@ -2502,7 +2507,12 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 {canSkip && job.pipelineId != null && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runEstimate(job)}><Gauge className="h-4 w-4" /> Estimate</button>}
                                                 {canSkip && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`skip-${jobId}`, () => mediaAutomationApi.skipJob(jobId), 'Job skipped.')}><SkipForward className="h-4 w-4" /> Skip</button>}
                                                 {canRetry && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`retry-${jobId}`, () => mediaAutomationApi.retryJob(jobId), 'Job queued for retry.')}><RotateCcw className="h-4 w-4" /> Retry</button>}
-                                                {canCancel && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`cancel-${jobId}`, () => mediaAutomationApi.cancelJob(jobId), 'Job cancelled.')}><X className="h-4 w-4" /> Cancel</button>}
+                                                {canCancel && <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`cancel-${jobId}`, () => mediaAutomationApi.cancelJob(jobId), 'Stopping encode…')}><X className="h-4 w-4" /> Cancel</button>}
+                                                {cancelPending && (
+                                                    <button type="button" className={buttonClass} disabled title="Waiting for FFmpeg to stop">
+                                                        <Loader2 className="h-4 w-4 animate-spin" /> Cancelling…
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                         {(percent != null || isActive) && (
@@ -3314,10 +3324,14 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         <div className="flex flex-wrap items-center gap-2">
                                             <StatusPill
                                                 value={
-                                                    jobIsDryRun(selectedJob)
-                                                    && ['completed', 'succeeded', 'success'].includes(String(selectedJob?.state || selectedJob?.status || '').toLowerCase())
-                                                        ? 'dry-run'
-                                                        : (selectedJob?.phase || selectedJob?.state || selectedJob?.status)
+                                                    selectedJob && isCancelPendingJob(selectedJob)
+                                                        ? 'cancelling'
+                                                        : (
+                                                            jobIsDryRun(selectedJob)
+                                                            && ['completed', 'succeeded', 'success'].includes(String(selectedJob?.state || selectedJob?.status || '').toLowerCase())
+                                                                ? 'dry-run'
+                                                                : (selectedJob?.phase || selectedJob?.state || selectedJob?.status)
+                                                        )
                                                 }
                                             />
                                             {selectedJob && <HardwareBadge job={selectedJob} />}
@@ -3347,11 +3361,16 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         {selectedJob && (
                                             <div className="flex flex-wrap gap-2">
                                                 {isCancellableJob(selectedJob) && (
-                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`cancel-${selectedJobId}`, () => mediaAutomationApi.cancelJob(selectedJobId!), 'Job cancelled.').then(() => openJobDetail(selectedJobId!))}>
+                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`cancel-${selectedJobId}`, () => mediaAutomationApi.cancelJob(selectedJobId!), 'Stopping encode…').then(() => openJobDetail(selectedJobId!))}>
                                                         {busy === `cancel-${selectedJobId}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />} Cancel
                                                     </button>
                                                 )}
-                                                {jobStateValue(selectedJob) === 'queued' && (
+                                                {isCancelPendingJob(selectedJob) && (
+                                                    <button type="button" className={buttonClass} disabled title="Waiting for FFmpeg to stop">
+                                                        <Loader2 className="h-4 w-4 animate-spin" /> Cancelling…
+                                                    </button>
+                                                )}
+                                                {jobStateValue(selectedJob) === 'queued' && !selectedJob.cancelRequested && (
                                                     <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => runAction(`skip-${selectedJobId}`, () => mediaAutomationApi.skipJob(selectedJobId!), 'Job skipped.').then(() => openJobDetail(selectedJobId!))}>
                                                         <SkipForward className="h-4 w-4" /> Skip
                                                     </button>

@@ -318,6 +318,7 @@ export type MediaAutomationJob = {
     priority?: number;
     attempts?: number;
     maxAttempts?: number;
+    cancelRequested?: boolean;
     progress?: number | MediaAutomationJobProgress;
     plan?: MediaAutomationPlan | MediaAutomationPlan[] | null;
     createdAt?: string;

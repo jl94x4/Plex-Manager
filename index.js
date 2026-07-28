@@ -18850,7 +18850,6 @@ mediaAutomationService = createMediaAutomation({
     },
     onActivity: async (entry) => {
         log(`[media-automation] ${entry.message || entry.type}`);
-        const outputPath = String(entry.data?.output || '').trim();
         if (entry.type === 'job.failed') {
             try {
                 const config = await loadFile(CONFIG_PATH, {});
@@ -18903,26 +18902,9 @@ mediaAutomationService = createMediaAutomation({
                 log(`[media-automation] Gotify scan notify failed: ${error.message}`);
             }
         }
-        if (entry.type !== 'job.completed' || !outputPath) return;
-        try {
-            const config = await loadFile(CONFIG_PATH, {});
-            if (!config.scannerEnabled) return;
-            const runtime = mediaAutomationRuntimeConfig(config);
-            // Dedicated toggle + library-root gate live in onMediaCommitted.
-            if (runtime.plexRescanEnabled || runtime.scannerRefreshEnabled) return;
-            await enqueueScans([{
-                folder: outputPath,
-                priority: 10,
-                time: new Date().toISOString(),
-                source: 'media-automation',
-                eventType: 'Processed',
-                action: 'refresh',
-                reason: 'Media Automation completed',
-                title: path.basename(outputPath),
-            }]);
-        } catch (error) {
-            log(`[media-automation] Failed to enqueue library refresh: ${error.message}`);
-        }
+        // Scanner / Plex refresh is handled only by onMediaCommitted (gated by
+        // scannerRefreshEnabled / plexRescanEnabled). Do not enqueue here — the old
+        // fallback queued Scanner on every job.completed when both toggles were off.
     },
 });
 
