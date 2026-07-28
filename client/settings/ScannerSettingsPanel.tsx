@@ -26,6 +26,7 @@ export type ScannerSettings = {
         sonarr: ScannerTrigger[];
         radarr: ScannerTrigger[];
         lidarr: ScannerTrigger[];
+        mediaAutomation: ScannerTrigger[];
     };
     targets: {
         plex: ScannerTarget[];
@@ -43,6 +44,7 @@ export const defaultScannerSettings = (): ScannerSettings => ({
         sonarr: [{ name: 'sonarr', priority: 1, rewrite: [] }],
         radarr: [{ name: 'radarr', priority: 1, rewrite: [] }],
         lidarr: [{ name: 'lidarr', priority: 1, rewrite: [] }],
+        mediaAutomation: [{ name: 'media-automation', priority: 20, rewrite: [] }],
     },
     targets: {
         plex: [{ enabled: true, usePortalCredentials: true, url: '', token: '', rewrite: [] }],
@@ -199,7 +201,7 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
 
     const update = (patch: Partial<ScannerSettings>) => onChange({ ...scanner, ...patch });
 
-    const updateTrigger = (kind: 'sonarr' | 'radarr' | 'lidarr', index: number, patch: Partial<ScannerTrigger>) => {
+    const updateTrigger = (kind: 'sonarr' | 'radarr' | 'lidarr' | 'mediaAutomation', index: number, patch: Partial<ScannerTrigger>) => {
         const list = [...(scanner.triggers[kind] || [])];
         list[index] = { ...list[index], ...patch };
         update({ triggers: { ...scanner.triggers, [kind]: list } });
@@ -264,6 +266,7 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
             `Sonarr ${(imported.triggers?.sonarr?.[0]?.rewrite || []).length} rewrites`,
             `Radarr ${(imported.triggers?.radarr?.[0]?.rewrite || []).length} rewrites`,
             `Lidarr ${(imported.triggers?.lidarr?.[0]?.rewrite || []).length} rewrites`,
+            `Automation ${(imported.triggers?.mediaAutomation?.[0]?.rewrite || []).length} rewrites`,
             `Plex ${(imported.targets?.plex?.[0]?.rewrite || []).length} rewrites`,
         ].filter(Boolean);
         return parts.join(' · ');
@@ -545,6 +548,51 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                         ))}
                     </SectionCard>
                 ))}
+
+                <SectionCard
+                    title="Media Automation Rewrites"
+                    description="Applied when Media Automation finishes Copy/Replace and queues an instant Scanner refresh. Map the Automation/container path to the path Plex (or Scanner) expects — same idea as Sonarr From → To."
+                >
+                    {(scanner.triggers.mediaAutomation || []).map((trig, i) => (
+                        <div key={i} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="font-semibold text-sm block mb-2 text-text">Label</label>
+                                    <input
+                                        className={FIELD}
+                                        value={trig.name}
+                                        disabled={!enabled}
+                                        onChange={(e) => updateTrigger('mediaAutomation', i, { name: e.target.value })}
+                                    />
+                                    <p className="text-[11px] text-muted mt-1.5">
+                                        Not a webhook URL — used only for Scanner queue source labeling.
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="font-semibold text-sm block mb-2 text-text">Priority</label>
+                                    <input
+                                        type="number"
+                                        className={FIELD}
+                                        value={trig.priority}
+                                        disabled={!enabled}
+                                        onChange={(e) => updateTrigger('mediaAutomation', i, { priority: Number(e.target.value) || 0 })}
+                                    />
+                                </div>
+                            </div>
+                            <RewriteEditor
+                                rules={trig.rewrite || []}
+                                disabled={!enabled}
+                                fromLabel="Automation path"
+                                toLabel="Scanner / Plex path"
+                                onChange={(rewrite) => updateTrigger('mediaAutomation', i, { rewrite })}
+                            />
+                            <p className="text-[11px] text-muted">
+                                Example: <code className="text-plex">/media/TV SHOWS</code> → <code className="text-plex">/mnt/user/TV SHOWS</code>.
+                                Requires Media Automation → &quot;Queue Scanner refresh after library writes&quot; and Scanner enabled.
+                            </p>
+                        </div>
+                    ))}
+                </SectionCard>
 
                 {([
                     { kind: 'plex' as const, secret: 'token' as const, portalOnly: true },

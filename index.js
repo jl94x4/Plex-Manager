@@ -18570,6 +18570,7 @@ const collectScannerPathRewrites = (scanner) => collectMountRewrites(
     scanner?.triggers?.sonarr,
     scanner?.triggers?.radarr,
     scanner?.triggers?.lidarr,
+    scanner?.triggers?.mediaAutomation,
 );
 
 /**
@@ -18619,8 +18620,8 @@ const resolveScannerRefreshFilePath = async (event = {}) => {
 
 /**
  * Queue a season/parent-folder Scanner refresh for a Media Automation library write.
- * Keep the real library path (no from→to at enqueue). Plex/Jellyfin targets expand
- * rewrite candidates at process time so host and container layouts both match.
+ * Applies Settings → Scanner → Media Automation path rewrites (from = Automation path,
+ * to = Scanner/Plex path), same pattern as Sonarr webhook triggers.
  */
 const enqueueInstantLibraryRefresh = async (config, filePath, {
     reason = 'Media Automation completed',
@@ -18632,12 +18633,13 @@ const enqueueInstantLibraryRefresh = async (config, filePath, {
         return { skipped: true, reason: 'missing-folder' };
     }
     const scanner = normalizeScannerConfig(config.scanner, getDefaultScannerConfig());
+    const automationTriggers = scanner.triggers?.mediaAutomation || [];
+    const automationRewrites = collectMountRewrites(automationTriggers);
+    const priority = Number(automationTriggers[0]?.priority) || 20;
     const scans = buildScansFromPaths([folder], {
-        priority: 20,
+        priority,
         source: 'media-automation',
-        // Never apply Sonarr/Plex from→to here — that forced one mount layout and
-        // broke the other. Targets try original + forward + inverted forms.
-        rewrite: [],
+        rewrite: automationRewrites,
         eventType: 'Processed',
         action: 'refresh',
         reason,
@@ -19280,6 +19282,7 @@ app.get('/api/scanner/status', requireAdmin, requireScanner, async (req, res) =>
                 sonarr: (scanner.triggers.sonarr || []).map((t) => t.name),
                 radarr: (scanner.triggers.radarr || []).map((t) => t.name),
                 lidarr: (scanner.triggers.lidarr || []).map((t) => t.name),
+                mediaAutomation: (scanner.triggers.mediaAutomation || []).map((t) => t.name),
             },
             webhookPaths: {
                 manual: '/triggers/manual',

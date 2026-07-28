@@ -373,7 +373,7 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                 />
                 <SettingsToggleRow
                     title="Queue Scanner refresh after library writes"
-                    description="After Copy or Replace into a library root (not your Output folder), queue an instant Scanner refresh for that season/parent folder. Scanner matches Plex using your rewrite rules in both directions (host or container paths). Leave off if completed files live outside Plex library paths."
+                    description="After Copy or Replace into a library root (not your Output folder), queue an instant Scanner refresh for that season/parent folder. Paths are remapped using Settings → Scanner → Media Automation Rewrites (Automation path → Scanner/Plex path). Leave off if completed files live outside Plex library paths."
                     checked={config.scannerRefreshEnabled === true}
                     onChange={(scannerRefreshEnabled) => update({ scannerRefreshEnabled })}
                     disabled={!enabled}
@@ -1004,6 +1004,9 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                 </p>
                 <p className="text-xs text-muted">
                     Configure under <span className="font-semibold text-text">Settings → Scanner</span> on the matching trigger (e.g. <code className="text-plex">sonarr</code> / <code className="text-plex">radarr</code>). Media Automation looks up rewrite by trigger name from the webhook query/body, then falls back to the first trigger for that ARR type.
+                </p>
+                <p className="text-xs text-muted mt-2">
+                    For post-encode Scanner refreshes, use <span className="font-semibold text-text">Settings → Scanner → Media Automation Rewrites</span> (not the ARR triggers).
                 </p>
             </section>
 

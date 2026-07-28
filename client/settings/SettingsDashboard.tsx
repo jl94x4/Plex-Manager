@@ -1203,7 +1203,20 @@ export const SettingsDashboard: React.FC = () => {
                 setScannerManualPathVisible(initialSettings.scannerManualPathVisible !== false);
             }
             if (initialSettings.scanner && typeof initialSettings.scanner === 'object') {
-                setScanner({ ...defaultScannerSettings(), ...initialSettings.scanner });
+                const defaults = defaultScannerSettings();
+                const incoming = initialSettings.scanner as ScannerSettings;
+                setScanner({
+                    ...defaults,
+                    ...incoming,
+                    triggers: {
+                        ...defaults.triggers,
+                        ...(incoming.triggers || {}),
+                    },
+                    targets: {
+                        ...defaults.targets,
+                        ...(incoming.targets || {}),
+                    },
+                });
             }
             if (initialSettings.collexionsAutostart !== undefined) setCollexionsAutostart(!!initialSettings.collexionsAutostart);
             if (initialSettings.collexionsInternalUrl !== undefined) setCollexionsInternalUrl(String(initialSettings.collexionsInternalUrl || ''));
