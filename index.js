@@ -18584,9 +18584,14 @@ const triggerPlexRescanForPath = async (config, filePath) => {
     const refresh = await target.scan(folder);
     // Same-path Replace keeps the filename — folder refresh alone often leaves stale codec metadata.
     // Analyze the item so Media Info updates (e.g. H264 → HEVC) like a manual Analyze in Plex.
+    // Wait briefly after refresh: Plex lookup can lag, and ?file= responses often omit Part.file.
     let analyze = null;
     try {
-        analyze = await target.analyzeFile(targetPath, { retries: 1, retryDelayMs: 2000 });
+        analyze = await target.analyzeFile(targetPath, {
+            initialDelayMs: 2500,
+            retries: 4,
+            retryDelayMs: 2500,
+        });
     } catch (error) {
         analyze = { skipped: true, reason: error.message || 'analyze-failed', analyzed: [] };
     }
@@ -18662,7 +18667,10 @@ mediaAutomationService = createMediaAutomation({
                     if (analyzedKeys.length) {
                         log(`[media-automation] Plex analyze requested for ${path.basename(String(targetPath))} (ratingKey ${analyzedKeys.join(', ')})`);
                     } else if (result?.analyze?.skipped) {
-                        log(`[media-automation] Plex analyze skipped for ${path.basename(String(targetPath))}: ${result.analyze.reason || 'unknown'}`);
+                        const candidates = Array.isArray(result.analyze.candidates) && result.analyze.candidates.length
+                            ? ` (tried ${result.analyze.candidates.join(' | ')})`
+                            : '';
+                        log(`[media-automation] Plex analyze skipped for ${path.basename(String(targetPath))}: ${result.analyze.reason || 'unknown'}${candidates}`);
                     }
                 }
             } catch (error) {
