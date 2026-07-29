@@ -17,6 +17,17 @@ export const posterSetsApi = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
     }) as Promise<{ ok: boolean; config: PosterSetsConfig }>,
+    importPortal: () => apiFetch(`${ROOT}/import-portal`, json({})) as Promise<{
+        ok: boolean;
+        config: PosterSetsConfig;
+        imported?: {
+            base_url?: string;
+            tv_library?: string[];
+            movie_library?: string[];
+            librarySource?: string;
+        };
+        error?: string;
+    }>,
     test: (config?: Partial<PosterSetsConfig>) => apiFetch(`${ROOT}/test`, json(config || {})) as Promise<{
         ok: boolean;
         server?: string;

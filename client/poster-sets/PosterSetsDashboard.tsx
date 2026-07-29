@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     CheckCircle2,
+    Download,
     Image as ImageIcon,
     Loader2,
     RefreshCw,
@@ -104,6 +105,30 @@ export const PosterSetsDashboard: React.FC = () => {
             await load();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to save settings', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const importFromPortal = async () => {
+        setBusy('import');
+        setTestResult(null);
+        try {
+            const response = await posterSetsApi.importPortal();
+            const cfg = response.config;
+            setConfigDraft({
+                ...DEFAULT_POSTER_SETS_CONFIG,
+                ...cfg,
+                token: cfg.hasToken ? '********' : '',
+            });
+            setTvText(listToText(cfg.tv_library));
+            setMovieText(listToText(cfg.movie_library));
+            const tvCount = response.imported?.tv_library?.length || 0;
+            const movieCount = response.imported?.movie_library?.length || 0;
+            toast(`Imported from Media Player (${tvCount} TV, ${movieCount} movie libraries).`);
+            await load();
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Import failed', 'error');
         } finally {
             setBusy(null);
         }
@@ -347,7 +372,14 @@ export const PosterSetsDashboard: React.FC = () => {
                         <h2 className="text-lg font-bold text-text">Poster Sets config</h2>
                         <p className="mt-1 text-sm text-muted">
                             Same layout as the original helper config.json — used only by this feature.
+                            You can pull URL, token, and libraries from Settings → Media Player.
                         </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void importFromPortal()}>
+                            {busy === 'import' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                            Import from Media Player
+                        </button>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <label className="block sm:col-span-2">

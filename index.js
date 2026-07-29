@@ -18941,6 +18941,39 @@ app.use('/api/poster-sets', createPosterSetsRouter({
     requireAdmin,
     requirePosterSets,
     loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+    importFromPortalPlex: async () => {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex') {
+            throw new Error('Poster Sets import currently supports Plex Media Player settings only.');
+        }
+        const base_url = resolveConfiguredPlexServerUrl(config);
+        const token = normalizePlexToken(config.plexToken);
+        if (!base_url || !token || token === SECRET_MASK) {
+            throw new Error('Configure Plex server URL and token under Settings → Media Player first.');
+        }
+        let libraries = [];
+        try {
+            libraries = await listPlexLibrariesForConfig(config);
+        } catch (error) {
+            throw new Error(`Could not list Plex libraries: ${error.message || error}`);
+        }
+        const selectedIds = Array.isArray(config.defaultLibraryIds)
+            ? config.defaultLibraryIds.map((id) => String(id))
+            : [];
+        const scoped = selectedIds.length
+            ? libraries.filter((lib) => selectedIds.includes(String(lib.id)))
+            : libraries;
+        const source = selectedIds.length ? scoped : libraries;
+        const tv_library = source.filter((lib) => lib.type === 'show').map((lib) => lib.title).filter(Boolean);
+        const movie_library = source.filter((lib) => lib.type === 'movie').map((lib) => lib.title).filter(Boolean);
+        return {
+            base_url: base_url.endsWith('/') ? base_url : `${base_url}/`,
+            token,
+            tv_library,
+            movie_library,
+            librarySource: selectedIds.length ? 'default-libraries' : 'all-sections',
+        };
+    },
 }));
 
 const findMediaAutomationLibraryForPath = async (candidate) => {
