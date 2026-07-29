@@ -153,6 +153,11 @@ export const UpgraderDashboard: React.FC = () => {
     const [showDrawerItem, setShowDrawerItem] = useState<UpgraderItem | null>(null);
     const [drawerPosition, setDrawerPosition] = useState<'sidebar' | 'modal'>('sidebar');
     const [reportSeed, setReportSeed] = useState<ReportModalSeed | null>(null);
+    const [reportEphemeralLibrary, setReportEphemeralLibrary] = useState<{
+        id: string | number;
+        name: string;
+        rootPath: string;
+    } | null>(null);
     const [maLibraries, setMaLibraries] = useState<MediaAutomationLibrary[]>([]);
     const [maPipelines, setMaPipelines] = useState<MediaAutomationPipeline[]>([]);
     const [maHandoffBusyKey, setMaHandoffBusyKey] = useState<string | null>(null);
@@ -482,25 +487,78 @@ export const UpgraderDashboard: React.FC = () => {
         setMaHandoffBusyKey(busyKey);
         try {
             const [handoff] = await Promise.all([fetchMaHandoff(item), ensureMaCatalog()]);
+            let libraryId = handoff.matchingLibrary?.id ?? null;
+            let pipelineId = handoff.matchingLibrary?.pipelineId ?? null;
+            let ephemeral: { id: string | number; name: string; rootPath: string } | null = null;
+
+            // Report must sit under an MA library root. If nothing covers this folder yet,
+            // create a temporary title library for the scan — on close we ask Keep vs Delete.
             if (!handoff.matchingLibrary) {
-                addToast(
-                    'No Media Automation library covers this folder yet. Use Create MA library first, or add a parent root in Media Automation (e.g. /media/TV SHOWS).',
-                    'error',
-                );
-                return;
+                const { pipelines } = await ensureMaCatalog();
+                const defaultPipeline = pipelines.find((pipeline) => pipeline.enabled !== false);
+                const created = await mediaAutomationApi.createLibrary({
+                    ...emptyLibrary(),
+                    name: handoff.suggestedLibrary?.name || item.title,
+                    rootPath: String(handoff.suggestedLibrary?.rootPath || handoff.resolvedPath || ''),
+                    pipelineId: defaultPipeline?.id ?? '',
+                    enabled: true,
+                    tags: ['upgrader-report-temp'],
+                }) as { library?: MediaAutomationLibrary };
+                const library = created?.library;
+                if (!library?.id) throw new Error('Could not create a temporary library for the report.');
+                libraryId = library.id;
+                pipelineId = library.pipelineId ?? defaultPipeline?.id ?? null;
+                ephemeral = {
+                    id: library.id,
+                    name: library.name || item.title,
+                    rootPath: library.rootPath || String(handoff.resolvedPath || ''),
+                };
+                await ensureMaCatalog();
             }
+
+            setReportEphemeralLibrary(ephemeral);
             setReportSeed({
-                libraryId: handoff.matchingLibrary.id ?? null,
+                libraryId,
                 libraryRoot: handoff.resolvedPath,
-                pipelineId: handoff.matchingLibrary.pipelineId ?? null,
+                pipelineId,
                 forcePipeline: false,
             });
         } catch (error) {
+            setReportEphemeralLibrary(null);
             addToast(error instanceof Error ? error.message : 'Savings report failed', 'error');
         } finally {
             setMaHandoffBusyKey(null);
         }
     }, [addToast, ensureMaCatalog, fetchMaHandoff]);
+
+    const closeTitleSavingsReport = useCallback(async () => {
+        const ephemeral = reportEphemeralLibrary;
+        setReportSeed(null);
+        setReportEphemeralLibrary(null);
+        if (!ephemeral?.id) return;
+
+        const shouldDelete = await askConfirm(
+            `Remove the temporary Media Automation library created for this report?\n\n`
+            + `“${ephemeral.name}”\n${ephemeral.rootPath}\n\n`
+            + 'Keep it if you want to encode this title later.',
+            {
+                title: 'Done with savings report',
+                confirmLabel: 'Delete library',
+                cancelLabel: 'Keep library',
+            },
+        );
+        if (!shouldDelete) {
+            addToast(`Kept MA library “${ephemeral.name}”.`, 'success');
+            return;
+        }
+        try {
+            await mediaAutomationApi.deleteLibrary(ephemeral.id);
+            await ensureMaCatalog();
+            addToast(`Deleted temporary MA library “${ephemeral.name}”.`, 'success');
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Failed to delete temporary library', 'error');
+        }
+    }, [addToast, ensureMaCatalog, reportEphemeralLibrary]);
 
     const goToMaLibraryEditor = useCallback((libraryId: string | number) => {
         const params = new URLSearchParams({ editLibrary: String(libraryId) });
@@ -1331,7 +1389,7 @@ export const UpgraderDashboard: React.FC = () => {
                 seed={reportSeed}
                 libraries={maLibraries}
                 pipelines={maPipelines}
-                onClose={() => setReportSeed(null)}
+                onClose={() => { void closeTitleSavingsReport(); }}
                 toast={(message, tone) => addToast(message, tone === 'error' ? 'error' : 'success')}
             />
         </div>
