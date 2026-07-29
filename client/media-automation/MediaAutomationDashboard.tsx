@@ -2021,167 +2021,257 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </section>
                     )}
                     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-                        <section className={`${cardClass} space-y-4 p-5`}>
-                            <div className="mb-1 flex items-center justify-between">
-                                <div>
-                                    <h2 className="text-lg font-bold tracking-tight text-text">Worker</h2>
-                                    <p className="mt-0.5 text-xs text-muted">
-                                        {workerStatusLabel(status) === 'Auto-paused (queue depth)'
-                                            ? 'Auto-paused because queue depth exceeded the configured limit. Jobs stay queued until depth drops or you adjust Settings.'
-                                            : (status.workerPaused ?? status.paused) !== false
-                                                ? 'Paused (queue only). Jobs can be queued while paused. Start when you want encodes to run.'
-                                                : 'Encoding — worker may claim queued jobs.'}
-                                    </p>
-                                </div>
-                                <Cpu className="h-5 w-5 text-plex" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                                {([
-                                    { action: 'start', label: 'Start', Icon: CirclePlay, primary: true },
-                                    { action: 'pause', label: 'Pause', Icon: CirclePause, primary: false },
-                                    { action: 'resume', label: 'Resume', Icon: Play, primary: false },
-                                    { action: 'stop', label: 'Stop', Icon: Square, primary: false },
-                                ] satisfies Array<{
-                                    action: string;
-                                    label: string;
-                                    Icon: React.ComponentType<{ className?: string }>;
-                                    primary: boolean;
-                                }>).map(({ action, label, Icon, primary }) => {
-                                    const ActionIcon = Icon;
+                                                <section className={`${cardClass} relative overflow-hidden p-0`}>
+                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgb(var(--color-plex)_/_0.16),transparent_42%)]" />
+                            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-plex/50 to-transparent" />
+                            <div className="relative space-y-5 p-5 sm:p-6">
+                                {(() => {
+                                    const paused = (status.workerPaused ?? status.paused) !== false;
+                                    const autoPaused = workerStatusLabel(status) === 'Auto-paused (queue depth)';
+                                    const encoding = !paused && !autoPaused;
+                                    const statusTone = autoPaused
+                                        ? 'border-amber-400/30 bg-amber-400/10 text-amber-200'
+                                        : encoding
+                                            ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+                                            : 'border-white/10 bg-white/5 text-muted';
+                                    const statusText = autoPaused ? 'Auto-paused' : encoding ? 'Encoding' : 'Paused';
+                                    const statusDetail = autoPaused
+                                        ? 'Queue depth exceeded the configured limit. Jobs stay queued until depth drops or you adjust Settings.'
+                                        : encoding
+                                            ? 'Worker may claim queued jobs.'
+                                            : 'Queue only — jobs can still enqueue. Start when you want encodes to run.';
+                                    const cpuRunning = Number(status.lanes?.cpu?.running || 0);
+                                    const cpuQueued = Number(status.lanes?.cpu?.queued || 0);
+                                    const gpuRunning = Number(status.lanes?.gpu?.running || 0);
+                                    const gpuQueued = Number(status.lanes?.gpu?.queued || 0);
+                                    const watcherLabel = status.libraryWatchConfigured && status.watchEnvEnabled === false
+                                        ? 'Blocked'
+                                        : status.libraryWatchEnabled === false
+                                            ? 'Disabled'
+                                            : status.watch?.watching
+                                                ? `Watching ${status.watch.roots?.length || 0}`
+                                                : 'Idle';
+                                    const periodicLabel = status.libraryScanEnabled === false
+                                        ? 'Disabled'
+                                        : status.periodicScanning
+                                            ? `Every ${status.libraryScanIntervalMinutes || 360}m`
+                                            : 'Idle';
                                     return (
-                                        <button
-                                            key={action}
-                                            type="button"
-                                            className={primary ? primaryButtonClass : buttonClass}
-                                            disabled={busy !== null}
-                                            onClick={() => runAction(`control-${action}`, () => mediaAutomationApi.control(action), `Worker ${action} requested.`)}
-                                        >
-                                            {busy === `control-${action}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <ActionIcon className="h-4 w-4" />} {label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null}
-                                    onClick={() => {
-                                        const enabledRoots = libraries
-                                            .filter((library) => library.enabled !== false)
-                                            .map((library) => String(library.rootPath || '').trim())
-                                            .filter(Boolean);
-                                        void runScanNow({}, enabledRoots);
-                                    }}
-                                >
-                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />} Scan now
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null}
-                                    onClick={() => void runScanNow({ preview: true })}
-                                >
-                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />} Preview scan
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null}
-                                    onClick={() => void runScanNow({ planOnly: true })}
-                                >
-                                    {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Plan only
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null}
-                                    onClick={async () => {
-                                        setBusy('worker-test');
-                                        setWorkerTestError('');
-                                        try {
-                                            const result = await mediaAutomationApi.testWorker() as MediaAutomationCapabilities & { ok?: boolean; error?: string };
-                                            if (result?.ok === false || result?.available === false) {
-                                                setWorkerTestError(result.error || 'Worker test failed');
-                                                setWorkerTestResult(result);
-                                                toast(result.error || 'Worker test failed', 'error');
-                                            } else {
-                                                setWorkerTestResult(result);
-                                                setCapabilities(result);
-                                                toast('Worker test completed.');
-                                            }
-                                            await load(true);
-                                        } catch (error) {
-                                            const message = error instanceof Error ? error.message : 'Worker test failed';
-                                            setWorkerTestError(message);
-                                            setWorkerTestResult(null);
-                                            toast(message, 'error');
-                                        } finally {
-                                            setBusy(null);
-                                        }
-                                    }}
-                                >
-                                    {busy === 'worker-test' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Test worker
-                                </button>
-                            </div>
-                            {(workerTestResult || workerTestError) && (
-                                <div className={`mt-3 rounded-xl border p-4 text-sm ${workerTestError ? 'border-red-500/30 bg-red-500/10 text-red-100' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-50'}`}>
-                                    <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                            <p className="font-bold">{workerTestError ? 'Worker test failed' : 'Worker test passed'}</p>
-                                            {workerTestError && <p className="mt-1 text-xs opacity-90">{workerTestError}</p>}
-                                            {workerTestResult && (
-                                                <div className="mt-2 space-y-1 text-xs opacity-90">
-                                                    <p>FFmpeg: {typeof workerTestResult.ffmpeg === 'object' ? (workerTestResult.ffmpeg.version || (workerTestResult.ffmpeg.available === false ? 'unavailable' : 'available')) : (workerTestResult.ffmpeg ? 'available' : 'unknown')}</p>
-                                                    <p>Hardware: {(Array.isArray(workerTestResult.hardware) ? workerTestResult.hardware : []).join(', ') || 'cpu only'}</p>
-                                                    {workerTestResult.devices?.dri && (
-                                                        <p>/dev/dri: {workerTestResult.devices.dri.present === false ? 'not mapped' : (workerTestResult.devices.dri.readable === false ? 'present but not readable' : (workerTestResult.devices.dri.device || 'present'))}</p>
-                                                    )}
-                                                    {(['qsv', 'nvenc', 'intel-vaapi', 'vaapi'] as const).map((id) => {
-                                                        const detail = workerTestResult.details?.[id];
-                                                        if (!detail?.error) return null;
-                                                        return <p key={id} className="text-amber-200">{detail.label || id}: {detail.error}</p>;
-                                                    })}
+                                        <>
+                                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <h2 className="text-lg font-black tracking-tight text-text">Worker</h2>
+                                                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${statusTone}`}>
+                                                            <span className={`h-1.5 w-1.5 rounded-full ${
+                                                                encoding ? 'ma-live-dot bg-emerald-400' : autoPaused ? 'bg-amber-300' : 'bg-white/40'
+                                                            }`} />
+                                                            {statusText}
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-1.5 max-w-xl text-sm text-muted">{statusDetail}</p>
+                                                </div>
+                                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-plex/30 bg-plex/10 shadow-[0_0_24px_rgb(var(--color-plex)/0.18)]">
+                                                    <Cpu className="h-5 w-5 text-plex" />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                                                {([
+                                                    { action: 'start', label: 'Start', Icon: CirclePlay, primary: true },
+                                                    { action: 'pause', label: 'Pause', Icon: CirclePause, primary: false },
+                                                    { action: 'resume', label: 'Resume', Icon: Play, primary: false },
+                                                    { action: 'stop', label: 'Stop', Icon: Square, primary: false },
+                                                ] satisfies Array<{
+                                                    action: string;
+                                                    label: string;
+                                                    Icon: React.ComponentType<{ className?: string }>;
+                                                    primary: boolean;
+                                                }>).map(({ action, label, Icon, primary }) => {
+                                                    const ActionIcon = Icon;
+                                                    return (
+                                                        <button
+                                                            key={action}
+                                                            type="button"
+                                                            className={primary
+                                                                ? `${primaryButtonClass} min-h-[3rem] shadow-[0_10px_30px_-12px_rgb(var(--color-plex)/0.8)]`
+                                                                : `${buttonClass} min-h-[3rem] bg-gradient-to-b from-white/[0.05] to-black/20`}
+                                                            disabled={busy !== null}
+                                                            onClick={() => runAction(`control-${action}`, () => mediaAutomationApi.control(action), `Worker ${action} requested.`)}
+                                                        >
+                                                            {busy === `control-${action}`
+                                                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                                : <ActionIcon className="h-4 w-4" />}
+                                                            {label}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+                                                <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-muted">Library actions</p>
+                                                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                                                    <button
+                                                        type="button"
+                                                        className={`${buttonClass} justify-start bg-gradient-to-b from-white/[0.04] to-transparent px-3.5 py-3`}
+                                                        disabled={busy !== null}
+                                                        onClick={() => {
+                                                            const enabledRoots = libraries
+                                                                .filter((library) => library.enabled !== false)
+                                                                .map((library) => String(library.rootPath || '').trim())
+                                                                .filter(Boolean);
+                                                            void runScanNow({}, enabledRoots);
+                                                        }}
+                                                    >
+                                                        {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4 text-plex" />}
+                                                        <span className="text-left">
+                                                            <span className="block">Scan now</span>
+                                                            <span className="block text-[11px] font-medium text-muted">Enqueue matching media</span>
+                                                        </span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`${buttonClass} justify-start bg-gradient-to-b from-white/[0.04] to-transparent px-3.5 py-3`}
+                                                        disabled={busy !== null}
+                                                        onClick={() => void runScanNow({ preview: true })}
+                                                    >
+                                                        {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4 text-plex" />}
+                                                        <span className="text-left">
+                                                            <span className="block">Preview scan</span>
+                                                            <span className="block text-[11px] font-medium text-muted">Dry discovery pass</span>
+                                                        </span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`${buttonClass} justify-start bg-gradient-to-b from-white/[0.04] to-transparent px-3.5 py-3`}
+                                                        disabled={busy !== null}
+                                                        onClick={() => void runScanNow({ planOnly: true })}
+                                                    >
+                                                        {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-plex" />}
+                                                        <span className="text-left">
+                                                            <span className="block">Plan only</span>
+                                                            <span className="block text-[11px] font-medium text-muted">Build plans, no encode</span>
+                                                        </span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`${buttonClass} justify-start bg-gradient-to-b from-white/[0.04] to-transparent px-3.5 py-3`}
+                                                        disabled={busy !== null}
+                                                        onClick={async () => {
+                                                            setBusy('worker-test');
+                                                            setWorkerTestError('');
+                                                            try {
+                                                                const result = await mediaAutomationApi.testWorker() as MediaAutomationCapabilities & { ok?: boolean; error?: string };
+                                                                if (result?.ok === false || result?.available === false) {
+                                                                    setWorkerTestError(result.error || 'Worker test failed');
+                                                                    setWorkerTestResult(result);
+                                                                    toast(result.error || 'Worker test failed', 'error');
+                                                                } else {
+                                                                    setWorkerTestResult(result);
+                                                                    setCapabilities(result);
+                                                                    toast('Worker test completed.');
+                                                                }
+                                                                await load(true);
+                                                            } catch (error) {
+                                                                const message = error instanceof Error ? error.message : 'Worker test failed';
+                                                                setWorkerTestError(message);
+                                                                setWorkerTestResult(null);
+                                                                toast(message, 'error');
+                                                            } finally {
+                                                                setBusy(null);
+                                                            }
+                                                        }}
+                                                    >
+                                                        {busy === 'worker-test' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-plex" />}
+                                                        <span className="text-left">
+                                                            <span className="block">Test worker</span>
+                                                            <span className="block text-[11px] font-medium text-muted">Probe FFmpeg + hardware</span>
+                                                        </span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {(workerTestResult || workerTestError) && (
+                                                <div className={`rounded-2xl border p-4 text-sm ${workerTestError ? 'border-red-500/30 bg-red-500/10 text-red-100' : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-50'}`}>
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div>
+                                                            <p className="font-bold">{workerTestError ? 'Worker test failed' : 'Worker test passed'}</p>
+                                                            {workerTestError && <p className="mt-1 text-xs opacity-90">{workerTestError}</p>}
+                                                            {workerTestResult && (
+                                                                <div className="mt-2 space-y-1 text-xs opacity-90">
+                                                                    <p>FFmpeg: {typeof workerTestResult.ffmpeg === 'object' ? (workerTestResult.ffmpeg.version || (workerTestResult.ffmpeg.available === false ? 'unavailable' : 'available')) : (workerTestResult.ffmpeg ? 'available' : 'unknown')}</p>
+                                                                    <p>Hardware: {(Array.isArray(workerTestResult.hardware) ? workerTestResult.hardware : []).join(', ') || 'cpu only'}</p>
+                                                                    {workerTestResult.devices?.dri && (
+                                                                        <p>/dev/dri: {workerTestResult.devices.dri.present === false ? 'not mapped' : (workerTestResult.devices.dri.readable === false ? 'present but not readable' : (workerTestResult.devices.dri.device || 'present'))}</p>
+                                                                    )}
+                                                                    {(['qsv', 'nvenc', 'intel-vaapi', 'vaapi'] as const).map((id) => {
+                                                                        const detail = workerTestResult.details?.[id];
+                                                                        if (!detail?.error) return null;
+                                                                        return <p key={id} className="text-amber-200">{detail.label || id}: {detail.error}</p>;
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <button type="button" className="rounded-lg p-1 text-current/70 hover:bg-white/10" onClick={() => { setWorkerTestResult(null); setWorkerTestError(''); }} aria-label="Dismiss">
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             )}
-                                        </div>
-                                        <button type="button" className="rounded-lg p-1 text-current/70 hover:bg-white/10" onClick={() => { setWorkerTestResult(null); setWorkerTestError(''); }} aria-label="Dismiss">
-                                            <X className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                            <dl className="mt-5 grid grid-cols-1 gap-3 border-t border-border/60 pt-5 text-sm sm:grid-cols-2">
-                                <div><dt className="text-muted">Last scan</dt><dd className="mt-1 font-semibold text-text">{formatTime(status.lastScanAt)}{status.lastScanResult ? ` · ${status.lastScanResult.enqueued || 0} queued` : ''}</dd></div>
-                                <div><dt className="text-muted">Periodic scan</dt><dd className="mt-1 font-semibold text-text">{status.libraryScanEnabled === false ? 'Disabled' : status.periodicScanning ? `Every ${status.libraryScanIntervalMinutes || 360}m` : 'Idle'}</dd></div>
-                                <div>
-                                    <dt className="text-muted">Watcher</dt>
-                                    <dd className="mt-1 flex items-center gap-2 font-semibold text-text">
-                                        <Radar className="h-3.5 w-3.5 text-plex" />
-                                        {status.libraryWatchConfigured && status.watchEnvEnabled === false
-                                            ? 'Blocked: set MEDIA_AUTOMATION_ENABLE_WATCH=1'
-                                            : status.libraryWatchEnabled === false
-                                                ? 'Disabled'
-                                                : status.watch?.watching
-                                                    ? `Watching ${status.watch.roots?.length || 0} root(s)`
-                                                    : 'Not watching'}
-                                    </dd>
-                                </div>
-                                <div><dt className="text-muted">Lanes</dt><dd className="mt-1 font-semibold text-text">CPU {status.lanes?.cpu?.running || 0}/{status.lanes?.cpu?.queued || 0} · GPU {status.lanes?.gpu?.running || 0}/{status.lanes?.gpu?.queued || 0}</dd></div>
-                            </dl>
-                            {status.libraryWatchConfigured && status.watchEnvEnabled === false && (
-                                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-                                    Watcher is enabled in Settings, but the container env gate is off. Add <code className="font-mono text-plex">MEDIA_AUTOMATION_ENABLE_WATCH=1</code> and recreate the container.
-                                </div>
-                            )}
+
+                                            <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+                                                <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/25 p-3.5">
+                                                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Last scan</p>
+                                                    <p className="mt-2 text-sm font-semibold tabular-nums text-text">{formatTime(status.lastScanAt)}</p>
+                                                    <p className="mt-1 text-[11px] text-muted">{status.lastScanResult ? `${status.lastScanResult.enqueued || 0} queued` : 'No scan yet'}</p>
+                                                </div>
+                                                <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/25 p-3.5">
+                                                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Periodic scan</p>
+                                                    <p className="mt-2 text-sm font-semibold text-text">{periodicLabel}</p>
+                                                    <p className="mt-1 text-[11px] text-muted">Library schedule</p>
+                                                </div>
+                                                <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/25 p-3.5">
+                                                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Watcher</p>
+                                                    <p className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-text">
+                                                        <Radar className="h-3.5 w-3.5 text-plex" />
+                                                        {watcherLabel}
+                                                    </p>
+                                                    <p className="mt-1 text-[11px] text-muted">Filesystem events</p>
+                                                </div>
+                                                <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/25 p-3.5">
+                                                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Lanes</p>
+                                                    <p className="mt-2 text-sm font-semibold tabular-nums text-text">CPU {cpuRunning}/{cpuQueued}</p>
+                                                    <p className="mt-1 text-[11px] font-semibold tabular-nums text-muted">GPU {gpuRunning}/{gpuQueued}</p>
+                                                </div>
+                                            </div>
+
+                                            {status.libraryWatchConfigured && status.watchEnvEnabled === false && (
+                                                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                                                    Watcher is enabled in Settings, but the container env gate is off. Add <code className="font-mono text-plex">MEDIA_AUTOMATION_ENABLE_WATCH=1</code> and recreate the container.
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                            </div>
                         </section>
-                        <section className={`${cardClass} space-y-3 p-5`}>
-                            <h2 className="text-lg font-bold tracking-tight text-text">Capabilities</h2>
+<section className={`${cardClass} relative overflow-hidden p-0`}>
+                            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_100%_0%,rgb(var(--color-plex)_/_0.12),transparent_40%)]" />
+                            <div className="relative space-y-4 p-5 sm:p-6">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h2 className="text-lg font-black tracking-tight text-text">Capabilities</h2>
+                                    <p className="mt-1 text-sm text-muted">Detected encode adapters in this container.</p>
+                                </div>
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
+                                    <Gauge className="h-5 w-5 text-plex" />
+                                </div>
+                            </div>
                             <div className="space-y-3 text-sm">
-                                <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">FFmpeg</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffmpeg === 'object' ? (capabilities.ffmpeg.available === false ? 'Unavailable' : capabilities.ffmpeg.version || 'Available') : capabilities.ffmpeg ? 'Available' : 'Unknown'}</p></div>
-                                <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">FFprobe</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffprobe === 'object' ? (capabilities.ffprobe.available === false ? 'Unavailable' : capabilities.ffprobe.version || 'Available') : capabilities.ffprobe ? 'Available' : 'Unknown'}</p></div>
-                                <div className="rounded-lg bg-background/40 p-3">
-                                    <p className="text-muted">Hardware adapters</p>
+                                <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/25 p-3.5"><p className="text-[11px] font-bold uppercase tracking-wide text-muted">FFmpeg</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffmpeg === 'object' ? (capabilities.ffmpeg.available === false ? 'Unavailable' : capabilities.ffmpeg.version || 'Available') : capabilities.ffmpeg ? 'Available' : 'Unknown'}</p></div>
+                                <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/25 p-3.5"><p className="text-[11px] font-bold uppercase tracking-wide text-muted">FFprobe</p><p className="mt-2 break-words font-semibold text-text">{typeof capabilities.ffprobe === 'object' ? (capabilities.ffprobe.available === false ? 'Unavailable' : capabilities.ffprobe.version || 'Available') : capabilities.ffprobe ? 'Available' : 'Unknown'}</p></div>
+                                <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/25 p-3.5">
+                                    <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Hardware adapters</p>
                                     <div className="mt-2 flex flex-wrap gap-2">
                                         {[
                                             ['cpu', 'CPU'],
@@ -2249,7 +2339,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         );
                                     })}
                                 </div>
-                                <div className="rounded-lg bg-background/40 p-3"><p className="text-muted">Encoders</p><p className="mt-2 line-clamp-3 font-semibold text-text">{capabilities.encoders?.length ? capabilities.encoders.join(', ') : 'No encoder data reported'}</p></div>
+                                <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/25 p-3.5"><p className="text-[11px] font-bold uppercase tracking-wide text-muted">Encoders</p><p className="mt-2 line-clamp-3 font-semibold text-text">{capabilities.encoders?.length ? capabilities.encoders.join(', ') : 'No encoder data reported'}</p></div>
+                            </div>
                             </div>
                         </section>
                     </div>
