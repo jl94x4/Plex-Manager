@@ -8,7 +8,7 @@ import json
 import sys
 import traceback
 
-from core import apply_bulk, apply_url, parse_bulk_urls, preview_url, test_connection
+from core import apply_bulk, apply_url, parse_bulk_urls, preview_url, search_catalog, test_connection
 
 
 def write_event(event_type: str, **payload) -> None:
@@ -22,7 +22,7 @@ def progress(message: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poster Sets headless CLI")
-    parser.add_argument("command", choices=["test", "preview", "apply", "bulk"])
+    parser.add_argument("command", choices=["test", "preview", "apply", "bulk", "search"])
     parser.add_argument("--payload", default="", help="JSON payload string (otherwise read stdin)")
     args = parser.parse_args()
 
@@ -58,7 +58,21 @@ def main() -> int:
                 matchError=result.get("matchError"),
                 samples=result.get("samples"),
                 assets=result.get("assets") or [],
+                setMeta=result.get("setMeta"),
             )
+            return 0
+
+        if args.command == "search":
+            result = search_catalog(
+                str(request.get("provider") or ""),
+                query=str(request.get("query") or request.get("q") or ""),
+                title_url=str(request.get("titleUrl") or request.get("title_url") or ""),
+                media_type=str(request.get("mediaType") or request.get("media_type") or "movie"),
+                tmdb_id=request.get("tmdbId") or request.get("tmdb_id"),
+                limit=int(request.get("limit") or 24),
+                progress=progress,
+            )
+            write_event("result", **result)
             return 0
 
         if args.command == "apply":

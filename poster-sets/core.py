@@ -14,6 +14,8 @@ import tempfile
 import time
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Set, Tuple
 
+from urllib.parse import quote, unquote
+
 import plexapi.exceptions
 import requests
 from bs4 import BeautifulSoup
@@ -645,6 +647,60 @@ def summarize_posters(movieposters, showposters, collectionposters) -> dict:
     }
 
 
+def parse_set_ref(url: str) -> dict:
+    """Extract provider + set/poster id from a MediUX or ThePosterDB URL."""
+    value = str(url or "").strip()
+    lower = value.lower()
+    provider = None
+    set_id = None
+    if "mediux.pro" in lower:
+        provider = "mediux"
+        match = re.search(r"/sets?/(\d+)", value, re.I)
+        if match:
+            set_id = match.group(1)
+    elif "theposterdb.com" in lower:
+        provider = "posterdb"
+        match = re.search(r"/(?:set|poster)/(\d+)", value, re.I)
+        if match:
+            set_id = match.group(1)
+        elif "/user/" in lower:
+            match = re.search(r"/user/([^/?#]+)", value, re.I)
+            if match:
+                set_id = match.group(1)
+    return {"provider": provider, "setId": set_id, "url": value}
+
+
+def build_set_meta(url: str, movieposters=None, showposters=None, collectionposters=None) -> dict:
+    """Compact set summary for Recent chips / history list (one thumb + title)."""
+    ref = parse_set_ref(url)
+    title = None
+    thumb = ""
+    for group in (movieposters, showposters, collectionposters):
+        for poster in group or []:
+            if not title and poster.get("title"):
+                title = str(poster.get("title") or "").strip() or None
+            if not thumb and poster.get("url"):
+                thumb = str(poster.get("url") or "").strip()
+            if title and thumb:
+                break
+        if title and thumb:
+            break
+    total = len(movieposters or []) + len(showposters or []) + len(collectionposters or [])
+    if not title:
+        if ref.get("setId"):
+            title = f"Set {ref['setId']}"
+        else:
+            title = "Poster set"
+    return {
+        "provider": ref.get("provider"),
+        "setId": ref.get("setId"),
+        "url": ref.get("url") or str(url or "").strip(),
+        "title": title,
+        "thumbUrl": thumb,
+        "assetCount": total or None,
+    }
+
+
 def match_show_target(tv_show, poster: dict) -> Tuple[bool, str]:
     season = poster.get("season")
     episode = poster.get("episode")
@@ -793,6 +849,7 @@ def preview_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
     assets = build_preview_assets(movieposters, showposters, collectionposters, tv=tv, movies=movies)
     matched = sum(1 for asset in assets if asset.get("matched") is True)
     unmatched = sum(1 for asset in assets if asset.get("matched") is False)
+    set_meta = build_set_meta(url, movieposters, showposters, collectionposters)
     return {
         "ok": True,
         "url": url,
@@ -801,6 +858,7 @@ def preview_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
         "matched": matched,
         "unmatched": unmatched,
         "matchError": match_error,
+        "setMeta": set_meta,
     }
 
 
@@ -839,6 +897,7 @@ def apply_url(
         poster = {**poster, "_config": config}
         results.append(upload_tv_poster(poster, tv, progress=progress))
     uploaded = sum(1 for item in results if item.get("ok"))
+    set_meta = build_set_meta(url, movieposters, showposters, collectionposters)
     return {
         "ok": True,
         "url": url,
@@ -852,6 +911,7 @@ def apply_url(
             "collections": len(collectionposters),
         },
         "results": results,
+        "setMeta": set_meta,
     }
 
 
@@ -866,6 +926,255 @@ def parse_bulk_urls(lines: Iterable[str]) -> List[str]:
         if url and is_not_comment(url):
             urls.append(url)
     return urls
+
+
+def _absolute_url(base: str, href: str) -> str:
+    value = str(href or "").strip()
+    if not value:
+        return ""
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    if value.startswith("//"):
+        return "https:" + value
+    if value.startswith("/"):
+        return base.rstrip("/") + value
+    return base.rstrip("/") + "/" + value
+
+
+def _decode_next_image_url(src: str) -> str:
+    value = str(src or "").strip()
+    if not value:
+        return ""
+    match = re.search(r"[?&]url=([^&]+)", value)
+    if match:
+        return unquote(match.group(1))
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    return ""
+
+
+def search_posterdb_titles(query: str, progress: ProgressFn = None, limit: int = 24) -> dict:
+    term = str(query or "").strip()
+    if not term:
+        raise ValueError("query is required")
+    search_url = f"https://theposterdb.com/search?term={quote(term)}"
+    emit(progress, f"Searching ThePosterDB for “{term}”…")
+    soup = cook_soup(search_url)
+    titles = []
+    seen = set()
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "")
+        match = re.search(r"/posters/(\d+)", href)
+        if not match:
+            continue
+        posters_id = match.group(1)
+        if posters_id in seen or posters_id == "requests":
+            continue
+        title = anchor.get_text(" ", strip=True)
+        if not title or len(title) < 2:
+            continue
+        seen.add(posters_id)
+        year = None
+        year_match = re.search(r"\((\d{4}|N/A)\)\s*$", title)
+        if year_match and year_match.group(1).isdigit():
+            year = int(year_match.group(1))
+        titles.append(
+            {
+                "id": posters_id,
+                "title": title,
+                "year": year,
+                "url": _absolute_url("https://theposterdb.com", href.split("?")[0]),
+                "mediaType": None,
+                "provider": "posterdb",
+            }
+        )
+        if len(titles) >= max(1, int(limit or 24)):
+            break
+    return {"ok": True, "provider": "posterdb", "phase": "titles", "query": term, "titles": titles, "sets": []}
+
+
+def list_posterdb_sets(title_url: str, progress: ProgressFn = None, limit: int = 40) -> dict:
+    url = str(title_url or "").strip()
+    if not url or "theposterdb.com" not in url.lower() or "/posters/" not in url.lower():
+        raise ValueError("A ThePosterDB /posters/… title URL is required")
+    emit(progress, f"Loading sets from {url}")
+    soup = cook_soup(url)
+    page_title = ""
+    heading = soup.find(["h1", "h2", "title"])
+    if heading:
+        page_title = heading.get_text(" ", strip=True)
+    sets: dict = {}
+    for badge in soup.select("a.set_poster_count[href*='/set/']"):
+        href = str(badge.get("href") or "")
+        match = re.search(r"/set/(\d+)", href)
+        if not match:
+            continue
+        set_id = match.group(1)
+        poster_count = None
+        count_text = badge.get_text(" ", strip=True)
+        if count_text.isdigit():
+            poster_count = int(count_text)
+        card = badge
+        for _ in range(8):
+            if card.parent is None:
+                break
+            card = card.parent
+            classes = card.get("class") or []
+            if "hovereffect" in classes:
+                break
+        title = ""
+        user = None
+        thumb = ""
+        title_node = card.select_one(".poster-title-correction p") if hasattr(card, "select_one") else None
+        if title_node:
+            title = title_node.get_text(" ", strip=True)
+        user_node = card.select_one("a[href*='/user/']") if hasattr(card, "select_one") else None
+        if user_node:
+            user = user_node.get_text(" ", strip=True) or None
+        picture = card.find("picture") if hasattr(card, "find") else None
+        if picture:
+            for source in picture.find_all("source", srcset=True):
+                candidate = str(source.get("srcset") or "").split()[0].strip()
+                if candidate and "missing_poster" not in candidate:
+                    thumb = candidate
+                    break
+        if not thumb:
+            img = card.find("img") if hasattr(card, "find") else None
+            if img:
+                thumb = img.get("data-src") or img.get("src") or ""
+        if thumb and thumb.startswith("/"):
+            thumb = _absolute_url("https://theposterdb.com", thumb)
+        if thumb and "missing_poster" in thumb:
+            thumb = ""
+        entry = sets.get(set_id) or {
+            "setId": set_id,
+            "url": _absolute_url("https://theposterdb.com", f"/set/{set_id}"),
+            "title": "",
+            "thumbUrl": "",
+            "user": None,
+            "posterCount": None,
+            "provider": "posterdb",
+        }
+        if title and not entry["title"]:
+            entry["title"] = title
+        if user and not entry["user"]:
+            entry["user"] = user
+        if thumb and not entry["thumbUrl"]:
+            entry["thumbUrl"] = thumb
+        if poster_count is not None:
+            entry["posterCount"] = poster_count
+        sets[set_id] = entry
+        if len(sets) >= max(1, int(limit or 40)):
+            break
+    results = list(sets.values())
+    for item in results:
+        if not item.get("title"):
+            item["title"] = page_title or f"Set {item['setId']}"
+    return {
+        "ok": True,
+        "provider": "posterdb",
+        "phase": "sets",
+        "titleUrl": url,
+        "title": page_title or None,
+        "titles": [],
+        "sets": results,
+    }
+
+
+def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn = None, limit: int = 40) -> dict:
+    kind = str(media_type or "movie").strip().lower()
+    if kind in {"tv", "series", "show", "shows"}:
+        kind = "show"
+        path = "shows"
+    else:
+        kind = "movie"
+        path = "movies"
+    tmdb = str(tmdb_id or "").strip()
+    if not tmdb.isdigit():
+        raise ValueError("tmdbId is required for MediUX browse")
+    page_url = f"https://mediux.pro/{path}/{tmdb}"
+    emit(progress, f"Loading MediUX {kind} page {tmdb}…")
+    soup = cook_soup(page_url)
+    page_title = ""
+    if soup.title:
+        page_title = soup.title.get_text(" ", strip=True)
+    sets: dict = {}
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "")
+        match = re.search(r"/sets/(\d+)", href)
+        if not match:
+            continue
+        set_id = match.group(1)
+        title = anchor.get_text(" ", strip=True)
+        thumb = ""
+        img = anchor.find("img")
+        if img:
+            thumb = _decode_next_image_url(img.get("src") or "")
+            if not thumb:
+                thumb = img.get("src") or ""
+                if thumb.startswith("/"):
+                    # Keep api.mediux asset URLs only when decoded; skip next/image paths.
+                    thumb = ""
+        entry = sets.get(set_id) or {
+            "setId": set_id,
+            "url": f"https://mediux.pro/sets/{set_id}",
+            "title": "",
+            "thumbUrl": "",
+            "user": None,
+            "posterCount": None,
+            "provider": "mediux",
+        }
+        if title and not entry["title"]:
+            entry["title"] = title[:160]
+        if thumb and not entry["thumbUrl"]:
+            entry["thumbUrl"] = thumb
+        sets[set_id] = entry
+        if len(sets) >= max(1, int(limit or 40)):
+            break
+    results = list(sets.values())
+    for item in results:
+        if not item.get("title"):
+            item["title"] = page_title or f"Set {item['setId']}"
+    return {
+        "ok": True,
+        "provider": "mediux",
+        "phase": "sets",
+        "mediaType": kind,
+        "tmdbId": tmdb,
+        "titleUrl": page_url,
+        "title": page_title or None,
+        "titles": [],
+        "sets": results,
+    }
+
+
+def search_catalog(
+    provider: str,
+    *,
+    query: str = "",
+    title_url: str = "",
+    media_type: str = "movie",
+    tmdb_id: str | int | None = None,
+    limit: int = 24,
+    progress: ProgressFn = None,
+) -> dict:
+    """Scrape MediUX / ThePosterDB discovery pages (user-initiated only)."""
+    source = str(provider or "").strip().lower()
+    if source in {"tpdb", "posterdb", "theposterdb"}:
+        source = "posterdb"
+    elif source in {"mediux", "mediaux"}:
+        source = "mediux"
+    else:
+        raise ValueError("provider must be mediux or posterdb")
+
+    if source == "posterdb":
+        if title_url:
+            return list_posterdb_sets(title_url, progress=progress, limit=limit)
+        return search_posterdb_titles(query, progress=progress, limit=limit)
+
+    if tmdb_id:
+        return list_mediux_sets(media_type, tmdb_id, progress=progress, limit=limit)
+    raise ValueError("MediUX browse needs a TMDB title id (search titles in the portal first)")
 
 
 def apply_bulk(urls: Sequence[str], config: dict, progress: ProgressFn = None) -> dict:

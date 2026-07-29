@@ -11,6 +11,15 @@ export type PosterSetsConfig = {
     configured?: boolean;
 };
 
+export type PosterSetsSetMeta = {
+    provider?: string | null;
+    setId?: string | null;
+    url?: string | null;
+    title?: string | null;
+    thumbUrl?: string;
+    assetCount?: number | null;
+};
+
 export type PosterSetsJobInput = {
     url?: string;
     urls?: string[];
@@ -19,6 +28,7 @@ export type PosterSetsJobInput = {
     file?: string;
     lineCount?: number;
     selectedCount?: number;
+    setMeta?: PosterSetsSetMeta | null;
 };
 
 export type PosterSetsStatus = {
@@ -37,6 +47,7 @@ export type PosterSetsStatus = {
         uploaded?: number | null;
         attempted?: number | null;
         input?: PosterSetsJobInput | null;
+        setMeta?: PosterSetsSetMeta | null;
     }>;
 };
 
@@ -69,6 +80,7 @@ export type PosterSetsPreview = {
         collections?: string[];
     };
     assets?: PosterSetsPreviewAsset[];
+    setMeta?: PosterSetsSetMeta | null;
     logs?: string[];
     error?: string;
 };
@@ -86,6 +98,40 @@ export type PosterSetsJob = {
     uploaded?: number | null;
     attempted?: number | null;
     logCount?: number;
+    setMeta?: PosterSetsSetMeta | null;
+};
+
+export type PosterSetsSearchTitle = {
+    id: string;
+    title: string;
+    year?: number | null;
+    url: string;
+    mediaType?: string | null;
+    thumbUrl?: string;
+    provider?: string;
+};
+
+export type PosterSetsSearchSet = {
+    setId: string;
+    title: string;
+    url: string;
+    thumbUrl?: string;
+    user?: string | null;
+    posterCount?: number | null;
+    provider?: string;
+};
+
+export type PosterSetsSearchResult = {
+    ok?: boolean;
+    provider?: string;
+    phase?: 'titles' | 'sets' | string;
+    query?: string;
+    title?: string | null;
+    titleUrl?: string;
+    titles?: PosterSetsSearchTitle[];
+    sets?: PosterSetsSearchSet[];
+    error?: string;
+    code?: string;
 };
 
 export const MEDIUX_FILTER_OPTIONS = [

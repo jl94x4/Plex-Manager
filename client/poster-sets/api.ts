@@ -1,5 +1,5 @@
 import { apiFetch } from '../shared/api';
-import type { PosterSetsConfig, PosterSetsJob, PosterSetsPreview, PosterSetsStatus } from './types';
+import type { PosterSetsConfig, PosterSetsJob, PosterSetsPreview, PosterSetsSearchResult, PosterSetsStatus } from './types';
 
 const ROOT = '/api/poster-sets';
 
@@ -38,6 +38,14 @@ export const posterSetsApi = {
         error?: string;
     }>,
     preview: (url: string) => apiFetch(`${ROOT}/preview`, json({ url })) as Promise<PosterSetsPreview>,
+    search: (payload: {
+        provider: 'mediux' | 'posterdb';
+        query?: string;
+        titleUrl?: string;
+        tmdbId?: string | number;
+        mediaType?: string;
+        limit?: number;
+    }) => apiFetch(`${ROOT}/search`, json(payload)) as Promise<PosterSetsSearchResult>,
     apply: (url: string, selectedIds?: string[]) => apiFetch(`${ROOT}/apply`, json({
         url,
         ...(selectedIds?.length ? { selectedIds } : {}),

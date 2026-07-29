@@ -1,12 +1,15 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     CheckCircle2,
     Download,
+    ExternalLink,
     History,
     Image as ImageIcon,
     Loader2,
     RefreshCw,
+    RotateCcw,
     Save,
+    Search,
     Settings2,
     Sparkles,
 } from 'lucide-react';
@@ -20,6 +23,9 @@ import {
     type PosterSetsJob,
     type PosterSetsPreview,
     type PosterSetsPreviewAsset,
+    type PosterSetsSearchSet,
+    type PosterSetsSearchTitle,
+    type PosterSetsSetMeta,
     type PosterSetsStatus,
 } from './types';
 
@@ -30,9 +36,95 @@ const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px
 
 type TabId = 'apply' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed';
+type SetProvider = 'mediux' | 'posterdb';
+
+const RECENT_SETS_KEY = 'poster-sets-recent-v1';
+const MAX_RECENT_SETS = 10;
+
+type RecentSetChip = {
+    url: string;
+    title: string;
+    provider: string | null;
+    setId: string | null;
+    thumbUrl: string;
+    assetCount: number | null;
+    at: string;
+};
 
 const listToText = (value: string[] | undefined) => (Array.isArray(value) ? value.join('\n') : '');
 const textToList = (value: string) => value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean);
+
+const parseSetRef = (rawUrl: string): { provider: SetProvider | null; setId: string | null; url: string } => {
+    const url = String(rawUrl || '').trim();
+    const lower = url.toLowerCase();
+    if (lower.includes('mediux.pro')) {
+        const match = url.match(/\/sets?\/(\d+)/i);
+        return { provider: 'mediux', setId: match?.[1] || null, url };
+    }
+    if (lower.includes('theposterdb.com')) {
+        const match = url.match(/\/(?:set|poster)\/(\d+)/i) || url.match(/\/user\/([^/?#]+)/i);
+        return { provider: 'posterdb', setId: match?.[1] || null, url };
+    }
+    return { provider: null, setId: null, url };
+};
+
+const buildSetUrl = (provider: SetProvider, rawId: string) => {
+    const id = String(rawId || '').trim().replace(/^#/, '');
+    if (!id) return '';
+    if (provider === 'mediux') return `https://mediux.pro/sets/${encodeURIComponent(id)}`;
+    if (/^\d+$/.test(id)) return `https://theposterdb.com/set/${id}`;
+    return `https://theposterdb.com/user/${encodeURIComponent(id)}`;
+};
+
+const providerLabel = (provider?: string | null) => {
+    if (provider === 'mediux') return 'MediUX';
+    if (provider === 'posterdb') return 'PosterDB';
+    return 'Set';
+};
+
+const readRecentSets = (): RecentSetChip[] => {
+    try {
+        const raw = localStorage.getItem(RECENT_SETS_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.filter((item) => item && item.url) : [];
+    } catch {
+        return [];
+    }
+};
+
+const writeRecentSets = (entries: RecentSetChip[]) => {
+    try {
+        localStorage.setItem(RECENT_SETS_KEY, JSON.stringify(entries.slice(0, MAX_RECENT_SETS)));
+    } catch {
+        // ignore quota / private mode
+    }
+};
+
+const upsertRecentSet = (meta: PosterSetsSetMeta | null | undefined, fallbackUrl?: string) => {
+    const url = String(meta?.url || fallbackUrl || '').trim();
+    if (!url) return;
+    const ref = parseSetRef(url);
+    const next: RecentSetChip = {
+        url,
+        title: String(meta?.title || (ref.setId ? `Set ${ref.setId}` : 'Poster set')).trim() || 'Poster set',
+        provider: meta?.provider || ref.provider,
+        setId: meta?.setId != null ? String(meta.setId) : ref.setId,
+        thumbUrl: String(meta?.thumbUrl || ''),
+        assetCount: Number.isFinite(Number(meta?.assetCount)) ? Number(meta?.assetCount) : null,
+        at: new Date().toISOString(),
+    };
+    const existing = readRecentSets().filter((item) => item.url !== url);
+    writeRecentSets([next, ...existing]);
+};
+
+const jobSetMeta = (job: PosterSetsJob | null | undefined): PosterSetsSetMeta | null => {
+    if (!job) return null;
+    if (job.setMeta) return job.setMeta;
+    if (job.input?.setMeta) return job.input.setMeta;
+    const resultMeta = job.result?.setMeta;
+    if (resultMeta && typeof resultMeta === 'object') return resultMeta as PosterSetsSetMeta;
+    return null;
+};
 
 const formatTime = (value?: string | null) => {
     if (!value) return '—';
@@ -69,6 +161,11 @@ const jobCardTone = (job: PosterSetsJob) => {
 };
 
 const jobTitle = (job: PosterSetsJob) => {
+    const meta = jobSetMeta(job);
+    if (meta?.title) {
+        const provider = providerLabel(meta.provider);
+        return meta.setId ? `${meta.title} · ${provider} #${meta.setId}` : meta.title;
+    }
     const input = job.input;
     if (input?.url) return input.url;
     if (input?.fromFile) {
@@ -108,6 +205,13 @@ export const PosterSetsDashboard: React.FC = () => {
     const [movieText, setMovieText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.movie_library));
     const [url, setUrl] = useState('');
     const [bulkText, setBulkText] = useState('');
+    const [findProvider, setFindProvider] = useState<SetProvider>('mediux');
+    const [findId, setFindId] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchTitles, setSearchTitles] = useState<PosterSetsSearchTitle[]>([]);
+    const [searchSets, setSearchSets] = useState<PosterSetsSearchSet[]>([]);
+    const [searchContext, setSearchContext] = useState('');
+    const [recentTick, setRecentTick] = useState(0);
     const [preview, setPreview] = useState<PosterSetsPreview | null>(null);
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
     const [activeJob, setActiveJob] = useState<PosterSetsJob | null>(null);
@@ -156,14 +260,20 @@ export const PosterSetsDashboard: React.FC = () => {
                 const response = await posterSetsApi.job(activeJob.id);
                 setActiveJob(response.job);
                 if (response.job.state && response.job.state !== 'running') {
+                    const meta = jobSetMeta(response.job);
+                    if (meta?.thumbUrl || meta?.title) {
+                        upsertRecentSet(meta, response.job.input?.url);
+                        setRecentTick((value) => value + 1);
+                    }
                     await load();
+                    await loadHistory();
                 }
             } catch {
                 // keep polling until terminal or user leaves
             }
         }, 1500);
         return () => window.clearInterval(timer);
-    }, [activeJob?.id, activeJob?.state, load]);
+    }, [activeJob?.id, activeJob?.state, load, loadHistory]);
 
     useEffect(() => {
         if (tab !== 'history') return undefined;
@@ -269,12 +379,13 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
-    const runPreview = async () => {
-        const target = url.trim();
+    const runPreview = async (overrideUrl?: string) => {
+        const target = String(overrideUrl ?? url).trim();
         if (!target) {
             toast('Paste a MediUX or ThePosterDB set URL first.', 'error');
             return;
         }
+        if (overrideUrl) setUrl(target);
         setBusy('preview');
         setPreview(null);
         setSelectedAssetIds([]);
@@ -284,6 +395,8 @@ export const PosterSetsDashboard: React.FC = () => {
             const assets = response.assets || [];
             const defaults = assets.filter((asset) => asset.matched !== false).map((asset) => asset.id);
             setSelectedAssetIds(defaults.length ? defaults : assets.map((asset) => asset.id));
+            upsertRecentSet(response.setMeta, target);
+            setRecentTick((value) => value + 1);
             const matched = response.matched ?? defaults.length;
             toast(`Preview ready: ${response.total || 0} assets · ${matched} matched in Plex.`);
         } catch (error) {
@@ -293,12 +406,13 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
-    const runApply = async (selectedOnly = false) => {
-        const target = url.trim();
+    const runApply = async (selectedOnly = false, overrideUrl?: string) => {
+        const target = String(overrideUrl ?? url).trim();
         if (!target) {
             toast('Paste a MediUX or ThePosterDB set URL first.', 'error');
             return;
         }
+        if (overrideUrl) setUrl(target);
         if (selectedOnly && !selectedAssetIds.length) {
             toast('Select at least one asset to apply.', 'error');
             return;
@@ -310,6 +424,8 @@ export const PosterSetsDashboard: React.FC = () => {
                 selectedOnly ? selectedAssetIds : undefined,
             );
             setActiveJob(response.job);
+            upsertRecentSet(jobSetMeta(response.job), target);
+            setRecentTick((value) => value + 1);
             toast(selectedOnly
                 ? `Apply started for ${selectedAssetIds.length} selected asset(s).`
                 : 'Apply started.');
@@ -319,6 +435,85 @@ export const PosterSetsDashboard: React.FC = () => {
         } finally {
             setBusy(null);
         }
+    };
+
+    const useFindId = async (andPreview: boolean) => {
+        const built = buildSetUrl(findProvider, findId);
+        if (!built) {
+            toast(findProvider === 'mediux'
+                ? 'Enter a MediUX set ID (numbers only).'
+                : 'Enter a ThePosterDB set ID or username.', 'error');
+            return;
+        }
+        setUrl(built);
+        if (andPreview) await runPreview(built);
+        else toast('Set URL filled — preview or apply when ready.');
+    };
+
+    const runCatalogSearch = async () => {
+        const q = searchQuery.trim();
+        if (!q) {
+            toast('Enter a title to search.', 'error');
+            return;
+        }
+        setBusy('search');
+        setSearchTitles([]);
+        setSearchSets([]);
+        setSearchContext('');
+        try {
+            const response = await posterSetsApi.search({
+                provider: findProvider,
+                query: q,
+                limit: 24,
+            });
+            setSearchTitles(response.titles || []);
+            setSearchSets(response.sets || []);
+            setSearchContext(response.title || q);
+            const titleCount = response.titles?.length || 0;
+            const setCount = response.sets?.length || 0;
+            if (!titleCount && !setCount) {
+                toast('No matches found.', 'error');
+            } else if (titleCount) {
+                toast(`Found ${titleCount} title${titleCount === 1 ? '' : 's'}. Pick one to see sets.`);
+            } else {
+                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}.`);
+            }
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Search failed', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const openSearchTitle = async (title: PosterSetsSearchTitle) => {
+        setBusy('search');
+        setSearchSets([]);
+        try {
+            const response = findProvider === 'mediux'
+                ? await posterSetsApi.search({
+                    provider: 'mediux',
+                    tmdbId: title.id,
+                    mediaType: title.mediaType === 'show' ? 'show' : 'movie',
+                    limit: 40,
+                })
+                : await posterSetsApi.search({
+                    provider: 'posterdb',
+                    titleUrl: title.url,
+                    limit: 40,
+                });
+            setSearchSets(response.sets || []);
+            setSearchContext(response.title || title.title);
+            toast(`Found ${response.sets?.length || 0} set${(response.sets?.length || 0) === 1 ? '' : 's'} for ${title.title}.`);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const pickSearchSet = (set: PosterSetsSearchSet) => {
+        setUrl(set.url);
+        void runPreview(set.url);
     };
 
     const toggleAsset = (id: string) => {
@@ -368,6 +563,37 @@ export const PosterSetsDashboard: React.FC = () => {
     const jobLogs = jobLogLines(activeJob);
     const selectedLogs = jobLogLines(selectedHistoryJob);
 
+    const recentSets = useMemo(() => {
+        void recentTick;
+        const byUrl = new Map<string, RecentSetChip>();
+        const push = (chip: RecentSetChip | null) => {
+            if (!chip?.url || byUrl.has(chip.url)) return;
+            byUrl.set(chip.url, chip);
+        };
+
+        for (const stored of readRecentSets()) {
+            push(stored);
+        }
+        for (const job of historyJobs) {
+            const urlValue = String(job.input?.url || jobSetMeta(job)?.url || '').trim();
+            if (!urlValue) continue;
+            const meta = jobSetMeta(job);
+            const ref = parseSetRef(urlValue);
+            push({
+                url: urlValue,
+                title: String(meta?.title || (ref.setId ? `Set ${ref.setId}` : 'Poster set')),
+                provider: meta?.provider || ref.provider,
+                setId: meta?.setId != null ? String(meta.setId) : ref.setId,
+                thumbUrl: String(meta?.thumbUrl || ''),
+                assetCount: Number.isFinite(Number(meta?.assetCount)) ? Number(meta?.assetCount) : null,
+                at: job.finishedAt || job.createdAt || new Date(0).toISOString(),
+            });
+        }
+        return [...byUrl.values()]
+            .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+            .slice(0, MAX_RECENT_SETS);
+    }, [historyJobs, recentTick]);
+
     const filteredHistory = historyJobs.filter((job) => {
         const state = String(job.state || '').toLowerCase();
         if (historyFilter === 'running') return ['running', 'queued'].includes(state);
@@ -398,8 +624,8 @@ export const PosterSetsDashboard: React.FC = () => {
                         <p className="text-xs font-bold uppercase tracking-[0.2em] text-plex">Poster Sets</p>
                         <h1 className="mt-2 text-3xl font-bold tracking-tight text-text">Artwork from MediUX & ThePosterDB</h1>
                         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-                            Paste a set URL, preview matched assets, then apply posters to your Plex libraries.
-                            Connection settings live in this section.
+                            Find a set by ID, preview matched assets, then apply posters to your Plex libraries.
+                            Recent sets stay ready to re-run. Connection settings live in this section.
                         </p>
                     </div>
                     <button type="button" className={buttonClass} onClick={() => void load()} disabled={busy !== null}>
@@ -458,7 +684,246 @@ export const PosterSetsDashboard: React.FC = () => {
 
             {tab === 'apply' ? (
                 <div className="space-y-4">
+                    {recentSets.length ? (
+                        <section className={`${cardClass} space-y-3 p-5`}>
+                            <div className="flex flex-wrap items-end justify-between gap-2">
+                                <div>
+                                    <h2 className="text-lg font-bold text-text">Recent sets</h2>
+                                    <p className="mt-1 text-sm text-muted">
+                                        Re-preview or re-apply sets you&apos;ve already used.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                                {recentSets.map((item) => (
+                                    <div
+                                        key={item.url}
+                                        className="overflow-hidden rounded-2xl border border-white/10 bg-black/20"
+                                    >
+                                        <button
+                                            type="button"
+                                            className="block w-full text-left"
+                                            disabled={busy !== null}
+                                            onClick={() => void runPreview(item.url)}
+                                            title={`Preview ${item.title}`}
+                                        >
+                                            <div className="relative aspect-[2/3] bg-black/40">
+                                                {item.thumbUrl ? (
+                                                    <img
+                                                        src={posterSetsApi.imageUrl(item.thumbUrl)}
+                                                        alt={item.title}
+                                                        loading="lazy"
+                                                        className="h-full w-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="flex h-full items-center justify-center text-muted">
+                                                        <ImageIcon className="h-8 w-8 opacity-40" />
+                                                    </div>
+                                                )}
+                                                <span className="absolute left-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text">
+                                                    {providerLabel(item.provider)}
+                                                </span>
+                                            </div>
+                                            <div className="space-y-1 p-3">
+                                                <p className="truncate text-sm font-semibold text-text" title={item.title}>{item.title}</p>
+                                                <p className="truncate text-[11px] text-muted">
+                                                    {item.setId ? `#${item.setId}` : 'Set'}
+                                                    {item.assetCount ? ` · ${item.assetCount} assets` : ''}
+                                                </p>
+                                            </div>
+                                        </button>
+                                        <div className="flex gap-2 border-t border-white/10 p-2">
+                                            <button
+                                                type="button"
+                                                className={`${buttonClass} flex-1 !px-2 !py-1.5 text-xs`}
+                                                disabled={busy !== null}
+                                                onClick={() => void runPreview(item.url)}
+                                            >
+                                                {busy === 'preview' && url === item.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                                                Preview
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={`${primaryButtonClass} flex-1 !px-2 !py-1.5 text-xs`}
+                                                disabled={busy !== null}
+                                                onClick={() => void runApply(false, item.url)}
+                                            >
+                                                {busy === 'apply' && url === item.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                                                Apply
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
+
                     <section className={`${cardClass} space-y-4 p-5`}>
+                        <div>
+                            <label className="text-xs font-bold uppercase tracking-wide text-muted">Search sets</label>
+                            <p className="mt-1 text-sm text-muted">
+                                Search by title, pick a match, then preview a set. MediUX uses your portal TMDB key;
+                                ThePosterDB is scraped on demand when you search.
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {([
+                                    ['mediux', 'MediUX'],
+                                    ['posterdb', 'ThePosterDB'],
+                                ] as const).map(([id, label]) => (
+                                    <button
+                                        key={id}
+                                        type="button"
+                                        className={`${buttonClass} ${findProvider === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
+                                        onClick={() => {
+                                            setFindProvider(id);
+                                            setSearchTitles([]);
+                                            setSearchSets([]);
+                                            setSearchContext('');
+                                        }}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                                <a
+                                    href={findProvider === 'mediux' ? 'https://mediux.pro/' : 'https://theposterdb.com/'}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={`${buttonClass} no-underline`}
+                                >
+                                    <ExternalLink className="h-4 w-4" />
+                                    Browse site
+                                </a>
+                            </div>
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                                <div className="relative min-w-0 flex-1">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                    <input
+                                        className={`${fieldClass} pl-9`}
+                                        value={searchQuery}
+                                        onChange={(event) => setSearchQuery(event.target.value)}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter') {
+                                                event.preventDefault();
+                                                void runCatalogSearch();
+                                            }
+                                        }}
+                                        placeholder="Search titles e.g. The Matrix"
+                                    />
+                                </div>
+                                <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void runCatalogSearch()}>
+                                    {busy === 'search' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                    Search
+                                </button>
+                            </div>
+
+                            {searchTitles.length ? (
+                                <div className="mt-4 space-y-2">
+                                    <p className="text-xs font-bold uppercase tracking-wide text-muted">Titles</p>
+                                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                        {searchTitles.map((title) => (
+                                            <button
+                                                key={`${title.provider || findProvider}-${title.id}`}
+                                                type="button"
+                                                className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 p-2 text-left transition hover:border-plex/40"
+                                                disabled={busy !== null}
+                                                onClick={() => void openSearchTitle(title)}
+                                            >
+                                                <div className="h-14 w-10 shrink-0 overflow-hidden rounded-md bg-black/40">
+                                                    {title.thumbUrl ? (
+                                                        <img
+                                                            src={title.thumbUrl.startsWith('https://image.tmdb.org/')
+                                                                ? title.thumbUrl
+                                                                : posterSetsApi.imageUrl(title.thumbUrl)}
+                                                            alt=""
+                                                            className="h-full w-full object-cover"
+                                                            loading="lazy"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-full items-center justify-center text-muted">
+                                                            <ImageIcon className="h-4 w-4 opacity-40" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate text-sm font-semibold text-text">{title.title}</p>
+                                                    <p className="text-[11px] text-muted">
+                                                        {title.year || '—'}
+                                                        {title.mediaType ? ` · ${title.mediaType}` : ''}
+                                                    </p>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            {searchSets.length ? (
+                                <div className="mt-4 space-y-2">
+                                    <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                                        Sets{searchContext ? ` · ${searchContext}` : ''}
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                        {searchSets.map((set) => (
+                                            <button
+                                                key={`${set.provider || findProvider}-${set.setId}`}
+                                                type="button"
+                                                className="overflow-hidden rounded-2xl border border-white/10 bg-black/20 text-left transition hover:border-plex/40"
+                                                disabled={busy !== null}
+                                                onClick={() => pickSearchSet(set)}
+                                            >
+                                                <div className="relative aspect-[2/3] bg-black/40">
+                                                    {set.thumbUrl ? (
+                                                        <img
+                                                            src={posterSetsApi.imageUrl(set.thumbUrl)}
+                                                            alt={set.title}
+                                                            className="h-full w-full object-cover"
+                                                            loading="lazy"
+                                                        />
+                                                    ) : (
+                                                        <div className="flex h-full items-center justify-center text-muted">
+                                                            <ImageIcon className="h-8 w-8 opacity-40" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="space-y-1 p-3">
+                                                    <p className="truncate text-sm font-semibold text-text" title={set.title}>{set.title}</p>
+                                                    <p className="truncate text-[11px] text-muted">
+                                                        #{set.setId}
+                                                        {set.user ? ` · ${set.user}` : ''}
+                                                        {set.posterCount ? ` · ${set.posterCount}` : ''}
+                                                    </p>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            <div className="mt-5 border-t border-white/10 pt-4">
+                                <label className="text-xs font-bold uppercase tracking-wide text-muted">Or find by set ID</label>
+                                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                                    <input
+                                        className={fieldClass}
+                                        value={findId}
+                                        onChange={(event) => setFindId(event.target.value)}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter') {
+                                                event.preventDefault();
+                                                void useFindId(true);
+                                            }
+                                        }}
+                                        placeholder={findProvider === 'mediux' ? 'Set ID e.g. 24522' : 'Set ID e.g. 11318 or username'}
+                                    />
+                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void useFindId(false)}>
+                                        Fill URL
+                                    </button>
+                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void useFindId(true)}>
+                                        Preview set
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div>
                             <label className="text-xs font-bold uppercase tracking-wide text-muted">Set URL</label>
                             <input
@@ -668,6 +1133,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                 const selected = selectedHistoryJob?.id === job.id;
                                 const uploaded = job.uploaded ?? (typeof job.result?.uploaded === 'number' ? job.result.uploaded : null);
                                 const attempted = job.attempted ?? (typeof job.result?.attempted === 'number' ? job.result.attempted : null);
+                                const meta = jobSetMeta(job);
                                 return (
                                     <article
                                         key={job.id}
@@ -675,13 +1141,23 @@ export const PosterSetsDashboard: React.FC = () => {
                                         onClick={() => void openHistoryJob(job.id)}
                                     >
                                         <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <p className="truncate font-semibold text-text" title={jobTitle(job)}>
-                                                    {jobTitle(job)}
-                                                </p>
-                                                <p className="mt-1 font-mono text-xs text-muted">
-                                                    #{job.id.slice(0, 8)} · {job.type || 'job'}
-                                                </p>
+                                            <div className="flex min-w-0 items-start gap-3">
+                                                {meta?.thumbUrl ? (
+                                                    <img
+                                                        src={posterSetsApi.imageUrl(meta.thumbUrl)}
+                                                        alt=""
+                                                        className="h-14 w-10 shrink-0 rounded-md object-cover"
+                                                        loading="lazy"
+                                                    />
+                                                ) : null}
+                                                <div className="min-w-0">
+                                                    <p className="truncate font-semibold text-text" title={jobTitle(job)}>
+                                                        {jobTitle(job)}
+                                                    </p>
+                                                    <p className="mt-1 font-mono text-xs text-muted">
+                                                        #{job.id.slice(0, 8)} · {job.type || 'job'}
+                                                    </p>
+                                                </div>
                                             </div>
                                             <div className="flex shrink-0 flex-col items-end gap-1">
                                                 <StatusPill value={job.state} />
@@ -737,6 +1213,36 @@ export const PosterSetsDashboard: React.FC = () => {
                                         <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
                                             {selectedHistoryJob.error}
                                         </p>
+                                    ) : null}
+                                    {selectedHistoryJob.input?.url ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={busy !== null}
+                                                onClick={() => {
+                                                    const target = String(selectedHistoryJob.input?.url || '').trim();
+                                                    if (!target) return;
+                                                    setTab('apply');
+                                                    void runPreview(target);
+                                                }}
+                                            >
+                                                <ImageIcon className="h-4 w-4" /> Re-preview
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={primaryButtonClass}
+                                                disabled={busy !== null}
+                                                onClick={() => {
+                                                    const target = String(selectedHistoryJob.input?.url || '').trim();
+                                                    if (!target) return;
+                                                    setTab('apply');
+                                                    void runApply(false, target);
+                                                }}
+                                            >
+                                                <RotateCcw className="h-4 w-4" /> Re-apply
+                                            </button>
+                                        </div>
                                     ) : null}
                                     <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-white/10 bg-black/30 p-3 font-mono text-[11px] text-muted custom-scrollbar">
                                         {selectedLogs.length ? selectedLogs.map((line, index) => (
