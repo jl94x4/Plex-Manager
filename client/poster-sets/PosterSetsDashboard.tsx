@@ -11,6 +11,7 @@ import {
     Sparkles,
 } from 'lucide-react';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
+import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
 import {
     DEFAULT_POSTER_SETS_CONFIG,
@@ -18,6 +19,7 @@ import {
     type PosterSetsConfig,
     type PosterSetsJob,
     type PosterSetsPreview,
+    type PosterSetsPreviewAsset,
     type PosterSetsStatus,
 } from './types';
 
@@ -107,6 +109,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const [url, setUrl] = useState('');
     const [bulkText, setBulkText] = useState('');
     const [preview, setPreview] = useState<PosterSetsPreview | null>(null);
+    const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
     const [activeJob, setActiveJob] = useState<PosterSetsJob | null>(null);
     const [testResult, setTestResult] = useState<string | null>(null);
     const [historyJobs, setHistoryJobs] = useState<PosterSetsJob[]>([]);
@@ -274,10 +277,15 @@ export const PosterSetsDashboard: React.FC = () => {
         }
         setBusy('preview');
         setPreview(null);
+        setSelectedAssetIds([]);
         try {
             const response = await posterSetsApi.preview(target);
             setPreview(response);
-            toast(`Preview ready: ${response.total || 0} assets.`);
+            const assets = response.assets || [];
+            const defaults = assets.filter((asset) => asset.matched !== false).map((asset) => asset.id);
+            setSelectedAssetIds(defaults.length ? defaults : assets.map((asset) => asset.id));
+            const matched = response.matched ?? defaults.length;
+            toast(`Preview ready: ${response.total || 0} assets · ${matched} matched in Plex.`);
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Preview failed', 'error');
         } finally {
@@ -285,23 +293,51 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
-    const runApply = async () => {
+    const runApply = async (selectedOnly = false) => {
         const target = url.trim();
         if (!target) {
             toast('Paste a MediUX or ThePosterDB set URL first.', 'error');
             return;
         }
+        if (selectedOnly && !selectedAssetIds.length) {
+            toast('Select at least one asset to apply.', 'error');
+            return;
+        }
         setBusy('apply');
         try {
-            const response = await posterSetsApi.apply(target);
+            const response = await posterSetsApi.apply(
+                target,
+                selectedOnly ? selectedAssetIds : undefined,
+            );
             setActiveJob(response.job);
-            toast('Apply started.');
+            toast(selectedOnly
+                ? `Apply started for ${selectedAssetIds.length} selected asset(s).`
+                : 'Apply started.');
             await loadHistory();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Apply failed', 'error');
         } finally {
             setBusy(null);
         }
+    };
+
+    const toggleAsset = (id: string) => {
+        setSelectedAssetIds((prev) => (
+            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+        ));
+    };
+
+    const selectPreviewAssets = (mode: 'all' | 'matched' | 'none') => {
+        const assets = preview?.assets || [];
+        if (mode === 'none') {
+            setSelectedAssetIds([]);
+            return;
+        }
+        if (mode === 'matched') {
+            setSelectedAssetIds(assets.filter((asset) => asset.matched).map((asset) => asset.id));
+            return;
+        }
+        setSelectedAssetIds(assets.map((asset) => asset.id));
     };
 
     const runBulk = async (fromFile = false) => {
@@ -437,22 +473,109 @@ export const PosterSetsDashboard: React.FC = () => {
                                 {busy === 'preview' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
                                 Preview
                             </button>
-                            <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void runApply()}>
+                            <button
+                                type="button"
+                                className={primaryButtonClass}
+                                disabled={busy !== null || (preview?.assets?.length ? !selectedAssetIds.length : !url.trim())}
+                                onClick={() => void runApply(Boolean(preview?.assets?.length))}
+                            >
                                 {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                Apply to Plex
+                                {preview?.assets?.length
+                                    ? `Apply selected (${selectedAssetIds.length})`
+                                    : 'Apply to Plex'}
                             </button>
                         </div>
                         {preview ? (
-                            <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-muted">
-                                <p className="font-semibold text-text">
-                                    {preview.total || 0} assets · {preview.movies || 0} movies · {preview.shows || 0} show items · {preview.collections || 0} collections
-                                </p>
-                                {preview.samples?.movies?.length ? (
-                                    <p className="mt-2">Movies: {preview.samples.movies.join(', ')}</p>
-                                ) : null}
-                                {preview.samples?.shows?.length ? (
-                                    <p className="mt-1">Shows: {[...new Set(preview.samples.shows)].join(', ')}</p>
-                                ) : null}
+                            <div className="space-y-4">
+                                <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-muted">
+                                    <p className="font-semibold text-text">
+                                        {preview.total || 0} assets · {preview.movies || 0} movies · {preview.shows || 0} show items · {preview.collections || 0} collections
+                                    </p>
+                                    <p className="mt-1">
+                                        <span className="text-emerald-300">{preview.matched ?? '—'} matched</span>
+                                        {' · '}
+                                        <span className="text-amber-200">{preview.unmatched ?? '—'} not in library</span>
+                                        {typeof preview.matched === 'number' ? ` · ${selectedAssetIds.length} selected` : null}
+                                    </p>
+                                </div>
+
+                                {(preview.assets || []).length ? (
+                                    <>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('all')}>Select all</button>
+                                            <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('matched')}>Matched only</button>
+                                            <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('none')}>Clear</button>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                            {(preview.assets || []).map((asset: PosterSetsPreviewAsset) => {
+                                                const selected = selectedAssetIds.includes(asset.id);
+                                                const matched = asset.matched === true;
+                                                const unmatched = asset.matched === false;
+                                                return (
+                                                    <button
+                                                        key={asset.id}
+                                                        type="button"
+                                                        onClick={() => toggleAsset(asset.id)}
+                                                        className={`group overflow-hidden rounded-2xl border text-left transition ${
+                                                            selected
+                                                                ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/40'
+                                                                : 'border-white/10 bg-black/20 hover:border-plex/35'
+                                                        }`}
+                                                    >
+                                                        <div className="relative aspect-[2/3] bg-black/40">
+                                                            {asset.thumbUrl ? (
+                                                                <img
+                                                                    src={posterSetsApi.imageUrl(asset.thumbUrl)}
+                                                                    alt={asset.title}
+                                                                    loading="lazy"
+                                                                    className="h-full w-full object-cover"
+                                                                />
+                                                            ) : (
+                                                                <div className="flex h-full items-center justify-center text-muted">
+                                                                    <ImageIcon className="h-8 w-8 opacity-40" />
+                                                                </div>
+                                                            )}
+                                                            <span className={`absolute left-2 top-2 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                                                                matched
+                                                                    ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-100'
+                                                                    : unmatched
+                                                                        ? 'border-amber-500/40 bg-amber-500/20 text-amber-100'
+                                                                        : 'border-white/15 bg-black/50 text-muted'
+                                                            }`}>
+                                                                {matched ? 'In library' : unmatched ? 'Missing' : 'Unknown'}
+                                                            </span>
+                                                            <span className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold ${
+                                                                selected
+                                                                    ? 'border-plex bg-plex text-background'
+                                                                    : 'border-white/20 bg-black/50 text-muted'
+                                                            }`}>
+                                                                {selected ? '✓' : ''}
+                                                            </span>
+                                                        </div>
+                                                        <div className="space-y-1 p-3">
+                                                            <p className="truncate text-sm font-semibold text-text" title={asset.title}>
+                                                                {asset.title}{asset.year ? ` (${asset.year})` : ''}
+                                                            </p>
+                                                            <p className="text-[11px] font-bold uppercase tracking-wide text-plex/90">{asset.label}</p>
+                                                            {asset.matchDetail ? (
+                                                                <p className="truncate text-[11px] text-muted" title={asset.matchDetail}>{asset.matchDetail}</p>
+                                                            ) : null}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-muted">
+                                        {preview.samples?.movies?.length ? (
+                                            <p>Movies: {preview.samples.movies.join(', ')}</p>
+                                        ) : null}
+                                        {preview.samples?.shows?.length ? (
+                                            <p className="mt-1">Shows: {[...new Set(preview.samples.shows)].join(', ')}</p>
+                                        ) : null}
+                                    </div>
+                                )}
                             </div>
                         ) : null}
                     </section>
@@ -718,6 +841,15 @@ export const PosterSetsDashboard: React.FC = () => {
                                 );
                             })}
                         </div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-4">
+                        <SettingsToggleRow
+                            title="Clear Kometa Overlay label after upload"
+                            description="Default on. Removes Kometa’s Overlay label so the next Kometa run reapplies overlays on the new artwork."
+                            checked={configDraft.reset_overlay !== false}
+                            onChange={(next) => setConfigDraft((prev) => ({ ...prev, reset_overlay: next }))}
+                            border={false}
+                        />
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>

@@ -8,6 +8,9 @@ MediUX note: images are fetched from `https://api.mediux.pro/assets/{id}` and up
 as files. The old `/_next/image` proxy returns 403/blank payloads, which is what caused
 empty posters in Plex.
 
+Kometa: after each successful upload the worker removes the `Overlay` label (config
+`reset_overlay`, default true) so Kometa can reapply overlays on the new art.
+
 ```bash
 # Local venv (optional)
 python -m venv .venv

@@ -5,6 +5,8 @@ export type PosterSetsConfig = {
     tv_library: string[];
     movie_library: string[];
     mediux_filters: string[];
+    /** Clear Kometa Overlay label after upload (default true). */
+    reset_overlay?: boolean;
     hasToken?: boolean;
     configured?: boolean;
 };
@@ -16,6 +18,7 @@ export type PosterSetsJobInput = {
     fromFile?: boolean;
     file?: string;
     lineCount?: number;
+    selectedCount?: number;
 };
 
 export type PosterSetsStatus = {
@@ -37,6 +40,20 @@ export type PosterSetsStatus = {
     }>;
 };
 
+export type PosterSetsPreviewAsset = {
+    id: string;
+    kind: 'movie' | 'show' | 'collection';
+    title: string;
+    year?: number | null;
+    season?: string | number | null;
+    episode?: string | number | null;
+    label: string;
+    thumbUrl: string;
+    matched: boolean;
+    matchDetail?: string;
+    source?: string;
+};
+
 export type PosterSetsPreview = {
     ok?: boolean;
     url?: string;
@@ -44,11 +61,14 @@ export type PosterSetsPreview = {
     shows?: number;
     collections?: number;
     total?: number;
+    matched?: number;
+    unmatched?: number;
     samples?: {
         movies?: string[];
         shows?: string[];
         collections?: string[];
     };
+    assets?: PosterSetsPreviewAsset[];
     logs?: string[];
     error?: string;
 };
@@ -82,4 +102,5 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     tv_library: ['TV Shows'],
     movie_library: ['Movies'],
     mediux_filters: ['title_card', 'background', 'season_cover', 'show_cover'],
+    reset_overlay: true,
 };

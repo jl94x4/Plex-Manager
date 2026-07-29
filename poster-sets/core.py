@@ -5,13 +5,14 @@ Adapted from plex-poster-set-helper; no GUI dependencies.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
 import re
 import tempfile
 import time
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Iterable, List, Optional, Sequence, Set, Tuple
 
 import plexapi.exceptions
 import requests
@@ -30,10 +31,67 @@ IMAGE_HEADERS = {
     "Referer": "https://mediux.pro/",
 }
 
+# Kometa marks items with Overlay so it can re-apply overlay art on the next run.
+KOMETA_OVERLAY_LABELS = ("Overlay", "overlay")
+
 
 def emit(progress: ProgressFn, message: str) -> None:
     if progress:
         progress(message)
+
+
+def should_reset_overlay(config: Optional[dict] = None) -> bool:
+    if not config:
+        return True
+    value = config.get("reset_overlay")
+    return True if value is None else bool(value)
+
+
+def clear_kometa_overlay(upload_target, config: Optional[dict] = None, progress: ProgressFn = None) -> None:
+    """
+    Remove Kometa's Overlay label so the next Kometa run reapplies overlays on the new art.
+    Enabled by default; disable via config.reset_overlay = false.
+    """
+    if not should_reset_overlay(config):
+        return
+    for label in KOMETA_OVERLAY_LABELS:
+        try:
+            upload_target.removeLabel(label)
+            return
+        except Exception:
+            continue
+
+
+def asset_id(kind: str, poster: dict) -> str:
+    raw = "|".join(
+        [
+            kind,
+            str(poster.get("title") or ""),
+            str(poster.get("year") or ""),
+            str(poster.get("season") if poster.get("season") is not None else ""),
+            str(poster.get("episode") if poster.get("episode") is not None else ""),
+            str(poster.get("url") or ""),
+        ]
+    )
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def asset_label(kind: str, poster: dict) -> str:
+    if kind == "collection":
+        return "Collection"
+    if kind == "movie":
+        return "Movie poster"
+    season = poster.get("season")
+    episode = poster.get("episode")
+    if season == "Cover":
+        return "Show cover"
+    if season == "Backdrop":
+        return "Background"
+    if season == 0:
+        return "Specials"
+    if episode == "Cover" or episode is None:
+        return f"Season {season}"
+    return f"S{season}E{episode}"
 
 
 def _image_suffix(content_type: str, url: str) -> str:
@@ -273,10 +331,7 @@ def upload_tv_poster(poster, tv, progress: ProgressFn = None) -> dict:
                 continue
 
             apply_poster_or_art(upload_target, poster, art=(poster["season"] == "Backdrop"), progress=progress)
-            try:
-                upload_target.removeLabel("Overlay")
-            except Exception:
-                pass
+            clear_kometa_overlay(upload_target, config=poster.get("_config"), progress=progress)
             if poster.get("source") == "posterdb":
                 time.sleep(6)
             elif poster.get("source") == "mediux":
@@ -303,10 +358,7 @@ def upload_movie_poster(poster, movies, progress: ProgressFn = None) -> dict:
     for movie_item in movie_items:
         try:
             apply_poster_or_art(movie_item, poster, progress=progress)
-            try:
-                movie_item.removeLabel("Overlay")
-            except Exception:
-                pass
+            clear_kometa_overlay(movie_item, config=poster.get("_config"), progress=progress)
             if poster.get("source") == "posterdb":
                 time.sleep(6)
             elif poster.get("source") == "mediux":
@@ -331,10 +383,7 @@ def upload_collection_poster(poster, movies, progress: ProgressFn = None) -> dic
     for collection in collection_items:
         try:
             apply_poster_or_art(collection, poster, progress=progress)
-            try:
-                collection.removeLabel("Overlay")
-            except Exception:
-                pass
+            clear_kometa_overlay(collection, config=poster.get("_config"), progress=progress)
             if poster.get("source") == "posterdb":
                 time.sleep(6)
             elif poster.get("source") == "mediux":
@@ -596,6 +645,130 @@ def summarize_posters(movieposters, showposters, collectionposters) -> dict:
     }
 
 
+def match_show_target(tv_show, poster: dict) -> Tuple[bool, str]:
+    season = poster.get("season")
+    episode = poster.get("episode")
+    try:
+        if season == "Cover" or season == "Backdrop":
+            return True, tv_show.librarySectionTitle
+        if season == 0:
+            tv_show.season("Specials")
+            return True, f"{tv_show.librarySectionTitle} · Specials"
+        if isinstance(season, int) and season >= 1:
+            season_obj = tv_show.season(season)
+            if episode == "Cover" or episode is None:
+                return True, f"{tv_show.librarySectionTitle} · Season {season}"
+            season_obj.episode(episode)
+            return True, f"{tv_show.librarySectionTitle} · S{season}E{episode}"
+        return False, "Unhandled season target"
+    except Exception:
+        if isinstance(episode, int):
+            return False, f"S{season}E{episode} not in library"
+        if isinstance(season, int):
+            return False, f"Season {season} not in library"
+        return False, "Target not in library"
+
+
+def match_poster(kind: str, poster: dict, tv, movies) -> Tuple[bool, str]:
+    if kind == "movie":
+        items = find_in_library(movies, poster)
+        if not items:
+            return False, "Not found in movie libraries"
+        return True, items[0].librarySectionTitle
+    if kind == "collection":
+        items = find_collection(movies, poster)
+        if not items:
+            return False, "Collection not found"
+        return True, items[0].librarySectionTitle
+    items = find_in_library(tv, poster)
+    if not items:
+        return False, "Not found in TV libraries"
+    matched_any = False
+    detail = ""
+    for show in items:
+        ok, detail = match_show_target(show, poster)
+        if ok:
+            matched_any = True
+            break
+    return matched_any, detail or "Show found, target missing"
+
+
+def build_preview_assets(movieposters, showposters, collectionposters, tv=None, movies=None) -> List[dict]:
+    assets = []
+    for poster in movieposters:
+        kind = "movie"
+        matched, detail = (True, "") if tv is None else match_poster(kind, poster, tv, movies)
+        assets.append(
+            {
+                "id": asset_id(kind, poster),
+                "kind": kind,
+                "title": poster.get("title") or "Untitled",
+                "year": poster.get("year"),
+                "season": None,
+                "episode": None,
+                "label": asset_label(kind, poster),
+                "thumbUrl": poster.get("url") or "",
+                "matched": matched if tv is not None else None,
+                "matchDetail": detail,
+                "source": poster.get("source"),
+            }
+        )
+    for poster in showposters:
+        kind = "show"
+        matched, detail = (True, "") if tv is None else match_poster(kind, poster, tv, movies)
+        assets.append(
+            {
+                "id": asset_id(kind, poster),
+                "kind": kind,
+                "title": poster.get("title") or "Untitled",
+                "year": poster.get("year"),
+                "season": poster.get("season"),
+                "episode": poster.get("episode"),
+                "label": asset_label(kind, poster),
+                "thumbUrl": poster.get("url") or "",
+                "matched": matched if tv is not None else None,
+                "matchDetail": detail,
+                "source": poster.get("source"),
+            }
+        )
+    for poster in collectionposters:
+        kind = "collection"
+        matched, detail = (True, "") if tv is None else match_poster(kind, poster, tv, movies)
+        assets.append(
+            {
+                "id": asset_id(kind, poster),
+                "kind": kind,
+                "title": poster.get("title") or "Untitled",
+                "year": None,
+                "season": None,
+                "episode": None,
+                "label": asset_label(kind, poster),
+                "thumbUrl": poster.get("url") or "",
+                "matched": matched if tv is not None else None,
+                "matchDetail": detail,
+                "source": poster.get("source"),
+            }
+        )
+    return assets
+
+
+def filter_posters_by_ids(
+    movieposters,
+    showposters,
+    collectionposters,
+    selected_ids: Optional[Sequence[str]],
+) -> Tuple[list, list, list]:
+    if not selected_ids:
+        return movieposters, showposters, collectionposters
+    wanted: Set[str] = {str(item) for item in selected_ids if str(item).strip()}
+    if not wanted:
+        return movieposters, showposters, collectionposters
+    movies = [p for p in movieposters if asset_id("movie", p) in wanted]
+    shows = [p for p in showposters if asset_id("show", p) in wanted]
+    collections = [p for p in collectionposters if asset_id("collection", p) in wanted]
+    return movies, shows, collections
+
+
 def preview_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
     filters = normalize_library_list(config.get("mediux_filters")) or [
         "title_card",
@@ -606,11 +779,37 @@ def preview_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
     emit(progress, f"Scraping {url}")
     movieposters, showposters, collectionposters = scrape(url, mediux_filters=filters, progress=progress)
     summary = summarize_posters(movieposters, showposters, collectionposters)
-    # Drop full URL lists from samples response? Keep them for apply preview UI but trim urls in status.
-    return {"ok": True, "url": url, **summary}
+
+    tv = movies = None
+    match_error = None
+    try:
+        if config.get("base_url") and config.get("token"):
+            emit(progress, "Checking library matches…")
+            tv, movies, _plex = connect_plex(config, progress=progress)
+    except Exception as exc:
+        match_error = str(exc)
+        emit(progress, f"Match check skipped: {exc}")
+
+    assets = build_preview_assets(movieposters, showposters, collectionposters, tv=tv, movies=movies)
+    matched = sum(1 for asset in assets if asset.get("matched") is True)
+    unmatched = sum(1 for asset in assets if asset.get("matched") is False)
+    return {
+        "ok": True,
+        "url": url,
+        **summary,
+        "assets": assets,
+        "matched": matched,
+        "unmatched": unmatched,
+        "matchError": match_error,
+    }
 
 
-def apply_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
+def apply_url(
+    url: str,
+    config: dict,
+    progress: ProgressFn = None,
+    selected_ids: Optional[Sequence[str]] = None,
+) -> dict:
     filters = normalize_library_list(config.get("mediux_filters")) or [
         "title_card",
         "background",
@@ -620,12 +819,24 @@ def apply_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
     tv, movies, _plex = connect_plex(config, progress=progress)
     emit(progress, f"Scraping {url}")
     movieposters, showposters, collectionposters = scrape(url, mediux_filters=filters, progress=progress)
+    movieposters, showposters, collectionposters = filter_posters_by_ids(
+        movieposters, showposters, collectionposters, selected_ids
+    )
+    if selected_ids:
+        emit(
+            progress,
+            f"Applying {len(movieposters) + len(showposters) + len(collectionposters)} selected asset(s)",
+        )
+
     results = []
     for poster in collectionposters:
+        poster = {**poster, "_config": config}
         results.append(upload_collection_poster(poster, movies, progress=progress))
     for poster in movieposters:
+        poster = {**poster, "_config": config}
         results.append(upload_movie_poster(poster, movies, progress=progress))
     for poster in showposters:
+        poster = {**poster, "_config": config}
         results.append(upload_tv_poster(poster, tv, progress=progress))
     uploaded = sum(1 for item in results if item.get("ok"))
     return {
@@ -633,6 +844,8 @@ def apply_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
         "url": url,
         "uploaded": uploaded,
         "attempted": len(results),
+        "selected": len(selected_ids) if selected_ids else None,
+        "resetOverlay": should_reset_overlay(config),
         "counts": {
             "movies": len(movieposters),
             "shows": len(showposters),

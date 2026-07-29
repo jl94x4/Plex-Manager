@@ -38,7 +38,11 @@ export const posterSetsApi = {
         error?: string;
     }>,
     preview: (url: string) => apiFetch(`${ROOT}/preview`, json({ url })) as Promise<PosterSetsPreview>,
-    apply: (url: string) => apiFetch(`${ROOT}/apply`, json({ url })) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob }>,
+    apply: (url: string, selectedIds?: string[]) => apiFetch(`${ROOT}/apply`, json({
+        url,
+        ...(selectedIds?.length ? { selectedIds } : {}),
+    })) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob }>,
+    imageUrl: (thumbUrl: string) => `${ROOT}/image?url=${encodeURIComponent(thumbUrl)}`,
     bulk: (payload: { urls?: string[]; text?: string; fromFile?: boolean }) => (
         apiFetch(`${ROOT}/bulk`, json(payload)) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob }>
     ),

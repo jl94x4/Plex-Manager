@@ -45,7 +45,6 @@ def main() -> int:
             if not url:
                 raise ValueError("url is required")
             result = preview_url(url, config, progress=progress)
-            # Shrink payload for transport: keep samples + counts, drop full poster lists in result event size if huge
             write_event(
                 "result",
                 ok=True,
@@ -54,7 +53,11 @@ def main() -> int:
                 shows=result.get("shows"),
                 collections=result.get("collections"),
                 total=result.get("total"),
+                matched=result.get("matched"),
+                unmatched=result.get("unmatched"),
+                matchError=result.get("matchError"),
                 samples=result.get("samples"),
+                assets=result.get("assets") or [],
             )
             return 0
 
@@ -62,7 +65,10 @@ def main() -> int:
             url = str(request.get("url") or "").strip()
             if not url:
                 raise ValueError("url is required")
-            result = apply_url(url, config, progress=progress)
+            selected_ids = request.get("selectedIds")
+            if not isinstance(selected_ids, list):
+                selected_ids = None
+            result = apply_url(url, config, progress=progress, selected_ids=selected_ids)
             write_event("result", **result)
             return 0
 
