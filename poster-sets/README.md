@@ -1,0 +1,17 @@
+# Poster Sets (headless worker)
+
+Scrapes MediUX / ThePosterDB set URLs and uploads artwork to Plex.
+
+Used by the portal via `lib/poster-sets` — not related to ColleXions.
+
+```bash
+# Local venv (optional)
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt   # Windows
+# or: .venv/bin/pip install -r requirements.txt
+
+echo '{"config":{"base_url":"...","token":"...","tv_library":["TV Shows"],"movie_library":["Movies"],"mediux_filters":["show_cover","season_cover","background","title_card"]},"url":"https://mediux.pro/sets/123"}' \
+  | python cli.py preview
+```
+
+Docker uses `/opt/poster-sets-venv` and `POSTER_SETS_APP_DIR=/app/poster-sets`.

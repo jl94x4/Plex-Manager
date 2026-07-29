@@ -26,6 +26,7 @@ import {
     ScrollText,
     Plus,
     Cpu,
+    Image as ImageIcon,
 } from 'lucide-react';
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -167,6 +168,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
     collexions: Layers,
     scanner: Activity,
     'media-automation': Cpu,
+    'poster-sets': ImageIcon,
     system: Settings,
     contact: Phone,
     broadcast: Radio,
@@ -460,6 +462,7 @@ export const SettingsDashboard: React.FC = () => {
     const [scannerHomeWidgetEnabled, setScannerHomeWidgetEnabled] = useState(false);
     const [mediaAutomationEnabled, setMediaAutomationEnabled] = useState(false);
     const [mediaAutomationHomeWidgetEnabled, setMediaAutomationHomeWidgetEnabled] = useState(false);
+    const [posterSetsEnabled, setPosterSetsEnabled] = useState(false);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
     const [scannerWebhooksVisible, setScannerWebhooksVisible] = useState(true);
     const [scannerManualPathVisible, setScannerManualPathVisible] = useState(true);
@@ -1094,6 +1097,9 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.mediaAutomationHomeWidgetEnabled !== undefined) {
                 setMediaAutomationHomeWidgetEnabled(!!initialSettings.mediaAutomationHomeWidgetEnabled);
             }
+            if (initialSettings.posterSetsEnabled !== undefined) {
+                setPosterSetsEnabled(!!initialSettings.posterSetsEnabled);
+            }
             if (initialSettings.mediaAutomation && typeof initialSettings.mediaAutomation === 'object') {
                 const saved = initialSettings.mediaAutomation;
                 const fallback = {
@@ -1476,6 +1482,7 @@ export const SettingsDashboard: React.FC = () => {
             scanner,
             mediaAutomationEnabled,
             mediaAutomationHomeWidgetEnabled,
+            posterSetsEnabled,
             mediaAutomation: {
                 ...mediaAutomation,
                 enabled: mediaAutomationEnabled,
@@ -2878,6 +2885,7 @@ export const SettingsDashboard: React.FC = () => {
                                 collexions: collexionsEnabled,
                                 scanner: scannerEnabled,
                                 mediaAutomation: mediaAutomationEnabled,
+                                posterSets: posterSetsEnabled,
                                 maintenance: maintenanceExperimentalEnabled,
                             }}
                         />
@@ -3677,6 +3685,31 @@ export const SettingsDashboard: React.FC = () => {
                             config={mediaAutomation}
                             onConfigChange={setMediaAutomation}
                         />
+                    )}
+                    {activeTab === 'poster-sets' && (
+                        <div className="mb-8 animate-fade-in space-y-6">
+                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Poster Sets</h3>
+                            <section id={getSettingsSectionElementId('poster-sets')} className="space-y-3 scroll-mt-24">
+                                <SettingsToggleRow
+                                    title="Enable Poster Sets"
+                                    hint={<SettingHint>Admin nav for applying MediUX / ThePosterDB artwork sets to Plex. Connection settings live inside the Poster Sets page — separate from ColleXions and portal Plex settings.</SettingHint>}
+                                    checked={posterSetsEnabled}
+                                    onChange={setPosterSetsEnabled}
+                                />
+                                <p className={`text-xs mt-2 font-semibold ${posterSetsEnabled ? 'text-green-300' : 'text-yellow-300'}`}>
+                                    Current status: {posterSetsEnabled ? 'ON' : 'OFF'}
+                                </p>
+                                {posterSetsEnabled && (
+                                    <button
+                                        type="button"
+                                        className="mt-3 px-4 py-2 rounded-md font-bold transition-all bg-plex text-background hover:bg-plex-hover"
+                                        onClick={() => window.location.assign(portalUrl('/poster-sets'))}
+                                    >
+                                        Open Poster Sets
+                                    </button>
+                                )}
+                            </section>
+                        </div>
                     )}
                     {activeTab === 'system' && (
                         <div className="mb-8 animate-fade-in space-y-6">

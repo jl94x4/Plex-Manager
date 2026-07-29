@@ -37,6 +37,7 @@ ENV PORT=2121
 ENV FORCE_SECURE_COOKIES=false
 ENV COLLEXIONS_APP_DIR=/app/collexions
 ENV COLLEXIONS_EMBEDDED_PORT=15755
+ENV POSTER_SETS_APP_DIR=/app/poster-sets
 
 # ffmpeg supplies both ffmpeg and ffprobe. Mesa provides AMD VAAPI; Intel media /
 # QSV runtime libs are installed when Bookworm publishes them for the arch.
@@ -136,10 +137,18 @@ RUN python3 -m venv /opt/collexions-venv \
     && /opt/collexions-venv/bin/pip install --no-cache-dir bcrypt werkzeug \
     && chown -R node:node /app/collexions /opt/collexions-venv
 
+# Poster Sets headless worker (MediUX / ThePosterDB) — separate from ColleXions.
+COPY poster-sets/requirements.txt /app/poster-sets/requirements.txt
+COPY poster-sets/core.py /app/poster-sets/core.py
+COPY poster-sets/cli.py /app/poster-sets/cli.py
+RUN python3 -m venv /opt/poster-sets-venv \
+    && /opt/poster-sets-venv/bin/pip install --no-cache-dir -r /app/poster-sets/requirements.txt \
+    && chown -R node:node /app/poster-sets /opt/poster-sets-venv
+
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-RUN mkdir -p config/media-automation/work backup \
+RUN mkdir -p config/media-automation/work config/poster-sets backup \
     && chown -R node:node /app
 
 EXPOSE 2121

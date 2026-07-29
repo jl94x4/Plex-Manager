@@ -27,6 +27,7 @@ const UpgraderDashboard = lazy(() => import('./upgrader/UpgraderDashboard').then
 const CollexionsDashboard = lazy(() => import('./collexions/CollexionsDashboard').then(m => ({ default: m.CollexionsDashboard })));
 const ScannerDashboard = lazy(() => import('./scanner/ScannerDashboard').then(m => ({ default: m.ScannerDashboard })));
 const MediaAutomationDashboard = lazy(() => import('./media-automation/MediaAutomationDashboard').then(m => ({ default: m.MediaAutomationDashboard })));
+const PosterSetsDashboard = lazy(() => import('./poster-sets/PosterSetsDashboard').then(m => ({ default: m.PosterSetsDashboard })));
 import {
     updateFavicon,
     Login,
@@ -127,7 +128,7 @@ export const MainApp: React.FC = () => {
         closeConfirm();
     };
 
-    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading'>('loading');
+    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading'>('loading');
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     const [publicConfig, setPublicConfig] = useState<any>({});
     const [releaseNotes, setReleaseNotes] = useState<ReleaseNotes | null>(null);
@@ -298,7 +299,7 @@ export const MainApp: React.FC = () => {
         setShowWhatsNew(false);
     }, [publicConfig?.appVersion]);
 
-    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number }) => {
+    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number }) => {
         if (route === 'logs') {
             setCurrentRoute('settings');
             window.history.pushState({}, '', portalUrl('/settings#logs'));
@@ -321,6 +322,7 @@ export const MainApp: React.FC = () => {
             if (route === 'collexions') path = '/collexions';
             if (route === 'scanner') path = '/scanner';
             if (route === 'media-automation') path = '/media-automation';
+            if (route === 'poster-sets') path = '/poster-sets';
             if (route === 'requests') {
                 path = options?.reviewId ? `/requests?review=${options.reviewId}` : '/requests';
             }
@@ -389,6 +391,15 @@ export const MainApp: React.FC = () => {
                 setCurrentRoute('user');
             }
             else if (path.startsWith('/media-automation') && data.session.isAdmin && data.navFeatures?.mediaAutomation) setCurrentRoute('media-automation');
+            else if (path.startsWith('/media-automation')) {
+                window.history.replaceState({}, '', portalUrl('/portal'));
+                setCurrentRoute('user');
+            }
+            else if (path.startsWith('/poster-sets') && data.session.isAdmin && data.navFeatures?.posterSets) setCurrentRoute('poster-sets');
+            else if (path.startsWith('/poster-sets')) {
+                window.history.replaceState({}, '', portalUrl('/portal'));
+                setCurrentRoute('user');
+            }
             else if (path.startsWith('/requests') && data.session.isAdmin) setCurrentRoute('requests');
             else if (path.startsWith('/discovery')) setCurrentRoute('discovery');
             else if (path.startsWith('/about')) setCurrentRoute('about');
@@ -509,6 +520,13 @@ export const MainApp: React.FC = () => {
             );
         }
         if (currentRoute === 'media-automation' && isAdmin && sessionInfo?.navFeatures?.mediaAutomation) return <MediaAutomationDashboard />;
+        if (currentRoute === 'poster-sets' && isAdmin && sessionInfo?.navFeatures?.posterSets) {
+            return (
+                <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
+                    <PosterSetsDashboard />
+                </Suspense>
+            );
+        }
         if (currentRoute === 'requests' && isAdmin) {
             return (
                 <RequestQueueDashboard
@@ -548,7 +566,7 @@ export const MainApp: React.FC = () => {
                     onDismiss={dismissWhatsNew}
                 />
             )}
-            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'media-automation', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'logs', 'settings', 'logout']} navHiddenKeys={sessionInfo?.navHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} />}
+            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'logs', 'settings', 'logout']} navHiddenKeys={sessionInfo?.navHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} />}
             <div id="main-scroll-container" className={`relative z-10 flex-1 min-w-0 min-h-0 flex flex-col items-center px-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:px-8 md:pb-8 overflow-x-visible md:overflow-y-auto custom-scrollbar ${isPublicView ? '!pb-8' : ''}`}>
                 {isImpersonating && (
                     <div className="w-full max-w-[100%] pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-0 md:sticky md:top-0 md:z-30">

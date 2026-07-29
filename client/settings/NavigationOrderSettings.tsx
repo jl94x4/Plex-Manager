@@ -9,6 +9,7 @@ type NavFeatureStatus = {
     collexions?: boolean;
     scanner?: boolean;
     mediaAutomation?: boolean;
+    posterSets?: boolean;
     maintenance?: boolean;
 };
 
@@ -28,6 +29,7 @@ const FEATURE_OFF_HINT: Record<string, string> = {
     collexions: 'Feature off — enable under Settings → Collexions',
     scanner: 'Feature off — enable under Settings → Scanner',
     'media-automation': 'Feature off — enable under Settings → Media Automation',
+    'poster-sets': 'Feature off — enable under Settings → Poster Sets',
     maintenance: 'Feature off — enable under Settings → Cleanup',
 };
 
@@ -209,6 +211,7 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                         if (key === 'collexions' && featureStatus?.collexions === false) return FEATURE_OFF_HINT.collexions;
                         if (key === 'scanner' && featureStatus?.scanner === false) return FEATURE_OFF_HINT.scanner;
                         if (key === 'media-automation' && featureStatus?.mediaAutomation === false) return FEATURE_OFF_HINT['media-automation'];
+                        if (key === 'poster-sets' && featureStatus?.posterSets === false) return FEATURE_OFF_HINT['poster-sets'];
                         if (key === 'maintenance' && featureStatus?.maintenance === false) return FEATURE_OFF_HINT.maintenance;
                         return null;
                     })();

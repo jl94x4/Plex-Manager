@@ -1,6 +1,6 @@
 export const SETTINGS_TABS = [
     'plex', 'smtp', 'gotify', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'navigation', 'home-layout',
-    'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
+    'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
 ] as const;
 
 export type SettingsTabId = typeof SETTINGS_TABS[number];
@@ -76,6 +76,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'collexions', tabId: 'collexions', label: 'Collexions', group: 'Automation', keywords: ['collexions', 'collections', 'plex', 'trakt', 'sidecar', 'pinning', 'autostart', 'auto start'] },
     { id: 'scanner', tabId: 'scanner', label: 'Scanner', group: 'Automation', keywords: ['scanner', 'autoscan', 'plex scan', 'webhook', 'sonarr', 'radarr', 'lidarr', 'triggers', 'library refresh'] },
     { id: 'media-automation', tabId: 'media-automation', label: 'Media Automation', group: 'Automation', keywords: ['media', 'automation', 'ffmpeg', 'worker', 'transcode', 'remux', 'pipeline', 'hardware', 'nvenc', 'qsv', 'vaapi', 'quiet hours', 'schedule', 'overnight', 'gotify'] },
+    { id: 'poster-sets', tabId: 'poster-sets', label: 'Poster Sets', group: 'Automation', keywords: ['poster', 'sets', 'mediux', 'theposterdb', 'artwork', 'plex posters', 'title cards'] },
     { id: 'system', tabId: 'system', label: 'System', group: 'Automation', keywords: ['system', 'diagnostics', 'backup'] },
     { id: 'system/health', tabId: 'system', sectionId: 'health', label: 'Health Dashboard', group: 'Automation', keywords: ['health', 'score', 'alerts', 'integrations'] },
     { id: 'system/maintenance', tabId: 'system', sectionId: 'maintenance', label: 'Cleaner Experimental Mode', group: 'Automation', keywords: ['cleaner', 'maintenance', 'experimental'] },

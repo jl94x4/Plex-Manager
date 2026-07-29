@@ -57,6 +57,7 @@ import {
     selectMediaAdapter,
     spawnCommand,
 } from './lib/media-automation/index.js';
+import { createPosterSetsRouter } from './lib/poster-sets/index.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
 const resolveAppVersion = () => {
@@ -3098,6 +3099,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         scannerHomeWidget: !!config.scannerEnabled && !!config.scannerHomeWidgetEnabled,
         mediaAutomation: !!config.mediaAutomationEnabled,
         mediaAutomationHomeWidget: !!config.mediaAutomationEnabled && !!config.mediaAutomationHomeWidgetEnabled,
+        posterSets: !!config.posterSetsEnabled,
         // Portal engine unlocks Discover; Seerr URL still works when using Seerr as engine.
         request: portalRequestNav || seerrRequestNav,
         requestsQueue: portalRequestNav || requestAppService.isRequestAppConfigured(config),
@@ -3487,6 +3489,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 mediaAutomationEnabled: !!config.mediaAutomationEnabled,
                 mediaAutomationHomeWidgetEnabled: !!config.mediaAutomationHomeWidgetEnabled,
                 mediaAutomation: mediaAutomationConfigForApi(config),
+                posterSetsEnabled: !!config.posterSetsEnabled,
                 collexionsAutostart: !!config.collexionsAutostart,
                 collexionsInternalUrl: config.collexionsInternalUrl || '',
                 collexionsServiceKey: config.collexionsServiceKey ? '********' : '',
@@ -3600,6 +3603,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 mediaAutomationEnabled: false,
                 mediaAutomationHomeWidgetEnabled: false,
                 mediaAutomation: mediaAutomationConfigForApi({}),
+                posterSetsEnabled: false,
                 collexionsAutostart: false,
                 collexionsInternalUrl: '',
                 collexionsServiceKey: '',
@@ -3636,7 +3640,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -4013,6 +4017,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
                 : !!existingConfig.mediaAutomationHomeWidgetEnabled;
         })(),
         mediaAutomation: nextMediaAutomationConfig,
+        posterSetsEnabled: posterSetsEnabled !== undefined
+            ? !!posterSetsEnabled
+            : !!existingConfig.posterSetsEnabled,
         collexionsEnabled: (() => {
             // Plex-only integration — never leave enabled for Jellyfin/Emby.
             if (normalizedMediaServerType !== 'plex') return false;
@@ -18916,6 +18923,25 @@ const requireMediaAutomation = async (req, res, next) => {
         return res.status(500).json({ error: 'Failed to check Media Automation feature flag.' });
     }
 };
+
+const requirePosterSets = async (req, res, next) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!config.posterSetsEnabled) {
+            return res.status(403).json({ error: 'Poster Sets is disabled. Enable it in Settings first.' });
+        }
+        return next();
+    } catch {
+        return res.status(500).json({ error: 'Failed to check Poster Sets feature flag.' });
+    }
+};
+
+app.use('/api/poster-sets', createPosterSetsRouter({
+    Router: express.Router,
+    requireAdmin,
+    requirePosterSets,
+    loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+}));
 
 const findMediaAutomationLibraryForPath = async (candidate) => {
     const absolute = path.resolve(String(candidate || ''));
