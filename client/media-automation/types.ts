@@ -50,9 +50,27 @@ export type MediaAutomationHostMetrics = {
                 vendor?: string;
             }>;
         };
+        intel?: {
+            available?: boolean;
+            name?: string | null;
+            device?: string | null;
+            driver?: string | null;
+            utilizationPercent?: number | null;
+            videoUtilizationPercent?: number | null;
+            frequencyMhz?: number | null;
+            frequencyMaxMhz?: number | null;
+            temperatureC?: number | null;
+            engines?: Array<{
+                name?: string;
+                busyPercent?: number | null;
+            }>;
+            note?: string | null;
+            topAvailable?: boolean;
+            topError?: string | null;
+        };
         intelOrAmd?: {
             available?: boolean;
-            note?: string;
+            note?: string | null;
             dri?: {
                 present?: boolean;
                 readable?: boolean;

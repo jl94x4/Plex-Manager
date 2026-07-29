@@ -335,7 +335,8 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
     const pushHistory = useCallback((next: MediaAutomationHostMetrics) => {
         const cpu = clampPercent(next.cpu?.usedPercent);
         const mem = clampPercent(next.memory?.usedPercent);
-        const gpuUtil = next.gpu?.nvidia?.gpus?.[0]?.utilizationPercent;
+        const gpuUtil = next.gpu?.nvidia?.gpus?.[0]?.utilizationPercent
+            ?? next.gpu?.intel?.utilizationPercent;
         const gpu = clampPercent(gpuUtil);
         setHistory((prev) => ({
             cpu: cpu == null ? prev.cpu : [...prev.cpu, cpu].slice(-HISTORY_LEN),
@@ -402,8 +403,12 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
 
     const cpuSmooth = useSmoothNumber(metrics?.cpu?.usedPercent, 1);
     const memSmooth = useSmoothNumber(metrics?.memory?.usedPercent, 1);
-    const primaryGpu = metrics?.gpu?.nvidia?.gpus?.[0];
-    const gpuSmooth = useSmoothNumber(primaryGpu?.utilizationPercent, 0);
+    const primaryNvidia = metrics?.gpu?.nvidia?.gpus?.[0];
+    const intelGpu = metrics?.gpu?.intel;
+    const primaryGpuUtil = primaryNvidia?.utilizationPercent ?? intelGpu?.utilizationPercent;
+    const primaryGpuName = primaryNvidia?.name
+        || (intelGpu?.available ? (intelGpu.name || 'Intel Graphics') : null);
+    const gpuSmooth = useSmoothNumber(primaryGpuUtil, 0);
 
     if (loading && !metrics) {
         return (
@@ -417,7 +422,7 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
     const cpu = metrics?.cpu;
     const proc = metrics?.process;
     const nvidiaGpus = metrics?.gpu?.nvidia?.gpus || [];
-    const intel = metrics?.gpu?.intelOrAmd;
+    const intelFallback = metrics?.gpu?.intelOrAmd;
 
     return (
         <div className="space-y-4">
@@ -477,9 +482,14 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                 <ArcGauge
                     label="GPU"
                     icon={<Gauge className="h-3.5 w-3.5 text-plex" />}
-                    percent={clampPercent(primaryGpu?.utilizationPercent)}
-                    valueText={primaryGpu ? `${gpuSmooth}%` : 'N/A'}
-                    subtext={primaryGpu?.name || 'No NVIDIA metrics'}
+                    percent={clampPercent(primaryGpuUtil)}
+                    valueText={primaryGpuUtil != null ? `${gpuSmooth}%` : (primaryGpuName ? '…' : 'N/A')}
+                    subtext={[
+                        primaryGpuName || 'No GPU metrics',
+                        !primaryNvidia && Number.isFinite(Number(intelGpu?.temperatureC))
+                            ? `${intelGpu?.temperatureC}°C`
+                            : null,
+                    ].filter(Boolean).join(' · ')}
                     history={history.gpu}
                 />
             </div>
@@ -616,23 +626,100 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                             </div>
                         ))}
                     </div>
-                ) : (
+                ) : null}
+
+                {intelGpu?.available ? (
+                    <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="truncate font-semibold text-text">{intelGpu.name || 'Intel Graphics'}</p>
+                                <p className="mt-1 text-xs text-muted">
+                                    Intel
+                                    {intelGpu.driver ? ` · ${intelGpu.driver}` : ''}
+                                    {Number.isFinite(Number(intelGpu.temperatureC)) ? ` · ${intelGpu.temperatureC}°C` : ''}
+                                    {intelGpu.device ? ` · ${intelGpu.device}` : ''}
+                                </p>
+                            </div>
+                            <ServerCog className="h-4 w-4 shrink-0 text-plex" />
+                        </div>
+                        <LiveBar
+                            label="Render / 3D"
+                            valueLabel={
+                                Number.isFinite(Number(intelGpu.utilizationPercent))
+                                    ? `${Number(intelGpu.utilizationPercent).toFixed(0)}%`
+                                    : (intelGpu.topAvailable ? '—' : 'Needs intel_gpu_top')
+                            }
+                            percent={intelGpu.utilizationPercent}
+                        />
+                        <LiveBar
+                            label="Video engine"
+                            valueLabel={
+                                Number.isFinite(Number(intelGpu.videoUtilizationPercent))
+                                    ? `${Number(intelGpu.videoUtilizationPercent).toFixed(0)}%`
+                                    : '—'
+                            }
+                            percent={intelGpu.videoUtilizationPercent}
+                        />
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Frequency</p>
+                                <p className="mt-1 font-semibold tabular-nums text-text">
+                                    {Number.isFinite(Number(intelGpu.frequencyMhz))
+                                        ? `${Math.round(Number(intelGpu.frequencyMhz))} MHz`
+                                        : '—'}
+                                    {Number.isFinite(Number(intelGpu.frequencyMaxMhz))
+                                        ? ` / ${Math.round(Number(intelGpu.frequencyMaxMhz))} MHz`
+                                        : ''}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-muted">GPU temp</p>
+                                <p className="mt-1 font-semibold tabular-nums text-text">
+                                    {Number.isFinite(Number(intelGpu.temperatureC)) ? `${intelGpu.temperatureC}°C` : '—'}
+                                </p>
+                            </div>
+                        </div>
+                        {intelGpu.engines && intelGpu.engines.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                                {intelGpu.engines.slice(0, 8).map((engine) => (
+                                    <div key={engine.name} className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+                                        <p className="truncate text-[10px] font-bold uppercase tracking-wide text-muted" title={engine.name}>
+                                            {engine.name}
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold tabular-nums text-text">
+                                            {Number.isFinite(Number(engine.busyPercent))
+                                                ? `${Number(engine.busyPercent).toFixed(0)}%`
+                                                : '—'}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : null}
+                        {intelGpu.note ? <p className="text-xs text-muted">{intelGpu.note}</p> : null}
+                    </div>
+                ) : null}
+
+                {!nvidiaGpus.length && !intelGpu?.available ? (
                     <p className="text-sm text-muted">
-                        {metrics?.gpu?.nvidia?.error || 'No NVIDIA metrics (nvidia-smi not available in this container).'}
+                        {metrics?.gpu?.nvidia?.error || intelGpu?.note || intelFallback?.note || 'No GPU metrics available in this container.'}
                     </p>
-                )}
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                    <p className="text-sm font-semibold text-text">Intel / AMD</p>
-                    <p className="mt-1 text-sm text-muted">
-                        {intel?.dri?.present
-                            ? `/dev/dri mapped${intel.dri.device ? ` (${intel.dri.device})` : ''}${intel.vendors?.length ? ` · ${intel.vendors.join(', ')}` : ''}`
-                            : '/dev/dri not mapped'}
-                    </p>
-                    <p className="mt-2 text-xs text-muted">{intel?.note}</p>
-                    <p className="mt-2 text-xs text-muted">
-                        Active GPU encodes: {metrics?.gpu?.activeEncodes?.gpu ?? 0}
-                    </p>
-                </div>
+                ) : null}
+
+                {intelFallback?.note && !intelGpu?.available ? (
+                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-sm font-semibold text-text">Other GPU / DRM</p>
+                        <p className="mt-1 text-sm text-muted">
+                            {intelFallback.dri?.present
+                                ? `/dev/dri mapped${intelFallback.dri.device ? ` (${intelFallback.dri.device})` : ''}${intelFallback.vendors?.length ? ` · ${intelFallback.vendors.join(', ')}` : ''}`
+                                : '/dev/dri not mapped'}
+                        </p>
+                        <p className="mt-2 text-xs text-muted">{intelFallback.note}</p>
+                    </div>
+                ) : null}
+
+                <p className="text-xs text-muted">
+                    Active GPU encodes: {metrics?.gpu?.activeEncodes?.gpu ?? 0}
+                </p>
             </section>
         </div>
     );
