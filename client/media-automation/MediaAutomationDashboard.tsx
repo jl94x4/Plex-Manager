@@ -634,18 +634,18 @@ const historyEntryToJobClient = (entry: MediaAutomationHistoryEntry): MediaAutom
         id: entry.id,
         sourcePath,
         path: sourcePath,
-        pipelineId: entry.pipelineId ?? null,
+        pipelineId: entry.pipelineId ?? undefined,
         pipelineName: entry.pipelineName || '',
         libraryId: entry.libraryId ?? null,
         state,
         status: state,
         phase: state,
         lane: entry.lane === 'gpu' ? 'gpu' : 'cpu',
-        createdAt: entry.createdAt || null,
-        startedAt: entry.startedAt || null,
-        finishedAt: entry.finishedAt || null,
-        completedAt: entry.finishedAt || null,
-        error: entry.error || null,
+        createdAt: entry.createdAt || undefined,
+        startedAt: entry.startedAt || undefined,
+        finishedAt: entry.finishedAt || undefined,
+        completedAt: entry.finishedAt || undefined,
+        error: entry.error || undefined,
         archived: true,
         metadata: {
             tags: Array.isArray(entry.tags) ? entry.tags : [],
@@ -667,7 +667,7 @@ const historyEntryToJobClient = (entry: MediaAutomationHistoryEntry): MediaAutom
         },
     };
 };
-const formatTime = (value?: string) => {
+const formatTime = (value?: string | null) => {
     if (!value) return '-';
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
