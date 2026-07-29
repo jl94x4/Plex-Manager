@@ -40,6 +40,7 @@ import {
     buildTargets,
     createPlexTarget,
     collectMountRewrites,
+    expandPathRewriteCandidates,
 } from './lib/scanner/index.js';
 import {
     buildStepPlan,
@@ -49,6 +50,7 @@ import {
     collectHostMetrics,
     detectFfmpegCapabilities,
     getDefaultMediaAutomationConfig,
+    isPathContained,
     listBrowseDirectory,
     listMediaFiles,
     matchMediaRule,
@@ -16117,6 +16119,7 @@ const mapSonarrSeriesToUpgraderItem = (series, instance, fileStats = {}, episode
         arrEntityId: entityId,
         arrDeepUrl: deepUrl,
         arrQualityProfileId: series.qualityProfileId != null ? Number(series.qualityProfileId) : null,
+        arrPath: String(series.path || '').trim() || null,
         dataSource: 'sonarr',
     };
 };
@@ -16164,6 +16167,8 @@ const mapRadarrMovieToUpgraderItem = (movie, instance, plexItem = null) => {
         arrEntityId: entityId,
         arrDeepUrl: buildArrDeepUrl(instance, movie, 'radarr'),
         arrQualityProfileId: movie.qualityProfileId != null ? Number(movie.qualityProfileId) : null,
+        arrPath: String(movie.path || '').trim()
+            || (movie?.movieFile?.path ? path.dirname(String(movie.movieFile.path)) : null),
         dataSource: 'radarr',
     };
 };
@@ -16250,6 +16255,7 @@ const buildUpgraderItemsForArrInstance = async (instance, { config, plexLookup, 
             // Skip reuse when codecs are missing — we may fill them from Plex.
             if (prev?.arrFileFingerprint === fingerprint && prev.zeroSizeCount != null && !missingSonarrCodec && !(Number(prev.unknownCodecCount || 0) > 0)) {
                 prev.overview = series.overview || '';
+                prev.arrPath = String(series.path || '').trim() || prev.arrPath || null;
                 items.push(applyUpgraderPosterFields(prev, posterMeta, plexLookup));
                 reused += 1;
                 continue;
@@ -16292,6 +16298,10 @@ const buildUpgraderItemsForArrInstance = async (instance, { config, plexLookup, 
             const prev = prevByKey.get(ratingKey);
             if (prev?.arrFileFingerprint === fingerprint && prev.zeroSizeCount != null) {
                 prev.overview = movie.overview || '';
+                prev.arrPath = String(movie.path || '').trim()
+                    || (movie?.movieFile?.path ? path.dirname(String(movie.movieFile.path)) : null)
+                    || prev.arrPath
+                    || null;
                 items.push(applyUpgraderPosterFields(prev, posterMeta, plexLookup));
                 reused += 1;
                 return;
@@ -16727,6 +16737,7 @@ const mapUpgraderApiItem = (item, exclusions = { ratingKeys: new Set(), titles: 
         tmdbId: item.tmdbId ?? null,
         imdbId: item.imdbId ?? null,
         arrQualityProfileId: item.arrQualityProfileId != null ? Number(item.arrQualityProfileId) : null,
+        arrPath: item.arrPath ? String(item.arrPath) : null,
         excluded,
         snoozed,
     };
@@ -16734,6 +16745,101 @@ const mapUpgraderApiItem = (item, exclusions = { ratingKeys: new Set(), titles: 
 
 const UPGRADER_SORT_IDS = new Set(['title', 'sizeGB', 'watchCount', 'addedAt', 'daysSinceAdded', 'staleAdded', 'hevcFirst', 'h264First', 'av1First']);
 const upgraderUpgradeState = { running: false };
+
+const normalizeUpgraderPath = (value) => String(value || '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+
+/** Resolve Sonarr/Radarr folder → container path under a Media Automation library when possible. */
+const resolveUpgraderMaHandoff = async (config, item) => {
+    let arrPath = normalizeUpgraderPath(item?.arrPath);
+    if (!arrPath && item?.arrInstanceId && item?.arrEntityId) {
+        const instance = getArrInstance(config, item.arrInstanceId);
+        if (instance?.type === 'sonarr') {
+            const series = await fetchSonarrSeriesById(instance, item.arrEntityId, {
+                resolveUrl: resolveIntegrationUrlForFetch,
+                fetchImpl: fetch,
+            });
+            arrPath = normalizeUpgraderPath(series?.path);
+        } else if (instance?.type === 'radarr') {
+            const movie = await fetchArrInstanceJson(instance, `/api/v3/movie/${item.arrEntityId}`, {
+                resolveUrl: resolveIntegrationUrlForFetch,
+                fetchImpl: fetch,
+            });
+            arrPath = normalizeUpgraderPath(movie?.path)
+                || normalizeUpgraderPath(movie?.movieFile?.path ? path.dirname(String(movie.movieFile.path)) : '');
+        }
+    }
+    if (!arrPath) {
+        throw Object.assign(new Error('No on-disk folder path found for this title in Sonarr/Radarr.'), { status: 404 });
+    }
+
+    const scanner = normalizeScannerConfig(config.scanner || getDefaultScannerConfig());
+    const rewriteRules = collectScannerPathRewrites(scanner);
+    const candidates = Array.from(new Set(
+        expandPathRewriteCandidates(arrPath, rewriteRules).map(normalizeUpgraderPath).filter(Boolean),
+    ));
+    if (!candidates.includes(arrPath)) candidates.unshift(arrPath);
+
+    let libraries = [];
+    try {
+        libraries = await mediaAutomationService?.libraries?.list?.() || [];
+    } catch {
+        libraries = [];
+    }
+    const enabledLibraries = libraries.filter((library) => library?.enabled !== false && library?.rootPath);
+
+    const findOwningLibrary = (candidate) => enabledLibraries
+        .filter((library) => {
+            try {
+                return isPathContained(library.rootPath, candidate);
+            } catch {
+                return false;
+            }
+        })
+        .sort((a, b) => String(b.rootPath || '').length - String(a.rootPath || '').length)[0] || null;
+
+    let resolvedPath = null;
+    let matchingLibrary = null;
+    for (const candidate of candidates) {
+        const owning = findOwningLibrary(candidate);
+        if (owning) {
+            resolvedPath = candidate;
+            matchingLibrary = owning;
+            break;
+        }
+    }
+    if (!resolvedPath) {
+        for (const candidate of candidates) {
+            try {
+                await fs.access(candidate);
+                resolvedPath = candidate;
+                break;
+            } catch {
+                /* try next rewrite candidate */
+            }
+        }
+    }
+    if (!resolvedPath) resolvedPath = candidates[0] || arrPath;
+    if (!matchingLibrary) matchingLibrary = findOwningLibrary(resolvedPath);
+
+    const titleLabel = `${item?.title || 'Title'}${item?.year ? ` (${item.year})` : ''}`.slice(0, 120);
+    return {
+        arrPath,
+        resolvedPath,
+        pathCandidates: candidates,
+        matchingLibrary: matchingLibrary
+            ? {
+                id: matchingLibrary.id,
+                name: matchingLibrary.name,
+                rootPath: matchingLibrary.rootPath,
+                pipelineId: matchingLibrary.pipelineId ?? null,
+            }
+            : null,
+        suggestedLibrary: {
+            name: titleLabel,
+            rootPath: resolvedPath,
+        },
+    };
+};
 
 const normalizeUpgraderProfileMap = (raw = {}) => {
     const source = raw && typeof raw === 'object' ? raw : {};
@@ -20606,6 +20712,42 @@ app.get('/api/upgrader/items', requireAdmin, async (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ error: `Failed to load upgrader items: ${e.message}` });
+    }
+});
+
+app.get('/api/upgrader/ma-handoff', requireAdmin, requireUpgrader, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const ratingKey = String(req.query.ratingKey || '').trim();
+        if (!ratingKey) return res.status(400).json({ error: 'ratingKey is required' });
+
+        const payload = await loadUpgraderIndex();
+        const item = (Array.isArray(payload.items) ? payload.items : [])
+            .find((entry) => String(entry?.ratingKey || '') === ratingKey);
+        if (!item) return res.status(404).json({ error: 'Upgrader title not found. Rebuild the index and try again.' });
+
+        const mediaAutomationEnabled = !!config.mediaAutomationEnabled;
+        if (!mediaAutomationEnabled) {
+            return res.status(403).json({
+                error: 'Media Automation is disabled. Enable it in Settings first.',
+                mediaAutomationEnabled: false,
+            });
+        }
+
+        const handoff = await resolveUpgraderMaHandoff(config, item);
+        res.json({
+            ok: true,
+            mediaAutomationEnabled: true,
+            item: {
+                ratingKey: String(item.ratingKey || ''),
+                title: item.title || 'Unknown',
+                year: item.year ?? null,
+                mediaType: item.mediaType || 'movie',
+            },
+            ...handoff,
+        });
+    } catch (e) {
+        res.status(e.status || 500).json({ error: e.message || 'Failed to resolve Media Automation handoff' });
     }
 });
 

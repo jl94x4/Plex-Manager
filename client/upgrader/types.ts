@@ -71,6 +71,7 @@ export type UpgraderItem = {
     arrInstanceName: string | null;
     arrInstanceId: string | null;
     arrDeepUrl: string | null;
+    arrPath?: string | null;
     dataSource?: 'sonarr' | 'radarr';
     arrEntityId?: number;
     arrQualityProfileId?: number | null;

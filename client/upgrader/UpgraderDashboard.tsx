@@ -1,12 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowUpCircle, RefreshCw, Search, Settings as SettingsIcon, ArrowUpFromLine, Layers, Clock, History, Ban, Filter, Settings2, FileBarChart2 } from 'lucide-react';
+import { ArrowUpCircle, RefreshCw, Search, Settings as SettingsIcon, ArrowUpFromLine, Layers, Clock, History, Ban, Filter, Settings2, FileBarChart2, FolderPlus } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
+import { askConfirm } from '../shared/confirm';
 import { CustomSelect, OverlayCheckbox } from '../shared/ui';
 import { Loader, ToastContainer, pushToast } from '../shared/toast';
 import { normalizeUpgraderGridSize, UPGRADER_GRID_SIZE_OPTIONS, UPGRADER_GRID_SIZE_STORAGE_KEY, upgraderPosterGridClass, upgraderPosterGridStyle, type UpgraderGridSize } from '../shared/portalLayout';
 import { DiscoverPosterCard } from '../screens';
 import type { ToastMessage } from '../shared/types';
+import { mediaAutomationApi } from '../media-automation/api';
+import { ReportModal, type ReportModalSeed } from '../media-automation/ReportModal';
+import { emptyLibrary } from '../media-automation/types';
+import type { MediaAutomationLibrary, MediaAutomationPipeline } from '../media-automation/types';
 import { UpgraderUpgradeModal } from './UpgraderUpgradeModal';
 import { UpgraderShowDrawer } from './UpgraderShowDrawer';
 import { UpgraderHistoryPanel } from './UpgraderHistoryPanel';
@@ -31,6 +36,24 @@ import {
 import { formatUpgraderCodecLabel, getDominantCodecShare, mergeUpgraderCodecCounts } from './codecUtils';
 
 import { UPGRADER_CODEC_OPTIONS, UPGRADER_RESOLUTION_OPTIONS, UPGRADER_FEATURE_OPTIONS, UPGRADER_QUALITY_OPTIONS } from './presets';
+
+type UpgraderMaHandoff = {
+    ok?: boolean;
+    mediaAutomationEnabled?: boolean;
+    arrPath?: string | null;
+    resolvedPath?: string | null;
+    matchingLibrary?: {
+        id?: string | number;
+        name?: string;
+        rootPath?: string;
+        pipelineId?: string | number | null;
+    } | null;
+    suggestedLibrary?: {
+        name?: string;
+        rootPath?: string;
+    } | null;
+    error?: string;
+};
 
 const SORT_OPTIONS = [
     { value: 'sizeGB', label: 'Largest first' },
@@ -129,6 +152,10 @@ export const UpgraderDashboard: React.FC = () => {
     const [profilesUrl, setProfilesUrl] = useState<UpgraderProfilesUrlState>(initialUrl.profiles);
     const [showDrawerItem, setShowDrawerItem] = useState<UpgraderItem | null>(null);
     const [drawerPosition, setDrawerPosition] = useState<'sidebar' | 'modal'>('sidebar');
+    const [reportSeed, setReportSeed] = useState<ReportModalSeed | null>(null);
+    const [maLibraries, setMaLibraries] = useState<MediaAutomationLibrary[]>([]);
+    const [maPipelines, setMaPipelines] = useState<MediaAutomationPipeline[]>([]);
+    const [maHandoffBusyKey, setMaHandoffBusyKey] = useState<string | null>(null);
     const listScrollRef = useRef(0);
     const restoreScrollAfterDrawerRef = useRef(false);
 
@@ -430,6 +457,125 @@ export const UpgraderDashboard: React.FC = () => {
         window.history.pushState({}, '', savingsReportHref);
         window.dispatchEvent(new PopStateEvent('popstate'));
     }, [savingsReportHref]);
+
+    const ensureMaCatalog = useCallback(async () => {
+        const [libraries, pipelines] = await Promise.all([
+            mediaAutomationApi.libraries(),
+            mediaAutomationApi.pipelines(),
+        ]);
+        setMaLibraries(libraries);
+        setMaPipelines(pipelines);
+        return { libraries, pipelines };
+    }, []);
+
+    const fetchMaHandoff = useCallback(async (item: UpgraderItem) => {
+        const data = await apiFetch(
+            `/api/upgrader/ma-handoff?ratingKey=${encodeURIComponent(item.ratingKey)}`,
+        ) as UpgraderMaHandoff;
+        if (data?.error) throw new Error(data.error);
+        if (!data?.resolvedPath) throw new Error('Could not resolve an on-disk folder for this title.');
+        return data;
+    }, []);
+
+    const openTitleSavingsReport = useCallback(async (item: UpgraderItem) => {
+        const busyKey = `report:${item.ratingKey}`;
+        setMaHandoffBusyKey(busyKey);
+        try {
+            const [handoff] = await Promise.all([fetchMaHandoff(item), ensureMaCatalog()]);
+            let libraryId = handoff.matchingLibrary?.id ?? null;
+            let pipelineId = handoff.matchingLibrary?.pipelineId ?? null;
+            if (!handoff.matchingLibrary) {
+                const create = await askConfirm(
+                    `No Media Automation library covers:\n\n${handoff.resolvedPath}\n\n`
+                    + 'Create one for this title so the savings report can run?',
+                );
+                if (!create) return;
+                const created = await mediaAutomationApi.createLibrary({
+                    ...emptyLibrary(),
+                    name: handoff.suggestedLibrary?.name || item.title,
+                    rootPath: String(handoff.suggestedLibrary?.rootPath || handoff.resolvedPath || ''),
+                    pipelineId: '',
+                    enabled: true,
+                }) as { library?: MediaAutomationLibrary };
+                const library = created?.library;
+                if (!library?.id) throw new Error('Library create did not return an id.');
+                libraryId = library.id;
+                pipelineId = library.pipelineId ?? null;
+                await ensureMaCatalog();
+                addToast(`Created MA library “${library.name}”.`, 'success');
+            }
+            setReportSeed({
+                libraryId,
+                libraryRoot: handoff.resolvedPath,
+                pipelineId,
+                forcePipeline: false,
+            });
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Savings report failed', 'error');
+        } finally {
+            setMaHandoffBusyKey(null);
+        }
+    }, [addToast, ensureMaCatalog, fetchMaHandoff]);
+
+    const createMaLibraryForTitle = useCallback(async (item: UpgraderItem) => {
+        const busyKey = `library:${item.ratingKey}`;
+        setMaHandoffBusyKey(busyKey);
+        try {
+            const handoff = await fetchMaHandoff(item);
+            if (handoff.matchingLibrary
+                && String(handoff.matchingLibrary.rootPath || '').replace(/\\/g, '/').replace(/\/+$/, '')
+                    === String(handoff.resolvedPath || '').replace(/\\/g, '/').replace(/\/+$/, '')) {
+                const openExisting = await askConfirm(
+                    `A Media Automation library already points at this folder:\n\n`
+                    + `${handoff.matchingLibrary.name}\n${handoff.matchingLibrary.rootPath}\n\n`
+                    + 'Open a savings report for it instead?',
+                );
+                if (openExisting) {
+                    await ensureMaCatalog();
+                    setReportSeed({
+                        libraryId: handoff.matchingLibrary.id ?? null,
+                        libraryRoot: handoff.resolvedPath,
+                        pipelineId: handoff.matchingLibrary.pipelineId ?? null,
+                        forcePipeline: false,
+                    });
+                }
+                return;
+            }
+            const confirmed = await askConfirm(
+                `Create a Media Automation library for:\n\n`
+                + `${handoff.suggestedLibrary?.name || item.title}\n`
+                + `${handoff.suggestedLibrary?.rootPath || handoff.resolvedPath}\n\n`
+                + 'You can pick a pipeline and scan afterward.',
+            );
+            if (!confirmed) return;
+            const { pipelines } = await ensureMaCatalog();
+            const defaultPipeline = pipelines.find((pipeline) => pipeline.enabled !== false);
+            const created = await mediaAutomationApi.createLibrary({
+                ...emptyLibrary(),
+                name: handoff.suggestedLibrary?.name || item.title,
+                rootPath: String(handoff.suggestedLibrary?.rootPath || handoff.resolvedPath || ''),
+                pipelineId: defaultPipeline?.id ?? '',
+                enabled: true,
+            }) as { library?: MediaAutomationLibrary };
+            const library = created?.library;
+            if (!library?.id) throw new Error('Library create did not return an id.');
+            await ensureMaCatalog();
+            addToast(`Created MA library “${library.name}”.`, 'success');
+            const openReport = await askConfirm('Open a savings report for this library now?');
+            if (openReport) {
+                setReportSeed({
+                    libraryId: library.id,
+                    libraryRoot: library.rootPath || handoff.resolvedPath,
+                    pipelineId: library.pipelineId ?? defaultPipeline?.id ?? null,
+                    forcePipeline: false,
+                });
+            }
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Create library failed', 'error');
+        } finally {
+            setMaHandoffBusyKey(null);
+        }
+    }, [addToast, ensureMaCatalog, fetchMaHandoff]);
 
     const summaryChips = useMemo(() => {
         if (!summary) return [];
@@ -1002,6 +1148,26 @@ export const UpgraderDashboard: React.FC = () => {
                                                                     Open in {item.arrType === 'radarr' ? 'Radarr' : 'Sonarr'}
                                                                 </a>
                                                             )}
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex items-center gap-1 text-xs font-bold text-gray-300 hover:text-white transition-colors disabled:opacity-40"
+                                                                disabled={maHandoffBusyKey === `report:${item.ratingKey}`}
+                                                                onClick={() => void openTitleSavingsReport(item)}
+                                                                title="Estimate encode savings for this title folder"
+                                                            >
+                                                                <FileBarChart2 className="h-3.5 w-3.5" />
+                                                                {maHandoffBusyKey === `report:${item.ratingKey}` ? 'Opening…' : 'Savings report'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex items-center gap-1 text-xs font-bold text-gray-300 hover:text-white transition-colors disabled:opacity-40"
+                                                                disabled={maHandoffBusyKey === `library:${item.ratingKey}`}
+                                                                onClick={() => void createMaLibraryForTitle(item)}
+                                                                title="Create a Media Automation library for this title folder"
+                                                            >
+                                                                <FolderPlus className="h-3.5 w-3.5" />
+                                                                {maHandoffBusyKey === `library:${item.ratingKey}` ? 'Creating…' : 'Create MA library'}
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1097,6 +1263,32 @@ export const UpgraderDashboard: React.FC = () => {
                                                                         Open in {item.arrType === 'radarr' ? 'Radarr' : 'Sonarr'}
                                                                     </a>
                                                                 )}
+                                                                <button
+                                                                    type="button"
+                                                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-muted hover:text-text disabled:opacity-40"
+                                                                    disabled={maHandoffBusyKey === `report:${item.ratingKey}`}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        void openTitleSavingsReport(item);
+                                                                    }}
+                                                                    title="Estimate encode savings for this title folder"
+                                                                >
+                                                                    <FileBarChart2 className="h-3 w-3" />
+                                                                    Report
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-muted hover:text-text disabled:opacity-40"
+                                                                    disabled={maHandoffBusyKey === `library:${item.ratingKey}`}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        void createMaLibraryForTitle(item);
+                                                                    }}
+                                                                    title="Create a Media Automation library for this title folder"
+                                                                >
+                                                                    <FolderPlus className="h-3 w-3" />
+                                                                    MA library
+                                                                </button>
                                                                 {canUpgrade && (
                                                                     <button
                                                                         type="button"
@@ -1156,6 +1348,15 @@ export const UpgraderDashboard: React.FC = () => {
                     </>
                 )}
             </div>
+
+            <ReportModal
+                open={!!reportSeed}
+                seed={reportSeed}
+                libraries={maLibraries}
+                pipelines={maPipelines}
+                onClose={() => setReportSeed(null)}
+                toast={(message, tone) => addToast(message, tone === 'error' ? 'error' : 'success')}
+            />
         </div>
     );
 };
