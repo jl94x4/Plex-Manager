@@ -103,6 +103,9 @@ export const mediaAutomationApi = {
             savings: response.savings || null,
         };
     },
+    clearHistory: (libraryId?: string | number | null) => apiFetch(`${ROOT}/history/clear`, json({
+        libraryId: libraryId == null || String(libraryId).trim() === '' ? null : String(libraryId),
+    })) as Promise<{ ok?: boolean; removed?: number; remaining?: number; libraryId?: string | null }>,
     scanHistory: async (limit = 20) => asList<MediaAutomationScanHistoryEntry>(
         await apiFetch(`${ROOT}/scan-history?limit=${limit}`),
         ['entries', 'scans', 'items'],

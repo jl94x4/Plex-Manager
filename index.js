@@ -20057,6 +20057,24 @@ app.get('/api/media-automation/history', requireAdmin, requireMediaAutomation, a
     }
 });
 
+app.post('/api/media-automation/history/clear', requireAdmin, requireMediaAutomation, async (req, res) => {
+    try {
+        const rawLibraryId = req.body?.libraryId;
+        const libraryId = rawLibraryId == null || String(rawLibraryId).trim() === ''
+            ? null
+            : String(rawLibraryId).trim();
+        const result = await mediaAutomationService.clearHistory({ libraryId });
+        await appendAuditLog('media_automation_history_cleared', req.user, null, {
+            libraryId,
+            removed: result?.removed ?? 0,
+            remaining: result?.remaining ?? 0,
+        });
+        res.json({ ok: true, ...result });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to clear Media Automation history' });
+    }
+});
+
 app.get('/api/media-automation/scan-history', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
         const entries = await mediaAutomationService.listScanHistory({

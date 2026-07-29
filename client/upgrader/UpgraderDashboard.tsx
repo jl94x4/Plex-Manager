@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowUpCircle, RefreshCw, Search, Settings as SettingsIcon, ArrowUpFromLine, Layers, Clock, History, Ban, Filter, Settings2 } from 'lucide-react';
+import { ArrowUpCircle, RefreshCw, Search, Settings as SettingsIcon, ArrowUpFromLine, Layers, Clock, History, Ban, Filter, Settings2, FileBarChart2 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { CustomSelect, OverlayCheckbox } from '../shared/ui';
@@ -363,6 +363,23 @@ export const UpgraderDashboard: React.FC = () => {
         [items, selectedKeys],
     );
 
+    const selectedLibraryTitle = useMemo(() => {
+        if (!libraryId || libraryId === 'all') return '';
+        return libraries.find((lib) => String(lib.id) === String(libraryId))?.title || '';
+    }, [libraries, libraryId]);
+
+    const savingsReportHref = useMemo(() => {
+        const params = new URLSearchParams({ report: '1' });
+        if (selectedLibraryTitle) params.set('libraryName', selectedLibraryTitle);
+        return portalUrl(`/media-automation?${params.toString()}#libraries`);
+    }, [selectedLibraryTitle]);
+
+    const openSavingsReport = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
+        event.preventDefault();
+        window.history.pushState({}, '', savingsReportHref);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+    }, [savingsReportHref]);
+
     const summaryChips = useMemo(() => {
         if (!summary) return [];
         const chips = [
@@ -450,7 +467,7 @@ export const UpgraderDashboard: React.FC = () => {
                 {featureEnabled && (
                     <>
                         {summaryChips.length > 0 && activeTab === 'browse' && (
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 {summaryChips.map((chip) => (
                                     <span key={chip} className="text-xs font-semibold px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-text">
                                         {chip}
@@ -471,6 +488,17 @@ export const UpgraderDashboard: React.FC = () => {
                                         Manual Upgrades only
                                     </span>
                                 )}
+                                <a
+                                    href={savingsReportHref}
+                                    onClick={openSavingsReport}
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-plex/15 border border-plex/40 text-plex no-underline hover:bg-plex/25 transition-colors"
+                                    title={selectedLibraryTitle
+                                        ? `Open Media Automation savings report for ${selectedLibraryTitle}`
+                                        : 'Open Media Automation savings report'}
+                                >
+                                    <FileBarChart2 className="w-3.5 h-3.5" />
+                                    Savings report
+                                </a>
                             </div>
                         )}
 

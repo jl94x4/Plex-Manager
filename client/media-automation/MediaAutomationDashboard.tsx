@@ -1107,6 +1107,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [forceSampleSection, setForceSampleSection] = useState(false);
     const [libraryPathHealth, setLibraryPathHealth] = useState<Record<string, { ok: boolean; message: string }>>({});
     const [reportSeed, setReportSeed] = useState<ReportModalSeed | null>(null);
+    const reportDeepLinkHandled = React.useRef(false);
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
@@ -1156,6 +1157,41 @@ export const MediaAutomationDashboard: React.FC = () => {
         window.addEventListener('hashchange', onHashChange);
         return () => window.removeEventListener('hashchange', onHashChange);
     }, []);
+    useEffect(() => {
+        if (reportDeepLinkHandled.current || typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        const reportFlag = String(params.get('report') || '').trim().toLowerCase();
+        if (reportFlag !== '1' && reportFlag !== 'true') return;
+
+        const libraryName = String(params.get('libraryName') || '').trim().toLowerCase();
+        // Wait for first status load so we can match an MA library by Upgrader name.
+        if (libraryName && loading) return;
+
+        let seed: ReportModalSeed = { forcePipeline: false };
+        if (libraryName && libraries.length > 0) {
+            const exact = libraries.find((library) => String(library.name || '').trim().toLowerCase() === libraryName);
+            const partial = exact || libraries.find((library) => String(library.name || '').toLowerCase().includes(libraryName));
+            if (partial) {
+                seed = {
+                    libraryId: partial.id,
+                    libraryRoot: partial.rootPath,
+                    pipelineId: partial.pipelineId ?? null,
+                    forcePipeline: false,
+                };
+            }
+        }
+
+        reportDeepLinkHandled.current = true;
+        setTab('libraries');
+        writeMediaAutomationTabHash('libraries');
+        setReportSeed(seed);
+
+        params.delete('report');
+        params.delete('libraryName');
+        const qs = params.toString();
+        const next = `${window.location.pathname}${qs ? `?${qs}` : ''}#libraries`;
+        window.history.replaceState(null, '', next);
+    }, [libraries, loading]);
     useEffect(() => {
         const hasActive = jobs.some((job) => {
             const state = jobStateValue(job);
@@ -3453,6 +3489,30 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     <FileBarChart2 className="h-4 w-4" />
                                                     Report
                                                 </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null}
+                                                    onClick={async () => {
+                                                        const ok = await askConfirm(
+                                                            `Reset task history stats for "${library.name}"? Savings totals for this library will be cleared. Queue jobs are not affected.`,
+                                                            {
+                                                                title: 'Reset library stats?',
+                                                                confirmLabel: 'Reset stats',
+                                                                cancelLabel: 'Cancel',
+                                                            },
+                                                        );
+                                                        if (!ok) return;
+                                                        void runAction(
+                                                            `reset-stats-${library.id}`,
+                                                            () => mediaAutomationApi.clearHistory(library.id),
+                                                            `Stats reset for ${library.name}.`,
+                                                        );
+                                                    }}
+                                                >
+                                                    {busy === `reset-stats-${library.id}` ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                                                    Reset stats
+                                                </button>
                                                 {health && (
                                                     <p className={`text-xs ${health.ok ? 'text-emerald-300' : 'text-red-300'}`}>{health.message}</p>
                                                 )}
@@ -3510,6 +3570,26 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     {value}
                                 </button>
                             ))}
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy !== null}
+                                onClick={async () => {
+                                    const ok = await askConfirm(
+                                        'Reset ALL Media Automation task history and savings stats? This cannot be undone. Live queue jobs are not affected.',
+                                        {
+                                            title: 'Reset all stats?',
+                                            confirmLabel: 'Reset all',
+                                            cancelLabel: 'Cancel',
+                                        },
+                                    );
+                                    if (!ok) return;
+                                    void runAction('reset-stats-all', () => mediaAutomationApi.clearHistory(null), 'All history stats cleared.');
+                                }}
+                            >
+                                {busy === 'reset-stats-all' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                                Reset all stats
+                            </button>
                         </div>
                     </div>
                     <input
