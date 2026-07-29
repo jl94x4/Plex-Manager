@@ -56,9 +56,8 @@ RUN apt-get update \
         python3-venv \
         util-linux \
         vainfo \
-    && if apt-cache show intel-gpu-tools >/dev/null 2>&1; then \
-        apt-get install -y --no-install-recommends intel-gpu-tools; \
-    fi \
+    && apt-get install -y --no-install-recommends intel-gpu-tools \
+    && command -v intel_gpu_top \
     && if apt-cache show intel-media-va-driver >/dev/null 2>&1; then \
         apt-get install -y --no-install-recommends intel-media-va-driver; \
     fi \
