@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpCircle, RefreshCw, Search, Settings as SettingsIcon, ArrowUpFromLine, Layers, Clock, History, Ban, Filter, Settings2, FileBarChart2 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -129,11 +129,37 @@ export const UpgraderDashboard: React.FC = () => {
     const [profilesUrl, setProfilesUrl] = useState<UpgraderProfilesUrlState>(initialUrl.profiles);
     const [showDrawerItem, setShowDrawerItem] = useState<UpgraderItem | null>(null);
     const [drawerPosition, setDrawerPosition] = useState<'sidebar' | 'modal'>('sidebar');
+    const listScrollRef = useRef(0);
+    const restoreScrollAfterDrawerRef = useRef(false);
+
+    const getListScrollEl = () => (
+        typeof document !== 'undefined'
+            ? document.getElementById('main-scroll-container')
+            : null
+    );
+
+    const captureListScroll = useCallback(() => {
+        const el = getListScrollEl();
+        listScrollRef.current = el ? el.scrollTop : window.scrollY;
+    }, []);
+
+    const restoreListScroll = useCallback(() => {
+        const top = listScrollRef.current;
+        const apply = () => {
+            const el = getListScrollEl();
+            if (el) el.scrollTop = top;
+            else window.scrollTo(0, top);
+        };
+        apply();
+        requestAnimationFrame(apply);
+    }, []);
 
     const handleOpenDrawer = useCallback((item: UpgraderItem) => {
+        captureListScroll();
+        restoreScrollAfterDrawerRef.current = true;
         window.history.pushState({ drawerOpen: true }, '', window.location.href);
         setShowDrawerItem(item);
-    }, []);
+    }, [captureListScroll]);
 
     const handleCloseDrawer = useCallback(() => {
         if (window.history.state?.drawerOpen) {
@@ -152,6 +178,20 @@ export const UpgraderDashboard: React.FC = () => {
         window.addEventListener('popstate', onPopState);
         return () => window.removeEventListener('popstate', onPopState);
     }, []);
+
+    // Closing the drawer uses history.back(), which can reload browse state and jump the list.
+    // Restore the pre-open scroll only after that close transition (not on normal list refreshes).
+    useEffect(() => {
+        if (showDrawerItem) {
+            restoreScrollAfterDrawerRef.current = true;
+            return undefined;
+        }
+        if (!restoreScrollAfterDrawerRef.current || loading) return undefined;
+        restoreScrollAfterDrawerRef.current = false;
+        restoreListScroll();
+        const timer = window.setTimeout(restoreListScroll, 120);
+        return () => window.clearTimeout(timer);
+    }, [showDrawerItem, loading, restoreListScroll]);
 
     const [gridSize, setGridSize] = useState<UpgraderGridSize>(() => {
         if (typeof window === 'undefined') return 'medium';
@@ -210,20 +250,31 @@ export const UpgraderDashboard: React.FC = () => {
     }, [syncUpgraderUrl]);
 
     useEffect(() => {
+        const sameSet = (current: Set<string>, next: string[]) => (
+            current.size === next.length && next.every((value) => current.has(value))
+        );
         const onPopState = () => {
+            // Drawer open/close also uses history; don't churn identical browse state.
+            if (window.history.state?.drawerOpen) return;
             const next = readUpgraderUrl();
-            setActiveTab(next.tab);
-            setCodecs(new Set(next.browse.codecs as UpgraderCodec[]));
-            setResolutions(new Set(next.browse.resolutions as UpgraderResolution[]));
-            setFeatures(new Set(next.browse.features as UpgraderFeature[]));
-            setQualities(new Set(next.browse.qualities as UpgraderQuality[]));
-            setLibraryId(next.browse.library);
-            setMediaType(next.browse.type);
-            setSort(next.browse.sort);
-            setSearch(next.browse.search);
-            setSearchInput(next.browse.search);
-            setPage(next.browse.page);
-            setProfilesUrl(next.profiles);
+            setActiveTab((prev) => (prev === next.tab ? prev : next.tab));
+            setCodecs((prev) => (sameSet(prev, next.browse.codecs) ? prev : new Set(next.browse.codecs as UpgraderCodec[])));
+            setResolutions((prev) => (sameSet(prev, next.browse.resolutions) ? prev : new Set(next.browse.resolutions as UpgraderResolution[])));
+            setFeatures((prev) => (sameSet(prev, next.browse.features) ? prev : new Set(next.browse.features as UpgraderFeature[])));
+            setQualities((prev) => (sameSet(prev, next.browse.qualities) ? prev : new Set(next.browse.qualities as UpgraderQuality[])));
+            setLibraryId((prev) => (prev === next.browse.library ? prev : next.browse.library));
+            setMediaType((prev) => (prev === next.browse.type ? prev : next.browse.type));
+            setSort((prev) => (prev === next.browse.sort ? prev : next.browse.sort));
+            setSearch((prev) => (prev === next.browse.search ? prev : next.browse.search));
+            setSearchInput((prev) => (prev === next.browse.search ? prev : next.browse.search));
+            setPage((prev) => (prev === next.browse.page ? prev : next.browse.page));
+            setProfilesUrl((prev) => (
+                prev.instance === next.profiles.instance
+                && prev.formatPage === next.profiles.formatPage
+                && prev.profilePage === next.profiles.profilePage
+                    ? prev
+                    : next.profiles
+            ));
         };
         window.addEventListener('popstate', onPopState);
         return () => window.removeEventListener('popstate', onPopState);
