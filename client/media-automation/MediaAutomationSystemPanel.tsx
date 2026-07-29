@@ -36,9 +36,13 @@ const formatUptime = (seconds?: number) => {
 };
 
 const clampPercent = (value: number | null | undefined) => {
-    if (!Number.isFinite(Number(value))) return null;
+    if (value == null || !Number.isFinite(Number(value))) return null;
     return Math.max(0, Math.min(100, Number(value)));
 };
+
+const isFiniteNumber = (value: unknown): value is number => (
+    value != null && value !== '' && Number.isFinite(Number(value))
+);
 
 const toneFor = (percent: number | null) => {
     if (percent == null) return { stroke: 'rgb(var(--color-plex))', bar: 'from-plex/80 to-plex', text: 'text-plex' };
@@ -247,7 +251,7 @@ const CpuCoresModal: React.FC<{
                             <p className="mt-1 text-sm text-muted">
                                 {cpu?.model || 'Host CPU'} · {cpu?.cores ?? cores.length} cores
                                 {cpu?.usedPercent != null ? ` · overall ${cpu.usedPercent.toFixed(1)}%` : ''}
-                                {Number.isFinite(Number(cpu?.temperatureC)) ? ` · ${cpu?.temperatureC}°C` : ''}
+                                {isFiniteNumber(cpu?.temperatureC) ? ` · ${cpu?.temperatureC}°C` : ''}
                             </p>
                             <p className="mt-1 text-xs text-muted">
                                 Busy (≥50%): {busy} · Hot (≥90%): {hot} · Live while this panel is open
@@ -465,7 +469,7 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                     valueText={cpu?.usedPercent != null ? `${cpuSmooth}%` : '…'}
                     subtext={[
                         `${cpu?.cores ?? '—'} cores`,
-                        Number.isFinite(Number(cpu?.temperatureC)) ? `${cpu?.temperatureC}°C` : null,
+                        isFiniteNumber(cpu?.temperatureC) ? `${cpu?.temperatureC}°C` : null,
                     ].filter(Boolean).join(' · ')}
                     history={history.cpu}
                     onClick={() => setCpuCoresOpen(true)}
@@ -483,10 +487,10 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                     label="GPU"
                     icon={<Gauge className="h-3.5 w-3.5 text-plex" />}
                     percent={clampPercent(primaryGpuUtil)}
-                    valueText={primaryGpuUtil != null ? `${gpuSmooth}%` : (primaryGpuName ? '…' : 'N/A')}
+                    valueText={isFiniteNumber(primaryGpuUtil) ? `${gpuSmooth}%` : (primaryGpuName ? '—' : 'N/A')}
                     subtext={[
                         primaryGpuName || 'No GPU metrics',
-                        !primaryNvidia && Number.isFinite(Number(intelGpu?.temperatureC))
+                        !primaryNvidia && isFiniteNumber(intelGpu?.temperatureC)
                             ? `${intelGpu?.temperatureC}°C`
                             : null,
                     ].filter(Boolean).join(' · ')}
@@ -557,15 +561,15 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                         percent={cpu?.usedPercent}
                         hint={[
                             cpu?.model,
-                            Number.isFinite(Number(cpu?.temperatureC)) ? `${cpu?.temperatureC}°C` : null,
+                            isFiniteNumber(cpu?.temperatureC) ? `${cpu?.temperatureC}°C` : null,
                         ].filter(Boolean).join(' · ') || undefined}
                     />
-                    <div className={`grid gap-3 text-sm ${Number.isFinite(Number(cpu?.temperatureC)) ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    <div className={`grid gap-3 text-sm ${isFiniteNumber(cpu?.temperatureC) ? 'grid-cols-3' : 'grid-cols-2'}`}>
                         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                             <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Cores</p>
                             <p className="mt-1 font-semibold tabular-nums text-text">{cpu?.cores ?? '-'}</p>
                         </div>
-                        {Number.isFinite(Number(cpu?.temperatureC)) ? (
+                        {isFiniteNumber(cpu?.temperatureC) ? (
                             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                                 <p className="text-[11px] font-bold uppercase tracking-wide text-muted">CPU temp</p>
                                 <p className="mt-1 font-semibold tabular-nums text-text">{cpu?.temperatureC}°C</p>
@@ -585,7 +589,7 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                             </p>
                         </div>
                     </div>
-                    {!Number.isFinite(Number(cpu?.temperatureC)) && cpu?.temperatureNote ? (
+                    {!isFiniteNumber(cpu?.temperatureC) && cpu?.temperatureNote ? (
                         <p className="text-xs text-muted">{cpu.temperatureNote}</p>
                     ) : null}
                 </section>
@@ -604,7 +608,7 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                                         <p className="truncate font-semibold text-text">{gpu.name}</p>
                                         <p className="mt-1 text-xs text-muted">
                                             NVIDIA
-                                            {Number.isFinite(Number(gpu.temperatureC)) ? ` · ${gpu.temperatureC}°C` : ''}
+                                            {isFiniteNumber(gpu.temperatureC) ? ` · ${gpu.temperatureC}°C` : ''}
                                         </p>
                                     </div>
                                     <ServerCog className="h-4 w-4 shrink-0 text-plex" />
@@ -636,7 +640,7 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                                 <p className="mt-1 text-xs text-muted">
                                     Intel
                                     {intelGpu.driver ? ` · ${intelGpu.driver}` : ''}
-                                    {Number.isFinite(Number(intelGpu.temperatureC)) ? ` · ${intelGpu.temperatureC}°C` : ''}
+                                    {isFiniteNumber(intelGpu.temperatureC) ? ` · ${intelGpu.temperatureC}°C` : ''}
                                     {intelGpu.device ? ` · ${intelGpu.device}` : ''}
                                 </p>
                             </div>
@@ -675,7 +679,7 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                                 <p className="text-[11px] font-bold uppercase tracking-wide text-muted">GPU temp</p>
                                 <p className="mt-1 font-semibold tabular-nums text-text">
-                                    {Number.isFinite(Number(intelGpu.temperatureC)) ? `${intelGpu.temperatureC}°C` : '—'}
+                                    {isFiniteNumber(intelGpu.temperatureC) ? `${intelGpu.temperatureC}°C` : '—'}
                                 </p>
                             </div>
                         </div>
