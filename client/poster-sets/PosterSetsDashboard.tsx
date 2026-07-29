@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     CheckCircle2,
+    ChevronLeft,
     Download,
     ExternalLink,
     History,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { SettingsToggleRow } from '../shared/ui';
+import { askConfirm } from '../shared/confirm';
 import { posterSetsApi } from './api';
 import {
     DEFAULT_POSTER_SETS_CONFIG,
@@ -211,6 +213,11 @@ export const PosterSetsDashboard: React.FC = () => {
     const [searchTitles, setSearchTitles] = useState<PosterSetsSearchTitle[]>([]);
     const [searchSets, setSearchSets] = useState<PosterSetsSearchSet[]>([]);
     const [searchContext, setSearchContext] = useState('');
+    const [selectedSearchTitle, setSelectedSearchTitle] = useState<PosterSetsSearchTitle | null>(null);
+    const [selectedSearchSet, setSelectedSearchSet] = useState<PosterSetsSearchSet | null>(null);
+    const [showAssetPicker, setShowAssetPicker] = useState(false);
+    const [manualUrlOpen, setManualUrlOpen] = useState(false);
+    const previewPanelRef = useRef<HTMLDivElement | null>(null);
     const [recentTick, setRecentTick] = useState(0);
     const [preview, setPreview] = useState<PosterSetsPreview | null>(null);
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
@@ -379,28 +386,41 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
-    const runPreview = async (overrideUrl?: string) => {
+    const runPreview = async (overrideUrl?: string, options?: { scroll?: boolean; keepSearch?: boolean }) => {
         const target = String(overrideUrl ?? url).trim();
         if (!target) {
             toast('Paste a MediUX or ThePosterDB set URL first.', 'error');
-            return;
+            return null;
         }
         if (overrideUrl) setUrl(target);
         setBusy('preview');
         setPreview(null);
         setSelectedAssetIds([]);
+        setShowAssetPicker(false);
         try {
             const response = await posterSetsApi.preview(target);
             setPreview(response);
             const assets = response.assets || [];
-            const defaults = assets.filter((asset) => asset.matched !== false).map((asset) => asset.id);
-            setSelectedAssetIds(defaults.length ? defaults : assets.map((asset) => asset.id));
+            const matchedIds = assets.filter((asset) => asset.matched === true).map((asset) => asset.id);
+            const defaults = matchedIds.length ? matchedIds : assets.map((asset) => asset.id);
+            setSelectedAssetIds(defaults);
             upsertRecentSet(response.setMeta, target);
             setRecentTick((value) => value + 1);
-            const matched = response.matched ?? defaults.length;
-            toast(`Preview ready: ${response.total || 0} assets · ${matched} matched in Plex.`);
+            const matched = response.matched ?? matchedIds.length;
+            toast(`Ready: ${matched} matched in Plex · ${response.total || 0} in set.`);
+            if (options?.scroll !== false) {
+                window.setTimeout(() => {
+                    previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 50);
+            }
+            if (!options?.keepSearch) {
+                // Keep context for the ready card, but get titles out of the way.
+                setSearchTitles([]);
+            }
+            return response;
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Preview failed', 'error');
+            return null;
         } finally {
             setBusy(null);
         }
@@ -428,7 +448,42 @@ export const PosterSetsDashboard: React.FC = () => {
             setRecentTick((value) => value + 1);
             toast(selectedOnly
                 ? `Apply started for ${selectedAssetIds.length} selected asset(s).`
-                : 'Apply started.');
+                : 'Apply started for the full set.');
+            await loadHistory();
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Apply failed', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const applyMatched = async () => {
+        const assets = preview?.assets || [];
+        const matchedIds = assets.filter((asset) => asset.matched === true).map((asset) => asset.id);
+        const ids = matchedIds.length ? matchedIds : selectedAssetIds;
+        if (!ids.length) {
+            toast('No matched posters to apply.', 'error');
+            return;
+        }
+        setSelectedAssetIds(ids);
+        const label = matchedIds.length
+            ? `Apply ${matchedIds.length} matched poster${matchedIds.length === 1 ? '' : 's'} to Plex?`
+            : `Apply ${ids.length} poster${ids.length === 1 ? '' : 's'} to Plex?`;
+        const ok = await askConfirm(label, {
+            title: 'Apply poster set?',
+            confirmLabel: 'Apply',
+            cancelLabel: 'Cancel',
+        });
+        if (!ok) return;
+        // Ensure apply uses the matched selection even if state hasn't flushed.
+        setBusy('apply');
+        try {
+            const target = url.trim();
+            const response = await posterSetsApi.apply(target, ids);
+            setActiveJob(response.job);
+            upsertRecentSet(jobSetMeta(response.job), target);
+            setRecentTick((value) => value + 1);
+            toast(`Apply started for ${ids.length} poster${ids.length === 1 ? '' : 's'}.`);
             await loadHistory();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Apply failed', 'error');
@@ -445,6 +500,12 @@ export const PosterSetsDashboard: React.FC = () => {
                 : 'Enter a ThePosterDB set ID or username.', 'error');
             return;
         }
+        setSelectedSearchSet({
+            setId: findId.trim(),
+            title: `Set ${findId.trim()}`,
+            url: built,
+            provider: findProvider,
+        });
         setUrl(built);
         if (andPreview) await runPreview(built);
         else toast('Set URL filled — preview or apply when ready.');
@@ -460,6 +521,10 @@ export const PosterSetsDashboard: React.FC = () => {
         setSearchTitles([]);
         setSearchSets([]);
         setSearchContext('');
+        setSelectedSearchTitle(null);
+        setSelectedSearchSet(null);
+        setPreview(null);
+        setShowAssetPicker(false);
         try {
             const response = await posterSetsApi.search({
                 provider: findProvider,
@@ -474,9 +539,9 @@ export const PosterSetsDashboard: React.FC = () => {
             if (!titleCount && !setCount) {
                 toast('No matches found.', 'error');
             } else if (titleCount) {
-                toast(`Found ${titleCount} title${titleCount === 1 ? '' : 's'}. Pick one to see sets.`);
+                toast(`Found ${titleCount} title${titleCount === 1 ? '' : 's'}. Choose one.`);
             } else {
-                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}.`);
+                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}. Choose one to apply.`);
             }
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Search failed', 'error');
@@ -488,6 +553,9 @@ export const PosterSetsDashboard: React.FC = () => {
     const openSearchTitle = async (title: PosterSetsSearchTitle) => {
         setBusy('search');
         setSearchSets([]);
+        setSelectedSearchTitle(title);
+        setSelectedSearchSet(null);
+        setPreview(null);
         try {
             const response = findProvider === 'mediux'
                 ? await posterSetsApi.search({
@@ -503,7 +571,9 @@ export const PosterSetsDashboard: React.FC = () => {
                 });
             setSearchSets(response.sets || []);
             setSearchContext(response.title || title.title);
-            toast(`Found ${response.sets?.length || 0} set${(response.sets?.length || 0) === 1 ? '' : 's'} for ${title.title}.`);
+            // Focus on sets: titles list becomes a back action only.
+            setSearchTitles([]);
+            toast(`Choose a set for ${title.title}.`);
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
         } finally {
@@ -511,10 +581,27 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
-    const pickSearchSet = (set: PosterSetsSearchSet) => {
+    const pickSearchSet = async (set: PosterSetsSearchSet) => {
+        setSelectedSearchSet(set);
         setUrl(set.url);
-        void runPreview(set.url);
+        await runPreview(set.url);
     };
+
+    const backToTitles = () => {
+        setSearchSets([]);
+        setSelectedSearchTitle(null);
+        setSelectedSearchSet(null);
+        setPreview(null);
+        setShowAssetPicker(false);
+        if (searchQuery.trim()) void runCatalogSearch();
+    };
+
+    const matchedAssetCount = useMemo(() => {
+        const assets = preview?.assets || [];
+        return assets.filter((asset) => asset.matched === true).length;
+    }, [preview]);
+
+    const readyToApply = Boolean(preview?.assets?.length);
 
     const toggleAsset = (id: string) => {
         setSelectedAssetIds((prev) => (
@@ -624,7 +711,7 @@ export const PosterSetsDashboard: React.FC = () => {
                         <p className="text-xs font-bold uppercase tracking-[0.2em] text-plex">Poster Sets</p>
                         <h1 className="mt-2 text-3xl font-bold tracking-tight text-text">Artwork from MediUX & ThePosterDB</h1>
                         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-                            Find a set by ID, preview matched assets, then apply posters to your Plex libraries.
+                            Find a title, choose a poster set, then apply matched art to Plex.
                             Recent sets stay ready to re-run. Connection settings live in this section.
                         </p>
                     </div>
@@ -760,10 +847,9 @@ export const PosterSetsDashboard: React.FC = () => {
 
                     <section className={`${cardClass} space-y-4 p-5`}>
                         <div>
-                            <label className="text-xs font-bold uppercase tracking-wide text-muted">Search sets</label>
+                            <label className="text-xs font-bold uppercase tracking-wide text-muted">Search → choose set → apply</label>
                             <p className="mt-1 text-sm text-muted">
-                                Search by title, pick a match, then preview a set. MediUX uses your portal TMDB key;
-                                ThePosterDB is scraped on demand when you search.
+                                Find a title, pick a poster set, then apply matched art to Plex in one step.
                             </p>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {([
@@ -779,6 +865,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                             setSearchTitles([]);
                                             setSearchSets([]);
                                             setSearchContext('');
+                                            setSelectedSearchTitle(null);
+                                            setSelectedSearchSet(null);
                                         }}
                                     >
                                         {label}
@@ -816,9 +904,29 @@ export const PosterSetsDashboard: React.FC = () => {
                                 </button>
                             </div>
 
+                            {(selectedSearchTitle || selectedSearchSet) ? (
+                                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+                                    {selectedSearchTitle ? (
+                                        <button type="button" className={`${buttonClass} !py-1.5 text-xs`} onClick={() => void backToTitles()} disabled={busy !== null}>
+                                            <ChevronLeft className="h-3.5 w-3.5" /> Titles
+                                        </button>
+                                    ) : null}
+                                    {selectedSearchTitle ? (
+                                        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-text">
+                                            {selectedSearchTitle.title}
+                                        </span>
+                                    ) : null}
+                                    {selectedSearchSet ? (
+                                        <span className="rounded-full border border-plex/30 bg-plex/10 px-2.5 py-1 text-plex">
+                                            {selectedSearchSet.title || `Set #${selectedSearchSet.setId}`}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            ) : null}
+
                             {searchTitles.length ? (
                                 <div className="mt-4 space-y-2">
-                                    <p className="text-xs font-bold uppercase tracking-wide text-muted">Titles</p>
+                                    <p className="text-xs font-bold uppercase tracking-wide text-muted">1. Choose a title</p>
                                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                         {searchTitles.map((title) => (
                                             <button
@@ -857,19 +965,23 @@ export const PosterSetsDashboard: React.FC = () => {
                                 </div>
                             ) : null}
 
-                            {searchSets.length ? (
+                            {searchSets.length && !readyToApply ? (
                                 <div className="mt-4 space-y-2">
                                     <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                                        Sets{searchContext ? ` · ${searchContext}` : ''}
+                                        2. Choose a poster set{searchContext ? ` · ${searchContext}` : ''}
                                     </p>
                                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                                         {searchSets.map((set) => (
                                             <button
                                                 key={`${set.provider || findProvider}-${set.setId}`}
                                                 type="button"
-                                                className="overflow-hidden rounded-2xl border border-white/10 bg-black/20 text-left transition hover:border-plex/40"
+                                                className={`overflow-hidden rounded-2xl border text-left transition ${
+                                                    selectedSearchSet?.setId === set.setId
+                                                        ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/30'
+                                                        : 'border-white/10 bg-black/20 hover:border-plex/40'
+                                                }`}
                                                 disabled={busy !== null}
-                                                onClick={() => pickSearchSet(set)}
+                                                onClick={() => void pickSearchSet(set)}
                                             >
                                                 <div className="relative aspect-[2/3] bg-black/40">
                                                     {set.thumbUrl ? (
@@ -884,6 +996,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             <ImageIcon className="h-8 w-8 opacity-40" />
                                                         </div>
                                                     )}
+                                                    {busy === 'preview' && selectedSearchSet?.setId === set.setId ? (
+                                                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                                            <Loader2 className="h-6 w-6 animate-spin text-plex" />
+                                                        </div>
+                                                    ) : null}
                                                 </div>
                                                 <div className="space-y-1 p-3">
                                                     <p className="truncate text-sm font-semibold text-text" title={set.title}>{set.title}</p>
@@ -899,150 +1016,219 @@ export const PosterSetsDashboard: React.FC = () => {
                                 </div>
                             ) : null}
 
-                            <div className="mt-5 border-t border-white/10 pt-4">
-                                <label className="text-xs font-bold uppercase tracking-wide text-muted">Or find by set ID</label>
-                                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                                    <input
-                                        className={fieldClass}
-                                        value={findId}
-                                        onChange={(event) => setFindId(event.target.value)}
-                                        onKeyDown={(event) => {
-                                            if (event.key === 'Enter') {
-                                                event.preventDefault();
-                                                void useFindId(true);
-                                            }
-                                        }}
-                                        placeholder={findProvider === 'mediux' ? 'Set ID e.g. 24522' : 'Set ID e.g. 11318 or username'}
-                                    />
-                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void useFindId(false)}>
-                                        Fill URL
-                                    </button>
-                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void useFindId(true)}>
-                                        Preview set
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-bold uppercase tracking-wide text-muted">Set URL</label>
-                            <input
-                                className={`${fieldClass} mt-2`}
-                                placeholder="https://mediux.pro/sets/… or https://theposterdb.com/set/…"
-                                value={url}
-                                onChange={(event) => setUrl(event.target.value)}
-                            />
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runPreview()}>
-                                {busy === 'preview' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                                Preview
-                            </button>
-                            <button
-                                type="button"
-                                className={primaryButtonClass}
-                                disabled={busy !== null || (preview?.assets?.length ? !selectedAssetIds.length : !url.trim())}
-                                onClick={() => void runApply(Boolean(preview?.assets?.length))}
-                            >
-                                {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                {preview?.assets?.length
-                                    ? `Apply selected (${selectedAssetIds.length})`
-                                    : 'Apply to Plex'}
-                            </button>
-                        </div>
-                        {preview ? (
-                            <div className="space-y-4">
-                                <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-muted">
-                                    <p className="font-semibold text-text">
-                                        {preview.total || 0} assets · {preview.movies || 0} movies · {preview.shows || 0} show items · {preview.collections || 0} collections
-                                    </p>
-                                    <p className="mt-1">
-                                        <span className="text-emerald-300">{preview.matched ?? '—'} matched</span>
-                                        {' · '}
-                                        <span className="text-amber-200">{preview.unmatched ?? '—'} not in library</span>
-                                        {typeof preview.matched === 'number' ? ` · ${selectedAssetIds.length} selected` : null}
-                                    </p>
-                                </div>
-
-                                {(preview.assets || []).length ? (
-                                    <>
-                                        <div className="flex flex-wrap gap-2">
-                                            <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('all')}>Select all</button>
-                                            <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('matched')}>Matched only</button>
-                                            <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('none')}>Clear</button>
+                            {readyToApply ? (
+                                <div ref={previewPanelRef} className="mt-4 space-y-4 rounded-2xl border border-plex/30 bg-plex/10 p-4">
+                                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                                        <div className="h-28 w-20 shrink-0 overflow-hidden rounded-xl bg-black/40">
+                                            {(selectedSearchSet?.thumbUrl || preview?.setMeta?.thumbUrl || preview?.assets?.[0]?.thumbUrl) ? (
+                                                <img
+                                                    src={posterSetsApi.imageUrl(String(
+                                                        selectedSearchSet?.thumbUrl
+                                                        || preview?.setMeta?.thumbUrl
+                                                        || preview?.assets?.[0]?.thumbUrl
+                                                        || '',
+                                                    ))}
+                                                    alt=""
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex h-full items-center justify-center text-muted">
+                                                    <ImageIcon className="h-8 w-8 opacity-40" />
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                                            {(preview.assets || []).map((asset: PosterSetsPreviewAsset) => {
-                                                const selected = selectedAssetIds.includes(asset.id);
-                                                const matched = asset.matched === true;
-                                                const unmatched = asset.matched === false;
-                                                return (
-                                                    <button
-                                                        key={asset.id}
-                                                        type="button"
-                                                        onClick={() => toggleAsset(asset.id)}
-                                                        className={`group overflow-hidden rounded-2xl border text-left transition ${
-                                                            selected
-                                                                ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/40'
-                                                                : 'border-white/10 bg-black/20 hover:border-plex/35'
-                                                        }`}
-                                                    >
-                                                        <div className="relative aspect-[2/3] bg-black/40">
-                                                            {asset.thumbUrl ? (
-                                                                <img
-                                                                    src={posterSetsApi.imageUrl(asset.thumbUrl)}
-                                                                    alt={asset.title}
-                                                                    loading="lazy"
-                                                                    className="h-full w-full object-cover"
-                                                                />
-                                                            ) : (
-                                                                <div className="flex h-full items-center justify-center text-muted">
-                                                                    <ImageIcon className="h-8 w-8 opacity-40" />
-                                                                </div>
-                                                            )}
-                                                            <span className={`absolute left-2 top-2 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                                                                matched
-                                                                    ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-100'
-                                                                    : unmatched
-                                                                        ? 'border-amber-500/40 bg-amber-500/20 text-amber-100'
-                                                                        : 'border-white/15 bg-black/50 text-muted'
-                                                            }`}>
-                                                                {matched ? 'In library' : unmatched ? 'Missing' : 'Unknown'}
-                                                            </span>
-                                                            <span className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold ${
-                                                                selected
-                                                                    ? 'border-plex bg-plex text-background'
-                                                                    : 'border-white/20 bg-black/50 text-muted'
-                                                            }`}>
-                                                                {selected ? '✓' : ''}
-                                                            </span>
-                                                        </div>
-                                                        <div className="space-y-1 p-3">
-                                                            <p className="truncate text-sm font-semibold text-text" title={asset.title}>
-                                                                {asset.title}{asset.year ? ` (${asset.year})` : ''}
-                                                            </p>
-                                                            <p className="text-[11px] font-bold uppercase tracking-wide text-plex/90">{asset.label}</p>
-                                                            {asset.matchDetail ? (
-                                                                <p className="truncate text-[11px] text-muted" title={asset.matchDetail}>{asset.matchDetail}</p>
-                                                            ) : null}
-                                                        </div>
-                                                    </button>
-                                                );
-                                            })}
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-bold uppercase tracking-wide text-plex">3. Apply to Plex</p>
+                                            <h3 className="mt-1 truncate text-lg font-bold text-text">
+                                                {selectedSearchSet?.title || preview?.setMeta?.title || 'Poster set'}
+                                            </h3>
+                                            <p className="mt-1 text-sm text-muted">
+                                                <span className="text-emerald-300">{matchedAssetCount} matched</span>
+                                                {' · '}
+                                                <span className="text-amber-200">{preview?.unmatched ?? 0} missing</span>
+                                                {' · '}
+                                                {preview?.total || 0} in set
+                                            </p>
+                                            {searchSets.length ? (
+                                                <button
+                                                    type="button"
+                                                    className="mt-2 text-xs font-semibold text-plex hover:underline"
+                                                    onClick={() => {
+                                                        setPreview(null);
+                                                        setSelectedSearchSet(null);
+                                                        setShowAssetPicker(false);
+                                                    }}
+                                                >
+                                                    Choose a different set
+                                                </button>
+                                            ) : null}
                                         </div>
-                                    </>
-                                ) : (
-                                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-muted">
-                                        {preview.samples?.movies?.length ? (
-                                            <p>Movies: {preview.samples.movies.join(', ')}</p>
-                                        ) : null}
-                                        {preview.samples?.shows?.length ? (
-                                            <p className="mt-1">Shows: {[...new Set(preview.samples.shows)].join(', ')}</p>
-                                        ) : null}
                                     </div>
-                                )}
+
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                        <button
+                                            type="button"
+                                            className={`${primaryButtonClass} sm:min-w-[220px]`}
+                                            disabled={busy !== null || (matchedAssetCount < 1 && !selectedAssetIds.length)}
+                                            onClick={() => void applyMatched()}
+                                        >
+                                            {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                            Apply matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null}
+                                            onClick={async () => {
+                                                const ok = await askConfirm('Apply the entire set, including posters not matched in your libraries?', {
+                                                    title: 'Apply full set?',
+                                                    confirmLabel: 'Apply all',
+                                                    cancelLabel: 'Cancel',
+                                                });
+                                                if (!ok) return;
+                                                void runApply(false);
+                                            }}
+                                        >
+                                            Apply entire set
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            onClick={() => setShowAssetPicker((value) => !value)}
+                                        >
+                                            <ImageIcon className="h-4 w-4" />
+                                            {showAssetPicker ? 'Hide poster picker' : 'Choose specific posters'}
+                                        </button>
+                                    </div>
+
+                                    {showAssetPicker ? (
+                                        <div className="space-y-3 border-t border-white/10 pt-4">
+                                            <div className="flex flex-wrap gap-2">
+                                                <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('matched')}>Matched only</button>
+                                                <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('all')}>Select all</button>
+                                                <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('none')}>Clear</button>
+                                                <button
+                                                    type="button"
+                                                    className={primaryButtonClass}
+                                                    disabled={busy !== null || !selectedAssetIds.length}
+                                                    onClick={() => void runApply(true)}
+                                                >
+                                                    Apply selected ({selectedAssetIds.length})
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                                {(preview?.assets || []).map((asset: PosterSetsPreviewAsset) => {
+                                                    const selected = selectedAssetIds.includes(asset.id);
+                                                    const matched = asset.matched === true;
+                                                    const unmatched = asset.matched === false;
+                                                    return (
+                                                        <button
+                                                            key={asset.id}
+                                                            type="button"
+                                                            onClick={() => toggleAsset(asset.id)}
+                                                            className={`group overflow-hidden rounded-2xl border text-left transition ${
+                                                                selected
+                                                                    ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/40'
+                                                                    : 'border-white/10 bg-black/20 hover:border-plex/35'
+                                                            }`}
+                                                        >
+                                                            <div className="relative aspect-[2/3] bg-black/40">
+                                                                {asset.thumbUrl ? (
+                                                                    <img
+                                                                        src={posterSetsApi.imageUrl(asset.thumbUrl)}
+                                                                        alt={asset.title}
+                                                                        loading="lazy"
+                                                                        className="h-full w-full object-cover"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="flex h-full items-center justify-center text-muted">
+                                                                        <ImageIcon className="h-8 w-8 opacity-40" />
+                                                                    </div>
+                                                                )}
+                                                                <span className={`absolute left-2 top-2 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                                                                    matched
+                                                                        ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-100'
+                                                                        : unmatched
+                                                                            ? 'border-amber-500/40 bg-amber-500/20 text-amber-100'
+                                                                            : 'border-white/15 bg-black/50 text-muted'
+                                                                }`}>
+                                                                    {matched ? 'In library' : unmatched ? 'Missing' : 'Unknown'}
+                                                                </span>
+                                                                <span className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold ${
+                                                                    selected
+                                                                        ? 'border-plex bg-plex text-background'
+                                                                        : 'border-white/20 bg-black/50 text-muted'
+                                                                }`}>
+                                                                    {selected ? '✓' : ''}
+                                                                </span>
+                                                            </div>
+                                                            <div className="space-y-1 p-3">
+                                                                <p className="truncate text-sm font-semibold text-text" title={asset.title}>
+                                                                    {asset.title}{asset.year ? ` (${asset.year})` : ''}
+                                                                </p>
+                                                                <p className="text-[11px] font-bold uppercase tracking-wide text-plex/90">{asset.label}</p>
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ) : null}
+
+                            <div className="mt-5 border-t border-white/10 pt-4">
+                                <button
+                                    type="button"
+                                    className="text-xs font-bold uppercase tracking-wide text-muted hover:text-text"
+                                    onClick={() => setManualUrlOpen((value) => !value)}
+                                >
+                                    {manualUrlOpen ? 'Hide manual URL / set ID' : 'Manual URL / set ID'}
+                                </button>
+                                {manualUrlOpen ? (
+                                    <div className="mt-3 space-y-3">
+                                        <div className="flex flex-col gap-2 sm:flex-row">
+                                            <input
+                                                className={fieldClass}
+                                                value={findId}
+                                                onChange={(event) => setFindId(event.target.value)}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === 'Enter') {
+                                                        event.preventDefault();
+                                                        void useFindId(true);
+                                                    }
+                                                }}
+                                                placeholder={findProvider === 'mediux' ? 'Set ID e.g. 24522' : 'Set ID e.g. 11318 or username'}
+                                            />
+                                            <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void useFindId(true)}>
+                                                Preview set
+                                            </button>
+                                        </div>
+                                        <input
+                                            className={fieldClass}
+                                            placeholder="https://mediux.pro/sets/… or https://theposterdb.com/set/…"
+                                            value={url}
+                                            onChange={(event) => setUrl(event.target.value)}
+                                        />
+                                        <div className="flex flex-wrap gap-2">
+                                            <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runPreview()}>
+                                                {busy === 'preview' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                                                Preview
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={primaryButtonClass}
+                                                disabled={busy !== null || !url.trim()}
+                                                onClick={() => void (readyToApply ? applyMatched() : runApply(false))}
+                                            >
+                                                {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                                {readyToApply ? `Apply matched (${matchedAssetCount || selectedAssetIds.length})` : 'Apply to Plex'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : null}
                             </div>
-                        ) : null}
+                        </div>
                     </section>
 
                     {activeJob ? (
