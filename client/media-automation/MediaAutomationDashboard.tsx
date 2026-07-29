@@ -967,6 +967,15 @@ const jobProfileLabel = (
     pipelines: MediaAutomationPipeline[] = [],
 ) => {
     if (!job) return 'Automatic';
+
+    const pipelineId = job.pipelineId != null ? String(job.pipelineId).trim() : '';
+    // Prefer the live catalog name so renames update existing queue/history pills.
+    if (pipelineId) {
+        const match = pipelines.find((pipeline) => String(pipeline.id ?? '') === pipelineId);
+        const resolved = String(match?.name || '').trim();
+        if (resolved) return resolved;
+    }
+
     const direct = String(job.pipelineName || '').trim();
     if (direct && !/^[0-9a-f-]{8,}$/i.test(direct)) return direct;
 
@@ -976,11 +985,7 @@ const jobProfileLabel = (
         : '';
     if (metaName) return metaName;
 
-    const pipelineId = job.pipelineId != null ? String(job.pipelineId).trim() : '';
     if (pipelineId) {
-        const match = pipelines.find((pipeline) => String(pipeline.id ?? '') === pipelineId);
-        const resolved = String(match?.name || '').trim();
-        if (resolved) return resolved;
         if (/^[0-9a-f-]{8,}$/i.test(pipelineId)) return 'Unknown profile';
         return `Pipeline ${pipelineId}`;
     }
