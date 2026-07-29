@@ -962,6 +962,28 @@ const HardwareBadge: React.FC<{ job: MediaAutomationJob }> = ({ job }) => {
     );
 };
 
+const jobProfileLabel = (job: MediaAutomationJob | null | undefined) => {
+    if (!job) return 'Automatic';
+    const name = String(job.pipelineName || '').trim();
+    if (name) return name;
+    if (job.pipelineId != null && String(job.pipelineId).trim()) return `Pipeline ${job.pipelineId}`;
+    return 'Automatic';
+};
+
+/** Third queue pill: which encode profile / pipeline this job is using. */
+const ProfileBadge: React.FC<{ job: MediaAutomationJob }> = ({ job }) => {
+    const label = jobProfileLabel(job);
+    return (
+        <span
+            title={`Encode profile: ${label}`}
+            className="inline-flex max-w-[16rem] items-center gap-1 rounded-full border border-plex/35 bg-plex/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-plex"
+        >
+            <Layers3 className="h-3 w-3 shrink-0" />
+            <span className="truncate">{label}</span>
+        </span>
+    );
+};
+
 const EmptyState: React.FC<{
     icon: React.ComponentType<{ className?: string }>;
     title: string;
@@ -2746,6 +2768,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <StatusPill value={cancelPending ? 'cancelling' : jobState} />
                                                         <HardwareBadge job={job} />
+                                                        <ProfileBadge job={job} />
                                                         {(Array.isArray(job.metadata?.tags) ? job.metadata.tags : []).map((tag: string) => (
                                                             <span key={tag} className="rounded border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-plex">{tag}</span>
                                                         ))}
@@ -2773,7 +2796,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                             libraryRoots: libraries.map((library) => library.rootPath),
                                                         }) || 'Path not reported'}
                                                     </p>
-                                                    <p className="mt-1 text-xs text-muted">{job.pipelineName || (job.pipelineId ? `Pipeline ${job.pipelineId}` : 'Automatic pipeline')} · {formatTime(job.finishedAt || job.completedAt || job.createdAt)}</p>
+                                                    <p className="mt-1 text-xs text-muted">{formatTime(job.finishedAt || job.completedAt || job.createdAt)}</p>
                                                     {(() => {
                                                         const outcome = jobQueueOutcomeSummary(job);
                                                         if (!outcome) return null;
@@ -3712,6 +3735,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 }
                                             />
                                             <HardwareBadge job={selectedJob} />
+                                            <ProfileBadge job={selectedJob} />
                                             {selectedJob.priority != null && (
                                                 <label className="flex items-center gap-2 text-xs text-muted">
                                                     Priority
