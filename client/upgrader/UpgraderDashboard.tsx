@@ -482,32 +482,17 @@ export const UpgraderDashboard: React.FC = () => {
         setMaHandoffBusyKey(busyKey);
         try {
             const [handoff] = await Promise.all([fetchMaHandoff(item), ensureMaCatalog()]);
-            let libraryId = handoff.matchingLibrary?.id ?? null;
-            let pipelineId = handoff.matchingLibrary?.pipelineId ?? null;
             if (!handoff.matchingLibrary) {
-                const create = await askConfirm(
-                    `No Media Automation library covers:\n\n${handoff.resolvedPath}\n\n`
-                    + 'Create one for this title so the savings report can run?',
+                addToast(
+                    'No Media Automation library covers this folder yet. Use Create MA library first, or add a parent root in Media Automation (e.g. /media/TV SHOWS).',
+                    'error',
                 );
-                if (!create) return;
-                const created = await mediaAutomationApi.createLibrary({
-                    ...emptyLibrary(),
-                    name: handoff.suggestedLibrary?.name || item.title,
-                    rootPath: String(handoff.suggestedLibrary?.rootPath || handoff.resolvedPath || ''),
-                    pipelineId: '',
-                    enabled: true,
-                }) as { library?: MediaAutomationLibrary };
-                const library = created?.library;
-                if (!library?.id) throw new Error('Library create did not return an id.');
-                libraryId = library.id;
-                pipelineId = library.pipelineId ?? null;
-                await ensureMaCatalog();
-                addToast(`Created MA library “${library.name}”.`, 'success');
+                return;
             }
             setReportSeed({
-                libraryId,
+                libraryId: handoff.matchingLibrary.id ?? null,
                 libraryRoot: handoff.resolvedPath,
-                pipelineId,
+                pipelineId: handoff.matchingLibrary.pipelineId ?? null,
                 forcePipeline: false,
             });
         } catch (error) {
@@ -517,27 +502,28 @@ export const UpgraderDashboard: React.FC = () => {
         }
     }, [addToast, ensureMaCatalog, fetchMaHandoff]);
 
+    const goToMaLibraryEditor = useCallback((libraryId: string | number) => {
+        const params = new URLSearchParams({ editLibrary: String(libraryId) });
+        const href = portalUrl(`/media-automation?${params.toString()}#libraries`);
+        window.history.pushState({}, '', href);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+    }, []);
+
     const createMaLibraryForTitle = useCallback(async (item: UpgraderItem) => {
         const busyKey = `library:${item.ratingKey}`;
         setMaHandoffBusyKey(busyKey);
         try {
             const handoff = await fetchMaHandoff(item);
+            const normalizeRoot = (value?: string | null) => String(value || '').replace(/\\/g, '/').replace(/\/+$/, '');
             if (handoff.matchingLibrary
-                && String(handoff.matchingLibrary.rootPath || '').replace(/\\/g, '/').replace(/\/+$/, '')
-                    === String(handoff.resolvedPath || '').replace(/\\/g, '/').replace(/\/+$/, '')) {
+                && normalizeRoot(handoff.matchingLibrary.rootPath) === normalizeRoot(handoff.resolvedPath)) {
                 const openExisting = await askConfirm(
                     `A Media Automation library already points at this folder:\n\n`
                     + `${handoff.matchingLibrary.name}\n${handoff.matchingLibrary.rootPath}\n\n`
-                    + 'Open a savings report for it instead?',
+                    + 'Open it in Media Automation to edit?',
                 );
-                if (openExisting) {
-                    await ensureMaCatalog();
-                    setReportSeed({
-                        libraryId: handoff.matchingLibrary.id ?? null,
-                        libraryRoot: handoff.resolvedPath,
-                        pipelineId: handoff.matchingLibrary.pipelineId ?? null,
-                        forcePipeline: false,
-                    });
+                if (openExisting && handoff.matchingLibrary.id != null) {
+                    goToMaLibraryEditor(handoff.matchingLibrary.id);
                 }
                 return;
             }
@@ -545,7 +531,7 @@ export const UpgraderDashboard: React.FC = () => {
                 `Create a Media Automation library for:\n\n`
                 + `${handoff.suggestedLibrary?.name || item.title}\n`
                 + `${handoff.suggestedLibrary?.rootPath || handoff.resolvedPath}\n\n`
-                + 'You can pick a pipeline and scan afterward.',
+                + 'You’ll land on Media Automation to pick a pipeline and finish setup.',
             );
             if (!confirmed) return;
             const { pipelines } = await ensureMaCatalog();
@@ -559,23 +545,14 @@ export const UpgraderDashboard: React.FC = () => {
             }) as { library?: MediaAutomationLibrary };
             const library = created?.library;
             if (!library?.id) throw new Error('Library create did not return an id.');
-            await ensureMaCatalog();
-            addToast(`Created MA library “${library.name}”.`, 'success');
-            const openReport = await askConfirm('Open a savings report for this library now?');
-            if (openReport) {
-                setReportSeed({
-                    libraryId: library.id,
-                    libraryRoot: library.rootPath || handoff.resolvedPath,
-                    pipelineId: library.pipelineId ?? defaultPipeline?.id ?? null,
-                    forcePipeline: false,
-                });
-            }
+            addToast(`Created MA library “${library.name}”. Opening Media Automation…`, 'success');
+            goToMaLibraryEditor(library.id);
         } catch (error) {
             addToast(error instanceof Error ? error.message : 'Create library failed', 'error');
         } finally {
             setMaHandoffBusyKey(null);
         }
-    }, [addToast, ensureMaCatalog, fetchMaHandoff]);
+    }, [addToast, ensureMaCatalog, fetchMaHandoff, goToMaLibraryEditor]);
 
     const summaryChips = useMemo(() => {
         if (!summary) return [];

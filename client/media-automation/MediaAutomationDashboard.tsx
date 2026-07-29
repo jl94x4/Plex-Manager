@@ -1108,6 +1108,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [libraryPathHealth, setLibraryPathHealth] = useState<Record<string, { ok: boolean; message: string }>>({});
     const [reportSeed, setReportSeed] = useState<ReportModalSeed | null>(null);
     const reportDeepLinkHandled = React.useRef(false);
+    const editLibraryDeepLinkHandled = React.useRef(false);
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
@@ -1191,6 +1192,40 @@ export const MediaAutomationDashboard: React.FC = () => {
         const qs = params.toString();
         const next = `${window.location.pathname}${qs ? `?${qs}` : ''}#libraries`;
         window.history.replaceState(null, '', next);
+    }, [libraries, loading]);
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const params = new URLSearchParams(window.location.search);
+        const editLibrary = String(params.get('editLibrary') || params.get('libraryId') || '').trim();
+        if (!editLibrary) return;
+        if (loading) return;
+        if (editLibraryDeepLinkHandled.current === editLibrary) return;
+
+        let cancelled = false;
+        const openEditor = async () => {
+            let match = libraries.find((library) => String(library.id) === editLibrary) || null;
+            if (!match) {
+                try {
+                    const fresh = await mediaAutomationApi.libraries();
+                    match = fresh.find((library) => String(library.id) === editLibrary) || null;
+                } catch {
+                    match = null;
+                }
+            }
+            if (cancelled) return;
+            editLibraryDeepLinkHandled.current = editLibrary;
+            setTab('libraries');
+            writeMediaAutomationTabHash('libraries');
+            if (match) setLibraryDraft({ ...emptyLibrary(), ...match });
+
+            params.delete('editLibrary');
+            params.delete('libraryId');
+            const qs = params.toString();
+            const next = `${window.location.pathname}${qs ? `?${qs}` : ''}#libraries`;
+            window.history.replaceState(null, '', next);
+        };
+        void openEditor();
+        return () => { cancelled = true; };
     }, [libraries, loading]);
     useEffect(() => {
         const hasActive = jobs.some((job) => {
