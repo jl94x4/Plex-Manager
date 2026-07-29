@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     CheckCircle2,
     ChevronLeft,
+    Clock,
     Download,
     ExternalLink,
     History,
@@ -36,7 +37,7 @@ const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bo
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 
-type TabId = 'apply' | 'history' | 'settings';
+type TabId = 'apply' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed';
 type SetProvider = 'mediux' | 'posterdb';
 
@@ -712,7 +713,7 @@ export const PosterSetsDashboard: React.FC = () => {
                         <h1 className="mt-2 text-3xl font-bold tracking-tight text-text">Artwork from MediUX & ThePosterDB</h1>
                         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
                             Find a title, choose a poster set, then apply matched art to Plex.
-                            Recent sets stay ready to re-run. Connection settings live in this section.
+                            Re-run past sets from the Recent tab. Connection settings live in this section.
                         </p>
                     </div>
                     <button type="button" className={buttonClass} onClick={() => void load()} disabled={busy !== null}>
@@ -752,6 +753,7 @@ export const PosterSetsDashboard: React.FC = () => {
             <div className="flex flex-wrap gap-2">
                 {([
                     ['apply', 'Apply', Sparkles],
+                    ['recent', 'Recent', Clock],
                     ['history', 'History', History],
                     ['settings', 'Settings', Settings2],
                 ] as const).map(([id, label, Icon]) => (
@@ -769,82 +771,111 @@ export const PosterSetsDashboard: React.FC = () => {
                 ))}
             </div>
 
-            {tab === 'apply' ? (
-                <div className="space-y-4">
+            {tab === 'recent' ? (
+                <section className={`${cardClass} space-y-3 p-5`}>
+                    <div>
+                        <h2 className="text-lg font-bold text-text">Recent sets</h2>
+                        <p className="mt-1 text-sm text-muted">
+                            Re-preview or re-apply sets you&apos;ve already used.
+                        </p>
+                    </div>
                     {recentSets.length ? (
-                        <section className={`${cardClass} space-y-3 p-5`}>
-                            <div className="flex flex-wrap items-end justify-between gap-2">
-                                <div>
-                                    <h2 className="text-lg font-bold text-text">Recent sets</h2>
-                                    <p className="mt-1 text-sm text-muted">
-                                        Re-preview or re-apply sets you&apos;ve already used.
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                                {recentSets.map((item) => (
-                                    <div
-                                        key={item.url}
-                                        className="overflow-hidden rounded-2xl border border-white/10 bg-black/20"
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                            {recentSets.map((item) => (
+                                <div
+                                    key={item.url}
+                                    className="overflow-hidden rounded-2xl border border-white/10 bg-black/20"
+                                >
+                                    <button
+                                        type="button"
+                                        className="block w-full text-left"
+                                        disabled={busy !== null}
+                                        onClick={() => {
+                                            setSelectedSearchSet({
+                                                setId: item.setId || '',
+                                                title: item.title,
+                                                url: item.url,
+                                                thumbUrl: item.thumbUrl,
+                                                provider: item.provider || undefined,
+                                                posterCount: item.assetCount,
+                                            });
+                                            setTab('apply');
+                                            void runPreview(item.url);
+                                        }}
+                                        title={`Preview ${item.title}`}
                                     >
+                                        <div className="relative aspect-[2/3] bg-black/40">
+                                            {item.thumbUrl ? (
+                                                <img
+                                                    src={posterSetsApi.imageUrl(item.thumbUrl)}
+                                                    alt={item.title}
+                                                    loading="lazy"
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <div className="flex h-full items-center justify-center text-muted">
+                                                    <ImageIcon className="h-8 w-8 opacity-40" />
+                                                </div>
+                                            )}
+                                            <span className="absolute left-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text">
+                                                {providerLabel(item.provider)}
+                                            </span>
+                                        </div>
+                                        <div className="space-y-1 p-3">
+                                            <p className="truncate text-sm font-semibold text-text" title={item.title}>{item.title}</p>
+                                            <p className="truncate text-[11px] text-muted">
+                                                {item.setId ? `#${item.setId}` : 'Set'}
+                                                {item.assetCount ? ` · ${item.assetCount} assets` : ''}
+                                            </p>
+                                        </div>
+                                    </button>
+                                    <div className="flex gap-2 border-t border-white/10 p-2">
                                         <button
                                             type="button"
-                                            className="block w-full text-left"
+                                            className={`${buttonClass} flex-1 !px-2 !py-1.5 text-xs`}
                                             disabled={busy !== null}
-                                            onClick={() => void runPreview(item.url)}
-                                            title={`Preview ${item.title}`}
+                                            onClick={() => {
+                                                setSelectedSearchSet({
+                                                    setId: item.setId || '',
+                                                    title: item.title,
+                                                    url: item.url,
+                                                    thumbUrl: item.thumbUrl,
+                                                    provider: item.provider || undefined,
+                                                    posterCount: item.assetCount,
+                                                });
+                                                setTab('apply');
+                                                void runPreview(item.url);
+                                            }}
                                         >
-                                            <div className="relative aspect-[2/3] bg-black/40">
-                                                {item.thumbUrl ? (
-                                                    <img
-                                                        src={posterSetsApi.imageUrl(item.thumbUrl)}
-                                                        alt={item.title}
-                                                        loading="lazy"
-                                                        className="h-full w-full object-cover"
-                                                    />
-                                                ) : (
-                                                    <div className="flex h-full items-center justify-center text-muted">
-                                                        <ImageIcon className="h-8 w-8 opacity-40" />
-                                                    </div>
-                                                )}
-                                                <span className="absolute left-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text">
-                                                    {providerLabel(item.provider)}
-                                                </span>
-                                            </div>
-                                            <div className="space-y-1 p-3">
-                                                <p className="truncate text-sm font-semibold text-text" title={item.title}>{item.title}</p>
-                                                <p className="truncate text-[11px] text-muted">
-                                                    {item.setId ? `#${item.setId}` : 'Set'}
-                                                    {item.assetCount ? ` · ${item.assetCount} assets` : ''}
-                                                </p>
-                                            </div>
+                                            {busy === 'preview' && url === item.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
+                                            Preview
                                         </button>
-                                        <div className="flex gap-2 border-t border-white/10 p-2">
-                                            <button
-                                                type="button"
-                                                className={`${buttonClass} flex-1 !px-2 !py-1.5 text-xs`}
-                                                disabled={busy !== null}
-                                                onClick={() => void runPreview(item.url)}
-                                            >
-                                                {busy === 'preview' && url === item.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                                                Preview
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={`${primaryButtonClass} flex-1 !px-2 !py-1.5 text-xs`}
-                                                disabled={busy !== null}
-                                                onClick={() => void runApply(false, item.url)}
-                                            >
-                                                {busy === 'apply' && url === item.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                                                Apply
-                                            </button>
-                                        </div>
+                                        <button
+                                            type="button"
+                                            className={`${primaryButtonClass} flex-1 !px-2 !py-1.5 text-xs`}
+                                            disabled={busy !== null}
+                                            onClick={() => {
+                                                setTab('apply');
+                                                void runApply(false, item.url);
+                                            }}
+                                        >
+                                            {busy === 'apply' && url === item.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                                            Apply
+                                        </button>
                                     </div>
-                                ))}
-                            </div>
-                        </section>
-                    ) : null}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="rounded-xl border border-white/10 bg-black/20 p-5 text-sm text-muted">
+                            No recent sets yet. Search and apply a set on the Apply tab and it will show up here.
+                        </p>
+                    )}
+                </section>
+            ) : null}
 
+            {tab === 'apply' ? (
+                <div className="space-y-4">
                     <section className={`${cardClass} space-y-4 p-5`}>
                         <div>
                             <label className="text-xs font-bold uppercase tracking-wide text-muted">Search → choose set → apply</label>
