@@ -42,6 +42,7 @@ ENV COLLEXIONS_EMBEDDED_PORT=15755
 # QSV runtime libs are installed when Bookworm publishes them for the arch.
 # util-linux provides setpriv so the entrypoint can attach /dev/dri GIDs after
 # dropping to PUID:PGID (required for render node access on Unraid).
+# intel-gpu-tools provides intel_gpu_top for System-tab iGPU utilization.
 # Optional: set LIBVA_DRIVER_NAME=iHD (Intel) or radeonsi (AMD) if auto-detect fails.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -49,11 +50,15 @@ RUN apt-get update \
         gosu \
         libva2 \
         mesa-va-drivers \
+        pciutils \
         python3 \
         python3-pip \
         python3-venv \
         util-linux \
         vainfo \
+    && if apt-cache show intel-gpu-tools >/dev/null 2>&1; then \
+        apt-get install -y --no-install-recommends intel-gpu-tools; \
+    fi \
     && if apt-cache show intel-media-va-driver >/dev/null 2>&1; then \
         apt-get install -y --no-install-recommends intel-media-va-driver; \
     fi \

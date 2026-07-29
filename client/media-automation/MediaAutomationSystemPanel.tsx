@@ -649,29 +649,29 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                         <LiveBar
                             label="Render / 3D"
                             valueLabel={
-                                Number.isFinite(Number(intelGpu.utilizationPercent))
+                                isFiniteNumber(intelGpu.utilizationPercent)
                                     ? `${Number(intelGpu.utilizationPercent).toFixed(0)}%`
                                     : (intelGpu.topAvailable ? '—' : 'Needs intel_gpu_top')
                             }
-                            percent={intelGpu.utilizationPercent}
+                            percent={isFiniteNumber(intelGpu.utilizationPercent) ? intelGpu.utilizationPercent : null}
                         />
                         <LiveBar
                             label="Video engine"
                             valueLabel={
-                                Number.isFinite(Number(intelGpu.videoUtilizationPercent))
+                                isFiniteNumber(intelGpu.videoUtilizationPercent)
                                     ? `${Number(intelGpu.videoUtilizationPercent).toFixed(0)}%`
                                     : '—'
                             }
-                            percent={intelGpu.videoUtilizationPercent}
+                            percent={isFiniteNumber(intelGpu.videoUtilizationPercent) ? intelGpu.videoUtilizationPercent : null}
                         />
                         <div className="grid grid-cols-2 gap-3 text-sm">
                             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                                 <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Frequency</p>
                                 <p className="mt-1 font-semibold tabular-nums text-text">
-                                    {Number.isFinite(Number(intelGpu.frequencyMhz))
+                                    {isFiniteNumber(intelGpu.frequencyMhz)
                                         ? `${Math.round(Number(intelGpu.frequencyMhz))} MHz`
                                         : '—'}
-                                    {Number.isFinite(Number(intelGpu.frequencyMaxMhz))
+                                    {isFiniteNumber(intelGpu.frequencyMaxMhz) && Number(intelGpu.frequencyMaxMhz) > 0
                                         ? ` / ${Math.round(Number(intelGpu.frequencyMaxMhz))} MHz`
                                         : ''}
                                 </p>
@@ -691,7 +691,7 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                                             {engine.name}
                                         </p>
                                         <p className="mt-1 text-sm font-semibold tabular-nums text-text">
-                                            {Number.isFinite(Number(engine.busyPercent))
+                                            {isFiniteNumber(engine.busyPercent)
                                                 ? `${Number(engine.busyPercent).toFixed(0)}%`
                                                 : '—'}
                                         </p>
@@ -700,6 +700,9 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                             </div>
                         ) : null}
                         {intelGpu.note ? <p className="text-xs text-muted">{intelGpu.note}</p> : null}
+                        <p className="text-xs text-muted">
+                            Encode path is ready via {intelGpu.device || '/dev/dri'} — live util needs intel_gpu_top in the image.
+                        </p>
                     </div>
                 ) : null}
 
