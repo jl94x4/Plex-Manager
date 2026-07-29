@@ -4,6 +4,10 @@ Scrapes MediUX / ThePosterDB set URLs and uploads artwork to Plex.
 
 Used by the portal via `lib/poster-sets` — not related to ColleXions.
 
+MediUX note: images are fetched from `https://api.mediux.pro/assets/{id}` and uploaded
+as files. The old `/_next/image` proxy returns 403/blank payloads, which is what caused
+empty posters in Plex.
+
 ```bash
 # Local venv (optional)
 python -m venv .venv

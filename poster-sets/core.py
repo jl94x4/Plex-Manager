@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
+import tempfile
 import time
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple
 
@@ -18,10 +20,98 @@ from plexapi.server import PlexServer
 
 ProgressFn = Optional[Callable[[str], None]]
 
+IMAGE_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://mediux.pro/",
+}
+
 
 def emit(progress: ProgressFn, message: str) -> None:
     if progress:
         progress(message)
+
+
+def _image_suffix(content_type: str, url: str) -> str:
+    ct = (content_type or "").lower()
+    if "png" in ct or url.lower().endswith(".png"):
+        return ".png"
+    if "webp" in ct or url.lower().endswith(".webp"):
+        return ".webp"
+    return ".jpg"
+
+
+def _looks_like_image(data: bytes) -> bool:
+    if len(data) < 24:
+        return False
+    if data[:3] == b"\xff\xd8\xff":
+        return True  # JPEG
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return True  # PNG
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return True  # WEBP
+    return False
+
+
+def download_image(url: str, progress: ProgressFn = None) -> Optional[str]:
+    """Download an image to a temp file. Returns path or None."""
+    try:
+        response = requests.get(url, headers=IMAGE_HEADERS, timeout=60)
+        response.raise_for_status()
+        if not _looks_like_image(response.content):
+            emit(progress, f"Downloaded non-image payload from {url[:80]}… ({len(response.content)} bytes)")
+            return None
+        suffix = _image_suffix(response.headers.get("content-type", ""), url)
+        handle = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        handle.write(response.content)
+        handle.close()
+        return handle.name
+    except Exception as exc:
+        emit(progress, f"Failed to download image: {exc}")
+        return None
+
+
+def cleanup_temp_file(path: Optional[str]) -> None:
+    if not path:
+        return
+    try:
+        if os.path.exists(path):
+            time.sleep(0.5)
+            os.remove(path)
+    except Exception:
+        pass
+
+
+def apply_poster_or_art(upload_target, poster: dict, *, art: bool = False, progress: ProgressFn = None) -> None:
+    """
+    Upload artwork to Plex.
+
+    MediUX's Next.js image proxy now returns 403/blank HTML to scrapers and to Plex's
+    URL fetch — download the direct api.mediux.pro asset ourselves and upload as a file.
+    """
+    url = poster.get("url") or ""
+    source = poster.get("source")
+    if source == "mediux" or "api.mediux.pro/assets/" in url:
+        path = download_image(url, progress=progress)
+        if not path:
+            raise RuntimeError(f"Could not download MediUX image: {url}")
+        try:
+            if art:
+                upload_target.uploadArt(filepath=path)
+            else:
+                upload_target.uploadPoster(filepath=path)
+        finally:
+            cleanup_temp_file(path)
+        return
+
+    if art:
+        upload_target.uploadArt(url=url)
+    else:
+        upload_target.uploadPoster(url=url)
 
 
 def normalize_library_list(value: Any) -> List[str]:
@@ -182,23 +272,22 @@ def upload_tv_poster(poster, tv, progress: ProgressFn = None) -> dict:
                 emit(progress, result["message"])
                 continue
 
-            if poster["season"] == "Backdrop":
-                upload_target.uploadArt(url=poster["url"])
-            else:
-                upload_target.uploadPoster(url=poster["url"])
+            apply_poster_or_art(upload_target, poster, art=(poster["season"] == "Backdrop"), progress=progress)
             try:
                 upload_target.removeLabel("Overlay")
             except Exception:
                 pass
             if poster.get("source") == "posterdb":
                 time.sleep(6)
+            elif poster.get("source") == "mediux":
+                time.sleep(1)
             result["ok"] = True
             result["message"] = msg
             emit(progress, msg)
-        except Exception:
+        except Exception as exc:
             result["message"] = (
-                f"{poster['title']} - Season {poster.get('season')} not found "
-                f"in {tv_show.librarySectionTitle}, skipping."
+                f"{poster['title']} - Season {poster.get('season')} upload failed "
+                f"in {tv_show.librarySectionTitle}: {exc}"
             )
             emit(progress, result["message"])
     return result
@@ -213,19 +302,21 @@ def upload_movie_poster(poster, movies, progress: ProgressFn = None) -> dict:
         return result
     for movie_item in movie_items:
         try:
-            movie_item.uploadPoster(poster["url"])
+            apply_poster_or_art(movie_item, poster, progress=progress)
             try:
                 movie_item.removeLabel("Overlay")
             except Exception:
                 pass
             if poster.get("source") == "posterdb":
                 time.sleep(6)
+            elif poster.get("source") == "mediux":
+                time.sleep(1)
             msg = f'Uploaded art for {poster["title"]} in {movie_item.librarySectionTitle}.'
             result["ok"] = True
             result["message"] = msg
             emit(progress, msg)
-        except Exception:
-            result["message"] = f'Unable to upload art for {poster["title"]}.'
+        except Exception as exc:
+            result["message"] = f'Unable to upload art for {poster["title"]}: {exc}'
             emit(progress, result["message"])
     return result
 
@@ -239,19 +330,21 @@ def upload_collection_poster(poster, movies, progress: ProgressFn = None) -> dic
         return result
     for collection in collection_items:
         try:
-            collection.uploadPoster(poster["url"])
+            apply_poster_or_art(collection, poster, progress=progress)
             try:
                 collection.removeLabel("Overlay")
             except Exception:
                 pass
             if poster.get("source") == "posterdb":
                 time.sleep(6)
+            elif poster.get("source") == "mediux":
+                time.sleep(1)
             msg = f'Uploaded art for {poster["title"]} in {collection.librarySectionTitle}.'
             result["ok"] = True
             result["message"] = msg
             emit(progress, msg)
-        except Exception:
-            result["message"] = f'Unable to upload art for {poster["title"]}.'
+        except Exception as exc:
+            result["message"] = f'Unable to upload art for {poster["title"]}: {exc}'
             emit(progress, result["message"])
     return result
 
@@ -346,8 +439,8 @@ def check_mediux_filter(mediux_filters: Optional[Sequence[str]], filter_name: st
 
 
 def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress: ProgressFn = None) -> Tuple[list, list, list]:
-    base_url = "https://mediux.pro/_next/image?url=https%3A%2F%2Fapi.mediux.pro%2Fassets%2F"
-    quality_suffix = "&w=3840&q=80"
+    # Direct API assets — MediUX's /_next/image proxy now 403s scrapers/Plex (blank posters).
+    base_url = "https://api.mediux.pro/assets/"
     scripts = soup.find_all("script")
     showposters = []
     movieposters = []
@@ -359,9 +452,13 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
 
     for script in scripts:
         if "files" in script.text and "set" in script.text and "Set Link\\" not in script.text:
-            data_dict = parse_string_to_dict(script.text)
-            poster_data = data_dict["set"]["files"]
-            break
+            try:
+                data_dict = parse_string_to_dict(script.text)
+                if "set" in data_dict and "files" in data_dict["set"]:
+                    poster_data = data_dict["set"]["files"]
+                    break
+            except Exception:
+                continue
 
     if not poster_data or not data_dict:
         raise RuntimeError("Could not parse MediUX set data from page")
@@ -369,10 +466,10 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
     media_type = None
     for data in poster_data:
         if (
-            data["show_id"] is not None
-            or data["show_id_backdrop"] is not None
-            or data["episode_id"] is not None
-            or data["season_id"] is not None
+            data.get("show_id") is not None
+            or data.get("show_id_backdrop") is not None
+            or data.get("episode_id") is not None
+            or data.get("season_id") is not None
         ):
             media_type = "Show"
         else:
@@ -392,26 +489,26 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
             except Exception:
                 year = None
 
-            if data["fileType"] == "title_card":
+            if data.get("fileType") == "title_card":
                 season = data["episode_id"]["season_id"]["season_number"]
                 title = data["title"]
                 try:
-                    episode = int(title.split(" E")[1])
+                    episode = int(title.rsplit(" E", 1)[1])
                 except Exception:
                     emit(progress, f"Error getting episode number for {title}.")
                     episode = None
                 file_type = "title_card"
-            elif data["fileType"] == "backdrop":
+            elif data.get("fileType") == "backdrop":
                 season = "Backdrop"
                 episode = None
                 file_type = "background"
-            elif data["season_id"] is not None:
+            elif data.get("season_id") is not None:
                 season_id = data["season_id"]["id"]
                 season_data = [episode for episode in episodes if episode["id"] == season_id][0]
                 episode = "Cover"
                 season = season_data["season_number"]
                 file_type = "season_cover"
-            elif data["show_id"] is not None:
+            elif data.get("show_id") is not None:
                 season = "Cover"
                 episode = None
                 file_type = "show_cover"
@@ -419,21 +516,21 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
                 continue
 
         elif media_type == "Movie":
-            if data["movie_id"]:
-                if data_dict["set"]["movie"]:
+            if data.get("movie_id"):
+                if data_dict["set"].get("movie"):
                     title = data_dict["set"]["movie"]["title"]
                     year = int(data_dict["set"]["movie"]["release_date"][:4])
-                elif data_dict["set"]["collection"]:
+                elif data_dict["set"].get("collection"):
                     movie_id = data["movie_id"]["id"]
                     movies = data_dict["set"]["collection"]["movies"]
                     movie_data = [movie for movie in movies if movie["id"] == movie_id][0]
                     title = movie_data["title"]
                     year = int(movie_data["release_date"][:4])
-            elif data["collection_id"]:
+            elif data.get("collection_id"):
                 title = data_dict["set"]["collection"]["collection_name"]
 
         image_stub = data["id"]
-        poster_url = f"{base_url}{image_stub}{quality_suffix}"
+        poster_url = f"{base_url}{image_stub}"
 
         if media_type == "Show":
             showposter = {

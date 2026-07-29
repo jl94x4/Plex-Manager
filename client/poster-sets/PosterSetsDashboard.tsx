@@ -33,7 +33,7 @@ const textToList = (value: string) => value.split(/[\n,]/).map((item) => item.tr
 export const PosterSetsDashboard: React.FC = () => {
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const toast = useCallback((message: string, type: ToastMessage['type'] = 'success') => {
-        pushToast(setToasts, message, type);
+        setToasts((current) => pushToast(current, message, type));
     }, []);
 
     const [tab, setTab] = useState<TabId>('apply');
@@ -229,7 +229,7 @@ export const PosterSetsDashboard: React.FC = () => {
     )).filter(Boolean);
 
     return (
-        <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+        <div className="flex w-full animate-fade-in flex-col gap-6 pb-10">
             <ToastContainer toasts={toasts} setToasts={setToasts} />
 
             <header className={`${cardClass} overflow-hidden p-6`}>
@@ -239,7 +239,7 @@ export const PosterSetsDashboard: React.FC = () => {
                         <h1 className="mt-2 text-3xl font-bold tracking-tight text-text">Artwork from MediUX & ThePosterDB</h1>
                         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
                             Paste a set URL, preview matched assets, then apply posters to your Plex libraries.
-                            Connection settings live in this section — separate from ColleXions and portal Plex settings.
+                            Connection settings live in this section.
                         </p>
                     </div>
                     <button type="button" className={buttonClass} onClick={() => void load()} disabled={busy !== null}>
@@ -319,29 +319,6 @@ export const PosterSetsDashboard: React.FC = () => {
                         ) : null}
                     </section>
 
-                    <section className={`${cardClass} space-y-4 p-5`}>
-                        <div>
-                            <h2 className="text-lg font-bold text-text">Bulk import</h2>
-                            <p className="mt-1 text-sm text-muted">One URL per line. Lines starting with # or // are ignored.</p>
-                        </div>
-                        <textarea
-                            className={`${fieldClass} min-h-36 font-mono text-xs`}
-                            value={bulkText}
-                            onChange={(event) => setBulkText(event.target.value)}
-                            placeholder={'https://mediux.pro/sets/123\nhttps://theposterdb.com/set/456'}
-                        />
-                        <div className="flex flex-wrap gap-2">
-                            <button type="button" className={primaryButtonClass} disabled={busy !== null || !bulkText.trim()} onClick={() => void runBulk(false)}>
-                                {busy === 'bulk' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                                Apply bulk list
-                            </button>
-                            <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runBulk(true)}>
-                                {busy === 'bulk-file' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                Apply from {configDraft.bulk_txt || 'bulk_import.txt'}
-                            </button>
-                        </div>
-                    </section>
-
                     {activeJob ? (
                         <section className={`${cardClass} space-y-3 p-5`}>
                             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -365,6 +342,29 @@ export const PosterSetsDashboard: React.FC = () => {
                             </div>
                         </section>
                     ) : null}
+
+                    <section className={`${cardClass} space-y-4 p-5`}>
+                        <div>
+                            <h2 className="text-lg font-bold text-text">Bulk import</h2>
+                            <p className="mt-1 text-sm text-muted">One URL per line. Lines starting with # or // are ignored.</p>
+                        </div>
+                        <textarea
+                            className={`${fieldClass} min-h-36 font-mono text-xs`}
+                            value={bulkText}
+                            onChange={(event) => setBulkText(event.target.value)}
+                            placeholder={'https://mediux.pro/sets/123\nhttps://theposterdb.com/set/456'}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                            <button type="button" className={primaryButtonClass} disabled={busy !== null || !bulkText.trim()} onClick={() => void runBulk(false)}>
+                                {busy === 'bulk' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                                Apply bulk list
+                            </button>
+                            <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runBulk(true)}>
+                                {busy === 'bulk-file' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                Apply from {configDraft.bulk_txt || 'bulk_import.txt'}
+                            </button>
+                        </div>
+                    </section>
                 </div>
             ) : (
                 <section className={`${cardClass} space-y-5 p-5`}>
