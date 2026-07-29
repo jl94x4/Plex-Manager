@@ -7,6 +7,8 @@ export type PosterSetsConfig = {
     mediux_filters: string[];
     /** Clear Kometa Overlay label after upload (default true). */
     reset_overlay?: boolean;
+    /** Prefer this provider when MediUX and ThePosterDB both return the same set/title. */
+    dupePreference?: 'posterdb' | 'mediux';
     hasToken?: boolean;
     configured?: boolean;
 };
@@ -109,6 +111,22 @@ export type PosterSetsSearchTitle = {
     mediaType?: string | null;
     thumbUrl?: string;
     provider?: string;
+    sources?: Array<{
+        provider: string;
+        id: string;
+        url: string;
+        mediaType?: string | null;
+        year?: number | null;
+        thumbUrl?: string;
+    }>;
+    alsoOn?: Array<{
+        provider: string;
+        id: string;
+        url: string;
+        mediaType?: string | null;
+        year?: number | null;
+        thumbUrl?: string;
+    }>;
 };
 
 export type PosterSetsSearchSet = {
@@ -119,6 +137,14 @@ export type PosterSetsSearchSet = {
     user?: string | null;
     posterCount?: number | null;
     provider?: string;
+    alsoOn?: Array<{
+        provider: string;
+        setId: string;
+        url: string;
+        title?: string;
+        user?: string | null;
+        thumbUrl?: string;
+    }>;
 };
 
 export type PosterSetsSearchResult = {
@@ -130,6 +156,9 @@ export type PosterSetsSearchResult = {
     titleUrl?: string;
     titles?: PosterSetsSearchTitle[];
     sets?: PosterSetsSearchSet[];
+    dupesCollapsed?: number;
+    dupePreference?: string;
+    partialErrors?: string[];
     error?: string;
     code?: string;
 };
@@ -149,4 +178,5 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     movie_library: ['Movies'],
     mediux_filters: ['title_card', 'background', 'season_cover', 'show_cover'],
     reset_overlay: true,
+    dupePreference: 'posterdb',
 };

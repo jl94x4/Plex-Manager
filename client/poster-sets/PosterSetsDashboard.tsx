@@ -52,6 +52,15 @@ const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px
 type TabId = 'apply' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed';
 type SetProvider = 'mediux' | 'posterdb';
+type SearchProvider = 'both' | SetProvider;
+
+const providerLabel = (provider?: string | null) => {
+    const value = String(provider || '').toLowerCase();
+    if (value === 'mediux') return 'MediUX';
+    if (value === 'posterdb' || value === 'tpdb' || value === 'theposterdb') return 'ThePosterDB';
+    if (value === 'both') return 'Both';
+    return provider || 'Provider';
+};
 
 const RECENT_SETS_KEY = 'poster-sets-recent-v1';
 const MAX_RECENT_SETS = 10;
@@ -89,12 +98,6 @@ const buildSetUrl = (provider: SetProvider, rawId: string) => {
     if (provider === 'mediux') return `https://mediux.pro/sets/${encodeURIComponent(id)}`;
     if (/^\d+$/.test(id)) return `https://theposterdb.com/set/${id}`;
     return `https://theposterdb.com/user/${encodeURIComponent(id)}`;
-};
-
-const providerLabel = (provider?: string | null) => {
-    if (provider === 'mediux') return 'MediUX';
-    if (provider === 'posterdb') return 'PosterDB';
-    return 'Set';
 };
 
 const readRecentSets = (): RecentSetChip[] => {
@@ -222,6 +225,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const [bulkText, setBulkText] = useState('');
     const [findProvider, setFindProvider] = useState<SetProvider>('mediux');
     const [findId, setFindId] = useState('');
+    const [searchProvider, setSearchProvider] = useState<SearchProvider>('both');
     const [searchMode, setSearchMode] = useState<'title' | 'creator'>('title');
     const [searchQuery, setSearchQuery] = useState('');
     const [searchTitles, setSearchTitles] = useState<PosterSetsSearchTitle[]>([]);
@@ -556,9 +560,10 @@ export const PosterSetsDashboard: React.FC = () => {
         setPreview(null);
         try {
             const response = await posterSetsApi.search({
-                provider: findProvider,
+                provider: searchProvider,
                 query: q,
                 mode: searchMode,
+                dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
                 limit: searchMode === 'creator' ? 40 : 24,
             });
             setSearchTitles(response.titles || []);
@@ -566,14 +571,19 @@ export const PosterSetsDashboard: React.FC = () => {
             setSearchContext(response.title || (searchMode === 'creator' ? `@${q.replace(/^@/, '')}` : q));
             const titleCount = response.titles?.length || 0;
             const setCount = response.sets?.length || 0;
+            const dupes = Number(response.dupesCollapsed || 0);
+            const dupeNote = dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} collapsed` : '';
             if (!titleCount && !setCount) {
                 toast('No matches found.', 'error');
             } else if (titleCount) {
-                toast(`Found ${titleCount} title${titleCount === 1 ? '' : 's'}. Choose one.`);
+                toast(`Found ${titleCount} title${titleCount === 1 ? '' : 's'}${dupeNote}. Choose one.`);
             } else if (searchMode === 'creator') {
-                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'} from ${response.title || q}. Choose one to preview.`);
+                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'} from ${response.title || q}${dupeNote}. Choose one to preview.`);
             } else {
-                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}. Choose one to preview.`);
+                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}${dupeNote}. Choose one to preview.`);
+            }
+            if (response.partialErrors?.length) {
+                toast(response.partialErrors[0], 'error');
             }
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Search failed', 'error');
@@ -589,23 +599,43 @@ export const PosterSetsDashboard: React.FC = () => {
         setSelectedSearchSet(null);
         setPreview(null);
         try {
-            const response = findProvider === 'mediux'
+            const sources = (title.sources?.length
+                ? title.sources
+                : [{
+                    provider: title.provider || findProvider,
+                    id: title.id,
+                    url: title.url,
+                    mediaType: title.mediaType,
+                }]).filter((source) => source?.id || source?.url);
+
+            const response = sources.length > 1
                 ? await posterSetsApi.search({
-                    provider: 'mediux',
-                    tmdbId: title.id,
-                    mediaType: title.mediaType === 'show' ? 'show' : 'movie',
+                    provider: 'both',
+                    query: title.title,
+                    title: title.title,
+                    titleSources: sources,
+                    dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
                     limit: 40,
                 })
-                : await posterSetsApi.search({
-                    provider: 'posterdb',
-                    titleUrl: title.url,
-                    limit: 40,
-                });
+                : (String(sources[0]?.provider || '').toLowerCase() === 'mediux'
+                    ? await posterSetsApi.search({
+                        provider: 'mediux',
+                        tmdbId: sources[0].id,
+                        mediaType: sources[0].mediaType === 'show' ? 'show' : 'movie',
+                        limit: 40,
+                    })
+                    : await posterSetsApi.search({
+                        provider: 'posterdb',
+                        titleUrl: sources[0].url,
+                        limit: 40,
+                    }));
             setSearchSets(response.sets || []);
             setSearchContext(response.title || title.title);
             // Focus on sets: titles list becomes a back action only.
             setSearchTitles([]);
-            toast(`Choose a set for ${title.title}.`);
+            const dupes = Number(response.dupesCollapsed || 0);
+            toast(`Choose a set for ${title.title}${dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} collapsed` : ''}.`);
+            if (response.partialErrors?.length) toast(response.partialErrors[0], 'error');
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
         } finally {
@@ -935,15 +965,17 @@ export const PosterSetsDashboard: React.FC = () => {
                             </p>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {([
+                                    ['both', 'Both'],
                                     ['mediux', 'MediUX'],
                                     ['posterdb', 'ThePosterDB'],
                                 ] as const).map(([id, label]) => (
                                     <button
                                         key={id}
                                         type="button"
-                                        className={`${buttonClass} ${findProvider === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
+                                        className={`${buttonClass} ${searchProvider === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
                                         onClick={() => {
-                                            setFindProvider(id);
+                                            setSearchProvider(id);
+                                            if (id !== 'both') setFindProvider(id);
                                             setSearchTitles([]);
                                             setSearchSets([]);
                                             setSearchContext('');
@@ -976,7 +1008,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </button>
                                 ))}
                                 <a
-                                    href={findProvider === 'mediux' ? 'https://mediux.pro/' : 'https://theposterdb.com/'}
+                                    href={searchProvider === 'posterdb' ? 'https://theposterdb.com/' : 'https://mediux.pro/'}
                                     target="_blank"
                                     rel="noreferrer"
                                     className={`${buttonClass} no-underline`}
@@ -1008,7 +1040,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             }
                                         }}
                                         placeholder={searchMode === 'creator'
-                                            ? (findProvider === 'mediux' ? 'Creator username e.g. kaster' : 'Creator username e.g. TheDoctor30')
+                                            ? 'Creator username e.g. kaster / TheDoctor30'
                                             : 'Search titles e.g. The Matrix'}
                                     />
                                 </div>
@@ -1097,6 +1129,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 <div className="min-w-0">
                                                     <p className="truncate text-sm font-semibold text-text">{title.title}</p>
                                                     <p className="text-[11px] text-muted">
+                                                        {providerLabel(title.provider)}
+                                                        {title.alsoOn?.length
+                                                            ? ` · also ${title.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}`
+                                                            : ''}
+                                                        {' · '}
                                                         {title.year || '—'}
                                                         {title.mediaType ? ` · ${title.mediaType}` : ''}
                                                     </p>
@@ -1147,6 +1184,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 <div className="space-y-1 p-3">
                                                     <p className="truncate text-sm font-semibold text-text" title={set.title}>{set.title}</p>
                                                     <p className="truncate text-[11px] text-muted">
+                                                        {providerLabel(set.provider)}
+                                                        {set.alsoOn?.length
+                                                            ? ` · also ${set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}`
+                                                            : ''}
+                                                        {' · '}
                                                         #{set.setId}
                                                         {set.user ? ` · ${set.user}` : ''}
                                                         {set.posterCount ? ` · ${set.posterCount}` : ''}
@@ -1334,6 +1376,21 @@ export const PosterSetsDashboard: React.FC = () => {
                                 </button>
                                 {manualUrlOpen ? (
                                     <div className="mt-3 space-y-3">
+                                        <div className="flex flex-wrap gap-2">
+                                            {([
+                                                ['mediux', 'MediUX'],
+                                                ['posterdb', 'ThePosterDB'],
+                                            ] as const).map(([id, label]) => (
+                                                <button
+                                                    key={id}
+                                                    type="button"
+                                                    className={`${buttonClass} !py-1.5 text-xs ${findProvider === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
+                                                    onClick={() => setFindProvider(id)}
+                                                >
+                                                    {label}
+                                                </button>
+                                            ))}
+                                        </div>
                                         <div className="flex flex-col gap-2 sm:flex-row">
                                             <input
                                                 className={fieldClass}
@@ -1679,6 +1736,26 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </button>
                                 );
                             })}
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                        <p className="text-sm font-semibold text-text">Fallback for duplicates</p>
+                        <p className="mt-1 text-xs text-muted">
+                            When Both finds the same title/set on MediUX and ThePosterDB, keep this source as the primary card.
+                        </p>
+                        <div className="mt-3">
+                            <CustomSelect
+                                value={configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb'}
+                                onChange={(value) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    dupePreference: value === 'mediux' ? 'mediux' : 'posterdb',
+                                }))}
+                                options={[
+                                    { value: 'posterdb', label: 'Prefer ThePosterDB' },
+                                    { value: 'mediux', label: 'Prefer MediUX' },
+                                ]}
+                                className="w-full min-w-[180px] sm:w-auto"
+                            />
                         </div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-black/20 px-4">

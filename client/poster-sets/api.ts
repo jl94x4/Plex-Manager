@@ -39,12 +39,21 @@ export const posterSetsApi = {
     }>,
     preview: (url: string) => apiFetch(`${ROOT}/preview`, json({ url })) as Promise<PosterSetsPreview>,
     search: (payload: {
-        provider: 'mediux' | 'posterdb';
+        provider: 'mediux' | 'posterdb' | 'both';
         query?: string;
         titleUrl?: string;
         tmdbId?: string | number;
         mediaType?: string;
         mode?: 'title' | 'creator';
+        titleSources?: Array<{
+            provider: string;
+            id?: string;
+            url?: string;
+            mediaType?: string | null;
+            tmdbId?: string | number;
+        }>;
+        title?: string;
+        dupePreference?: 'posterdb' | 'mediux';
         limit?: number;
     }) => apiFetch(`${ROOT}/search`, json(payload)) as Promise<PosterSetsSearchResult>,
     apply: (url: string, selectedIds?: string[]) => apiFetch(`${ROOT}/apply`, json({
