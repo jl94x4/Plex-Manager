@@ -1,6 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, MoreHorizontal } from 'lucide-react';
-import { ALWAYS_VISIBLE_NAV_KEYS, getNavItemLabel, MOBILE_NAV_PRIMARY_SLOTS, normalizeNavHiddenKeys } from '../shared/nav';
+import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, MoreHorizontal, Shield, Users } from 'lucide-react';
+import {
+    ALWAYS_VISIBLE_MEMBER_NAV_KEYS,
+    ALWAYS_VISIBLE_NAV_KEYS,
+    getNavItemLabel,
+    MOBILE_NAV_PRIMARY_SLOTS,
+    normalizeMemberNavHiddenKeys,
+    normalizeNavHiddenKeys,
+} from '../shared/nav';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 
@@ -18,6 +25,10 @@ type Props = {
     onChange: (next: string[]) => void;
     navHiddenKeys: string[];
     onHiddenKeysChange: (next: string[]) => void;
+    memberNavOrder: string[];
+    onMemberNavOrderChange: (next: string[]) => void;
+    memberNavHiddenKeys: string[];
+    onMemberNavHiddenKeysChange: (next: string[]) => void;
     downloadsVisibleToMembers: boolean;
     onDownloadsVisibleToMembersChange: (next: boolean) => void;
     /** When false, sidebar still hides these until enabled in their Settings section. */
@@ -26,7 +37,7 @@ type Props = {
 
 const FEATURE_OFF_HINT: Record<string, string> = {
     upgrader: 'Feature off — enable under Settings → Library Upgrader',
-    collexions: 'Feature off — enable under Settings → Collexions',
+    collexions: 'Feature off — enable under Settings → ColleXions',
     scanner: 'Feature off — enable under Settings → Scanner',
     'media-automation': 'Feature off — enable under Settings → Media Automation',
     'poster-sets': 'Feature off — enable under Settings → Poster Sets',
@@ -54,14 +65,38 @@ const vibrate = (pattern: number | number[]) => {
     }
 };
 
-export const NavigationOrderSettings: React.FC<Props> = ({
+type ColumnProps = {
+    title: string;
+    subtitle: string;
+    icon: React.ReactNode;
+    accentClass: string;
+    navOrder: string[];
+    onChange: (next: string[]) => void;
+    navHiddenKeys: string[];
+    onHiddenKeysChange: (next: string[]) => void;
+    alwaysVisibleKeys: Set<string>;
+    normalizeHidden: (keys: string[]) => string[];
+    downloadsVisibleToMembers: boolean;
+    showAdminSuffix: boolean;
+    featureStatus?: NavFeatureStatus;
+    downloadsMembersNote?: string | null;
+};
+
+const NavOrderColumn: React.FC<ColumnProps> = ({
+    title,
+    subtitle,
+    icon,
+    accentClass,
     navOrder,
     onChange,
     navHiddenKeys,
     onHiddenKeysChange,
+    alwaysVisibleKeys,
+    normalizeHidden,
     downloadsVisibleToMembers,
-    onDownloadsVisibleToMembersChange,
+    showAdminSuffix,
     featureStatus,
+    downloadsMembersNote,
 }) => {
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -70,7 +105,7 @@ export const NavigationOrderSettings: React.FC<Props> = ({
     const dropIndexRef = useRef<number | null>(null);
     const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
 
-    const hiddenSet = useMemo(() => new Set(normalizeNavHiddenKeys(navHiddenKeys)), [navHiddenKeys]);
+    const hiddenSet = useMemo(() => new Set(normalizeHidden(navHiddenKeys)), [navHiddenKeys, normalizeHidden]);
     const mobileKeys = useMemo(() => navOrder.filter(isMobileNavKey), [navOrder]);
     const moreStartsAtMobileIndex = mobileKeys.length > MOBILE_NAV_PRIMARY_SLOTS
         ? MOBILE_NAV_PRIMARY_SLOTS
@@ -89,11 +124,11 @@ export const NavigationOrderSettings: React.FC<Props> = ({
     };
 
     const toggleHidden = (key: string) => {
-        if (ALWAYS_VISIBLE_NAV_KEYS.has(key)) return;
+        if (alwaysVisibleKeys.has(key)) return;
         const next = new Set(hiddenSet);
         if (next.has(key)) next.delete(key);
         else next.add(key);
-        onHiddenKeysChange(normalizeNavHiddenKeys([...next]));
+        onHiddenKeysChange(normalizeHidden([...next]));
         vibrate(10);
     };
 
@@ -168,33 +203,21 @@ export const NavigationOrderSettings: React.FC<Props> = ({
     const draggingKey = dragIndex != null ? navOrder[dragIndex] : null;
 
     return (
-        <div className="mb-8 animate-fade-in">
-            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Navigation Order</h3>
-            <p className="text-muted text-sm mb-2 max-w-2xl">
-                Drag the handle to reorder the desktop sidebar. On phones, press and drag the grip — or use the arrows. The first {MOBILE_NAV_PRIMARY_SLOTS} items stay in the bottom bar; the rest move into More.
-            </p>
-            <p className="text-xs text-muted mb-4 max-w-2xl">
-                Use the eye icon to hide items from navigation for everyone. Home, Settings, and Logout always stay visible. Hidden items remain here so you can unhide or reorder them. Upgrader, ColleXions, and Cleaner also need their feature toggles turned on before they appear in the sidebar.
-            </p>
-
-            <div className="mb-6 max-w-xl rounded-xl border border-border/70 p-4 bg-background/30">
-                <SettingsToggleRow
-                    title="Show Downloads to members"
-                    hint={(
-                        <SettingHint>
-                            When off, Downloads stays in the nav order for admins only. Members will not see the tab or the download status page.
-                        </SettingHint>
-                    )}
-                    checked={downloadsVisibleToMembers}
-                    onChange={onDownloadsVisibleToMembersChange}
-                    border={false}
-                />
-                <p className={`text-xs mt-2 font-semibold ${downloadsVisibleToMembers ? 'text-green-300' : 'text-yellow-300'}`}>
-                    Members: {downloadsVisibleToMembers ? 'can see Downloads' : 'Downloads hidden'}
-                </p>
+        <div className="min-w-0 rounded-2xl border border-border/70 bg-background/20 p-4">
+            <div className="mb-4 flex items-start gap-3">
+                <div className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${accentClass}`}>
+                    {icon}
+                </div>
+                <div className="min-w-0">
+                    <h4 className="text-base font-bold text-text">{title}</h4>
+                    <p className="mt-1 text-xs leading-relaxed text-muted">{subtitle}</p>
+                    {downloadsMembersNote ? (
+                        <p className="mt-2 text-[11px] font-semibold text-yellow-300/90">{downloadsMembersNote}</p>
+                    ) : null}
+                </div>
             </div>
 
-            <div className={`relative flex flex-col gap-2 max-w-xl select-none ${dragIndex !== null ? 'cursor-grabbing' : ''}`}>
+            <div className={`relative flex flex-col gap-2 select-none ${dragIndex !== null ? 'cursor-grabbing' : ''}`}>
                 {navOrder.map((key, index) => {
                     const mobileIndex = mobileIndexByKey.get(key);
                     const inMobileBar = mobileIndex !== undefined
@@ -204,7 +227,7 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                         && mobileIndex >= moreStartsAtMobileIndex;
                     const showMoreDivider = moreStartsAtMobileIndex !== null
                         && mobileIndex === moreStartsAtMobileIndex;
-                    const isAlwaysVisible = ALWAYS_VISIBLE_NAV_KEYS.has(key);
+                    const isAlwaysVisible = alwaysVisibleKeys.has(key);
                     const isHidden = hiddenSet.has(key);
                     const featureOffHint = (() => {
                         if (key === 'upgrader' && featureStatus?.upgrader === false) return FEATURE_OFF_HINT.upgrader;
@@ -226,8 +249,8 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                             {showMoreDivider && (
                                 <div className="flex items-center gap-3 pt-3 pb-1">
                                     <div className="h-px flex-1 bg-border/70" />
-                                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-muted shrink-0">
-                                        <MoreHorizontal className="w-3.5 h-3.5" />
+                                    <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+                                        <MoreHorizontal className="h-3.5 w-3.5" />
                                         Mobile More menu
                                     </span>
                                     <div className="h-px flex-1 bg-border/70" />
@@ -237,11 +260,11 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                             <div
                                 ref={(node) => { itemRefs.current[index] = node; }}
                                 data-nav-order-index={index}
-                                className={`relative flex items-center gap-2 sm:gap-3 py-3 px-3 rounded-xl border bg-background/30 transition-[transform,box-shadow,opacity,border-color,background-color] duration-150
-                                    ${isDragging ? 'opacity-40 border-plex/50 bg-plex/5 scale-[0.985] shadow-inner' : 'border-border/40'}
-                                    ${isDropTarget ? 'border-plex ring-2 ring-plex/35 bg-plex/10' : ''}
+                                className={`relative flex items-center gap-2 rounded-xl border bg-background/30 px-3 py-3 transition-[transform,box-shadow,opacity,border-color,background-color] duration-150 sm:gap-3
+                                    ${isDragging ? 'scale-[0.985] border-plex/50 bg-plex/5 opacity-40 shadow-inner' : 'border-border/40'}
+                                    ${isDropTarget ? 'border-plex bg-plex/10 ring-2 ring-plex/35' : ''}
                                     ${inMoreMenu && !isDropTarget ? 'border-dashed border-border/50 bg-white/[0.02]' : ''}
-                                    ${isHidden && !isDropTarget ? 'opacity-55 border-dashed border-border/50' : ''}
+                                    ${isHidden && !isDropTarget ? 'border-dashed border-border/50 opacity-55' : ''}
                                     ${!isMobileNavKey(key) ? 'opacity-70' : ''}`}
                             >
                                 {insertBefore && (
@@ -258,36 +281,36 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                                     onPointerMove={handlePointerMove}
                                     onPointerUp={handlePointerUp}
                                     onPointerCancel={handlePointerCancel}
-                                    className={`touch-none shrink-0 p-1.5 -ml-1 rounded-lg transition-colors cursor-grab active:cursor-grabbing
-                                        ${isDragging ? 'text-plex bg-plex/15' : 'text-muted hover:text-text hover:bg-white/5 active:bg-white/10 active:scale-95'}`}
+                                    className={`-ml-1 shrink-0 touch-none rounded-lg p-1.5 transition-colors cursor-grab active:cursor-grabbing
+                                        ${isDragging ? 'bg-plex/15 text-plex' : 'text-muted hover:bg-white/5 hover:text-text active:scale-95 active:bg-white/10'}`}
                                 >
-                                    <GripVertical className="w-5 h-5" aria-hidden />
+                                    <GripVertical className="h-5 w-5" aria-hidden />
                                 </button>
 
                                 <div className="min-w-0 flex-1">
-                                    <div className="text-text font-medium">
+                                    <div className="font-medium text-text">
                                         {getNavItemLabel(key, {
-                                            adminSuffix: true,
+                                            adminSuffix: showAdminSuffix,
                                             downloadsMembersVisible: downloadsVisibleToMembers,
                                         })}
                                     </div>
                                     {isHidden ? (
-                                        <p className="text-[11px] text-yellow-300/90 mt-0.5">Hidden from navigation</p>
+                                        <p className="mt-0.5 text-[11px] text-yellow-300/90">Hidden from navigation</p>
                                     ) : featureOffHint ? (
-                                        <p className="text-[11px] text-yellow-300/90 mt-0.5">{featureOffHint}</p>
+                                        <p className="mt-0.5 text-[11px] text-yellow-300/90">{featureOffHint}</p>
                                     ) : !isMobileNavKey(key) ? (
-                                        <p className="text-[11px] text-muted mt-0.5">Not shown in the mobile bottom bar</p>
+                                        <p className="mt-0.5 text-[11px] text-muted">Not shown in the mobile bottom bar</p>
                                     ) : null}
                                 </div>
 
-                                <div className="flex items-center gap-1 shrink-0">
+                                <div className="flex shrink-0 items-center gap-1">
                                     {inMobileBar && moreStartsAtMobileIndex !== null && !isHidden && (
-                                        <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider text-plex/90 bg-plex/10 border border-plex/25 rounded-md px-2 py-1">
+                                        <span className="hidden rounded-md border border-plex/25 bg-plex/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-plex/90 lg:inline">
                                             Mobile bar
                                         </span>
                                     )}
                                     {inMoreMenu && !isHidden && (
-                                        <span className="hidden sm:inline text-[10px] font-bold uppercase tracking-wider text-muted bg-white/5 border border-border/60 rounded-md px-2 py-1">
+                                        <span className="hidden rounded-md border border-border/60 bg-white/5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted lg:inline">
                                             More
                                         </span>
                                     )}
@@ -305,32 +328,32 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                                         }
                                         disabled={isAlwaysVisible}
                                         onClick={() => toggleHidden(key)}
-                                        className={`w-8 h-8 inline-flex items-center justify-center rounded-lg border transition-colors
+                                        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors
                                             ${isAlwaysVisible
-                                                ? 'border-border/40 bg-white/[0.02] text-muted/40 cursor-not-allowed'
+                                                ? 'cursor-not-allowed border-border/40 bg-white/[0.02] text-muted/40'
                                                 : isHidden
                                                     ? 'border-yellow-500/35 bg-yellow-500/10 text-yellow-300 hover:bg-yellow-500/15'
-                                                    : 'border-border/60 bg-white/[0.03] text-muted hover:text-text hover:border-plex/40 active:scale-90'}`}
+                                                    : 'border-border/60 bg-white/[0.03] text-muted hover:border-plex/40 hover:text-text active:scale-90'}`}
                                     >
-                                        {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </button>
                                     <button
                                         type="button"
                                         aria-label={`Move ${getNavItemLabel(key)} up`}
                                         disabled={index === 0}
                                         onClick={() => commitReorder(index, index - 1, { haptic: true })}
-                                        className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-border/60 bg-white/[0.03] text-muted hover:text-text hover:border-plex/40 active:scale-90 active:bg-plex/15 disabled:opacity-30 disabled:pointer-events-none transition-transform"
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-white/[0.03] text-muted transition-transform hover:border-plex/40 hover:text-text active:scale-90 active:bg-plex/15 disabled:pointer-events-none disabled:opacity-30"
                                     >
-                                        <ChevronUp className="w-4 h-4" />
+                                        <ChevronUp className="h-4 w-4" />
                                     </button>
                                     <button
                                         type="button"
                                         aria-label={`Move ${getNavItemLabel(key)} down`}
                                         disabled={index === navOrder.length - 1}
                                         onClick={() => commitReorder(index, index + 1, { haptic: true })}
-                                        className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-border/60 bg-white/[0.03] text-muted hover:text-text hover:border-plex/40 active:scale-90 active:bg-plex/15 disabled:opacity-30 disabled:pointer-events-none transition-transform"
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-white/[0.03] text-muted transition-transform hover:border-plex/40 hover:text-text active:scale-90 active:bg-plex/15 disabled:pointer-events-none disabled:opacity-30"
                                     >
-                                        <ChevronDown className="w-4 h-4" />
+                                        <ChevronDown className="h-4 w-4" />
                                     </button>
                                 </div>
                             </div>
@@ -345,10 +368,10 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                         aria-hidden
                     >
                         <div className="flex items-center gap-3">
-                            <GripVertical className="w-5 h-5 text-plex shrink-0" />
-                            <p className="text-sm font-bold text-text truncate">
+                            <GripVertical className="h-5 w-5 shrink-0 text-plex" />
+                            <p className="truncate text-sm font-bold text-text">
                                 {getNavItemLabel(draggingKey, {
-                                    adminSuffix: true,
+                                    adminSuffix: showAdminSuffix,
                                     downloadsMembersVisible: downloadsVisibleToMembers,
                                 })}
                             </p>
@@ -358,14 +381,94 @@ export const NavigationOrderSettings: React.FC<Props> = ({
             </div>
 
             {moreStartsAtMobileIndex === null ? (
-                <p className="text-xs text-muted mt-4 max-w-xl">
+                <p className="mt-4 text-xs text-muted">
                     All mobile-visible items currently fit in the bottom bar — no More menu yet.
                 </p>
             ) : (
-                <p className="text-xs text-muted mt-4 max-w-xl">
-                    Items below the divider open from the mobile More button. Reorder carefully if you want Status, Settings, or Discover higher in the bottom bar.
+                <p className="mt-4 text-xs text-muted">
+                    Items below the divider open from the mobile More button.
                 </p>
             )}
         </div>
     );
 };
+
+export const NavigationOrderSettings: React.FC<Props> = ({
+    navOrder,
+    onChange,
+    navHiddenKeys,
+    onHiddenKeysChange,
+    memberNavOrder,
+    onMemberNavOrderChange,
+    memberNavHiddenKeys,
+    onMemberNavHiddenKeysChange,
+    downloadsVisibleToMembers,
+    onDownloadsVisibleToMembersChange,
+    featureStatus,
+}) => (
+    <div className="mb-8 animate-fade-in">
+        <h3 className="mb-4 border-b border-border pb-2 text-xl font-bold text-plex">Navigation Order</h3>
+        <p className="mb-2 max-w-3xl text-sm text-muted">
+            Set separate layouts for admins and members. Drag the handle to reorder, or use the arrows.
+            The first {MOBILE_NAV_PRIMARY_SLOTS} items stay in the mobile bottom bar; the rest move into More.
+        </p>
+        <p className="mb-4 max-w-3xl text-xs text-muted">
+            Use the eye icon to hide items from that audience. Home stays visible for everyone; Settings and Logout stay visible for admins.
+            Feature-gated items also need their Settings toggles turned on before they appear.
+        </p>
+
+        <div className="mb-6 max-w-xl rounded-xl border border-border/70 bg-background/30 p-4">
+            <SettingsToggleRow
+                title="Show Downloads to members"
+                hint={(
+                    <SettingHint>
+                        When off, Downloads stays available in the admin layout only. Members will not see the tab or the download status page — even if it is enabled in the Users column.
+                    </SettingHint>
+                )}
+                checked={downloadsVisibleToMembers}
+                onChange={onDownloadsVisibleToMembersChange}
+                border={false}
+            />
+            <p className={`mt-2 text-xs font-semibold ${downloadsVisibleToMembers ? 'text-green-300' : 'text-yellow-300'}`}>
+                Members: {downloadsVisibleToMembers ? 'can see Downloads' : 'Downloads hidden'}
+            </p>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+            <NavOrderColumn
+                title="Admins"
+                subtitle="Full portal nav — admin-only tools stay here."
+                icon={<Shield className="h-4 w-4 text-plex" />}
+                accentClass="border-plex/35 bg-plex/10 text-plex"
+                navOrder={navOrder}
+                onChange={onChange}
+                navHiddenKeys={navHiddenKeys}
+                onHiddenKeysChange={onHiddenKeysChange}
+                alwaysVisibleKeys={ALWAYS_VISIBLE_NAV_KEYS}
+                normalizeHidden={normalizeNavHiddenKeys}
+                downloadsVisibleToMembers={downloadsVisibleToMembers}
+                showAdminSuffix
+                featureStatus={featureStatus}
+            />
+            <NavOrderColumn
+                title="Users"
+                subtitle="What non-admins see in the sidebar and mobile bar."
+                icon={<Users className="h-4 w-4 text-sky-300" />}
+                accentClass="border-sky-500/35 bg-sky-500/10 text-sky-200"
+                navOrder={memberNavOrder}
+                onChange={onMemberNavOrderChange}
+                navHiddenKeys={memberNavHiddenKeys}
+                onHiddenKeysChange={onMemberNavHiddenKeysChange}
+                alwaysVisibleKeys={ALWAYS_VISIBLE_MEMBER_NAV_KEYS}
+                normalizeHidden={normalizeMemberNavHiddenKeys}
+                downloadsVisibleToMembers={downloadsVisibleToMembers}
+                showAdminSuffix={false}
+                downloadsMembersNote={
+                    !downloadsVisibleToMembers
+                        ? 'Downloads is forced off for members by the toggle above.'
+                        : null
+                }
+            />
+        </div>
+    </div>
+);

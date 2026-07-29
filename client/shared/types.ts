@@ -120,6 +120,10 @@ export interface AppSettings {
     navOrder?: string[];
     /** Server-wide nav keys hidden from the sidebar/mobile bar (Settings → Navigation). */
     navHiddenKeys?: string[];
+    /** Members / non-admin nav order (Settings → Navigation → Users). */
+    memberNavOrder?: string[];
+    /** Members / non-admin hidden nav keys. */
+    memberNavHiddenKeys?: string[];
 }
 
 export interface PlexServer {

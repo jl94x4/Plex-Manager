@@ -72,6 +72,14 @@ const ADMIN_ONLY_NAV_KEYS = new Set([
     'logs',
 ]);
 
+/** Keys admins see that members never get in their nav (even if present in order). */
+export const isAdminOnlyNavKey = (key: string) => ADMIN_ONLY_NAV_KEYS.has(key);
+
+/** Keys that can appear in the members / non-admin nav editor. */
+export const isMemberNavKey = (key: string) => !ADMIN_ONLY_NAV_KEYS.has(key);
+
+export const DEFAULT_MEMBER_NAV_ORDER = DEFAULT_NAV_ORDER.filter((key) => isMemberNavKey(key));
+
 export const getNavItemLabel = (key: string, options?: { adminSuffix?: boolean; downloadsMembersVisible?: boolean }) => {
     const base = NAV_ITEM_LABELS[key] || key;
     if (options?.adminSuffix) {
@@ -173,6 +181,9 @@ export const isRequestNavEnabled = (requestAppType?: string | null, requestUrl?:
 /** Keys that cannot be hidden via Settings → Navigation (prevents lockout). */
 export const ALWAYS_VISIBLE_NAV_KEYS = new Set(['home', 'settings', 'logout']);
 
+/** Members never see Settings; Home + Logout stay always visible in their layout. */
+export const ALWAYS_VISIBLE_MEMBER_NAV_KEYS = new Set(['home', 'logout']);
+
 /** Normalize a saved hidden-keys list; strips always-visible keys. */
 export const normalizeNavHiddenKeys = (keys?: string[] | null): string[] => {
     if (!Array.isArray(keys)) return [];
@@ -188,6 +199,84 @@ export const normalizeNavHiddenKeys = (keys?: string[] | null): string[] => {
     return result;
 };
 
+/** Hidden keys for the members layout — only member-visible keys, never Home/Logout. */
+export const normalizeMemberNavHiddenKeys = (keys?: string[] | null): string[] => {
+    if (!Array.isArray(keys)) return [];
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const raw of keys) {
+        const key = String(raw || '').trim();
+        if (!key || ALWAYS_VISIBLE_MEMBER_NAV_KEYS.has(key) || seen.has(key)) continue;
+        if (!isMemberNavKey(key)) continue;
+        if (!(key in NAV_ITEM_LABELS)) continue;
+        seen.add(key);
+        result.push(key);
+    }
+    return result;
+};
+
+/**
+ * Complete a members-only nav order. Missing member keys are inserted using
+ * DEFAULT_MEMBER_NAV_ORDER relative positions.
+ */
+export const ensureCompleteMemberNavOrder = (order?: string[] | null): string[] => {
+    const incoming = (Array.isArray(order) ? order : []).filter((key) => key && isMemberNavKey(key));
+    const result: string[] = [];
+    const seen = new Set<string>();
+
+    for (const key of incoming) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(key);
+    }
+
+    const insertMissing = (key: string) => {
+        if (result.includes(key)) return;
+        const defaultIndex = DEFAULT_MEMBER_NAV_ORDER.indexOf(key as typeof DEFAULT_MEMBER_NAV_ORDER[number]);
+        if (defaultIndex < 0) {
+            result.push(key);
+            return;
+        }
+        for (let i = defaultIndex - 1; i >= 0; i -= 1) {
+            const prevIdx = result.indexOf(DEFAULT_MEMBER_NAV_ORDER[i]);
+            if (prevIdx >= 0) {
+                result.splice(prevIdx + 1, 0, key);
+                return;
+            }
+        }
+        for (let i = defaultIndex + 1; i < DEFAULT_MEMBER_NAV_ORDER.length; i += 1) {
+            const nextIdx = result.indexOf(DEFAULT_MEMBER_NAV_ORDER[i]);
+            if (nextIdx >= 0) {
+                result.splice(nextIdx, 0, key);
+                return;
+            }
+        }
+        result.push(key);
+    };
+
+    for (const key of DEFAULT_MEMBER_NAV_ORDER) {
+        insertMissing(key);
+    }
+
+    return result;
+};
+
+/** Build a members order from an admin order (keeps relative sequence, drops admin-only keys). */
+export const deriveMemberNavOrderFromAdmin = (adminOrder?: string[] | null): string[] => {
+    const fromAdmin = ensureCompleteNavOrder(adminOrder).filter((key) => isMemberNavKey(key));
+    return ensureCompleteMemberNavOrder(fromAdmin);
+};
+
+export const resolveMemberNavOrder = (
+    memberOrder?: string[] | null,
+    adminOrder?: string[] | null,
+): string[] => {
+    if (Array.isArray(memberOrder) && memberOrder.length) {
+        return ensureCompleteMemberNavOrder(memberOrder);
+    }
+    return deriveMemberNavOrderFromAdmin(adminOrder);
+};
+
 export const filterNavOrder = (
     order: string[],
     options: { isAdmin: boolean; features?: NavFeatureFlags; hiddenKeys?: string[] },
@@ -201,11 +290,16 @@ export const filterNavOrder = (
     const posterSetsEnabled = !!features.posterSets;
     const requestsQueueEnabled = !!features.requestsQueue;
     const requestEnabled = features.request !== false || requestsQueueEnabled;
-    const hidden = new Set(normalizeNavHiddenKeys(options.hiddenKeys));
+    const hidden = new Set(
+        options.isAdmin
+            ? normalizeNavHiddenKeys(options.hiddenKeys)
+            : normalizeMemberNavHiddenKeys(options.hiddenKeys),
+    );
+    const alwaysVisible = options.isAdmin ? ALWAYS_VISIBLE_NAV_KEYS : ALWAYS_VISIBLE_MEMBER_NAV_KEYS;
 
     return (Array.isArray(order) ? order : []).filter((key) => {
         if (key === 'logout' || key === 'logs') return false;
-        if (hidden.has(key) && !ALWAYS_VISIBLE_NAV_KEYS.has(key)) return false;
+        if (hidden.has(key) && !alwaysVisible.has(key)) return false;
         if ((key === 'users' || key === 'settings' || key === 'maintenance' || key === 'upgrader' || key === 'collexions' || key === 'scanner' || key === 'media-automation' || key === 'poster-sets' || key === 'requests') && !options.isAdmin) return false;
         if (key === 'downloads' && !options.isAdmin && features.downloads === false) return false;
         if (key === 'maintenance' && !maintenanceEnabled) return false;

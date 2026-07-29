@@ -3117,6 +3117,10 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         navHiddenKeys: Array.isArray(config.navHiddenKeys)
             ? config.navHiddenKeys.filter((key) => typeof key === 'string' && key && key !== 'home' && key !== 'settings' && key !== 'logout')
             : [],
+        memberNavOrder: Array.isArray(config.memberNavOrder) ? config.memberNavOrder : [],
+        memberNavHiddenKeys: Array.isArray(config.memberNavHiddenKeys)
+            ? config.memberNavHiddenKeys.filter((key) => typeof key === 'string' && key && key !== 'home' && key !== 'logout')
+            : [],
         navFeatures,
         impersonation: impersonating ? {
             active: true,
@@ -3463,6 +3467,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 hideStreamUsers: config.hideStreamUsers === true ? 'anonymous' : (config.hideStreamUsers || 'false'),
                 navOrder: config.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
                 navHiddenKeys: Array.isArray(config.navHiddenKeys) ? config.navHiddenKeys : [],
+                memberNavOrder: Array.isArray(config.memberNavOrder) ? config.memberNavOrder : [],
+                memberNavHiddenKeys: Array.isArray(config.memberNavHiddenKeys) ? config.memberNavHiddenKeys : [],
                 downloadsVisibleToMembers: config.downloadsVisibleToMembers !== false,
                 defaultLibraryIds: config.defaultLibraryIds || null,
                 use24HourClock: !!config.use24HourClock,
@@ -3580,6 +3586,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 hideStreamUsers: 'false',
                 navOrder: ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
                 navHiddenKeys: [],
+                memberNavOrder: ['home', 'discover', 'request', 'analytics', 'downloads', 'mediastack', 'status', 'about', 'logout'],
+                memberNavHiddenKeys: [],
                 downloadsVisibleToMembers: true,
                 defaultLibraryIds: null,
                 use24HourClock: false,
@@ -3638,7 +3646,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
-        primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
+        primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
         autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
@@ -3968,6 +3976,35 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             for (const raw of incoming) {
                 const key = String(raw || '').trim();
                 if (!key || ALWAYS.has(key) || seen.has(key)) continue;
+                seen.add(key);
+                result.push(key);
+            }
+            return result;
+        })(),
+        memberNavOrder: (() => {
+            const ADMIN_ONLY = new Set(['users', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'requests', 'maintenance', 'settings', 'logs']);
+            const incoming = Array.isArray(memberNavOrder) ? memberNavOrder : existingConfig.memberNavOrder;
+            if (!Array.isArray(incoming)) return [];
+            const seen = new Set();
+            const result = [];
+            for (const raw of incoming) {
+                const key = String(raw || '').trim();
+                if (!key || ADMIN_ONLY.has(key) || seen.has(key)) continue;
+                seen.add(key);
+                result.push(key);
+            }
+            return result;
+        })(),
+        memberNavHiddenKeys: (() => {
+            const ALWAYS = new Set(['home', 'logout']);
+            const ADMIN_ONLY = new Set(['users', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'requests', 'maintenance', 'settings', 'logs']);
+            const incoming = Array.isArray(memberNavHiddenKeys) ? memberNavHiddenKeys : existingConfig.memberNavHiddenKeys;
+            if (!Array.isArray(incoming)) return [];
+            const seen = new Set();
+            const result = [];
+            for (const raw of incoming) {
+                const key = String(raw || '').trim();
+                if (!key || ALWAYS.has(key) || ADMIN_ONLY.has(key) || seen.has(key)) continue;
                 seen.add(key);
                 result.push(key);
             }
