@@ -186,18 +186,21 @@ const ArcGauge: React.FC<{
 const CoreBar: React.FC<{ index: number; percent: number | null | undefined }> = ({ index, percent }) => {
     const width = clampPercent(percent) ?? 0;
     const tone = toneFor(clampPercent(percent));
+    const label = percent == null ? '—' : `${Math.round(Number(percent))}%`;
     return (
-        <div className="rounded-xl border border-white/10 bg-black/25 p-2.5">
-            <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">Core {index}</p>
-                <p className="text-xs font-semibold tabular-nums text-text">
-                    {percent == null ? '—' : `${Number(percent).toFixed(0)}%`}
+        <div className="box-border flex h-[5.25rem] min-h-[5.25rem] w-full min-w-0 flex-col justify-between overflow-hidden rounded-xl border border-white/10 bg-black/25 p-3">
+            <div className="flex items-baseline justify-between gap-2">
+                <p className="truncate text-[11px] font-bold uppercase tracking-wide text-muted">
+                    Core {index}
+                </p>
+                <p className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums text-text">
+                    {label}
                 </p>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+            <div className="h-2.5 w-full shrink-0 overflow-hidden rounded-full bg-white/[0.06]">
                 <div
                     className={`ma-meter-fill h-full rounded-full bg-gradient-to-r ${tone.bar}`}
-                    style={{ width: `${width}%`, boxShadow: `0 0 12px ${tone.stroke}44` }}
+                    style={{ width: `${width}%`, boxShadow: width > 0 ? `0 0 12px ${tone.stroke}44` : 'none' }}
                 />
             </div>
         </div>
@@ -230,13 +233,13 @@ const CpuCoresModal: React.FC<{
                 onMouseDown={onClose}
             >
                 <div
-                    className="modal-glass animate-slide-up flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden"
+                    className="modal-glass animate-slide-up flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="cpu-cores-title"
                     onMouseDown={(event) => event.stopPropagation()}
                 >
-                    <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
+                    <div className="flex items-start justify-between gap-3 border-b border-white/10 px-6 py-4">
                         <div>
                             <h3 id="cpu-cores-title" className="flex items-center gap-2 text-lg font-black text-text">
                                 <Cpu className="h-5 w-5 text-plex" />
@@ -259,11 +262,11 @@ const CpuCoresModal: React.FC<{
                             <X className="h-4 w-4" />
                         </button>
                     </div>
-                    <div className="overflow-y-auto p-5 custom-scrollbar">
+                    <div className="overflow-y-auto p-6 custom-scrollbar">
                         {cores.length === 0 ? (
                             <p className="text-sm text-muted">Per-core samples are not available yet. Wait for the next refresh.</p>
                         ) : (
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 [grid-auto-rows:5.25rem]">
                                 {cores.map((core) => (
                                     <CoreBar
                                         key={core.index}
