@@ -654,7 +654,9 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                             valueLabel={
                                 isFiniteNumber(intelGpu.utilizationPercent)
                                     ? `${Number(intelGpu.utilizationPercent).toFixed(0)}%`
-                                    : (intelGpu.topAvailable ? '—' : 'Needs intel_gpu_top')
+                                    : (intelGpu.topAvailable
+                                        ? '—'
+                                        : (intelGpu.topBinaryPresent === false ? 'Needs intel_gpu_top' : 'Util blocked'))
                             }
                             percent={isFiniteNumber(intelGpu.utilizationPercent) ? intelGpu.utilizationPercent : null}
                         />
@@ -703,9 +705,16 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                             </div>
                         ) : null}
                         {intelGpu.note ? <p className="text-xs text-muted">{intelGpu.note}</p> : null}
-                        <p className="text-xs text-muted">
-                            Encode path is ready via {intelGpu.device || '/dev/dri'} — live util needs intel_gpu_top in the image.
-                        </p>
+                        {!intelGpu.topAvailable && intelGpu.topBinaryPresent !== false ? (
+                            <p className="text-xs text-muted">
+                                Encode path is ready via {intelGpu.device || '/dev/dri'} — live util needs host perf access for intel_gpu_top.
+                            </p>
+                        ) : null}
+                        {!intelGpu.topAvailable && intelGpu.topBinaryPresent === false ? (
+                            <p className="text-xs text-muted">
+                                Encode path is ready via {intelGpu.device || '/dev/dri'} — pull :nightly (Force Update) for intel_gpu_top in the image.
+                            </p>
+                        ) : null}
                     </div>
                 ) : null}
 

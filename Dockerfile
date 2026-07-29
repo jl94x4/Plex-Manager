@@ -42,8 +42,9 @@ ENV COLLEXIONS_EMBEDDED_PORT=15755
 # QSV runtime libs are installed when Bookworm publishes them for the arch.
 # util-linux provides setpriv so the entrypoint can attach /dev/dri GIDs after
 # dropping to PUID:PGID (required for render node access on Unraid).
-# intel-gpu-tools provides intel_gpu_top for System-tab iGPU utilization.
 # Optional: set LIBVA_DRIVER_NAME=iHD (Intel) or radeonsi (AMD) if auto-detect fails.
+# intel-gpu-tools (intel_gpu_top) is installed AFTER jellyfin/autoremove so it
+# cannot be swept away by apt-get autoremove in a later layer.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \
@@ -56,8 +57,6 @@ RUN apt-get update \
         python3-venv \
         util-linux \
         vainfo \
-    && apt-get install -y --no-install-recommends intel-gpu-tools \
-    && command -v intel_gpu_top \
     && if apt-cache show intel-media-va-driver >/dev/null 2>&1; then \
         apt-get install -y --no-install-recommends intel-media-va-driver; \
     fi \
@@ -102,6 +101,21 @@ RUN set -eu; \
     fi; \
     ffmpeg -version; \
     ffprobe -version
+
+# Ship intel_gpu_top last (amd64/i386 only in Debian bookworm) and fail the
+# build if it is missing on amd64 — that is what System-tab util depends on.
+RUN set -eu; \
+    arch="$(dpkg --print-architecture)"; \
+    apt-get update; \
+    if [ "$arch" = "amd64" ] || [ "$arch" = "i386" ]; then \
+        apt-get install -y --no-install-recommends intel-gpu-tools; \
+        apt-mark manual intel-gpu-tools; \
+        command -v intel_gpu_top; \
+        test -x "$(command -v intel_gpu_top)"; \
+    else \
+        echo "Skipping intel-gpu-tools on ${arch} (not published by Debian)"; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules

@@ -66,6 +66,7 @@ export type MediaAutomationHostMetrics = {
             }>;
             note?: string | null;
             topAvailable?: boolean;
+            topBinaryPresent?: boolean;
             topError?: string | null;
         };
         intelOrAmd?: {
