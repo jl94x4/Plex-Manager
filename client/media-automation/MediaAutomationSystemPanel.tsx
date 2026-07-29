@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Cpu, Gauge, Loader2, MemoryStick, RefreshCw, ServerCog, Activity, X } from 'lucide-react';
+import { Cpu, Gauge, Loader2, MemoryStick, ServerCog, Activity, X } from 'lucide-react';
 import { CustomSelect } from '../shared/ui';
 import { ModalPortal } from '../shared/ModalPortal';
 import { mediaAutomationApi } from './api';
@@ -14,7 +14,6 @@ import {
 } from './systemMetricsRefresh';
 
 const cardClass = 'glass-card shadow-xl';
-const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
 const HISTORY_LEN = 36;
 
 const formatBytes = (value?: number) => {
@@ -324,7 +323,6 @@ type Props = {
 export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
     const [metrics, setMetrics] = useState<MediaAutomationHostMetrics | null>(null);
     const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
     const [live, setLive] = useState(true);
     const [refreshMs, setRefreshMs] = useState<SystemMetricsRefreshMs>(() => readSystemMetricsRefreshMs());
     const [history, setHistory] = useState<HistoryState>({ cpu: [], mem: [], gpu: [] });
@@ -348,8 +346,7 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
     const load = useCallback(async (soft = false) => {
         if (inFlight.current) return;
         inFlight.current = true;
-        if (soft) setRefreshing(true);
-        else setLoading(true);
+        if (!soft) setLoading(true);
         try {
             const next = await mediaAutomationApi.metrics();
             setMetrics(next);
@@ -360,7 +357,6 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
             if (!soft) toast(error instanceof Error ? error.message : 'Failed to load system metrics', 'error');
         } finally {
             setLoading(false);
-            setRefreshing(false);
             inFlight.current = false;
         }
     }, [pushHistory, toast]);
@@ -441,24 +437,18 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                         Streaming host CPU, memory, and GPU usage — {formatSystemMetricsRefreshLabel(refreshMs).toLowerCase()} refresh.
                     </p>
                 </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <label className="min-w-[12rem] space-y-1 text-xs font-bold uppercase tracking-wide text-muted">
-                        Refresh interval
-                        <CustomSelect
-                            value={String(refreshMs)}
-                            onChange={(value) => setRefreshMs(writeSystemMetricsRefreshMs(Number(value)))}
-                            options={SYSTEM_METRICS_REFRESH_OPTIONS.map((option) => ({
-                                value: String(option.value),
-                                label: option.label,
-                            }))}
-                            compact
-                        />
-                    </label>
-                    <button type="button" className={`${buttonClass} sm:mt-5`} disabled={refreshing} onClick={() => void load(true)}>
-                        {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                        Refresh
-                    </button>
-                </div>
+                <label className="min-w-[12rem] space-y-1 text-xs font-bold uppercase tracking-wide text-muted">
+                    Refresh interval
+                    <CustomSelect
+                        value={String(refreshMs)}
+                        onChange={(value) => setRefreshMs(writeSystemMetricsRefreshMs(Number(value)))}
+                        options={SYSTEM_METRICS_REFRESH_OPTIONS.map((option) => ({
+                            value: String(option.value),
+                            label: option.label,
+                        }))}
+                        compact
+                    />
+                </label>
             </div>
 
             <div className="grid gap-4 lg:grid-cols-3">
