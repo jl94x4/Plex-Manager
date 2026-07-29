@@ -69,6 +69,7 @@ def main() -> int:
                 title_url=str(request.get("titleUrl") or request.get("title_url") or ""),
                 media_type=str(request.get("mediaType") or request.get("media_type") or "movie"),
                 tmdb_id=request.get("tmdbId") or request.get("tmdb_id"),
+                mode=str(request.get("mode") or "title"),
                 limit=int(request.get("limit") or 24),
                 progress=progress,
             )

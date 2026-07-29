@@ -1148,6 +1148,212 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
     }
 
 
+def _normalize_creator_username(value: str) -> str:
+    raw = str(value or "").strip()
+    if raw.startswith("@"):
+        raw = raw[1:].strip()
+    # Accept pasted profile URLs.
+    match = re.search(r"/(?:user)/([^/?#]+)", raw, re.I)
+    if match:
+        raw = unquote(match.group(1))
+    raw = raw.strip().strip("/")
+    if not raw or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", raw):
+        raise ValueError("Enter a creator username (letters, numbers, . _ -).")
+    return raw
+
+
+def _collect_posterdb_set_cards(soup, *, sets: dict, limit: int, default_user: str | None = None) -> None:
+    for badge in soup.select("a.set_poster_count[href*='/set/']"):
+        href = str(badge.get("href") or "")
+        match = re.search(r"/set/(\d+)", href)
+        if not match:
+            continue
+        set_id = match.group(1)
+        if set_id in sets:
+            continue
+        poster_count = None
+        count_text = badge.get_text(" ", strip=True)
+        if count_text.isdigit():
+            poster_count = int(count_text)
+        card = badge
+        for _ in range(8):
+            if card.parent is None:
+                break
+            card = card.parent
+            classes = card.get("class") or []
+            if "hovereffect" in classes:
+                break
+        title = ""
+        user = default_user
+        thumb = ""
+        title_node = card.select_one(".poster-title-correction p") if hasattr(card, "select_one") else None
+        if title_node:
+            title = title_node.get_text(" ", strip=True)
+        user_node = card.select_one("a[href*='/user/']") if hasattr(card, "select_one") else None
+        if user_node:
+            user = user_node.get_text(" ", strip=True) or user
+        picture = card.find("picture") if hasattr(card, "find") else None
+        if picture:
+            for source in picture.find_all("source", srcset=True):
+                candidate = str(source.get("srcset") or "").split()[0].strip()
+                if candidate and "missing_poster" not in candidate:
+                    thumb = candidate
+                    break
+        if not thumb:
+            img = card.find("img") if hasattr(card, "find") else None
+            if img:
+                thumb = img.get("data-src") or img.get("src") or ""
+        if thumb and thumb.startswith("/"):
+            thumb = _absolute_url("https://theposterdb.com", thumb)
+        if thumb and "missing_poster" in thumb:
+            thumb = ""
+        # Fallback: any /set/ links in the card row may not have set_poster_count styling.
+        sets[set_id] = {
+            "setId": set_id,
+            "url": _absolute_url("https://theposterdb.com", f"/set/{set_id}"),
+            "title": title or f"Set {set_id}",
+            "thumbUrl": thumb,
+            "user": user,
+            "posterCount": poster_count,
+            "provider": "posterdb",
+        }
+        if len(sets) >= max(1, int(limit or 40)):
+            return
+
+    if len(sets) >= max(1, int(limit or 40)):
+        return
+
+    # User upload pages sometimes only expose per-poster cards with set links.
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "")
+        match = re.search(r"/set/(\d+)", href)
+        if not match:
+            continue
+        set_id = match.group(1)
+        if set_id in sets:
+            continue
+        title = anchor.get_text(" ", strip=True)
+        thumb = ""
+        img = anchor.find("img")
+        if img:
+            thumb = img.get("data-src") or img.get("src") or ""
+            if thumb.startswith("/"):
+                thumb = _absolute_url("https://theposterdb.com", thumb)
+            if "missing_poster" in thumb:
+                thumb = ""
+        sets[set_id] = {
+            "setId": set_id,
+            "url": _absolute_url("https://theposterdb.com", f"/set/{set_id}"),
+            "title": title[:160] if title else f"Set {set_id}",
+            "thumbUrl": thumb,
+            "user": default_user,
+            "posterCount": None,
+            "provider": "posterdb",
+        }
+        if len(sets) >= max(1, int(limit or 40)):
+            return
+
+
+def list_posterdb_user_sets(username: str, progress: ProgressFn = None, limit: int = 40, max_pages: int = 3) -> dict:
+    user = _normalize_creator_username(username)
+    base = f"https://theposterdb.com/user/{quote(user)}"
+    emit(progress, f"Loading ThePosterDB creator @{user}…")
+    first_url = f"{base}?section=uploads&page=1"
+    soup = cook_soup(first_url)
+    page_count = scrape_posterd_user_info(soup) or 1
+    pages = min(max(1, int(page_count)), max(1, int(max_pages or 3)))
+    sets: dict = {}
+    _collect_posterdb_set_cards(soup, sets=sets, limit=limit, default_user=user)
+    for page in range(2, pages + 1):
+        if len(sets) >= max(1, int(limit or 40)):
+            break
+        emit(progress, f"Creator page {page}/{pages}…")
+        soup = cook_soup(f"{base}?section=uploads&page={page}")
+        _collect_posterdb_set_cards(soup, sets=sets, limit=limit, default_user=user)
+    results = list(sets.values())
+    if not results:
+        raise ValueError(f"No sets found for ThePosterDB creator @{user}. Check the username.")
+    return {
+        "ok": True,
+        "provider": "posterdb",
+        "phase": "sets",
+        "mode": "creator",
+        "query": user,
+        "title": f"@{user}",
+        "titleUrl": base,
+        "titles": [],
+        "sets": results,
+    }
+
+
+def list_mediux_user_sets(username: str, progress: ProgressFn = None, limit: int = 40) -> dict:
+    user = _normalize_creator_username(username)
+    page_url = f"https://mediux.pro/user/{quote(user)}/sets"
+    emit(progress, f"Loading MediUX creator @{user}…")
+    soup = cook_soup(page_url)
+    page_title = ""
+    heading = soup.find(["h1", "h2"])
+    if heading:
+        page_title = heading.get_text(" ", strip=True)
+    elif soup.title:
+        page_title = soup.title.get_text(" ", strip=True)
+    sets: dict = {}
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "")
+        match = re.search(r"/sets/(\d+)", href)
+        if not match:
+            continue
+        set_id = match.group(1)
+        if set_id in sets:
+            continue
+        title = anchor.get_text(" ", strip=True)
+        # Skip empty or nav-only anchors.
+        if not title or title.lower() in {"peek", "yaml", "download", "sets", "posters"}:
+            # Prefer sibling heading text when the link is an image-only card.
+            parent = anchor.parent
+            for _ in range(4):
+                if parent is None:
+                    break
+                heading_node = parent.find(["h2", "h3", "h4"]) if hasattr(parent, "find") else None
+                if heading_node:
+                    title = heading_node.get_text(" ", strip=True) or title
+                    break
+                parent = parent.parent
+        thumb = ""
+        img = anchor.find("img")
+        if img:
+            thumb = _decode_next_image_url(img.get("src") or "")
+            if not thumb:
+                candidate = img.get("src") or ""
+                if "api.mediux.pro" in candidate:
+                    thumb = candidate
+        sets[set_id] = {
+            "setId": set_id,
+            "url": f"https://mediux.pro/sets/{set_id}",
+            "title": (title or f"Set {set_id}")[:160],
+            "thumbUrl": thumb,
+            "user": user,
+            "posterCount": None,
+            "provider": "mediux",
+        }
+        if len(sets) >= max(1, int(limit or 40)):
+            break
+    results = list(sets.values())
+    if not results:
+        raise ValueError(f"No sets found for MediUX creator @{user}. Check the username.")
+    return {
+        "ok": True,
+        "provider": "mediux",
+        "phase": "sets",
+        "mode": "creator",
+        "query": user,
+        "title": page_title or f"@{user}",
+        "titleUrl": page_url,
+        "titles": [],
+        "sets": results,
+    }
+
+
 def search_catalog(
     provider: str,
     *,
@@ -1155,6 +1361,7 @@ def search_catalog(
     title_url: str = "",
     media_type: str = "movie",
     tmdb_id: str | int | None = None,
+    mode: str = "title",
     limit: int = 24,
     progress: ProgressFn = None,
 ) -> dict:
@@ -1166,6 +1373,14 @@ def search_catalog(
         source = "mediux"
     else:
         raise ValueError("provider must be mediux or posterdb")
+
+    search_mode = str(mode or "title").strip().lower()
+    if search_mode in {"creator", "user", "author", "uploader"}:
+        if not str(query or "").strip():
+            raise ValueError("creator username is required")
+        if source == "posterdb":
+            return list_posterdb_user_sets(query, progress=progress, limit=limit)
+        return list_mediux_user_sets(query, progress=progress, limit=limit)
 
     if source == "posterdb":
         if title_url:

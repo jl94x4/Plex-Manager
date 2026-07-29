@@ -14,11 +14,19 @@ import {
     Search,
     Settings2,
     Sparkles,
+    User,
     X,
 } from 'lucide-react';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
-import { SettingsToggleRow } from '../shared/ui';
+import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
+import {
+    normalizeUpgraderGridSize,
+    UPGRADER_GRID_SIZE_OPTIONS,
+    upgraderPosterGridClass,
+    upgraderPosterGridStyle,
+    type UpgraderGridSize,
+} from '../shared/portalLayout';
 import { posterSetsApi } from './api';
 import {
     DEFAULT_POSTER_SETS_CONFIG,
@@ -32,6 +40,9 @@ import {
     type PosterSetsSetMeta,
     type PosterSetsStatus,
 } from './types';
+
+const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
+const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
 
 const cardClass = 'glass-card shadow-xl';
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
@@ -211,6 +222,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const [bulkText, setBulkText] = useState('');
     const [findProvider, setFindProvider] = useState<SetProvider>('mediux');
     const [findId, setFindId] = useState('');
+    const [searchMode, setSearchMode] = useState<'title' | 'creator'>('title');
     const [searchQuery, setSearchQuery] = useState('');
     const [searchTitles, setSearchTitles] = useState<PosterSetsSearchTitle[]>([]);
     const [searchSets, setSearchSets] = useState<PosterSetsSearchSet[]>([]);
@@ -220,6 +232,10 @@ export const PosterSetsDashboard: React.FC = () => {
     const [manualUrlOpen, setManualUrlOpen] = useState(false);
     const previewPanelRef = useRef<HTMLDivElement | null>(null);
     const [recentTick, setRecentTick] = useState(0);
+    const [gridSize, setGridSize] = useState<UpgraderGridSize>(() => {
+        if (typeof window === 'undefined') return 'medium';
+        return normalizeUpgraderGridSize(window.localStorage.getItem(POSTER_SETS_GRID_STORAGE_KEY));
+    });
     const [preview, setPreview] = useState<PosterSetsPreview | null>(null);
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
     const [activeJob, setActiveJob] = useState<PosterSetsJob | null>(null);
@@ -511,10 +527,24 @@ export const PosterSetsDashboard: React.FC = () => {
         else toast('Set URL filled — preview or apply when ready.');
     };
 
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem(POSTER_SETS_GRID_STORAGE_KEY, gridSize === 'list' ? 'medium' : gridSize);
+    }, [gridSize]);
+
+    const posterGridClass = useMemo(
+        () => upgraderPosterGridClass(gridSize === 'list' ? 'medium' : gridSize),
+        [gridSize],
+    );
+    const posterGridStyle = useMemo(
+        () => upgraderPosterGridStyle(gridSize === 'list' ? 'medium' : gridSize),
+        [gridSize],
+    );
+
     const runCatalogSearch = async () => {
         const q = searchQuery.trim();
         if (!q) {
-            toast('Enter a title to search.', 'error');
+            toast(searchMode === 'creator' ? 'Enter a creator username.' : 'Enter a title to search.', 'error');
             return;
         }
         setBusy('search');
@@ -528,17 +558,20 @@ export const PosterSetsDashboard: React.FC = () => {
             const response = await posterSetsApi.search({
                 provider: findProvider,
                 query: q,
-                limit: 24,
+                mode: searchMode,
+                limit: searchMode === 'creator' ? 40 : 24,
             });
             setSearchTitles(response.titles || []);
             setSearchSets(response.sets || []);
-            setSearchContext(response.title || q);
+            setSearchContext(response.title || (searchMode === 'creator' ? `@${q.replace(/^@/, '')}` : q));
             const titleCount = response.titles?.length || 0;
             const setCount = response.sets?.length || 0;
             if (!titleCount && !setCount) {
                 toast('No matches found.', 'error');
             } else if (titleCount) {
                 toast(`Found ${titleCount} title${titleCount === 1 ? '' : 's'}. Choose one.`);
+            } else if (searchMode === 'creator') {
+                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'} from ${response.title || q}. Choose one to preview.`);
             } else {
                 toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}. Choose one to preview.`);
             }
@@ -782,14 +815,23 @@ export const PosterSetsDashboard: React.FC = () => {
 
             {tab === 'recent' ? (
                 <section className={`${cardClass} space-y-3 p-5`}>
-                    <div>
-                        <h2 className="text-lg font-bold text-text">Recent sets</h2>
-                        <p className="mt-1 text-sm text-muted">
-                            Re-preview or re-apply sets you&apos;ve already used.
-                        </p>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 className="text-lg font-bold text-text">Recent sets</h2>
+                            <p className="mt-1 text-sm text-muted">
+                                Re-preview or re-apply sets you&apos;ve already used.
+                            </p>
+                        </div>
+                        <CustomSelect
+                            value={gridSize === 'list' ? 'medium' : gridSize}
+                            onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
+                            options={POSTER_SETS_GRID_OPTIONS}
+                            className="w-full min-w-[140px] sm:w-auto"
+                            compact
+                        />
                     </div>
                     {recentSets.length ? (
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        <div className={posterGridClass} style={posterGridStyle}>
                             {recentSets.map((item) => (
                                 <div
                                     key={item.url}
@@ -912,6 +954,27 @@ export const PosterSetsDashboard: React.FC = () => {
                                         {label}
                                     </button>
                                 ))}
+                                {([
+                                    ['title', 'Title', Search],
+                                    ['creator', 'Creator', User],
+                                ] as const).map(([id, label, Icon]) => (
+                                    <button
+                                        key={id}
+                                        type="button"
+                                        className={`${buttonClass} ${searchMode === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
+                                        onClick={() => {
+                                            setSearchMode(id);
+                                            setSearchTitles([]);
+                                            setSearchSets([]);
+                                            setSearchContext('');
+                                            setSelectedSearchTitle(null);
+                                            setSelectedSearchSet(null);
+                                        }}
+                                    >
+                                        <Icon className="h-4 w-4" />
+                                        {label}
+                                    </button>
+                                ))}
                                 <a
                                     href={findProvider === 'mediux' ? 'https://mediux.pro/' : 'https://theposterdb.com/'}
                                     target="_blank"
@@ -921,10 +984,19 @@ export const PosterSetsDashboard: React.FC = () => {
                                     <ExternalLink className="h-4 w-4" />
                                     Browse site
                                 </a>
+                                <CustomSelect
+                                    value={gridSize === 'list' ? 'medium' : gridSize}
+                                    onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
+                                    options={POSTER_SETS_GRID_OPTIONS}
+                                    className="ml-auto w-full min-w-[140px] sm:w-auto"
+                                    compact
+                                />
                             </div>
                             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                                 <div className="relative min-w-0 flex-1">
-                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                    {searchMode === 'creator'
+                                        ? <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                        : <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />}
                                     <input
                                         className={`${fieldClass} pl-9`}
                                         value={searchQuery}
@@ -935,7 +1007,9 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 void runCatalogSearch();
                                             }
                                         }}
-                                        placeholder="Search titles e.g. The Matrix"
+                                        placeholder={searchMode === 'creator'
+                                            ? (findProvider === 'mediux' ? 'Creator username e.g. kaster' : 'Creator username e.g. TheDoctor30')
+                                            : 'Search titles e.g. The Matrix'}
                                     />
                                 </div>
                                 <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void runCatalogSearch()}>
@@ -1038,7 +1112,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     <p className="text-xs font-bold uppercase tracking-wide text-muted">
                                         2. Choose a poster set{searchContext ? ` · ${searchContext}` : ''}
                                     </p>
-                                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                    <div className={posterGridClass} style={posterGridStyle}>
                                         {searchSets.map((set) => (
                                             <button
                                                 key={`${set.provider || findProvider}-${set.setId}`}
@@ -1167,7 +1241,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 Apply selected ({selectedAssetIds.length})
                                             </button>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                                        <div className={posterGridClass} style={posterGridStyle}>
                                             {(preview?.assets || []).map((asset: PosterSetsPreviewAsset) => {
                                                 const selected = selectedAssetIds.includes(asset.id);
                                                 const matched = asset.matched === true;

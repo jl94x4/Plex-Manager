@@ -44,6 +44,7 @@ export const posterSetsApi = {
         titleUrl?: string;
         tmdbId?: string | number;
         mediaType?: string;
+        mode?: 'title' | 'creator';
         limit?: number;
     }) => apiFetch(`${ROOT}/search`, json(payload)) as Promise<PosterSetsSearchResult>,
     apply: (url: string, selectedIds?: string[]) => apiFetch(`${ROOT}/apply`, json({
