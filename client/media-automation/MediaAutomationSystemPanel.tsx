@@ -493,6 +493,9 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                         !primaryNvidia && isFiniteNumber(intelGpu?.temperatureC)
                             ? `${intelGpu?.temperatureC}°C`
                             : null,
+                        !primaryNvidia && !isFiniteNumber(primaryGpuUtil) && isFiniteNumber(intelGpu?.frequencyMhz)
+                            ? `${Math.round(Number(intelGpu.frequencyMhz))} MHz`
+                            : null,
                     ].filter(Boolean).join(' · ')}
                     history={history.gpu}
                 />
