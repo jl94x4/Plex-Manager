@@ -962,24 +962,44 @@ const HardwareBadge: React.FC<{ job: MediaAutomationJob }> = ({ job }) => {
     );
 };
 
-const jobProfileLabel = (job: MediaAutomationJob | null | undefined) => {
+const jobProfileLabel = (
+    job: MediaAutomationJob | null | undefined,
+    pipelines: MediaAutomationPipeline[] = [],
+) => {
     if (!job) return 'Automatic';
-    const name = String(job.pipelineName || '').trim();
-    if (name) return name;
-    if (job.pipelineId != null && String(job.pipelineId).trim()) return `Pipeline ${job.pipelineId}`;
+    const direct = String(job.pipelineName || '').trim();
+    if (direct && !/^[0-9a-f-]{8,}$/i.test(direct)) return direct;
+
+    const metaPipeline = job.metadata?.pipeline;
+    const metaName = metaPipeline && typeof metaPipeline === 'object'
+        ? String((metaPipeline as { name?: string }).name || '').trim()
+        : '';
+    if (metaName) return metaName;
+
+    const pipelineId = job.pipelineId != null ? String(job.pipelineId).trim() : '';
+    if (pipelineId) {
+        const match = pipelines.find((pipeline) => String(pipeline.id ?? '') === pipelineId);
+        const resolved = String(match?.name || '').trim();
+        if (resolved) return resolved;
+        if (/^[0-9a-f-]{8,}$/i.test(pipelineId)) return 'Unknown profile';
+        return `Pipeline ${pipelineId}`;
+    }
     return 'Automatic';
 };
 
 /** Third queue pill: which encode profile / pipeline this job is using. */
-const ProfileBadge: React.FC<{ job: MediaAutomationJob }> = ({ job }) => {
-    const label = jobProfileLabel(job);
+const ProfileBadge: React.FC<{ job: MediaAutomationJob; pipelines?: MediaAutomationPipeline[] }> = ({
+    job,
+    pipelines = [],
+}) => {
+    const label = jobProfileLabel(job, pipelines);
     return (
         <span
             title={`Encode profile: ${label}`}
             className="inline-flex max-w-[16rem] items-center gap-1 rounded-full border border-plex/35 bg-plex/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-plex"
         >
             <Layers3 className="h-3 w-3 shrink-0" />
-            <span className="truncate">{label}</span>
+            <span className="truncate normal-case tracking-normal">{label}</span>
         </span>
     );
 };
@@ -2768,7 +2788,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                     <div className="flex flex-wrap items-center gap-2">
                                                         <StatusPill value={cancelPending ? 'cancelling' : jobState} />
                                                         <HardwareBadge job={job} />
-                                                        <ProfileBadge job={job} />
+                                                        <ProfileBadge job={job} pipelines={pipelines} />
                                                         {(Array.isArray(job.metadata?.tags) ? job.metadata.tags : []).map((tag: string) => (
                                                             <span key={tag} className="rounded border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-plex">{tag}</span>
                                                         ))}
@@ -3735,7 +3755,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 }
                                             />
                                             <HardwareBadge job={selectedJob} />
-                                            <ProfileBadge job={selectedJob} />
+                                            <ProfileBadge job={selectedJob} pipelines={pipelines} />
                                             {selectedJob.priority != null && (
                                                 <label className="flex items-center gap-2 text-xs text-muted">
                                                     Priority
