@@ -25,6 +25,11 @@ export type MediaAutomationHostMetrics = {
         load5?: number;
         load15?: number;
         usedPercent?: number | null;
+        temperatureC?: number | null;
+        temperatureMaxC?: number | null;
+        temperatureLabel?: string | null;
+        temperatureAvailable?: boolean;
+        temperatureNote?: string | null;
         perCore?: Array<{
             index?: number;
             usedPercent?: number | null;

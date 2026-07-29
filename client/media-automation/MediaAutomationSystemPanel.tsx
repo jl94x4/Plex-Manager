@@ -247,6 +247,7 @@ const CpuCoresModal: React.FC<{
                             <p className="mt-1 text-sm text-muted">
                                 {cpu?.model || 'Host CPU'} · {cpu?.cores ?? cores.length} cores
                                 {cpu?.usedPercent != null ? ` · overall ${cpu.usedPercent.toFixed(1)}%` : ''}
+                                {Number.isFinite(Number(cpu?.temperatureC)) ? ` · ${cpu?.temperatureC}°C` : ''}
                             </p>
                             <p className="mt-1 text-xs text-muted">
                                 Busy (≥50%): {busy} · Hot (≥90%): {hot} · Live while this panel is open
@@ -457,7 +458,10 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                     icon={<Cpu className="h-3.5 w-3.5 text-plex" />}
                     percent={clampPercent(cpu?.usedPercent)}
                     valueText={cpu?.usedPercent != null ? `${cpuSmooth}%` : '…'}
-                    subtext={`${cpu?.cores ?? '—'} cores`}
+                    subtext={[
+                        `${cpu?.cores ?? '—'} cores`,
+                        Number.isFinite(Number(cpu?.temperatureC)) ? `${cpu?.temperatureC}°C` : null,
+                    ].filter(Boolean).join(' · ')}
                     history={history.cpu}
                     onClick={() => setCpuCoresOpen(true)}
                     hint="Click for per-core"
@@ -541,13 +545,27 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                         label="CPU usage"
                         valueLabel={cpu?.usedPercent != null ? `${cpu.usedPercent.toFixed(1)}%` : 'Sampling…'}
                         percent={cpu?.usedPercent}
-                        hint={cpu?.model || undefined}
+                        hint={[
+                            cpu?.model,
+                            Number.isFinite(Number(cpu?.temperatureC)) ? `${cpu?.temperatureC}°C` : null,
+                        ].filter(Boolean).join(' · ') || undefined}
                     />
-                    <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className={`grid gap-3 text-sm ${Number.isFinite(Number(cpu?.temperatureC)) ? 'grid-cols-3' : 'grid-cols-2'}`}>
                         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                             <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Cores</p>
                             <p className="mt-1 font-semibold tabular-nums text-text">{cpu?.cores ?? '-'}</p>
                         </div>
+                        {Number.isFinite(Number(cpu?.temperatureC)) ? (
+                            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                <p className="text-[11px] font-bold uppercase tracking-wide text-muted">CPU temp</p>
+                                <p className="mt-1 font-semibold tabular-nums text-text">{cpu?.temperatureC}°C</p>
+                                {cpu?.temperatureLabel ? (
+                                    <p className="mt-1 truncate text-[10px] text-muted" title={cpu.temperatureLabel}>
+                                        {cpu.temperatureLabel}
+                                    </p>
+                                ) : null}
+                            </div>
+                        ) : null}
                         <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                             <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Load avg</p>
                             <p className="mt-1 font-semibold tabular-nums text-text">
@@ -557,6 +575,9 @@ export const MediaAutomationSystemPanel: React.FC<Props> = ({ toast }) => {
                             </p>
                         </div>
                     </div>
+                    {!Number.isFinite(Number(cpu?.temperatureC)) && cpu?.temperatureNote ? (
+                        <p className="text-xs text-muted">{cpu.temperatureNote}</p>
+                    ) : null}
                 </section>
             </div>
 
