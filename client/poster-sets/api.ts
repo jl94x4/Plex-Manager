@@ -43,4 +43,5 @@ export const posterSetsApi = {
         apiFetch(`${ROOT}/bulk`, json(payload)) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob }>
     ),
     job: (id: string) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}`) as Promise<{ job: PosterSetsJob }>,
+    jobs: () => apiFetch(`${ROOT}/jobs`) as Promise<{ ok?: boolean; jobs: PosterSetsJob[] }>,
 };

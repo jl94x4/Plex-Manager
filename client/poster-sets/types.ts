@@ -9,6 +9,15 @@ export type PosterSetsConfig = {
     configured?: boolean;
 };
 
+export type PosterSetsJobInput = {
+    url?: string;
+    urls?: string[];
+    count?: number;
+    fromFile?: boolean;
+    file?: string;
+    lineCount?: number;
+};
+
 export type PosterSetsStatus = {
     ok?: boolean;
     workerReady?: boolean;
@@ -23,6 +32,8 @@ export type PosterSetsStatus = {
         finishedAt?: string | null;
         error?: string | null;
         uploaded?: number | null;
+        attempted?: number | null;
+        input?: PosterSetsJobInput | null;
     }>;
 };
 
@@ -51,6 +62,10 @@ export type PosterSetsJob = {
     logs?: Array<{ at?: string; message?: string } | string>;
     result?: Record<string, unknown> | null;
     error?: string | null;
+    input?: PosterSetsJobInput | null;
+    uploaded?: number | null;
+    attempted?: number | null;
+    logCount?: number;
 };
 
 export const MEDIUX_FILTER_OPTIONS = [
