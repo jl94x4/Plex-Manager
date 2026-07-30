@@ -1,4 +1,5 @@
-import { apiFetch } from '../shared/api';
+import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE, portalRequestHeaders } from '../shared/api';
+import { portalUrl } from '../shared/basePath';
 import type { PosterSetsConfig, PosterSetsJob, PosterSetsPreview, PosterSetsSearchResult, PosterSetsStatus } from './types';
 
 const ROOT = '/api/poster-sets';
@@ -8,6 +9,62 @@ const json = (body: unknown) => ({
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
 });
+
+export type PosterSetsSearchPayload = {
+    provider: 'mediux' | 'posterdb' | 'both';
+    query?: string;
+    titleUrl?: string;
+    tmdbId?: string | number;
+    mediaType?: string;
+    mode?: 'title' | 'creator';
+    titleSources?: Array<{
+        provider: string;
+        id?: string;
+        url?: string;
+        mediaType?: string | null;
+        tmdbId?: string | number;
+    }>;
+    title?: string;
+    dupePreference?: 'posterdb' | 'mediux';
+    limit?: number;
+    batchPages?: number;
+};
+
+const readNdjsonStream = async (
+    response: Response,
+    onEvent: (event: PosterSetsSearchResult & { type?: string }) => void,
+    signal?: AbortSignal,
+) => {
+    if (!response.body) {
+        throw new Error('Streaming search is not supported in this browser.');
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try {
+        while (true) {
+            if (signal?.aborted) {
+                await reader.cancel().catch(() => undefined);
+                throw new DOMException('Aborted', 'AbortError');
+            }
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split(/\r?\n/);
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                onEvent(JSON.parse(trimmed) as PosterSetsSearchResult & { type?: string });
+            }
+        }
+        if (buffer.trim()) {
+            onEvent(JSON.parse(buffer.trim()) as PosterSetsSearchResult & { type?: string });
+        }
+    } finally {
+        reader.releaseLock();
+    }
+};
 
 export const posterSetsApi = {
     status: () => apiFetch(`${ROOT}/status`) as Promise<PosterSetsStatus>,
@@ -38,24 +95,62 @@ export const posterSetsApi = {
         error?: string;
     }>,
     preview: (url: string) => apiFetch(`${ROOT}/preview`, json({ url })) as Promise<PosterSetsPreview>,
-    search: (payload: {
-        provider: 'mediux' | 'posterdb' | 'both';
-        query?: string;
-        titleUrl?: string;
-        tmdbId?: string | number;
-        mediaType?: string;
-        mode?: 'title' | 'creator';
-        titleSources?: Array<{
-            provider: string;
-            id?: string;
-            url?: string;
-            mediaType?: string | null;
-            tmdbId?: string | number;
-        }>;
-        title?: string;
-        dupePreference?: 'posterdb' | 'mediux';
-        limit?: number;
-    }) => apiFetch(`${ROOT}/search`, json(payload)) as Promise<PosterSetsSearchResult>,
+    search: (payload: PosterSetsSearchPayload) => (
+        apiFetch(`${ROOT}/search`, json(payload)) as Promise<PosterSetsSearchResult>
+    ),
+    /**
+     * Creator search streams NDJSON batches (first ~3 source pages, then more).
+     * `onBatch` is called with the full merged set list so far.
+     */
+    searchCreatorStream: async (
+        payload: PosterSetsSearchPayload,
+        {
+            onBatch,
+            signal,
+        }: {
+            onBatch: (event: PosterSetsSearchResult & { type?: string }) => void;
+            signal?: AbortSignal;
+        },
+    ) => {
+        const response = await fetch(portalUrl(`${ROOT}/search`), {
+            method: 'POST',
+            credentials: 'same-origin',
+            signal,
+            headers: portalRequestHeaders({
+                Accept: 'application/x-ndjson, application/json',
+                [PORTAL_CSRF_HEADER]: PORTAL_CSRF_VALUE,
+            }),
+            body: JSON.stringify({
+                ...payload,
+                mode: 'creator',
+                batchPages: payload.batchPages ?? 3,
+            }),
+        });
+
+        const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Search failed' }));
+            throw new Error(errorData.error || `Search failed with status ${response.status}`);
+        }
+
+        if (!contentType.includes('ndjson')) {
+            const data = await response.json() as PosterSetsSearchResult;
+            onBatch({ ...data, type: 'result', loading: false });
+            return data;
+        }
+
+        let finalEvent: PosterSetsSearchResult | null = null;
+        await readNdjsonStream(response, (event) => {
+            if (event.type === 'error' || event.ok === false) {
+                throw new Error(event.error || 'Creator search failed');
+            }
+            onBatch(event);
+            if (event.type === 'result' || event.loading === false) {
+                finalEvent = event;
+            }
+        }, signal);
+        return finalEvent;
+    },
     apply: (url: string, selectedIds?: string[]) => apiFetch(`${ROOT}/apply`, json({
         url,
         ...(selectedIds?.length ? { selectedIds } : {}),

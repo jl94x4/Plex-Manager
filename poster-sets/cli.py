@@ -63,15 +63,30 @@ def main() -> int:
             return 0
 
         if args.command == "search":
+            mode = str(request.get("mode") or "title")
+            raw_limit = request.get("limit")
+            if raw_limit is None or raw_limit == "":
+                limit = 0 if str(mode).strip().lower() in {"creator", "user", "author", "uploader"} else 24
+            else:
+                limit = int(raw_limit)
+            batch_pages = int(request.get("batchPages") or request.get("batch_pages") or 3)
+            stream_batches = bool(request.get("streamBatches") if "streamBatches" in request else request.get("stream_batches", True))
+
+            def on_batch(payload: dict) -> None:
+                if stream_batches:
+                    write_event("batch", **payload)
+
             result = search_catalog(
                 str(request.get("provider") or ""),
                 query=str(request.get("query") or request.get("q") or ""),
                 title_url=str(request.get("titleUrl") or request.get("title_url") or ""),
                 media_type=str(request.get("mediaType") or request.get("media_type") or "movie"),
                 tmdb_id=request.get("tmdbId") or request.get("tmdb_id"),
-                mode=str(request.get("mode") or "title"),
-                limit=int(request.get("limit") or 24),
+                mode=mode,
+                limit=limit,
                 progress=progress,
+                on_batch=on_batch if stream_batches else None,
+                batch_pages=batch_pages,
             )
             write_event("result", **result)
             return 0

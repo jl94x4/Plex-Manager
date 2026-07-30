@@ -233,7 +233,9 @@ export const PosterSetsDashboard: React.FC = () => {
     const [searchTitles, setSearchTitles] = useState<PosterSetsSearchTitle[]>([]);
     const [searchSets, setSearchSets] = useState<PosterSetsSearchSet[]>([]);
     const [searchSetsPage, setSearchSetsPage] = useState(1);
+    const [searchLoadingMore, setSearchLoadingMore] = useState(false);
     const [searchContext, setSearchContext] = useState('');
+    const creatorSearchAbortRef = useRef<AbortController | null>(null);
     const [selectedSearchTitle, setSelectedSearchTitle] = useState<PosterSetsSearchTitle | null>(null);
     const [selectedSearchSet, setSelectedSearchSet] = useState<PosterSetsSearchSet | null>(null);
     const [manualUrlOpen, setManualUrlOpen] = useState(false);
@@ -554,34 +556,78 @@ export const PosterSetsDashboard: React.FC = () => {
             toast(searchMode === 'creator' ? 'Enter a creator username.' : 'Enter a title to search.', 'error');
             return;
         }
+        creatorSearchAbortRef.current?.abort();
+        const abort = new AbortController();
+        creatorSearchAbortRef.current = abort;
+
         setBusy('search');
         setSearchTitles([]);
         setSearchSets([]);
         setSearchSetsPage(1);
+        setSearchLoadingMore(false);
         setSearchContext('');
         setSelectedSearchTitle(null);
         setSelectedSearchSet(null);
         setPreview(null);
         try {
             if (searchMode === 'creator') {
-                toast(
-                    searchProvider === 'both'
-                        ? 'Fetching all creator sets from MediUX and ThePosterDB — this can take a minute…'
-                        : 'Fetching all creator sets — this can take a minute…',
-                );
+                toast("Loading first pages… more will fill in as they're found.");
+                setSearchLoadingMore(true);
+                let sawFirstBatch = false;
+                const finalEvent = await posterSetsApi.searchCreatorStream({
+                    provider: searchProvider,
+                    query: q,
+                    mode: 'creator',
+                    dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
+                    limit: 0,
+                    batchPages: 3,
+                }, {
+                    signal: abort.signal,
+                    onBatch: (event) => {
+                        if (abort.signal.aborted) return;
+                        const sets = event.sets || [];
+                        setSearchSets(sets);
+                        setSearchContext(event.title || `@${q.replace(/^@/, '')}`);
+                        if (!sawFirstBatch && sets.length) {
+                            sawFirstBatch = true;
+                            setBusy(null);
+                            setSearchSetsPage(1);
+                            toast(`Showing first results — loading more in the background…`);
+                        }
+                        if (event.loading === false || event.type === 'result') {
+                            setSearchLoadingMore(false);
+                        } else {
+                            setSearchLoadingMore(true);
+                        }
+                    },
+                });
+                if (abort.signal.aborted) return;
+                const setCount = finalEvent?.sets?.length || 0;
+                const dupes = Number(finalEvent?.dupesCollapsed || 0);
+                const dupeNote = dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} collapsed` : '';
+                setSearchLoadingMore(false);
+                if (!setCount && !sawFirstBatch) {
+                    toast('No matches found.', 'error');
+                } else {
+                    toast(`Found ${setCount} set${setCount === 1 ? '' : 's'} from ${finalEvent?.title || q}${dupeNote}.`);
+                }
+                if (finalEvent?.partialErrors?.length) {
+                    toast(finalEvent.partialErrors[0], 'error');
+                }
+                return;
             }
+
             const response = await posterSetsApi.search({
                 provider: searchProvider,
                 query: q,
                 mode: searchMode,
                 dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
-                // Creator catalogs are paginated server-side; 0 means pull a large catalog.
-                limit: searchMode === 'creator' ? 0 : 24,
+                limit: 24,
             });
             setSearchTitles(response.titles || []);
             setSearchSets(response.sets || []);
             setSearchSetsPage(1);
-            setSearchContext(response.title || (searchMode === 'creator' ? `@${q.replace(/^@/, '')}` : q));
+            setSearchContext(response.title || q);
             const titleCount = response.titles?.length || 0;
             const setCount = response.sets?.length || 0;
             const dupes = Number(response.dupesCollapsed || 0);
@@ -590,8 +636,6 @@ export const PosterSetsDashboard: React.FC = () => {
                 toast('No matches found.', 'error');
             } else if (titleCount) {
                 toast(`Found ${titleCount} title${titleCount === 1 ? '' : 's'}${dupeNote}. Choose one.`);
-            } else if (searchMode === 'creator') {
-                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'} from ${response.title || q}${dupeNote}. Choose one to preview.`);
             } else {
                 toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}${dupeNote}. Choose one to preview.`);
             }
@@ -599,9 +643,15 @@ export const PosterSetsDashboard: React.FC = () => {
                 toast(response.partialErrors[0], 'error');
             }
         } catch (error) {
+            if (error instanceof DOMException && error.name === 'AbortError') return;
             toast(error instanceof Error ? error.message : 'Search failed', 'error');
+            setSearchLoadingMore(false);
         } finally {
-            setBusy(null);
+            if (creatorSearchAbortRef.current === abort) {
+                creatorSearchAbortRef.current = null;
+            }
+            setBusy((current) => (current === 'search' ? null : current));
+            if (!abort.signal.aborted) setSearchLoadingMore(false);
         }
     };
 
@@ -672,10 +722,13 @@ export const PosterSetsDashboard: React.FC = () => {
     };
 
     const clearSearch = () => {
+        creatorSearchAbortRef.current?.abort();
+        creatorSearchAbortRef.current = null;
         setSearchQuery('');
         setSearchTitles([]);
         setSearchSets([]);
         setSearchSetsPage(1);
+        setSearchLoadingMore(false);
         setSearchContext('');
         setSelectedSearchTitle(null);
         setSelectedSearchSet(null);
@@ -996,11 +1049,13 @@ export const PosterSetsDashboard: React.FC = () => {
                                         type="button"
                                         className={`${buttonClass} ${searchProvider === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
                                         onClick={() => {
+                                            creatorSearchAbortRef.current?.abort();
                                             setSearchProvider(id);
                                             if (id !== 'both') setFindProvider(id);
                                             setSearchTitles([]);
                                             setSearchSets([]);
                                             setSearchSetsPage(1);
+                                            setSearchLoadingMore(false);
                                             setSearchContext('');
                                             setSelectedSearchTitle(null);
                                             setSelectedSearchSet(null);
@@ -1018,10 +1073,12 @@ export const PosterSetsDashboard: React.FC = () => {
                                         type="button"
                                         className={`${buttonClass} ${searchMode === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
                                         onClick={() => {
+                                            creatorSearchAbortRef.current?.abort();
                                             setSearchMode(id);
                                             setSearchTitles([]);
                                             setSearchSets([]);
                                             setSearchSetsPage(1);
+                                            setSearchLoadingMore(false);
                                             setSearchContext('');
                                             setSelectedSearchTitle(null);
                                             setSelectedSearchSet(null);
@@ -1176,6 +1233,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             {searchSets.length > SEARCH_SETS_PAGE_SIZE
                                                 ? ` · ${searchSets.length} sets`
                                                 : ''}
+                                            {searchLoadingMore ? ' · loading more…' : ''}
                                         </p>
                                         {searchSetsPageCount > 1 ? (
                                             <div className="flex items-center gap-2">

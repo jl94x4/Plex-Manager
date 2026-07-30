@@ -151,6 +151,7 @@ export type PosterSetsSearchResult = {
     ok?: boolean;
     provider?: string;
     phase?: 'titles' | 'sets' | string;
+    mode?: string;
     query?: string;
     title?: string | null;
     titleUrl?: string;
@@ -159,6 +160,7 @@ export type PosterSetsSearchResult = {
     dupesCollapsed?: number;
     dupePreference?: string;
     partialErrors?: string[];
+    loading?: boolean;
     error?: string;
     code?: string;
 };

@@ -22,6 +22,8 @@ from bs4 import BeautifulSoup
 from plexapi.server import PlexServer
 
 ProgressFn = Optional[Callable[[str], None]]
+BatchFn = Optional[Callable[[dict], None]]
+
 
 IMAGE_HEADERS = {
     "User-Agent": (
@@ -1337,7 +1339,15 @@ def _mediux_max_page(soup) -> int:
     return max_page
 
 
-def list_posterdb_user_sets(username: str, progress: ProgressFn = None, limit: int = 0, max_pages: int = 0) -> dict:
+def list_posterdb_user_sets(
+    username: str,
+    progress: ProgressFn = None,
+    limit: int = 0,
+    max_pages: int = 0,
+    *,
+    on_batch: BatchFn = None,
+    batch_pages: int = 3,
+) -> dict:
     user = _normalize_creator_username(username)
     base = f"https://theposterdb.com/user/{quote(user)}"
     emit(progress, f"Loading ThePosterDB creator @{user}…")
@@ -1348,10 +1358,43 @@ def list_posterdb_user_sets(username: str, progress: ProgressFn = None, limit: i
     hard_cap = max(1, int(max_pages or 80))
     pages = min(max(1, int(page_count)), hard_cap)
     take = max(0, int(limit or 0)) or 10_000
+    step = max(1, int(batch_pages or 3))
     sets: dict = {}
-    _collect_posterdb_set_cards(soup, sets=sets, limit=take, default_user=user)
-    stagnant = 0
+    last_emitted = 0
+    pages_in_batch = 0
     last_page = 1
+
+    def flush_batch(*, done: bool = False, force: bool = False) -> None:
+        nonlocal last_emitted, pages_in_batch
+        if not on_batch:
+            return
+        if not force and not done and pages_in_batch < step:
+            return
+        chunk = list(sets.values())[last_emitted:]
+        if not chunk and not done:
+            pages_in_batch = 0
+            return
+        last_emitted = len(sets)
+        pages_in_batch = 0
+        on_batch({
+            "provider": "posterdb",
+            "phase": "sets",
+            "mode": "creator",
+            "query": user,
+            "title": f"@{user}",
+            "titleUrl": base,
+            "sets": chunk,
+            "allSets": list(sets.values())[:take],
+            "pagesFetched": last_page,
+            "pagesAvailable": page_count,
+            "done": done,
+            "loading": not done,
+        })
+
+    _collect_posterdb_set_cards(soup, sets=sets, limit=take, default_user=user)
+    pages_in_batch = 1
+    flush_batch()
+    stagnant = 0
     for page in range(2, pages + 1):
         before = len(sets)
         if before >= take:
@@ -1360,6 +1403,8 @@ def list_posterdb_user_sets(username: str, progress: ProgressFn = None, limit: i
         soup = cook_soup(f"{base}?section=uploads&page={page}")
         _collect_posterdb_set_cards(soup, sets=sets, limit=take, default_user=user)
         last_page = page
+        pages_in_batch += 1
+        flush_batch()
         if len(sets) == before:
             stagnant += 1
             if stagnant >= 3:
@@ -1367,7 +1412,8 @@ def list_posterdb_user_sets(username: str, progress: ProgressFn = None, limit: i
                 break
         else:
             stagnant = 0
-    results = list(sets.values())
+    flush_batch(done=True, force=True)
+    results = list(sets.values())[:take]
     if not results:
         raise ValueError(f"No sets found for ThePosterDB creator @{user}. Check the username.")
     return {
@@ -1385,7 +1431,15 @@ def list_posterdb_user_sets(username: str, progress: ProgressFn = None, limit: i
     }
 
 
-def list_mediux_user_sets(username: str, progress: ProgressFn = None, limit: int = 0, max_pages: int = 0) -> dict:
+def list_mediux_user_sets(
+    username: str,
+    progress: ProgressFn = None,
+    limit: int = 0,
+    max_pages: int = 0,
+    *,
+    on_batch: BatchFn = None,
+    batch_pages: int = 3,
+) -> dict:
     user = _normalize_creator_username(username)
     page_url = f"https://mediux.pro/user/{quote(user)}/sets"
     emit(progress, f"Loading MediUX creator @{user}…")
@@ -1399,18 +1453,56 @@ def list_mediux_user_sets(username: str, progress: ProgressFn = None, limit: int
     hard_cap = max(1, int(max_pages or 60))
     pages = min(_mediux_max_page(soup), hard_cap)
     take = max(0, int(limit or 0)) or 10_000
+    step = max(1, int(batch_pages or 3))
     sets: dict = {}
+    last_emitted = 0
+    pages_in_batch = 0
+    last_page = 1
+
+    def flush_batch(*, done: bool = False, force: bool = False) -> None:
+        nonlocal last_emitted, pages_in_batch
+        if not on_batch:
+            return
+        if not force and not done and pages_in_batch < step:
+            return
+        chunk = list(sets.values())[last_emitted:]
+        if not chunk and not done:
+            pages_in_batch = 0
+            return
+        last_emitted = len(sets)
+        pages_in_batch = 0
+        on_batch({
+            "provider": "mediux",
+            "phase": "sets",
+            "mode": "creator",
+            "query": user,
+            "title": page_title or f"@{user}",
+            "titleUrl": page_url,
+            "sets": chunk,
+            "allSets": list(sets.values())[:take],
+            "pagesFetched": last_page,
+            "pagesAvailable": pages,
+            "done": done,
+            "loading": not done,
+        })
+
     _collect_mediux_set_cards(soup, sets=sets, default_user=user)
+    pages_in_batch = 1
+    flush_batch()
     for page in range(2, pages + 1):
         if len(sets) >= take:
             break
         emit(progress, f"MediUX creator page {page}/{pages}…")
         soup = cook_soup(f"{page_url}?page={page}")
         added = _collect_mediux_set_cards(soup, sets=sets, default_user=user)
+        last_page = page
+        pages_in_batch += 1
         # Pagination links may under-report; keep going while pages add sets.
         pages = max(pages, min(_mediux_max_page(soup), hard_cap))
+        flush_batch()
         if added <= 0:
             break
+    flush_batch(done=True, force=True)
     results = list(sets.values())[:take]
     if not results:
         raise ValueError(f"No sets found for MediUX creator @{user}. Check the username.")
@@ -1424,7 +1516,7 @@ def list_mediux_user_sets(username: str, progress: ProgressFn = None, limit: int
         "titleUrl": page_url,
         "titles": [],
         "sets": results,
-        "pagesFetched": pages,
+        "pagesFetched": last_page,
     }
 
 
@@ -1438,6 +1530,8 @@ def search_catalog(
     mode: str = "title",
     limit: int = 24,
     progress: ProgressFn = None,
+    on_batch: BatchFn = None,
+    batch_pages: int = 3,
 ) -> dict:
     """Scrape MediUX / ThePosterDB discovery pages (user-initiated only)."""
     source = str(provider or "").strip().lower()
@@ -1455,8 +1549,20 @@ def search_catalog(
         # Creator mode: pull paginated set catalogs (limit 0 = practically unbounded).
         creator_limit = max(0, int(limit or 0))
         if source == "posterdb":
-            return list_posterdb_user_sets(query, progress=progress, limit=creator_limit)
-        return list_mediux_user_sets(query, progress=progress, limit=creator_limit)
+            return list_posterdb_user_sets(
+                query,
+                progress=progress,
+                limit=creator_limit,
+                on_batch=on_batch,
+                batch_pages=batch_pages,
+            )
+        return list_mediux_user_sets(
+            query,
+            progress=progress,
+            limit=creator_limit,
+            on_batch=on_batch,
+            batch_pages=batch_pages,
+        )
 
     if source == "posterdb":
         if title_url:
