@@ -1360,7 +1360,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 </div>
             </header>
 
-            <div className="flex min-w-0 flex-wrap gap-1.5 sm:gap-2">
+            <div className="flex min-w-0 flex-wrap justify-center gap-1.5 sm:justify-start sm:gap-2">
                 {([
                     ['apply', 'Apply', Sparkles],
                     ['queue', 'Queue', ListOrdered],

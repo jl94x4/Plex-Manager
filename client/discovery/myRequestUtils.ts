@@ -65,3 +65,56 @@ export const formatRequestRelativeTime = (value?: string | null) => {
     if (days < 7) return `${days}d ago`;
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
+
+/** Group HD + 4K rows for the same title into one My Requests card. */
+export type MergedMemberRequest = {
+    key: string;
+    primary: PortalRequestItem;
+    variants: PortalRequestItem[];
+};
+
+const requestGroupKey = (item: PortalRequestItem) => {
+    if (item.tmdbId != null && Number.isFinite(Number(item.tmdbId))) {
+        return `${item.type || 'movie'}:${Number(item.tmdbId)}`;
+    }
+    return `id:${item.id}`;
+};
+
+const requestRecency = (item: PortalRequestItem) => {
+    const raw = item.updatedAt || item.createdAt;
+    if (!raw) return 0;
+    const ms = new Date(raw).getTime();
+    return Number.isFinite(ms) ? ms : 0;
+};
+
+const qualityRank = (item: PortalRequestItem) => (item.is4k ? 1 : 0);
+
+/**
+ * Merge portal request rows that share type + tmdbId (typically HD + 4K).
+ * Preserves first-seen list order; variants sorted HD then 4K.
+ */
+export const mergeHd4kMemberRequests = (items: PortalRequestItem[]): MergedMemberRequest[] => {
+    const order: string[] = [];
+    const groups = new Map<string, PortalRequestItem[]>();
+
+    for (const item of items) {
+        const key = requestGroupKey(item);
+        if (!groups.has(key)) {
+            groups.set(key, []);
+            order.push(key);
+        }
+        groups.get(key)!.push(item);
+    }
+
+    return order.map((key) => {
+        const variants = [...(groups.get(key) || [])].sort((a, b) => {
+            const q = qualityRank(a) - qualityRank(b);
+            if (q !== 0) return q;
+            return requestRecency(b) - requestRecency(a);
+        });
+        const primary = [...variants].sort((a, b) => requestRecency(b) - requestRecency(a))[0] || variants[0];
+        return { key, primary, variants };
+    });
+};
+
+export const requestQualityLabel = (item: PortalRequestItem) => (item.is4k ? '4K' : 'HD');
