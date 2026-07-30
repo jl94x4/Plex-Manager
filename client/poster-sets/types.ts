@@ -58,6 +58,8 @@ export type PosterSetsSetMeta = {
     tvdbId?: string | null;
     thumbUrl?: string;
     assetCount?: number | null;
+    /** Dominant art type when known (title_cards, backgrounds, posters). */
+    setKind?: string | null;
 };
 
 export type PosterSetsJobInput = {

@@ -41,6 +41,7 @@ import {
     type UpgraderGridSize,
 } from '../shared/portalLayout';
 import { posterSetsApi } from './api';
+import { classifyPreviewAsset } from './previewGroups';
 import {
     DEFAULT_POSTER_SETS_CONFIG,
     MEDIUX_FILTER_OPTIONS,
@@ -340,6 +341,7 @@ type BulkSetSelection = {
     thumbUrl?: string;
     provider?: string | null;
     setId?: string | null;
+    setKind?: string | null;
 };
 
 const providerLabel = (provider?: string | null) => {
@@ -563,8 +565,11 @@ function BrowseSetCard({
     );
 }
 
-const RECENT_SETS_KEY = 'poster-sets-recent-v1';
-const MAX_RECENT_SETS = 10;
+const RECENT_SETS_KEY = 'poster-sets-recent-v2';
+const RECENT_SETS_KEY_LEGACY = 'poster-sets-recent-v1';
+const MAX_RECENT_SETS = 36;
+
+type RecentSetCategory = 'posters' | 'backgrounds' | 'title_cards';
 
 type RecentSetChip = {
     url: string;
@@ -574,8 +579,72 @@ type RecentSetChip = {
     setId: string | null;
     thumbUrl: string;
     assetCount: number | null;
+    setKind?: string | null;
     at: string;
 };
+
+const isBackgroundSet = (set?: { title?: string | null; setKind?: string | null } | null) => {
+    const kind = String(set?.setKind || '').trim().toLowerCase();
+    if (kind === 'backgrounds' || kind === 'background' || kind === 'backdrop' || kind === 'backdrops') return true;
+    return /\b(backgrounds?|backdrops?)\b/i.test(String(set?.title || ''));
+};
+
+const normalizeRecentSetKind = (value?: string | null): RecentSetCategory | null => {
+    const kind = String(value || '').trim().toLowerCase().replace(/-/g, '_');
+    if (!kind) return null;
+    if (kind === 'title_cards' || kind === 'title_card' || kind === 'titlecards') return 'title_cards';
+    if (kind === 'backgrounds' || kind === 'background' || kind === 'backdrop' || kind === 'backdrops') {
+        return 'backgrounds';
+    }
+    if (kind === 'posters' || kind === 'poster' || kind === 'covers' || kind === 'boxset') return 'posters';
+    return null;
+};
+
+const inferRecentSetKindFromAssets = (assets?: PosterSetsPreviewAsset[] | null): RecentSetCategory | null => {
+    if (!assets?.length) return null;
+    const kinds = new Set(assets.map((asset) => classifyPreviewAsset(asset)));
+    if (kinds.size === 1 && kinds.has('title_card')) return 'title_cards';
+    if (kinds.size === 1 && kinds.has('background')) return 'backgrounds';
+    if ([...kinds].every((kind) => kind === 'title_card' || kind === 'background') && kinds.has('title_card') && !kinds.has('background')) {
+        return 'title_cards';
+    }
+    if ([...kinds].every((kind) => kind === 'background')) return 'backgrounds';
+    if ([...kinds].every((kind) => kind === 'show_cover' || kind === 'season_cover' || kind === 'poster')) {
+        return 'posters';
+    }
+    return null;
+};
+
+const inferRecentSetKindFromFilters = (filters?: string[] | null): RecentSetCategory | null => {
+    const list = (Array.isArray(filters) ? filters : [])
+        .map((item) => String(item || '').trim().toLowerCase())
+        .filter(Boolean);
+    if (!list.length) return null;
+    if (list.every((item) => item === 'title_card')) return 'title_cards';
+    if (list.every((item) => item === 'background')) return 'backgrounds';
+    if (list.every((item) => item === 'show_cover' || item === 'season_cover')) return 'posters';
+    return null;
+};
+
+const classifyRecentSet = (item: {
+    title?: string | null;
+    setKind?: string | null;
+    mediuxFilters?: string[] | null;
+}): RecentSetCategory => {
+    const fromKind = normalizeRecentSetKind(item.setKind);
+    if (fromKind) return fromKind;
+    const fromFilters = inferRecentSetKindFromFilters(item.mediuxFilters);
+    if (fromFilters) return fromFilters;
+    if (isTitleCardSet(item)) return 'title_cards';
+    if (isBackgroundSet(item)) return 'backgrounds';
+    return 'posters';
+};
+
+const RECENT_CATEGORY_ORDER: Array<{ id: RecentSetCategory; title: string; landscape: boolean }> = [
+    { id: 'posters', title: 'Posters', landscape: false },
+    { id: 'backgrounds', title: 'Backgrounds', landscape: true },
+    { id: 'title_cards', title: 'Title cards', landscape: true },
+];
 
 const formatSetLabel = (meta?: { title?: string | null; user?: string | null } | null) => {
     const title = String(meta?.title || '').trim();
@@ -609,11 +678,30 @@ const buildSetUrl = (provider: SetProvider, rawId: string) => {
     return `https://theposterdb.com/user/${encodeURIComponent(id)}`;
 };
 
+const normalizeRecentChip = (raw: any): RecentSetChip | null => {
+    if (!raw?.url) return null;
+    const url = String(raw.url || '').trim();
+    if (!url) return null;
+    const ref = parseSetRef(url);
+    return {
+        url,
+        title: String(raw.title || (ref.setId ? `Set ${ref.setId}` : 'Poster set')).trim() || 'Poster set',
+        user: raw.user != null ? String(raw.user).trim().replace(/^@/, '') || null : null,
+        provider: raw.provider || ref.provider,
+        setId: raw.setId != null ? String(raw.setId) : ref.setId,
+        thumbUrl: String(raw.thumbUrl || ''),
+        assetCount: Number.isFinite(Number(raw.assetCount)) ? Number(raw.assetCount) : null,
+        setKind: normalizeRecentSetKind(raw.setKind) || (isTitleCardSet(raw) ? 'title_cards' : isBackgroundSet(raw) ? 'backgrounds' : null),
+        at: String(raw.at || new Date(0).toISOString()),
+    };
+};
+
 const readRecentSets = (): RecentSetChip[] => {
     try {
-        const raw = localStorage.getItem(RECENT_SETS_KEY);
+        const raw = localStorage.getItem(RECENT_SETS_KEY) || localStorage.getItem(RECENT_SETS_KEY_LEGACY);
         const parsed = raw ? JSON.parse(raw) : [];
-        return Array.isArray(parsed) ? parsed.filter((item) => item && item.url) : [];
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map(normalizeRecentChip).filter(Boolean) as RecentSetChip[];
     } catch {
         return [];
     }
@@ -627,10 +715,25 @@ const writeRecentSets = (entries: RecentSetChip[]) => {
     }
 };
 
-const upsertRecentSet = (meta: PosterSetsSetMeta | null | undefined, fallbackUrl?: string) => {
+const upsertRecentSet = (
+    meta: PosterSetsSetMeta | null | undefined,
+    fallbackUrl?: string,
+    options?: {
+        setKind?: string | null;
+        assets?: PosterSetsPreviewAsset[] | null;
+        mediuxFilters?: string[] | null;
+    },
+) => {
     const url = String(meta?.url || fallbackUrl || '').trim();
     if (!url) return;
     const ref = parseSetRef(url);
+    const setKind = normalizeRecentSetKind(options?.setKind)
+        || normalizeRecentSetKind(meta?.setKind)
+        || inferRecentSetKindFromAssets(options?.assets)
+        || inferRecentSetKindFromFilters(options?.mediuxFilters)
+        || (isTitleCardSet({ title: meta?.title, setKind: meta?.setKind }) ? 'title_cards' : null)
+        || (isBackgroundSet({ title: meta?.title, setKind: meta?.setKind }) ? 'backgrounds' : null)
+        || 'posters';
     const next: RecentSetChip = {
         url,
         title: String(meta?.title || (ref.setId ? `Set ${ref.setId}` : 'Poster set')).trim() || 'Poster set',
@@ -639,6 +742,7 @@ const upsertRecentSet = (meta: PosterSetsSetMeta | null | undefined, fallbackUrl
         setId: meta?.setId != null ? String(meta.setId) : ref.setId,
         thumbUrl: String(meta?.thumbUrl || ''),
         assetCount: Number.isFinite(Number(meta?.assetCount)) ? Number(meta?.assetCount) : null,
+        setKind,
         at: new Date().toISOString(),
     };
     const existing = readRecentSets().filter((item) => item.url !== url);
@@ -910,6 +1014,11 @@ export const PosterSetsDashboard: React.FC = () => {
     const currentSetMeta = useCallback((): PosterSetsSetMeta | null => {
         if (selectedSearchSet || preview?.setMeta) {
             const previewMeta = preview?.setMeta as PosterSetsSetMeta | undefined;
+            const setKind = normalizeRecentSetKind(selectedSearchSet?.setKind)
+                || normalizeRecentSetKind(previewMeta?.setKind)
+                || (titleCardsOnly || isTitleCardSet(selectedSearchSet) ? 'title_cards' : null)
+                || inferRecentSetKindFromAssets(preview?.assets)
+                || null;
             return {
                 provider: selectedSearchSet?.provider || previewMeta?.provider || null,
                 setId: selectedSearchSet?.setId || previewMeta?.setId || null,
@@ -922,10 +1031,31 @@ export const PosterSetsDashboard: React.FC = () => {
                     ?? preview?.total
                     ?? previewMeta?.assetCount
                     ?? null,
+                setKind,
             };
         }
-        return url ? { url, title: null, user: null, thumbUrl: '' } : null;
-    }, [preview, selectedSearchSet, url]);
+        return url ? {
+            url,
+            title: null,
+            user: null,
+            thumbUrl: '',
+            setKind: titleCardsOnly ? 'title_cards' : null,
+        } : null;
+    }, [preview, selectedSearchSet, titleCardsOnly, url]);
+
+    const rememberRecentFromContext = useCallback((
+        meta: PosterSetsSetMeta | null | undefined,
+        fallbackUrl?: string,
+        extra?: { mediuxFilters?: string[] | null },
+    ) => {
+        upsertRecentSet(meta, fallbackUrl, {
+            setKind: meta?.setKind || (titleCardsOnly ? 'title_cards' : null),
+            assets: preview?.assets,
+            mediuxFilters: extra?.mediuxFilters
+                || (titleCardsOnly ? TITLE_CARD_ONLY_FILTERS : undefined),
+        });
+        setRecentTick((value) => value + 1);
+    }, [preview?.assets, titleCardsOnly]);
 
     const load = useCallback(async () => {
         try {
@@ -992,8 +1122,9 @@ export const PosterSetsDashboard: React.FC = () => {
                 if (state && state !== 'running' && state !== 'queued') {
                     const meta = jobSetMeta(response.job);
                     if (meta?.thumbUrl || meta?.title) {
-                        upsertRecentSet(meta, response.job.input?.url);
-                        setRecentTick((value) => value + 1);
+                        rememberRecentFromContext(meta, response.job.input?.url, {
+                            mediuxFilters: response.job.input?.mediuxFilters,
+                        });
                     }
                     await load();
                     await loadHistory();
@@ -1014,7 +1145,7 @@ export const PosterSetsDashboard: React.FC = () => {
             }
         }, 1500);
         return () => window.clearInterval(timer);
-    }, [activeJob?.id, activeJob?.state, configDraft.autoWatchOnApply, load, loadHistory, loadQueue, loadWatches, toast]);
+    }, [activeJob?.id, activeJob?.state, configDraft.autoWatchOnApply, load, loadHistory, loadQueue, loadWatches, rememberRecentFromContext, toast]);
 
     useEffect(() => {
         if (tab !== 'history') return undefined;
@@ -1150,7 +1281,11 @@ export const PosterSetsDashboard: React.FC = () => {
             const matchedIds = assets.filter((asset) => asset.matched === true).map((asset) => asset.id);
             const defaults = matchedIds.length ? matchedIds : assets.map((asset) => asset.id);
             setSelectedAssetIds(defaults);
-            upsertRecentSet(response.setMeta, target);
+            upsertRecentSet(response.setMeta, target, {
+                setKind: restrictTitleCards ? 'title_cards' : undefined,
+                assets,
+                mediuxFilters: restrictTitleCards ? TITLE_CARD_ONLY_FILTERS : undefined,
+            });
             setRecentTick((value) => value + 1);
             const matched = response.matched ?? matchedIds.length;
             const total = response.total || assets.length;
@@ -1343,8 +1478,11 @@ export const PosterSetsDashboard: React.FC = () => {
                     : (titleCardsOnly ? TITLE_CARD_ONLY_FILTERS : undefined),
             );
             setActiveJob(response.job);
-            upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
-            setRecentTick((value) => value + 1);
+            rememberRecentFromContext(jobSetMeta(response.job) || currentSetMeta(), target, {
+                mediuxFilters: selected
+                    ? filtersForSelectedIds(selected)
+                    : (titleCardsOnly ? TITLE_CARD_ONLY_FILTERS : undefined),
+            });
             await loadQueue();
             dismissPreviewToSearch();
             toast(queuePaused
@@ -1389,8 +1527,9 @@ export const PosterSetsDashboard: React.FC = () => {
                 filtersForSelectedIds(ids),
             );
             setActiveJob(response.job);
-            upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
-            setRecentTick((value) => value + 1);
+            rememberRecentFromContext(jobSetMeta(response.job) || currentSetMeta(), target, {
+                mediuxFilters: filtersForSelectedIds(ids),
+            });
             await loadQueue();
             dismissPreviewToSearch();
             toast(queuePaused
@@ -1432,8 +1571,9 @@ export const PosterSetsDashboard: React.FC = () => {
                 filtersForSelectedIds(unmatchedIds),
             );
             setActiveJob(response.job);
-            upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
-            setRecentTick((value) => value + 1);
+            rememberRecentFromContext(jobSetMeta(response.job) || currentSetMeta(), target, {
+                mediuxFilters: filtersForSelectedIds(unmatchedIds),
+            });
             await loadQueue();
             dismissPreviewToSearch();
             toast(queuePaused
@@ -1506,8 +1646,9 @@ export const PosterSetsDashboard: React.FC = () => {
                 filtersForSelectedIds(newIds),
             );
             setActiveJob(response.job);
-            upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
-            setRecentTick((value) => value + 1);
+            rememberRecentFromContext(jobSetMeta(response.job) || currentSetMeta(), target, {
+                mediuxFilters: filtersForSelectedIds(newIds),
+            });
             await loadQueue();
             dismissPreviewToSearch();
             toast(queuePaused
@@ -1565,13 +1706,13 @@ export const PosterSetsDashboard: React.FC = () => {
                     thumbUrl: entry.thumbUrl || '',
                     provider: entry.provider ?? null,
                     setId: entry.setId ?? null,
+                    setKind: entry.setKind || null,
                 };
                 const response = await posterSetsApi.apply(entry.url, undefined, setMeta, 'bulk');
                 setActiveJob(response.job);
-                upsertRecentSet(jobSetMeta(response.job) || setMeta, entry.url);
+                rememberRecentFromContext(jobSetMeta(response.job) || setMeta, entry.url);
                 queued += 1;
             }
-            setRecentTick((value) => value + 1);
             clearBulkSelection();
             await loadQueue();
             await loadHistory();
@@ -2051,6 +2192,10 @@ export const PosterSetsDashboard: React.FC = () => {
             if (!urlValue) continue;
             const meta = jobSetMeta(job);
             const ref = parseSetRef(urlValue);
+            const setKind = normalizeRecentSetKind(meta?.setKind)
+                || inferRecentSetKindFromFilters(job.input?.mediuxFilters)
+                || (isTitleCardSet({ title: meta?.title, setKind: meta?.setKind }) ? 'title_cards' : null)
+                || (isBackgroundSet({ title: meta?.title, setKind: meta?.setKind }) ? 'backgrounds' : null);
             push({
                 url: urlValue,
                 title: String(meta?.title || (ref.setId ? `Set ${ref.setId}` : 'Poster set')),
@@ -2059,6 +2204,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 setId: meta?.setId != null ? String(meta.setId) : ref.setId,
                 thumbUrl: String(meta?.thumbUrl || ''),
                 assetCount: Number.isFinite(Number(meta?.assetCount)) ? Number(meta?.assetCount) : null,
+                setKind,
                 at: job.finishedAt || job.createdAt || new Date(0).toISOString(),
             });
         }
@@ -2066,6 +2212,18 @@ export const PosterSetsDashboard: React.FC = () => {
             .sort((a, b) => String(b.at).localeCompare(String(a.at)))
             .slice(0, MAX_RECENT_SETS);
     }, [historyJobs, recentTick]);
+
+    const recentSetsByCategory = useMemo(() => {
+        const groups: Record<RecentSetCategory, RecentSetChip[]> = {
+            posters: [],
+            backgrounds: [],
+            title_cards: [],
+        };
+        for (const item of recentSets) {
+            groups[classifyRecentSet(item)].push(item);
+        }
+        return groups;
+    }, [recentSets]);
 
     const selectedBulkCount = Object.keys(selectedBulkSets).length;
     const previewHeaderLabel = formatSetLabel(preview?.setMeta)
@@ -2941,12 +3099,12 @@ export const PosterSetsDashboard: React.FC = () => {
             ) : null}
 
             {tab === 'recent' ? (
-                <section className={`${cardClass} space-y-3 p-5`}>
+                <section className={`${cardClass} space-y-5 p-5`}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h2 className={sectionTitleClass}>Recent sets</h2>
                             <p className={sectionBodyClass}>
-                                Re-preview or re-apply sets you&apos;ve already used.
+                                Re-preview or re-apply sets you&apos;ve already used, grouped by art type.
                             </p>
                         </div>
                         <CustomSelect
@@ -2958,113 +3116,142 @@ export const PosterSetsDashboard: React.FC = () => {
                         />
                     </div>
                     {recentSets.length ? (
-                        <div className={posterGridClass} style={posterGridStyle}>
-                            {recentSets.map((item) => {
-                                const label = formatSetLabel(item) || item.title;
-                                const bulkSelected = Boolean(selectedBulkSets[item.url]);
+                        <div className="space-y-6">
+                            {RECENT_CATEGORY_ORDER.map((category) => {
+                                const items = recentSetsByCategory[category.id];
+                                if (!items.length) return null;
+                                const landscape = category.landscape;
                                 return (
-                                <div
-                                    key={item.url}
-                                    className={`relative overflow-hidden ${posterMediaRadiusClass} border bg-black/20 ${
-                                        bulkSelected ? 'border-plex/50 ring-1 ring-plex/30' : 'border-white/10'
-                                    }`}
-                                >
-                                    <label
-                                        className="absolute left-2 top-2 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-black/60"
-                                        onClick={(event) => event.stopPropagation()}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            className="h-3.5 w-3.5 accent-[var(--plex,#e5a00d)]"
-                                            checked={bulkSelected}
-                                            onChange={() => toggleBulkSet({
-                                                url: item.url,
-                                                title: item.title,
-                                                user: item.user,
-                                                thumbUrl: item.thumbUrl,
-                                                provider: item.provider,
-                                                setId: item.setId,
+                                    <div key={category.id} className="space-y-3">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 className="text-sm font-bold text-text sm:text-base">{category.title}</h3>
+                                            <span className="text-[11px] text-muted">{items.length}</span>
+                                        </div>
+                                        <div
+                                            className={posterGridClass}
+                                            style={landscape ? titleCardGridStyle : posterGridStyle}
+                                        >
+                                            {items.map((item) => {
+                                                const label = formatSetLabel(item) || item.title;
+                                                const bulkSelected = Boolean(selectedBulkSets[item.url]);
+                                                const openRecent = () => {
+                                                    void openSetForApply({
+                                                        setId: item.setId || '',
+                                                        title: item.title,
+                                                        url: item.url,
+                                                        thumbUrl: item.thumbUrl,
+                                                        user: item.user,
+                                                        provider: item.provider || undefined,
+                                                        posterCount: item.assetCount,
+                                                        setKind: item.setKind || category.id,
+                                                    });
+                                                };
+                                                return (
+                                                    <div
+                                                        key={item.url}
+                                                        className={`relative flex min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border bg-black/20 ${
+                                                            bulkSelected ? 'border-plex/50 ring-1 ring-plex/30' : 'border-white/10'
+                                                        }`}
+                                                    >
+                                                        <label
+                                                            className="absolute left-2 top-2 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-black/60"
+                                                            onClick={(event) => event.stopPropagation()}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                className="h-3.5 w-3.5 accent-[var(--plex,#e5a00d)]"
+                                                                checked={bulkSelected}
+                                                                onChange={() => toggleBulkSet({
+                                                                    url: item.url,
+                                                                    title: item.title,
+                                                                    user: item.user,
+                                                                    thumbUrl: item.thumbUrl,
+                                                                    provider: item.provider,
+                                                                    setId: item.setId,
+                                                                    setKind: item.setKind || category.id,
+                                                                })}
+                                                                onClick={(event) => event.stopPropagation()}
+                                                                aria-label={`Select ${label}`}
+                                                            />
+                                                        </label>
+                                                        <button
+                                                            type="button"
+                                                            className="block w-full min-w-0 flex-1 text-left"
+                                                            disabled={busy !== null}
+                                                            onClick={openRecent}
+                                                            title={`Preview ${label}`}
+                                                        >
+                                                            <div className={`relative overflow-hidden bg-black ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
+                                                                {item.thumbUrl ? (
+                                                                    <img
+                                                                        src={posterSetsApi.imageUrl(item.thumbUrl)}
+                                                                        alt={label}
+                                                                        loading="lazy"
+                                                                        className="absolute inset-0 h-full w-full object-contain object-center"
+                                                                        onLoad={(event) => {
+                                                                            const img = event.currentTarget;
+                                                                            if (!img.naturalWidth || !img.naturalHeight) return;
+                                                                            const ratio = img.naturalWidth / img.naturalHeight;
+                                                                            if (ratio < 1.2 || category.id !== 'posters') return;
+                                                                            // Landscape thumb parked under Posters — promote to title cards.
+                                                                            upsertRecentSet({
+                                                                                ...item,
+                                                                                setKind: 'title_cards',
+                                                                            }, item.url, { setKind: 'title_cards' });
+                                                                            setRecentTick((value) => value + 1);
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    <div className="absolute inset-0 flex items-center justify-center text-muted">
+                                                                        <ImageIcon className="h-8 w-8 opacity-40" />
+                                                                    </div>
+                                                                )}
+                                                                <span className="absolute right-2 top-2 rounded-full border border-white/15 bg-black/55 px-1.5 py-px text-[8px] font-bold uppercase tracking-wide text-text sm:text-[9px]">
+                                                                    {providerLabel(item.provider)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="min-w-0 space-y-0.5 px-1.5 py-1.5 sm:px-2">
+                                                                <p className="line-clamp-2 text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={label}>{label}</p>
+                                                                <p className="truncate text-[9px] text-muted sm:text-[10px]">
+                                                                    {item.setId ? `#${item.setId}` : 'Set'}
+                                                                    {item.assetCount ? ` · ${item.assetCount} assets` : ''}
+                                                                </p>
+                                                            </div>
+                                                        </button>
+                                                        <div className="flex items-center justify-center gap-1.5 border-t border-white/10 p-1.5">
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-black/20 text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40"
+                                                                disabled={busy !== null}
+                                                                aria-label="Preview"
+                                                                title="Preview"
+                                                                onClick={openRecent}
+                                                            >
+                                                                {busy === 'preview' && url === item.url
+                                                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                    : <ImageIcon className="h-3.5 w-3.5" />}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-plex text-background transition hover:bg-plex-hover disabled:pointer-events-none disabled:opacity-40"
+                                                                disabled={busy !== null}
+                                                                aria-label="Apply"
+                                                                title="Apply"
+                                                                onClick={() => {
+                                                                    goToTab('apply');
+                                                                    void runApply(false, item.url);
+                                                                }}
+                                                            >
+                                                                {busy === 'apply' && url === item.url
+                                                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                    : <RotateCcw className="h-3.5 w-3.5" />}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
                                             })}
-                                            onClick={(event) => event.stopPropagation()}
-                                            aria-label={`Select ${label}`}
-                                        />
-                                    </label>
-                                    <button
-                                        type="button"
-                                        className="block w-full text-left"
-                                        disabled={busy !== null}
-                                        onClick={() => {
-                                            void openSetForApply({
-                                                setId: item.setId || '',
-                                                title: item.title,
-                                                url: item.url,
-                                                thumbUrl: item.thumbUrl,
-                                                user: item.user,
-                                                provider: item.provider || undefined,
-                                                posterCount: item.assetCount,
-                                            });
-                                        }}
-                                        title={`Preview ${label}`}
-                                    >
-                                        <div className="relative aspect-[2/3] overflow-hidden bg-black">
-                                            {item.thumbUrl ? (
-                                                <img
-                                                    src={posterSetsApi.imageUrl(item.thumbUrl)}
-                                                    alt={label}
-                                                    loading="lazy"
-                                                    className="absolute inset-0 h-full w-full object-contain object-center"
-                                                />
-                                            ) : (
-                                                <div className="absolute inset-0 flex items-center justify-center text-muted">
-                                                    <ImageIcon className="h-8 w-8 opacity-40" />
-                                                </div>
-                                            )}
-                                            <span className="absolute right-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text">
-                                                {providerLabel(item.provider)}
-                                            </span>
                                         </div>
-                                        <div className="space-y-1 p-3">
-                                            <p className="truncate text-sm font-semibold text-text" title={label}>{label}</p>
-                                            <p className="truncate text-[11px] text-muted">
-                                                {item.setId ? `#${item.setId}` : 'Set'}
-                                                {item.assetCount ? ` · ${item.assetCount} assets` : ''}
-                                            </p>
-                                        </div>
-                                    </button>
-                                    <div className="flex gap-2 border-t border-white/10 p-2">
-                                        <button
-                                            type="button"
-                                            className={`${buttonClass} flex-1 !px-2 !py-1.5 text-xs`}
-                                            disabled={busy !== null}
-                                            onClick={() => {
-                                                void openSetForApply({
-                                                    setId: item.setId || '',
-                                                    title: item.title,
-                                                    url: item.url,
-                                                    thumbUrl: item.thumbUrl,
-                                                    user: item.user,
-                                                    provider: item.provider || undefined,
-                                                    posterCount: item.assetCount,
-                                                });
-                                            }}
-                                        >
-                                            {busy === 'preview' && url === item.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
-                                            Preview
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`${primaryButtonClass} flex-1 !px-2 !py-1.5 text-xs`}
-                                            disabled={busy !== null}
-                                            onClick={() => {
-                                                goToTab('apply');
-                                                void runApply(false, item.url);
-                                            }}
-                                        >
-                                            {busy === 'apply' && url === item.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                                            Apply
-                                        </button>
                                     </div>
-                                </div>
                                 );
                             })}
                         </div>
