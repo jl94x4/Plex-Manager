@@ -310,8 +310,22 @@ def upload_tv_poster(poster, tv, progress: ProgressFn = None) -> dict:
                 upload_target = tv_show
                 msg = f"Uploaded cover art for {poster['title']} in {tv_show.librarySectionTitle}."
             elif poster["season"] == 0:
-                upload_target = tv_show.season("Specials")
-                msg = f"Uploaded art for {poster['title']} - Specials in {tv_show.librarySectionTitle}."
+                if poster["episode"] == "Cover" or poster["episode"] is None:
+                    upload_target = tv_show.season("Specials")
+                    msg = f"Uploaded art for {poster['title']} - Specials in {tv_show.librarySectionTitle}."
+                else:
+                    try:
+                        upload_target = tv_show.season("Specials").episode(poster["episode"])
+                        msg = (
+                            f"Uploaded art for {poster['title']} - Specials "
+                            f"Episode {poster['episode']} in {tv_show.librarySectionTitle}."
+                        )
+                    except Exception:
+                        result["message"] = (
+                            f"{poster['title']} - Specials Episode {poster['episode']} not found, skipping."
+                        )
+                        emit(progress, result["message"])
+                        continue
             elif poster["season"] == "Backdrop":
                 upload_target = tv_show
                 msg = f"Uploaded background art for {poster['title']} in {tv_show.librarySectionTitle}."
@@ -717,8 +731,11 @@ def match_show_target(tv_show, poster: dict) -> Tuple[bool, str]:
         if season == "Cover" or season == "Backdrop":
             return True, tv_show.librarySectionTitle
         if season == 0:
-            tv_show.season("Specials")
-            return True, f"{tv_show.librarySectionTitle} · Specials"
+            season_obj = tv_show.season("Specials")
+            if episode == "Cover" or episode is None:
+                return True, f"{tv_show.librarySectionTitle} · Specials"
+            season_obj.episode(episode)
+            return True, f"{tv_show.librarySectionTitle} · Specials E{episode}"
         if isinstance(season, int) and season >= 1:
             season_obj = tv_show.season(season)
             if episode == "Cover" or episode is None:
@@ -832,6 +849,41 @@ def filter_posters_by_ids(
     shows = [p for p in showposters if asset_id("show", p) in wanted]
     collections = [p for p in collectionposters if asset_id("collection", p) in wanted]
     return movies, shows, collections
+
+
+def list_assets(url: str, config: dict | None = None, progress: ProgressFn = None) -> dict:
+    """Scrape a set URL and return asset fingerprints without connecting to Plex."""
+    cfg = config if isinstance(config, dict) else {}
+    filters = normalize_library_list(cfg.get("mediux_filters")) or [
+        "title_card",
+        "background",
+        "season_cover",
+        "show_cover",
+    ]
+    emit(progress, f"Listing assets from {url}")
+    movieposters, showposters, collectionposters = scrape(url, mediux_filters=filters, progress=progress)
+    assets = build_preview_assets(movieposters, showposters, collectionposters, tv=None, movies=None)
+    set_meta = build_set_meta(url, movieposters, showposters, collectionposters)
+    return {
+        "ok": True,
+        "url": url,
+        "setMeta": set_meta,
+        "assets": [
+            {
+                "id": asset.get("id"),
+                "kind": asset.get("kind"),
+                "title": asset.get("title"),
+                "year": asset.get("year"),
+                "season": asset.get("season"),
+                "episode": asset.get("episode"),
+                "label": asset.get("label"),
+                "source": asset.get("source"),
+            }
+            for asset in assets
+            if asset.get("id")
+        ],
+        "total": len(assets),
+    }
 
 
 def preview_url(url: str, config: dict, progress: ProgressFn = None) -> dict:

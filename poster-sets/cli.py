@@ -8,7 +8,7 @@ import json
 import sys
 import traceback
 
-from core import apply_bulk, apply_url, parse_bulk_urls, preview_url, search_catalog, test_connection
+from core import apply_bulk, apply_url, list_assets, parse_bulk_urls, preview_url, search_catalog, test_connection
 
 
 def write_event(event_type: str, **payload) -> None:
@@ -22,7 +22,7 @@ def progress(message: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poster Sets headless CLI")
-    parser.add_argument("command", choices=["test", "preview", "apply", "bulk", "search"])
+    parser.add_argument("command", choices=["test", "preview", "apply", "bulk", "search", "inspect"])
     parser.add_argument("--payload", default="", help="JSON payload string (otherwise read stdin)")
     args = parser.parse_args()
 
@@ -37,6 +37,18 @@ def main() -> int:
     try:
         if args.command == "test":
             result = test_connection(config)
+            write_event("result", **result)
+            return 0
+
+        if args.command == "inspect":
+            url = str(request.get("url") or "").strip()
+            if not url:
+                raise ValueError("url is required")
+            filters = request.get("mediuxFilters") or request.get("mediux_filters")
+            inspect_config = {**config}
+            if isinstance(filters, list) and filters:
+                inspect_config["mediux_filters"] = filters
+            result = list_assets(url, inspect_config, progress=progress)
             write_event("result", **result)
             return 0
 

@@ -9,8 +9,35 @@ export type PosterSetsConfig = {
     reset_overlay?: boolean;
     /** Prefer this provider when MediUX and ThePosterDB both return the same set/title. */
     dupePreference?: 'posterdb' | 'mediux';
+    watchersEnabled?: boolean;
+    watchIntervalHours?: number;
+    autoWatchOnApply?: boolean;
     hasToken?: boolean;
     configured?: boolean;
+};
+
+export type PosterSetsWatch = {
+    id: string;
+    enabled?: boolean;
+    provider?: string;
+    url: string;
+    setId?: string | null;
+    title?: string | null;
+    thumbUrl?: string;
+    mediuxFilters?: string[];
+    knownAssetIds?: string[];
+    lastCheckedAt?: string | null;
+    lastAppliedAt?: string | null;
+    lastError?: string | null;
+    lastNewCount?: number;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+};
+
+export type PosterSetsWatchStats = {
+    total?: number;
+    enabled?: number;
+    errored?: number;
 };
 
 export type PosterSetsSetMeta = {
@@ -33,6 +60,8 @@ export type PosterSetsJobInput = {
     selectedCount?: number;
     selectedIds?: string[] | null;
     setMeta?: PosterSetsSetMeta | null;
+    watchId?: string | null;
+    mediuxFilters?: string[];
 };
 
 export type PosterSetsQueueStats = {
@@ -59,6 +88,7 @@ export type PosterSetsStatus = {
     appDir?: string;
     config?: PosterSetsConfig;
     queue?: PosterSetsQueueStats;
+    watches?: PosterSetsWatchStats;
     recentJobs?: Array<{
         id: string;
         type?: string;
@@ -201,4 +231,7 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     mediux_filters: ['title_card', 'background', 'season_cover', 'show_cover'],
     reset_overlay: true,
     dupePreference: 'posterdb',
+    watchersEnabled: true,
+    watchIntervalHours: 6,
+    autoWatchOnApply: true,
 };

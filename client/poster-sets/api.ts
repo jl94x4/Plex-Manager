@@ -9,6 +9,8 @@ import type {
     PosterSetsSearchResult,
     PosterSetsSetMeta,
     PosterSetsStatus,
+    PosterSetsWatch,
+    PosterSetsWatchStats,
 } from './types';
 
 const ROOT = '/api/poster-sets';
@@ -188,4 +190,32 @@ export const posterSetsApi = {
         stats: PosterSetsQueueStats;
         jobs: PosterSetsJob[];
     }>,
+    watches: () => apiFetch(`${ROOT}/watches`) as Promise<{
+        ok?: boolean;
+        watches: PosterSetsWatch[];
+        stats?: PosterSetsWatchStats;
+    }>,
+    addWatch: (payload: { url: string; title?: string; thumbUrl?: string; provider?: string; setId?: string }) => (
+        apiFetch(`${ROOT}/watches`, json(payload)) as Promise<{ ok: boolean; watch: PosterSetsWatch }>
+    ),
+    toggleWatch: (id: string, enabled?: boolean) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}/toggle`, json(
+        enabled === undefined ? {} : { enabled },
+    )) as Promise<{ ok: boolean; watch: PosterSetsWatch }>,
+    checkWatch: (id: string, enqueue = true) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}/check`, json({ enqueue })) as Promise<{
+        ok: boolean;
+        watch?: PosterSetsWatch;
+        newIds?: string[];
+        queued?: boolean;
+        baseline?: boolean;
+    }>,
+    runWatches: () => apiFetch(`${ROOT}/watches/run`, json({})) as Promise<{
+        ok: boolean;
+        checked?: number;
+        queued?: number;
+        errors?: Array<{ id: string; error: string }>;
+    }>,
+    deleteWatch: (id: string) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+    }) as Promise<{ ok: boolean; watch: PosterSetsWatch }>,
 };

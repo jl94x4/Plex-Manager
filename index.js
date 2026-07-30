@@ -59,7 +59,7 @@ import {
     selectMediaAdapter,
     spawnCommand,
 } from './lib/media-automation/index.js';
-import { createPosterSetsRouter } from './lib/poster-sets/index.js';
+import { createPosterSetsRouter, startPosterSetsWatcher } from './lib/poster-sets/index.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
 const resolveAppVersion = () => {
@@ -22035,6 +22035,12 @@ app.listen(PORT, BIND_HOST, async () => {
     startDiscoveryAvailabilityCacheBackgroundTask();
     startScannerWorker(async () => scannerPortalConfig(await loadFile(CONFIG_PATH, {})));
     void refreshScannerAuthCache();
+    try {
+        startPosterSetsWatcher();
+        log('[poster-sets] Watcher scheduled');
+    } catch (error) {
+        log(`[poster-sets] Watcher startup failed: ${error.message}`);
+    }
     // Never block portal boot on Media Automation (watcher/scans can hang on big mounts).
     void mediaAutomationService.start()
         .then(() => refreshMediaAutomationAuthCache())

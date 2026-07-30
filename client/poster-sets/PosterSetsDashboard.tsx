@@ -6,6 +6,7 @@ import {
     Clock,
     Download,
     ExternalLink,
+    Eye,
     History,
     Image as ImageIcon,
     ListOrdered,
@@ -18,6 +19,7 @@ import {
     Search,
     Settings2,
     Sparkles,
+    Trash2,
     User,
     X,
 } from 'lucide-react';
@@ -44,6 +46,8 @@ import {
     type PosterSetsSearchTitle,
     type PosterSetsSetMeta,
     type PosterSetsStatus,
+    type PosterSetsWatch,
+    type PosterSetsWatchStats,
 } from './types';
 
 const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
@@ -55,7 +59,7 @@ const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bo
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 
-type TabId = 'apply' | 'queue' | 'recent' | 'history' | 'settings';
+type TabId = 'apply' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed';
 type SetProvider = 'mediux' | 'posterdb';
 type SearchProvider = 'both' | SetProvider;
@@ -262,6 +266,9 @@ export const PosterSetsDashboard: React.FC = () => {
     const [queueJobs, setQueueJobs] = useState<PosterSetsJob[]>([]);
     const [queuePaused, setQueuePaused] = useState(false);
     const [queueStats, setQueueStats] = useState<PosterSetsQueueStats>({});
+    const [watches, setWatches] = useState<PosterSetsWatch[]>([]);
+    const [watchStatsState, setWatchStatsState] = useState<PosterSetsWatchStats>({});
+    const [watchUrlDraft, setWatchUrlDraft] = useState('');
 
     const loadHistory = useCallback(async () => {
         try {
@@ -280,6 +287,16 @@ export const PosterSetsDashboard: React.FC = () => {
             setQueueStats(response.stats || {});
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load queue', 'error');
+        }
+    }, [toast]);
+
+    const loadWatches = useCallback(async () => {
+        try {
+            const response = await posterSetsApi.watches();
+            setWatches(response.watches || []);
+            setWatchStatsState(response.stats || {});
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to load watches', 'error');
         }
     }, [toast]);
 
@@ -334,12 +351,19 @@ export const PosterSetsDashboard: React.FC = () => {
 
     useEffect(() => { void load(); }, [load]);
     useEffect(() => { void loadQueue(); }, [loadQueue]);
+    useEffect(() => { void loadWatches(); }, [loadWatches]);
 
     useEffect(() => {
         if (tab !== 'queue' && !queueStats.pending) return undefined;
         const timer = window.setInterval(() => { void loadQueue(); }, 2000);
         return () => window.clearInterval(timer);
     }, [tab, queueStats.pending, loadQueue]);
+
+    useEffect(() => {
+        if (tab !== 'watches') return undefined;
+        const timer = window.setInterval(() => { void loadWatches(); }, 8000);
+        return () => window.clearInterval(timer);
+    }, [tab, loadWatches]);
 
     useEffect(() => {
         if (!activeJob?.id || !['running', 'queued'].includes(String(activeJob.state || ''))) return undefined;
@@ -357,13 +381,23 @@ export const PosterSetsDashboard: React.FC = () => {
                     await load();
                     await loadHistory();
                     await loadQueue();
+                    await loadWatches();
+                    if (state === 'succeeded' || state === 'completed' || state === 'success') {
+                        if (
+                            configDraft.autoWatchOnApply !== false
+                            && response.job.input?.url
+                            && !response.job.input?.watchId
+                        ) {
+                            toast('Watching for new posters on this set.');
+                        }
+                    }
                 }
             } catch {
                 // keep polling until terminal or user leaves
             }
         }, 1500);
         return () => window.clearInterval(timer);
-    }, [activeJob?.id, activeJob?.state, load, loadHistory, loadQueue]);
+    }, [activeJob?.id, activeJob?.state, configDraft.autoWatchOnApply, load, loadHistory, loadQueue, loadWatches, toast]);
 
     useEffect(() => {
         if (tab !== 'history') return undefined;
@@ -969,6 +1003,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 {([
                     ['apply', 'Apply', Sparkles],
                     ['queue', 'Queue', ListOrdered],
+                    ['watches', 'Watches', Eye],
                     ['recent', 'Recent', Clock],
                     ['history', 'History', History],
                     ['settings', 'Settings', Settings2],
@@ -981,12 +1016,22 @@ export const PosterSetsDashboard: React.FC = () => {
                             setTab(id);
                             if (id === 'history') void loadHistory();
                             if (id === 'queue') void loadQueue();
+                            if (id === 'watches') void loadWatches();
                         }}
                     >
                         <Icon className="h-4 w-4" /> {label}
                         {id === 'queue' && (queueStats.pending || 0) > 0 ? (
                             <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
                                 {queueStats.pending}
+                            </span>
+                        ) : null}
+                        {id === 'watches' && (watchStatsState.errored || 0) > 0 ? (
+                            <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
+                                {watchStatsState.errored}
+                            </span>
+                        ) : id === 'watches' && (watchStatsState.enabled || 0) > 0 ? (
+                            <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
+                                {watchStatsState.enabled}
                             </span>
                         ) : null}
                     </button>
@@ -1149,6 +1194,236 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         Re-open
                                                     </button>
                                                 ) : null}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
+            ) : null}
+
+            {tab === 'watches' ? (
+                <section className={`${cardClass} space-y-4 p-5`}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-bold text-text">Watches</h2>
+                            <p className="mt-1 text-sm text-muted">
+                                Pin MediUX / ThePosterDB sets. New art (including MediUX title cards) is queued automatically.
+                            </p>
+                            <p className="mt-2 text-xs text-muted">
+                                {watchStatsState.enabled || 0} enabled
+                                {' · '}
+                                {watchStatsState.total || 0} total
+                                {(watchStatsState.errored || 0) > 0 ? ` · ${watchStatsState.errored} with errors` : ''}
+                                {configDraft.watchersEnabled === false ? ' · watchers paused in Settings' : ''}
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy !== null}
+                                onClick={() => void loadWatches()}
+                            >
+                                <RefreshCw className="h-4 w-4" /> Refresh
+                            </button>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy !== null || !watches.length}
+                                onClick={async () => {
+                                    setBusy('watches');
+                                    try {
+                                        const result = await posterSetsApi.runWatches();
+                                        await loadWatches();
+                                        await loadQueue();
+                                        toast(result.queued
+                                            ? `Checked ${result.checked || 0} watch(es); queued ${result.queued}.`
+                                            : `Checked ${result.checked || 0} watch(es); no new art.`);
+                                    } catch (error) {
+                                        toast(error instanceof Error ? error.message : 'Watcher run failed', 'error');
+                                    } finally {
+                                        setBusy(null);
+                                    }
+                                }}
+                            >
+                                {busy === 'watches' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                                Check all now
+                            </button>
+                        </div>
+                    </div>
+
+                    <form
+                        className="flex flex-col gap-2 sm:flex-row"
+                        onSubmit={async (event) => {
+                            event.preventDefault();
+                            const target = watchUrlDraft.trim();
+                            if (!target) {
+                                toast('Paste a MediUX or ThePosterDB set URL.', 'error');
+                                return;
+                            }
+                            setBusy('watches');
+                            try {
+                                await posterSetsApi.addWatch({ url: target });
+                                setWatchUrlDraft('');
+                                await loadWatches();
+                                toast('Watch pinned. Current assets baselined — only future new art will queue.');
+                            } catch (error) {
+                                toast(error instanceof Error ? error.message : 'Failed to pin watch', 'error');
+                            } finally {
+                                setBusy(null);
+                            }
+                        }}
+                    >
+                        <input
+                            className={fieldClass}
+                            placeholder="https://mediux.pro/sets/... or theposterdb.com/posters/..."
+                            value={watchUrlDraft}
+                            onChange={(event) => setWatchUrlDraft(event.target.value)}
+                        />
+                        <button type="submit" className={primaryButtonClass} disabled={busy !== null}>
+                            Pin URL
+                        </button>
+                    </form>
+
+                    {!watches.length ? (
+                        <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
+                            Apply a set and keep watching, or pin a MediUX/TPDB URL.
+                        </p>
+                    ) : (
+                        <div className="space-y-2">
+                            {watches.map((watch) => {
+                                const title = String(watch.title || watch.setId || watch.url || 'Watch').trim();
+                                const provider = String(watch.provider || '').toLowerCase();
+                                return (
+                                    <div
+                                        key={watch.id}
+                                        className={`rounded-xl border px-4 py-3 ${
+                                            watch.lastError
+                                                ? 'border-red-500/30 bg-red-500/5'
+                                                : 'border-white/10 bg-black/10'
+                                        }`}
+                                    >
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="flex min-w-0 gap-3">
+                                                {watch.thumbUrl ? (
+                                                    <img
+                                                        src={watch.thumbUrl}
+                                                        alt=""
+                                                        className="h-16 w-12 shrink-0 rounded-lg object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="flex h-16 w-12 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
+                                                        <ImageIcon className="h-5 w-5 text-muted" />
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0 space-y-1">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <StatusPill value={watch.enabled === false ? 'Paused' : 'Watching'} />
+                                                        {provider ? (
+                                                            <span className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                                                                {provider === 'posterdb' ? 'ThePosterDB' : 'MediUX'}
+                                                            </span>
+                                                        ) : null}
+                                                        <p className="truncate text-sm font-semibold text-text" title={title}>
+                                                            {title}
+                                                        </p>
+                                                    </div>
+                                                    <p className="text-xs text-muted">
+                                                        {(watch.knownAssetIds || []).length} known
+                                                        {watch.lastCheckedAt ? ` · checked ${formatTime(watch.lastCheckedAt)}` : ' · not checked yet'}
+                                                        {watch.lastNewCount ? ` · last new ${watch.lastNewCount}` : ''}
+                                                        {watch.lastAppliedAt ? ` · applied ${formatTime(watch.lastAppliedAt)}` : ''}
+                                                    </p>
+                                                    {watch.lastError ? (
+                                                        <p className="text-sm text-red-300">{watch.lastError}</p>
+                                                    ) : null}
+                                                    {watch.url ? (
+                                                        <a
+                                                            href={watch.url}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="inline-flex items-center gap-1 text-xs font-semibold text-plex no-underline hover:underline"
+                                                        >
+                                                            Open set <ExternalLink className="h-3 w-3" />
+                                                        </a>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                            <div className="flex shrink-0 flex-wrap gap-2">
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null}
+                                                    onClick={async () => {
+                                                        setBusy('watches');
+                                                        try {
+                                                            await posterSetsApi.toggleWatch(watch.id);
+                                                            await loadWatches();
+                                                        } catch (error) {
+                                                            toast(error instanceof Error ? error.message : 'Toggle failed', 'error');
+                                                        } finally {
+                                                            setBusy(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    {watch.enabled === false ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                                                    {watch.enabled === false ? 'Enable' : 'Pause'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null}
+                                                    onClick={async () => {
+                                                        setBusy('watches');
+                                                        try {
+                                                            const result = await posterSetsApi.checkWatch(watch.id);
+                                                            await loadWatches();
+                                                            await loadQueue();
+                                                            if (result.baseline) {
+                                                                toast('Baselined current assets.');
+                                                            } else if (result.queued) {
+                                                                toast(`Queued ${result.newIds?.length || 0} new asset(s).`);
+                                                            } else {
+                                                                toast('No new art on this set.');
+                                                            }
+                                                        } catch (error) {
+                                                            await loadWatches();
+                                                            toast(error instanceof Error ? error.message : 'Check failed', 'error');
+                                                        } finally {
+                                                            setBusy(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    <RefreshCw className="h-4 w-4" /> Check now
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null}
+                                                    onClick={async () => {
+                                                        const ok = await askConfirm(`Remove watch for “${title}”?`, {
+                                                            title: 'Remove watch?',
+                                                            confirmLabel: 'Remove',
+                                                            cancelLabel: 'Cancel',
+                                                        });
+                                                        if (!ok) return;
+                                                        setBusy('watches');
+                                                        try {
+                                                            await posterSetsApi.deleteWatch(watch.id);
+                                                            await loadWatches();
+                                                            toast('Watch removed.');
+                                                        } catch (error) {
+                                                            toast(error instanceof Error ? error.message : 'Delete failed', 'error');
+                                                        } finally {
+                                                            setBusy(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="h-4 w-4" /> Remove
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -2153,6 +2428,36 @@ export const PosterSetsDashboard: React.FC = () => {
                             border={false}
                         />
                     </div>
+                    <div className="space-y-0 rounded-xl border border-white/10 bg-black/20 px-4">
+                        <SettingsToggleRow
+                            title="Enable set watchers"
+                            description="Periodically re-scrape pinned sets and queue only new assets (respects Queue pause)."
+                            checked={configDraft.watchersEnabled !== false}
+                            onChange={(next) => setConfigDraft((prev) => ({ ...prev, watchersEnabled: next }))}
+                        />
+                        <SettingsToggleRow
+                            title="Auto-watch on apply"
+                            description="After a successful apply from a set URL, pin that set so future new art is queued automatically."
+                            checked={configDraft.autoWatchOnApply !== false}
+                            onChange={(next) => setConfigDraft((prev) => ({ ...prev, autoWatchOnApply: next }))}
+                            border={false}
+                        />
+                    </div>
+                    <label className="block max-w-xs">
+                        <span className="text-xs font-bold uppercase tracking-wide text-muted">watch interval (hours)</span>
+                        <input
+                            className={`${fieldClass} mt-2`}
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={configDraft.watchIntervalHours ?? 6}
+                            onChange={(event) => {
+                                const hours = Math.max(1, Number(event.target.value) || 6);
+                                setConfigDraft((prev) => ({ ...prev, watchIntervalHours: hours }));
+                            }}
+                        />
+                        <span className="mt-1 block text-[11px] text-muted">Default 6. Minimum 1.</span>
+                    </label>
                     <div className="flex flex-wrap gap-2">
                         <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
                             {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
