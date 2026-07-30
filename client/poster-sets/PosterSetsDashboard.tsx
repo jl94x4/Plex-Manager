@@ -52,6 +52,11 @@ import {
     type PosterSetsWatchStats,
 } from './types';
 import { groupPosterSetsWatches } from './watchGroups';
+import {
+    groupPreviewAssets,
+    previewAssetEpisodeLabel,
+    type PreviewAssetSections,
+} from './previewGroups';
 
 const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
 const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
@@ -70,11 +75,159 @@ const primaryButtonClass = 'inline-flex items-center justify-center gap-1.5 roun
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-xs text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex sm:py-2.5 sm:text-sm';
 const sectionTitleClass = 'text-base font-bold text-text sm:text-lg';
 const sectionBodyClass = 'mt-1 text-xs text-muted sm:text-sm';
+const previewStripClass = 'flex gap-3 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]';
 
 type TabId = 'apply' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed' | 'audit';
 type SetProvider = 'mediux' | 'posterdb';
 type SearchProvider = 'both' | SetProvider;
+
+function PreviewAssetTile({
+    asset,
+    selected,
+    layout,
+    caption,
+    onToggle,
+}: {
+    asset: PosterSetsPreviewAsset;
+    selected: boolean;
+    layout: 'poster' | 'landscape';
+    caption?: string;
+    onToggle: (id: string) => void;
+}) {
+    const matched = asset.matched === true;
+    const unmatched = asset.matched === false;
+    const title = caption
+        || (layout === 'landscape' ? previewAssetEpisodeLabel(asset) : `${asset.title}${asset.year ? ` (${asset.year})` : ''}`);
+    return (
+        <button
+            type="button"
+            onClick={() => onToggle(asset.id)}
+            className={`group shrink-0 overflow-hidden rounded-2xl border text-left transition ${
+                layout === 'landscape' ? 'w-[min(100%,17rem)] sm:w-72' : 'w-[7.25rem] sm:w-36'
+            } ${
+                selected
+                    ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/40'
+                    : unmatched
+                        ? 'border-amber-500/45 bg-amber-500/[0.06] hover:border-amber-400/60'
+                        : 'border-white/10 bg-black/20 hover:border-plex/35'
+            }`}
+        >
+            <div className={`relative bg-black/40 ${layout === 'landscape' ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
+                {asset.thumbUrl ? (
+                    <img
+                        src={posterSetsApi.imageUrl(asset.thumbUrl)}
+                        alt={asset.title}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                    />
+                ) : (
+                    <div className="flex h-full items-center justify-center text-muted">
+                        <ImageIcon className="h-8 w-8 opacity-40" />
+                    </div>
+                )}
+                <span className={`absolute left-2 top-2 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                    matched
+                        ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-100'
+                        : unmatched
+                            ? 'border-amber-500/40 bg-amber-500/20 text-amber-100'
+                            : 'border-white/15 bg-black/50 text-muted'
+                }`}>
+                    {matched ? 'In library' : unmatched ? 'Missing' : 'Unknown'}
+                </span>
+                <span className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold ${
+                    selected
+                        ? 'border-plex bg-plex text-background'
+                        : 'border-white/20 bg-black/50 text-muted'
+                }`}>
+                    {selected ? '✓' : ''}
+                </span>
+            </div>
+            <div className="space-y-0.5 p-2.5 sm:p-3">
+                <p className="truncate text-xs font-semibold text-text sm:text-sm" title={title}>
+                    {title}
+                </p>
+                {layout === 'poster' ? (
+                    <p className="truncate text-[10px] font-bold uppercase tracking-wide text-plex/90 sm:text-[11px]">{asset.label}</p>
+                ) : null}
+                {asset.matchDetail ? (
+                    <p className="truncate text-[10px] text-muted sm:text-[11px]" title={asset.matchDetail}>{asset.matchDetail}</p>
+                ) : null}
+            </div>
+        </button>
+    );
+}
+
+function PreviewAssetGallery({
+    sections,
+    selectedAssetIds,
+    onToggle,
+}: {
+    sections: PreviewAssetSections;
+    selectedAssetIds: string[];
+    onToggle: (id: string) => void;
+}) {
+    const renderStrip = (
+        title: string,
+        assets: PosterSetsPreviewAsset[],
+        layout: 'poster' | 'landscape',
+        captionFor?: (asset: PosterSetsPreviewAsset) => string | undefined,
+    ) => {
+        if (!assets.length) return null;
+        return (
+            <section className="space-y-2.5">
+                <div className="flex items-baseline justify-between gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-muted">{title}</h4>
+                    <span className="text-[11px] text-muted/80">{assets.length}</span>
+                </div>
+                <div className={previewStripClass}>
+                    {assets.map((asset) => (
+                        <PreviewAssetTile
+                            key={asset.id}
+                            asset={asset}
+                            selected={selectedAssetIds.includes(asset.id)}
+                            layout={layout}
+                            caption={captionFor?.(asset)}
+                            onToggle={onToggle}
+                        />
+                    ))}
+                </div>
+            </section>
+        );
+    };
+
+    return (
+        <div className="space-y-5">
+            {renderStrip('Show & season covers', sections.covers, 'poster', (asset) => asset.label || asset.title)}
+            {renderStrip('Posters', sections.posters, 'poster')}
+            {renderStrip('Backgrounds', sections.backgrounds, 'landscape', (asset) => asset.label || 'Background')}
+            {sections.titleCardSeasons.map((season) => (
+                <section key={season.key} className="space-y-2.5">
+                    <div className="flex items-baseline justify-between gap-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wide text-muted">
+                            {season.label}
+                            <span className="ml-2 font-semibold normal-case tracking-normal text-muted/70">title cards</span>
+                        </h4>
+                        <span className="text-[11px] text-muted/80">{season.assets.length}</span>
+                    </div>
+                    <div className={previewStripClass}>
+                        {season.assets.map((asset) => (
+                            <PreviewAssetTile
+                                key={asset.id}
+                                asset={asset}
+                                selected={selectedAssetIds.includes(asset.id)}
+                                layout="landscape"
+                                caption={previewAssetEpisodeLabel(asset)}
+                                onToggle={onToggle}
+                            />
+                        ))}
+                    </div>
+                </section>
+            ))}
+            {renderStrip('Other assets', sections.other, 'poster')}
+        </div>
+    );
+}
 
 type BulkSetSelection = {
     url: string;
@@ -1157,6 +1310,11 @@ export const PosterSetsDashboard: React.FC = () => {
         const assets = preview?.assets || [];
         return assets.filter((asset) => asset.matched === true).length;
     }, [preview]);
+
+    const previewSections = useMemo(
+        () => groupPreviewAssets(preview?.assets || []),
+        [preview],
+    );
 
     const searchSetsPageCount = Math.max(1, Math.ceil(searchSets.length / SEARCH_SETS_PAGE_SIZE));
     const pagedSearchSets = useMemo(() => {
@@ -2505,7 +2663,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 {selectedAssetIds.length} selected
                                             </p>
                                             <p className="mt-1 text-xs text-muted">
-                                                Unmatched posters show the reason under each card.
+                                                Covers are tall posters; title cards show as landscape galleries by season. Tap to select.
                                             </p>
                                             <div className="mt-2 flex flex-wrap gap-3">
                                                 {searchSets.length ? (
@@ -2593,67 +2751,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 Queue selected ({selectedAssetIds.length})
                                             </button>
                                         </div>
-                                        <div className={posterGridClass} style={posterGridStyle}>
-                                            {(preview?.assets || []).map((asset: PosterSetsPreviewAsset) => {
-                                                const selected = selectedAssetIds.includes(asset.id);
-                                                const matched = asset.matched === true;
-                                                const unmatched = asset.matched === false;
-                                                return (
-                                                    <button
-                                                        key={asset.id}
-                                                        type="button"
-                                                        onClick={() => toggleAsset(asset.id)}
-                                                        className={`group overflow-hidden rounded-2xl border text-left transition ${
-                                                            selected
-                                                                ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/40'
-                                                                : unmatched
-                                                                    ? 'border-amber-500/45 bg-amber-500/[0.06] hover:border-amber-400/60'
-                                                                    : 'border-white/10 bg-black/20 hover:border-plex/35'
-                                                        }`}
-                                                    >
-                                                        <div className="relative aspect-[2/3] bg-black/40">
-                                                            {asset.thumbUrl ? (
-                                                                <img
-                                                                    src={posterSetsApi.imageUrl(asset.thumbUrl)}
-                                                                    alt={asset.title}
-                                                                    loading="lazy"
-                                                                    className="h-full w-full object-cover"
-                                                                />
-                                                            ) : (
-                                                                <div className="flex h-full items-center justify-center text-muted">
-                                                                    <ImageIcon className="h-8 w-8 opacity-40" />
-                                                                </div>
-                                                            )}
-                                                            <span className={`absolute left-2 top-2 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                                                                matched
-                                                                    ? 'border-emerald-500/40 bg-emerald-500/20 text-emerald-100'
-                                                                    : unmatched
-                                                                        ? 'border-amber-500/40 bg-amber-500/20 text-amber-100'
-                                                                        : 'border-white/15 bg-black/50 text-muted'
-                                                            }`}>
-                                                                {matched ? 'In library' : unmatched ? 'Missing' : 'Unknown'}
-                                                            </span>
-                                                            <span className={`absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md border text-xs font-bold ${
-                                                                selected
-                                                                    ? 'border-plex bg-plex text-background'
-                                                                    : 'border-white/20 bg-black/50 text-muted'
-                                                            }`}>
-                                                                {selected ? '✓' : ''}
-                                                            </span>
-                                                        </div>
-                                                        <div className="space-y-1 p-3">
-                                                            <p className="truncate text-sm font-semibold text-text" title={asset.title}>
-                                                                {asset.title}{asset.year ? ` (${asset.year})` : ''}
-                                                            </p>
-                                                            <p className="text-[11px] font-bold uppercase tracking-wide text-plex/90">{asset.label}</p>
-                                                            {asset.matchDetail ? (
-                                                                <p className="truncate text-[11px] text-muted" title={asset.matchDetail}>{asset.matchDetail}</p>
-                                                            ) : null}
-                                                        </div>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
+                                        <PreviewAssetGallery
+                                            sections={previewSections}
+                                            selectedAssetIds={selectedAssetIds}
+                                            onToggle={toggleAsset}
+                                        />
                                     </div>
 
                                     <div className="sticky bottom-3 z-10 flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/95 p-3 shadow-lg backdrop-blur">
