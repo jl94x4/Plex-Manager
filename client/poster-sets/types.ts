@@ -212,6 +212,24 @@ export type PosterSetsSearchSet = {
     }>;
 };
 
+export type PosterSetsBrowseRail = {
+    id: string;
+    title: string;
+    provider?: string;
+    sets: PosterSetsSearchSet[];
+    buffered?: number;
+    cap?: number;
+    loading?: boolean;
+    error?: string | null;
+};
+
+export type PosterSetsBrowseResponse = {
+    ok?: boolean;
+    rails?: PosterSetsBrowseRail[];
+    cap?: number;
+    error?: string;
+};
+
 export type PosterSetsSearchResult = {
     ok?: boolean;
     provider?: string;

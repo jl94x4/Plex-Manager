@@ -600,7 +600,7 @@ def _extract_user_near_node(node, *, max_depth: int = 10) -> Optional[str]:
             best = users[0]
             classes = " ".join(current.get("class") or []) if hasattr(current, "get") else ""
             # MediUX title/set rows use a bordered card container.
-            if "border-b" in classes:
+            if "border-b" in classes or "text-card-foreground" in classes:
                 return best
         elif len(users) > 1:
             return best
@@ -1368,7 +1368,8 @@ def _mediux_card_row(node):
         if current is None:
             break
         classes = " ".join(current.get("class") or []) if hasattr(current, "get") else ""
-        if "border-b" in classes:
+        # Show-page rows use border-b; posters/title_cards grids use card shells.
+        if "border-b" in classes or "text-card-foreground" in classes:
             return current
         current = getattr(current, "parent", None)
     return None
@@ -1393,22 +1394,41 @@ def _clean_mediux_set_title(value: str) -> str:
     return title[:160]
 
 
+def _title_from_mediux_card_text(card_text: str, user: str | None = None) -> str:
+    text = " ".join(str(card_text or "").split()).strip()
+    if not text:
+        return ""
+    # "2 The Shards (2026) by willtong93" / "Peek YAML Download …"
+    text = re.sub(r"\b(Peek|YAML|Download|Previous slide|Next slide)\b", " ", text, flags=re.I)
+    text = re.sub(r"^\d+\s+", "", text).strip()
+    if user:
+        text = re.sub(rf"\s+by\s+{re.escape(user)}\s*$", "", text, flags=re.I).strip()
+        text = re.sub(rf"\s+{re.escape(user)}\s*$", "", text, flags=re.I).strip()
+    text = re.sub(r"\s+by\s+[A-Za-z0-9._-]{1,64}\s*$", "", text, flags=re.I).strip()
+    return _clean_mediux_set_title(text)
+
+
 def _enrich_mediux_set_entry(anchor, entry: dict) -> None:
     """Fill creator / title / setKind from the surrounding MediUX card row."""
     card = _mediux_card_row(anchor)
     card_text = card.get_text(" ", strip=True) if card is not None else ""
-    if (not entry.get("title") or str(entry.get("title") or "").startswith("Set ")) and card is not None and hasattr(card, "find"):
-        for tag in ("h2", "h3", "h4", "p"):
-            node = card.find(tag)
-            if not node:
-                continue
-            title = _clean_mediux_set_title(node.get_text(" ", strip=True))
-            if title:
-                entry["title"] = title
-                break
     user = _extract_user_near_node(anchor)
     if user and not entry.get("user"):
         entry["user"] = user
+    if (not entry.get("title") or str(entry.get("title") or "").startswith("Set ")) and card is not None:
+        title = ""
+        if hasattr(card, "find"):
+            for tag in ("h2", "h3", "h4", "p"):
+                node = card.find(tag)
+                if not node:
+                    continue
+                title = _clean_mediux_set_title(node.get_text(" ", strip=True))
+                if title:
+                    break
+        if not title:
+            title = _title_from_mediux_card_text(card_text, entry.get("user") or user)
+        if title:
+            entry["title"] = title
     kind = _infer_set_kind(title=str(entry.get("title") or ""), card_text=card_text)
     existing_kind = str(entry.get("setKind") or "").strip()
     if kind == "boxset" or (kind and not existing_kind):
@@ -1866,6 +1886,102 @@ def list_mediux_user_sets(
     }
 
 
+def _posterdb_recent_max_page(soup) -> int:
+    max_page = 1
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "")
+        if "/recent" not in href.lower() and "recent" not in href.lower():
+            # still accept bare ?page= on recent pages
+            if "page=" not in href:
+                continue
+        match = re.search(r"[?&]page=(\d+)", href)
+        if match:
+            max_page = max(max_page, int(match.group(1)))
+        text = anchor.get_text(" ", strip=True)
+        if text.isdigit():
+            max_page = max(max_page, int(text))
+    return max_page
+
+
+def list_recent_sets(
+    provider: str,
+    *,
+    kind: str = "posters",
+    page: int = 1,
+    limit: int = 24,
+    progress: ProgressFn = None,
+) -> dict:
+    """One page of recently-added sets for Browse rails (creators included)."""
+    source = str(provider or "").strip().lower()
+    if source in {"tpdb", "posterdb", "theposterdb"}:
+        source = "posterdb"
+    elif source in {"mediux", "mediaux"}:
+        source = "mediux"
+    else:
+        raise ValueError("provider must be mediux or posterdb")
+
+    rail_kind = str(kind or "posters").strip().lower()
+    if rail_kind in {"title_card", "title-cards", "titlecards", "title_cards"}:
+        rail_kind = "title_cards"
+    else:
+        rail_kind = "posters"
+
+    page_num = max(1, int(page or 1))
+    take = max(1, min(int(limit or 24), 200))
+    sets: dict = {}
+
+    if source == "posterdb":
+        if rail_kind == "title_cards":
+            raise ValueError("ThePosterDB browse does not have a title-cards rail")
+        url = f"https://theposterdb.com/recent?page={page_num}"
+        emit(progress, f"Loading ThePosterDB recently added (page {page_num})…")
+        soup = cook_soup(url)
+        # Collect a full recent page (typically ~24), then trim only if caller asked for fewer.
+        _collect_posterdb_set_cards(soup, sets=sets, limit=max(take, 48))
+        max_page = _posterdb_recent_max_page(soup)
+        results = list(sets.values())[:take]
+        has_more = len(results) > 0 and (page_num < max_page or len(results) >= max(8, take // 2))
+        return {
+            "ok": True,
+            "provider": "posterdb",
+            "phase": "sets",
+            "mode": "recent",
+            "kind": "posters",
+            "page": page_num,
+            "maxPage": max_page,
+            "hasMore": has_more,
+            "nextPage": page_num + 1 if has_more else None,
+            "titles": [],
+            "sets": results,
+        }
+
+    path = "title_cards" if rail_kind == "title_cards" else "posters"
+    url = f"https://mediux.pro/{path}?page={page_num}"
+    emit(progress, f"Loading MediUX {path.replace('_', ' ')} (page {page_num})…")
+    soup = cook_soup(url)
+    _collect_mediux_set_cards(soup, sets=sets)
+    max_page = _mediux_max_page(soup)
+    results = list(sets.values())
+    if rail_kind == "title_cards":
+        for item in results:
+            item["setKind"] = "title_cards"
+    # Keep the full provider page so background fill does not skip cards.
+    has_more = len(results) > 0 and (page_num < max_page or len(results) >= 8)
+    return {
+        "ok": True,
+        "provider": "mediux",
+        "phase": "sets",
+        "mode": "recent",
+        "kind": rail_kind,
+        "page": page_num,
+        "maxPage": max_page,
+        "hasMore": has_more,
+        "nextPage": page_num + 1 if has_more else None,
+        "titles": [],
+        "sets": results,
+    }
+
+
 def search_catalog(
     provider: str,
     *,
@@ -1874,6 +1990,8 @@ def search_catalog(
     media_type: str = "movie",
     tmdb_id: str | int | None = None,
     mode: str = "title",
+    kind: str = "posters",
+    page: int = 1,
     limit: int = 24,
     progress: ProgressFn = None,
     on_batch: BatchFn = None,
@@ -1889,6 +2007,14 @@ def search_catalog(
         raise ValueError("provider must be mediux or posterdb")
 
     search_mode = str(mode or "title").strip().lower()
+    if search_mode in {"recent", "browse", "recently_added", "recently-added"}:
+        return list_recent_sets(
+            source,
+            kind=kind or query or "posters",
+            page=page,
+            limit=limit if limit else 24,
+            progress=progress,
+        )
     if search_mode in {"creator", "user", "author", "uploader"}:
         if not str(query or "").strip():
             raise ValueError("creator username is required")

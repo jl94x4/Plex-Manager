@@ -2,6 +2,7 @@ import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE, portalRequestHeaders }
 import { portalUrl } from '../shared/basePath';
 import type {
     PosterSetsAuditEntry,
+    PosterSetsBrowseResponse,
     PosterSetsConfig,
     PosterSetsJob,
     PosterSetsPreview,
@@ -109,6 +110,9 @@ export const posterSetsApi = {
     preview: (url: string) => apiFetch(`${ROOT}/preview`, json({ url })) as Promise<PosterSetsPreview>,
     search: (payload: PosterSetsSearchPayload) => (
         apiFetch(`${ROOT}/search`, json(payload)) as Promise<PosterSetsSearchResult>
+    ),
+    browse: (options?: { refresh?: boolean }) => (
+        apiFetch(`${ROOT}/browse`, json({ refresh: Boolean(options?.refresh) })) as Promise<PosterSetsBrowseResponse>
     ),
     /**
      * Creator search streams NDJSON batches (first ~3 source pages, then more).

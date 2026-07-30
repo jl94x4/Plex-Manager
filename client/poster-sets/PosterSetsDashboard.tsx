@@ -4,6 +4,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Clock,
+    Compass,
     Download,
     ExternalLink,
     Eye,
@@ -39,6 +40,8 @@ import {
     MEDIUX_FILTER_OPTIONS,
     mediuxFiltersFromAssets,
     type PosterSetsAuditEntry,
+    type PosterSetsBrowseRail,
+    type PosterSetsBrowseResponse,
     type PosterSetsConfig,
     type PosterSetsJob,
     type PosterSetsPreview,
@@ -77,7 +80,7 @@ const sectionTitleClass = 'text-base font-bold text-text sm:text-lg';
 const sectionBodyClass = 'mt-1 text-xs text-muted sm:text-sm';
 const previewStripClass = 'flex gap-3 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]';
 
-type TabId = 'apply' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
+type TabId = 'apply' | 'browse' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed' | 'audit';
 type SetProvider = 'mediux' | 'posterdb';
 type SearchProvider = 'both' | SetProvider;
@@ -319,6 +322,52 @@ const SetKindPill: React.FC<{ set?: { title?: string | null; setKind?: string | 
     return null;
 };
 
+function BrowseSetCard({
+    set,
+    onOpen,
+    disabled,
+}: {
+    set: PosterSetsSearchSet;
+    onOpen: (set: PosterSetsSearchSet) => void;
+    disabled?: boolean;
+}) {
+    const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
+    const landscape = isTitleCardSet(set);
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onOpen(set)}
+            className={`group shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 text-left transition hover:border-plex/40 ${
+                landscape ? 'w-[min(100%,16rem)] sm:w-64' : 'w-[7.25rem] sm:w-36'
+            }`}
+        >
+            <div className={`relative bg-black/40 ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
+                {set.thumbUrl ? (
+                    <img
+                        src={posterSetsApi.imageUrl(set.thumbUrl)}
+                        alt={setTitle}
+                        loading="lazy"
+                        className={`h-full w-full ${landscape ? 'object-contain' : 'object-cover'}`}
+                    />
+                ) : (
+                    <div className="flex h-full items-center justify-center text-muted">
+                        <ImageIcon className="h-8 w-8 opacity-40" />
+                    </div>
+                )}
+            </div>
+            <div className="space-y-1.5 p-2.5 sm:p-3">
+                <p className="truncate text-xs font-semibold text-text sm:text-sm" title={setTitle}>{setTitle}</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <CreatorPill user={set.user} />
+                    <SetKindPill set={set} />
+                    <ProviderPill provider={set.provider} />
+                </div>
+            </div>
+        </button>
+    );
+}
+
 const RECENT_SETS_KEY = 'poster-sets-recent-v1';
 const MAX_RECENT_SETS = 10;
 
@@ -528,6 +577,9 @@ export const PosterSetsDashboard: React.FC = () => {
     const [watchesPageSize, setWatchesPageSize] = useState(25);
     const [watchesFilter, setWatchesFilter] = useState('');
     const [selectedBulkSets, setSelectedBulkSets] = useState<Record<string, BulkSetSelection>>({});
+    const [browseRails, setBrowseRails] = useState<PosterSetsBrowseRail[]>([]);
+    const [browseLoading, setBrowseLoading] = useState(false);
+    const [browseSeeAllId, setBrowseSeeAllId] = useState<string | null>(null);
 
     const loadHistory = useCallback(async () => {
         try {
@@ -565,6 +617,20 @@ export const PosterSetsDashboard: React.FC = () => {
             setWatchStatsState(response.stats || {});
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load watches', 'error');
+        }
+    }, [toast]);
+
+    const loadBrowse = useCallback(async (options?: { refresh?: boolean; silent?: boolean }) => {
+        if (!options?.silent) setBrowseLoading(true);
+        try {
+            const response: PosterSetsBrowseResponse = await posterSetsApi.browse({ refresh: options?.refresh });
+            setBrowseRails(response.rails || []);
+        } catch (error) {
+            if (!options?.silent) {
+                toast(error instanceof Error ? error.message : 'Failed to load browse rails', 'error');
+            }
+        } finally {
+            if (!options?.silent) setBrowseLoading(false);
         }
     }, [toast]);
 
@@ -634,6 +700,22 @@ export const PosterSetsDashboard: React.FC = () => {
         const timer = window.setInterval(() => { void loadWatches(); }, 8000);
         return () => window.clearInterval(timer);
     }, [tab, loadWatches]);
+
+    useEffect(() => {
+        if (tab !== 'browse') return undefined;
+        void loadBrowse();
+        return undefined;
+    }, [tab, loadBrowse]);
+
+    useEffect(() => {
+        if (tab !== 'browse') return undefined;
+        const stillLoading = browseRails.some((rail) => rail.loading);
+        if (!stillLoading) return undefined;
+        const timer = window.setInterval(() => {
+            void loadBrowse({ silent: true });
+        }, 2500);
+        return () => window.clearInterval(timer);
+    }, [tab, browseRails, loadBrowse]);
 
     useEffect(() => {
         if (!activeJob?.id || !['running', 'queued'].includes(String(activeJob.state || ''))) return undefined;
@@ -815,6 +897,14 @@ export const PosterSetsDashboard: React.FC = () => {
         } finally {
             setBusy(null);
         }
+    };
+
+    const openBrowseSet = async (set: PosterSetsSearchSet) => {
+        setBrowseSeeAllId(null);
+        setTab('apply');
+        setSelectedSearchSet(set);
+        setUrl(set.url);
+        await runPreview(set.url);
     };
 
     const filtersForSelectedIds = (ids: string[]) => {
@@ -1406,6 +1496,11 @@ export const PosterSetsDashboard: React.FC = () => {
 
     const readyToApply = Boolean(preview?.assets?.length);
 
+    const browseSeeAllRail = useMemo(
+        () => browseRails.find((rail) => rail.id === browseSeeAllId) || null,
+        [browseRails, browseSeeAllId],
+    );
+
     const toggleAsset = (id: string) => {
         setSelectedAssetIds((prev) => (
             prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
@@ -1584,6 +1679,7 @@ export const PosterSetsDashboard: React.FC = () => {
             <div className="flex min-w-0 flex-wrap justify-center gap-1.5 sm:justify-start sm:gap-2">
                 {([
                     ['apply', 'Apply', Sparkles],
+                    ['browse', 'Browse', Compass],
                     ['queue', 'Queue', ListOrdered],
                     ['watches', 'Watching', Eye],
                     ['recent', 'Recent', Clock],
@@ -1602,6 +1698,10 @@ export const PosterSetsDashboard: React.FC = () => {
                             }
                             if (id === 'queue') void loadQueue();
                             if (id === 'watches') void loadWatches();
+                            if (id === 'browse') {
+                                setBrowseSeeAllId(null);
+                                void loadBrowse();
+                            }
                         }}
                     >
                         <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {label}
@@ -1622,6 +1722,126 @@ export const PosterSetsDashboard: React.FC = () => {
                     </button>
                 ))}
             </div>
+
+            {tab === 'browse' ? (
+                <section className={`${cardClass} space-y-5 p-4 sm:p-5`}>
+                    {browseSeeAllRail ? (
+                        <>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <button
+                                        type="button"
+                                        className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-plex hover:underline"
+                                        onClick={() => setBrowseSeeAllId(null)}
+                                    >
+                                        <ChevronLeft className="h-3.5 w-3.5" />
+                                        Back to Browse
+                                    </button>
+                                    <h2 className={sectionTitleClass}>{browseSeeAllRail.title}</h2>
+                                    <p className={sectionBodyClass}>
+                                        {browseSeeAllRail.buffered || browseSeeAllRail.sets.length}
+                                        {browseSeeAllRail.cap ? ` / ${browseSeeAllRail.cap}` : ''} sets
+                                        {browseSeeAllRail.loading ? ' · loading more in the background…' : ''}
+                                    </p>
+                                    {browseSeeAllRail.error ? (
+                                        <p className="mt-1 text-xs text-amber-200">{browseSeeAllRail.error}</p>
+                                    ) : null}
+                                </div>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={browseLoading || busy !== null}
+                                    onClick={() => void loadBrowse({ refresh: true })}
+                                >
+                                    {browseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    Refresh
+                                </button>
+                            </div>
+                            <div className={`flex flex-wrap gap-3 ${isTitleCardSet(browseSeeAllRail.sets[0]) ? '' : ''}`}>
+                                {browseSeeAllRail.sets.map((set) => (
+                                    <BrowseSetCard
+                                        key={`${set.provider}-${set.setId}`}
+                                        set={set}
+                                        disabled={busy !== null}
+                                        onOpen={(item) => void openBrowseSet(item)}
+                                    />
+                                ))}
+                            </div>
+                            {!browseSeeAllRail.sets.length && browseLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading sets…
+                                </div>
+                            ) : null}
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <h2 className={sectionTitleClass}>Browse recently added</h2>
+                                    <p className={sectionBodyClass}>
+                                        First results appear immediately; more fill in the background (up to 600 per row). Tap a row title to see all.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={browseLoading || busy !== null}
+                                    onClick={() => void loadBrowse({ refresh: true })}
+                                >
+                                    {browseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    Refresh
+                                </button>
+                            </div>
+                            {browseLoading && !browseRails.length ? (
+                                <div className="flex items-center gap-2 text-sm text-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading rails…
+                                </div>
+                            ) : null}
+                            {browseRails.map((rail) => (
+                                <div key={rail.id} className="space-y-2.5">
+                                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                        <button
+                                            type="button"
+                                            className="group inline-flex min-w-0 items-center gap-2 text-left"
+                                            onClick={() => setBrowseSeeAllId(rail.id)}
+                                        >
+                                            <h3 className="text-sm font-bold text-text group-hover:text-plex sm:text-base">
+                                                {rail.title}
+                                            </h3>
+                                            <span className="text-[11px] font-semibold uppercase tracking-wide text-plex/80 group-hover:underline">
+                                                See all
+                                            </span>
+                                        </button>
+                                        <span className="text-[11px] text-muted">
+                                            {rail.buffered || rail.sets.length}
+                                            {rail.cap ? ` / ${rail.cap}` : ''}
+                                            {rail.loading ? ' · loading…' : ''}
+                                        </span>
+                                    </div>
+                                    {rail.error ? (
+                                        <p className="text-xs text-amber-200">{rail.error}</p>
+                                    ) : null}
+                                    <div className={previewStripClass}>
+                                        {rail.sets.map((set) => (
+                                            <BrowseSetCard
+                                                key={`${set.provider}-${set.setId}`}
+                                                set={set}
+                                                disabled={busy !== null}
+                                                onOpen={(item) => void openBrowseSet(item)}
+                                            />
+                                        ))}
+                                        {!rail.sets.length && !rail.error ? (
+                                            <p className="py-6 text-sm text-muted">No sets yet.</p>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            ))}
+                        </>
+                    )}
+                </section>
+            ) : null}
 
             {tab === 'queue' ? (
                 <section className={`${cardClass} space-y-4 overflow-hidden p-4 sm:p-5`}>

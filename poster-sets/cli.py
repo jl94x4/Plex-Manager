@@ -95,6 +95,8 @@ def main() -> int:
                 media_type=str(request.get("mediaType") or request.get("media_type") or "movie"),
                 tmdb_id=request.get("tmdbId") or request.get("tmdb_id"),
                 mode=mode,
+                kind=str(request.get("kind") or request.get("railKind") or "posters"),
+                page=int(request.get("page") or 1),
                 limit=limit,
                 progress=progress,
                 on_batch=on_batch if stream_batches else None,
