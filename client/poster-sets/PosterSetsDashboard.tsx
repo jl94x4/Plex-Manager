@@ -71,10 +71,10 @@ const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
 const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
 const SEARCH_SETS_PAGE_SIZE = 24;
 const WATCHES_PAGE_SIZE_OPTIONS = [
-    { value: '25', label: '25 per page' },
-    { value: '50', label: '50 per page' },
-    { value: '75', label: '75 per page' },
-    { value: '100', label: '100 per page' },
+    { value: '12', label: '12 per page' },
+    { value: '24', label: '24 per page' },
+    { value: '36', label: '36 per page' },
+    { value: '48', label: '48 per page' },
 ] as const;
 const ALL_MEDIUX_FILTER_IDS = MEDIUX_FILTER_OPTIONS.map((option) => option.id);
 const TITLE_CARD_ONLY_FILTERS = ['title_card'];
@@ -694,7 +694,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const [watchStatsState, setWatchStatsState] = useState<PosterSetsWatchStats>({});
     const [watchUrlDraft, setWatchUrlDraft] = useState('');
     const [watchesPage, setWatchesPage] = useState(1);
-    const [watchesPageSize, setWatchesPageSize] = useState(25);
+    const [watchesPageSize, setWatchesPageSize] = useState(12);
     const [watchesFilter, setWatchesFilter] = useState('');
     const [selectedBulkSets, setSelectedBulkSets] = useState<Record<string, BulkSetSelection>>({});
     const [browseRails, setBrowseRails] = useState<PosterSetsBrowseRail[]>([]);
@@ -2353,20 +2353,32 @@ export const PosterSetsDashboard: React.FC = () => {
             ) : null}
 
             {tab === 'watches' ? (
-                <section className={`${cardClass} space-y-4 overflow-hidden p-4 sm:p-5`}>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <section className={`${cardClass} min-w-0 space-y-5 overflow-hidden p-4 sm:p-5`}>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div className="min-w-0">
-                            <h2 className={sectionTitleClass}>Watching</h2>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-plex">Pinned artwork</p>
+                            <h2 className="mt-1 text-xl font-bold tracking-tight text-text sm:text-2xl">Watching</h2>
                             <p className={sectionBodyClass}>
-                                Pin MediUX / ThePosterDB sets. New art (including MediUX title cards) is queued automatically.
+                                Keep MediUX and ThePosterDB sets in view. New art — including title cards — queues automatically.
                             </p>
-                            <p className="mt-2 text-[11px] text-muted sm:text-xs">
-                                {watchStatsState.enabled || 0} enabled
-                                {' · '}
-                                {watchStatsState.total || 0} total
-                                {(watchStatsState.errored || 0) > 0 ? ` · ${watchStatsState.errored} with errors` : ''}
-                                {configDraft.watchersEnabled === false ? ' · watchers paused in Settings' : ''}
-                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                <MetaPill className="border-plex/35 bg-plex/15 text-plex" truncate={false}>
+                                    {watchStatsState.enabled || 0} live
+                                </MetaPill>
+                                <MetaPill className="border-white/15 bg-white/5 text-muted" truncate={false}>
+                                    {watchStatsState.total || 0} pinned
+                                </MetaPill>
+                                {(watchStatsState.errored || 0) > 0 ? (
+                                    <MetaPill className="border-red-400/35 bg-red-500/15 text-red-200" truncate={false}>
+                                        {watchStatsState.errored} errors
+                                    </MetaPill>
+                                ) : null}
+                                {configDraft.watchersEnabled === false ? (
+                                    <MetaPill className="border-amber-400/35 bg-amber-500/15 text-amber-100" truncate={false}>
+                                        Watchers paused in Settings
+                                    </MetaPill>
+                                ) : null}
+                            </div>
                         </div>
                         <div className="flex flex-wrap gap-2">
                             <button
@@ -2379,7 +2391,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             </button>
                             <button
                                 type="button"
-                                className={buttonClass}
+                                className={primaryButtonClass}
                                 disabled={busy !== null || !watches.length}
                                 onClick={async () => {
                                     setBusy('watches');
@@ -2404,7 +2416,7 @@ export const PosterSetsDashboard: React.FC = () => {
                     </div>
 
                     <form
-                        className="flex flex-col gap-2 sm:flex-row"
+                        className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 p-3 sm:flex-row sm:items-center sm:p-3.5"
                         onSubmit={async (event) => {
                             event.preventDefault();
                             const target = watchUrlDraft.trim();
@@ -2427,20 +2439,20 @@ export const PosterSetsDashboard: React.FC = () => {
                         }}
                     >
                         <input
-                            className={fieldClass}
-                            placeholder="https://mediux.pro/sets/... or theposterdb.com/posters/..."
+                            className={`${fieldClass} border-white/10 bg-background/50`}
+                            placeholder="Paste a MediUX or ThePosterDB set URL to pin…"
                             value={watchUrlDraft}
                             onChange={(event) => setWatchUrlDraft(event.target.value)}
                         />
-                        <button type="submit" className={primaryButtonClass} disabled={busy !== null}>
-                            Pin URL
+                        <button type="submit" className={`${primaryButtonClass} shrink-0`} disabled={busy !== null}>
+                            <Eye className="h-4 w-4" /> Pin set
                         </button>
                     </form>
 
                     {watches.length ? (
-                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                             <input
-                                className={`${fieldClass} sm:max-w-xs`}
+                                className={`${fieldClass} sm:max-w-sm`}
                                 placeholder="Filter by title, creator, URL…"
                                 value={watchesFilter}
                                 onChange={(event) => {
@@ -2450,9 +2462,16 @@ export const PosterSetsDashboard: React.FC = () => {
                             />
                             <div className="flex flex-wrap items-center gap-2">
                                 <CustomSelect
+                                    value={gridSize === 'list' ? 'medium' : gridSize}
+                                    onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
+                                    options={POSTER_SETS_GRID_OPTIONS}
+                                    className="w-full min-w-[140px] sm:w-auto"
+                                    compact
+                                />
+                                <CustomSelect
                                     value={String(watchesPageSize)}
                                     onChange={(value) => {
-                                        const next = Number(value) || 25;
+                                        const next = Number(value) || 12;
                                         setWatchesPageSize(next);
                                         setWatchesPage(1);
                                     }}
@@ -2460,133 +2479,138 @@ export const PosterSetsDashboard: React.FC = () => {
                                     className="w-full min-w-[140px] sm:w-auto"
                                     compact
                                 />
-                                {watchesPageCount > 1 ? (
-                                    <>
-                                        <button
-                                            type="button"
-                                            className={buttonClass}
-                                            disabled={busy !== null || watchesPage <= 1}
-                                            onClick={() => setWatchesPage((page) => Math.max(1, page - 1))}
-                                        >
-                                            <ChevronLeft className="h-4 w-4" />
-                                            Prev
-                                        </button>
-                                        <span className="text-xs text-muted">
-                                            Page {Math.min(watchesPage, watchesPageCount)} / {watchesPageCount}
-                                            {' · '}
-                                            {watchGroups.length} shown
-                                            {filteredWatches.length !== watchGroups.length
-                                                ? ` · ${filteredWatches.length} sets`
-                                                : ''}
-                                        </span>
-                                        <button
-                                            type="button"
-                                            className={buttonClass}
-                                            disabled={busy !== null || watchesPage >= watchesPageCount}
-                                            onClick={() => setWatchesPage((page) => Math.min(watchesPageCount, page + 1))}
-                                        >
-                                            Next
-                                            <ChevronRight className="h-4 w-4" />
-                                        </button>
-                                    </>
-                                ) : (
-                                    <span className="text-xs text-muted">
-                                        {watchGroups.length} title{watchGroups.length === 1 ? '' : 's'}
-                                        {filteredWatches.length !== watchGroups.length
-                                            ? ` · ${filteredWatches.length} sets`
-                                            : ''}
-                                        {watchesFilter.trim() ? ` (of ${watches.length})` : ''}
-                                    </span>
-                                )}
+                                <span className="text-xs text-muted">
+                                    {watchGroups.length} title{watchGroups.length === 1 ? '' : 's'}
+                                    {filteredWatches.length !== watchGroups.length
+                                        ? ` · ${filteredWatches.length} sets`
+                                        : ''}
+                                    {watchesFilter.trim() ? ` (of ${watches.length})` : ''}
+                                </span>
                             </div>
                         </div>
                     ) : null}
 
                     {!watches.length ? (
-                        <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
-                            Apply a set and keep watching, or pin a MediUX/TPDB URL.
-                            Sonarr On Import (same Scanner webhook) also refreshes matching watches after a short debounce.
-                        </p>
+                        <div className="rounded-xl border border-dashed border-white/15 bg-black/20 px-5 py-14 text-center">
+                            <Eye className="mx-auto h-8 w-8 text-plex/70" />
+                            <p className="mt-3 text-sm font-semibold text-text">Nothing watching yet</p>
+                            <p className="mx-auto mt-1.5 max-w-md text-xs text-muted sm:text-sm">
+                                Apply a set and keep watching, or pin a MediUX / TPDB URL above.
+                                Sonarr On Import also refreshes matching watches after a short debounce.
+                            </p>
+                        </div>
                     ) : !filteredWatches.length ? (
-                        <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
+                        <div className="rounded-xl border border-dashed border-white/15 bg-black/20 px-5 py-10 text-center text-sm text-muted">
                             No sets match “{watchesFilter.trim()}”.
-                        </p>
+                        </div>
                     ) : (
-                        <div className="min-w-0 space-y-3 overflow-hidden">
-                            {pagedWatchGroups.map((group) => {
-                                const multi = group.watches.length > 1;
-                                return (
-                                    <div
-                                        key={group.key}
-                                        className={`min-w-0 overflow-hidden rounded-xl border px-3 py-3 sm:px-4 ${
-                                            group.errored
-                                                ? 'border-red-500/30 bg-red-500/5'
-                                                : 'border-white/10 bg-black/10'
-                                        }`}
-                                    >
-                                        <div className="flex min-w-0 gap-3 overflow-hidden">
-                                            {group.thumbUrl ? (
-                                                <img
-                                                    src={group.thumbUrl}
-                                                    alt=""
-                                                    className="h-14 w-10 shrink-0 rounded-lg object-cover sm:h-16 sm:w-12"
-                                                />
-                                            ) : (
-                                                <div className="flex h-14 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30 sm:h-16 sm:w-12">
-                                                    <ImageIcon className="h-5 w-5 text-muted" />
-                                                </div>
-                                            )}
-                                            <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
-                                                <p className="break-words text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]" title={group.title}>
-                                                    {group.title}
-                                                </p>
-                                                <p className="break-words text-[11px] text-muted sm:text-xs">
-                                                    {multi ? `${group.watches.length} sets` : '1 set'}
-                                                    {group.lastCheckedAt ? ` · checked ${formatTime(group.lastCheckedAt)}` : ''}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div className={`mt-3 space-y-2 ${multi ? 'border-t border-white/10 pt-3' : 'pt-2'}`}>
-                                            {group.watches.map((watch) => {
-                                                const creator = String(watch.user || '').trim().replace(/^@/, '');
-                                                const provider = String(watch.provider || '').toLowerCase();
-                                                const setLabel = creator
-                                                    ? `@${creator}`
-                                                    : (watch.setId ? `Set ${watch.setId}` : 'Set');
-                                                return (
-                                                    <div
-                                                        key={watch.id}
-                                                        className={`min-w-0 overflow-hidden rounded-lg border px-2.5 py-2.5 sm:px-3 ${
-                                                            watch.lastError
-                                                                ? 'border-red-500/25 bg-red-500/5'
-                                                                : 'border-white/10 bg-black/20'
+                        <div className="min-w-0 space-y-4">
+                            <div className={posterGridClass} style={posterGridStyle}>
+                                {pagedWatchGroups.map((group) => {
+                                    const multi = group.watches.length > 1;
+                                    const anyPaused = group.watches.every((watch) => watch.enabled === false);
+                                    const thumbSrc = group.thumbUrl
+                                        ? (group.thumbUrl.startsWith('http')
+                                            ? posterSetsApi.imageUrl(group.thumbUrl)
+                                            : group.thumbUrl)
+                                        : '';
+                                    return (
+                                        <article
+                                            key={group.key}
+                                            className={`group flex min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border bg-black/25 transition ${
+                                                group.errored
+                                                    ? 'border-red-500/35 ring-1 ring-red-500/20'
+                                                    : 'border-white/10 hover:border-plex/40'
+                                            }`}
+                                        >
+                                            <div className="relative aspect-[2/3] overflow-hidden bg-black">
+                                                {thumbSrc ? (
+                                                    <img
+                                                        src={thumbSrc}
+                                                        alt=""
+                                                        loading="lazy"
+                                                        className={`absolute inset-0 h-full w-full object-contain object-center transition duration-300 group-hover:scale-[1.02] ${
+                                                            anyPaused ? 'opacity-55' : ''
                                                         }`}
-                                                    >
-                                                        <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
-                                                            <div className="min-w-0 flex-1 space-y-1.5 overflow-hidden">
-                                                                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                                                                    <StatusPill value={watch.enabled === false ? 'Paused' : 'Watching'} />
-                                                                    <ProviderPill provider={provider} />
-                                                                    <CreatorPill user={creator} />
-                                                                    {!creator && watch.setId ? (
-                                                                        <span className="text-[11px] text-muted">#{watch.setId}</span>
-                                                                    ) : null}
-                                                                </div>
-                                                                <p className="break-words text-[11px] text-muted sm:text-xs">
-                                                                    {(watch.knownAssetIds || []).length} known
-                                                                    {watch.lastCheckedAt ? ` · checked ${formatTime(watch.lastCheckedAt)}` : ' · not checked yet'}
-                                                                    {watch.lastNewCount ? ` · last new ${watch.lastNewCount}` : ''}
-                                                                    {watch.lastAppliedAt ? ` · applied ${formatTime(watch.lastAppliedAt)}` : ''}
-                                                                </p>
-                                                                {watch.lastError ? (
-                                                                    <p className="break-words text-xs text-red-300 sm:text-sm [overflow-wrap:anywhere]">{watch.lastError}</p>
+                                                    />
+                                                ) : (
+                                                    <div className="absolute inset-0 flex items-center justify-center text-muted">
+                                                        <ImageIcon className="h-10 w-10 opacity-40" />
+                                                    </div>
+                                                )}
+                                                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-2.5 pb-2.5 pt-10">
+                                                    <p className="line-clamp-2 text-sm font-bold leading-snug text-white drop-shadow" title={group.title}>
+                                                        {group.title}
+                                                    </p>
+                                                    <p className="mt-0.5 text-[11px] text-white/70">
+                                                        {multi ? `${group.watches.length} sets` : '1 set'}
+                                                        {group.lastCheckedAt ? ` · ${formatTime(group.lastCheckedAt)}` : ''}
+                                                    </p>
+                                                </div>
+                                                {group.errored ? (
+                                                    <span className="absolute left-2 top-2 rounded-full border border-red-400/40 bg-red-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                                                        Error
+                                                    </span>
+                                                ) : anyPaused ? (
+                                                    <span className="absolute left-2 top-2 rounded-full border border-white/20 bg-black/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+                                                        Paused
+                                                    </span>
+                                                ) : (
+                                                    <span className="absolute left-2 top-2 rounded-full border border-plex/40 bg-plex/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-background">
+                                                        Watching
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-2.5 sm:p-3">
+                                                {group.watches.map((watch) => {
+                                                    const creator = String(watch.user || '').trim().replace(/^@/, '');
+                                                    const provider = String(watch.provider || '').toLowerCase();
+                                                    const setLabel = creator
+                                                        ? `@${creator}`
+                                                        : (watch.setId ? `Set ${watch.setId}` : 'Set');
+                                                    const watchThumb = String(watch.thumbUrl || '').trim();
+                                                    const watchThumbSrc = watchThumb
+                                                        ? (watchThumb.startsWith('http')
+                                                            ? posterSetsApi.imageUrl(watchThumb)
+                                                            : watchThumb)
+                                                        : '';
+                                                    return (
+                                                        <div
+                                                            key={watch.id}
+                                                            className={`min-w-0 space-y-2 rounded-lg border p-2 ${
+                                                                watch.lastError
+                                                                    ? 'border-red-500/30 bg-red-500/10'
+                                                                    : 'border-white/10 bg-black/30'
+                                                            }`}
+                                                        >
+                                                            <div className="flex min-w-0 items-start gap-2">
+                                                                {multi && watchThumbSrc ? (
+                                                                    <img
+                                                                        src={watchThumbSrc}
+                                                                        alt=""
+                                                                        className="h-12 w-8 shrink-0 rounded object-contain bg-black"
+                                                                        loading="lazy"
+                                                                    />
                                                                 ) : null}
-                                                                <div className="pt-0.5">
+                                                                <div className="min-w-0 flex-1 space-y-1.5">
+                                                                    <div className="flex min-w-0 flex-wrap items-center gap-1">
+                                                                        <StatusPill value={watch.enabled === false ? 'Paused' : 'Watching'} />
+                                                                        <ProviderPill provider={provider} />
+                                                                        <CreatorPill user={creator} />
+                                                                    </div>
+                                                                    <p className="text-[10px] leading-relaxed text-muted sm:text-[11px]">
+                                                                        {(watch.knownAssetIds || []).length} known
+                                                                        {watch.lastCheckedAt ? ` · ${formatTime(watch.lastCheckedAt)}` : ' · not checked'}
+                                                                        {watch.lastNewCount ? ` · +${watch.lastNewCount} last` : ''}
+                                                                    </p>
+                                                                    {watch.lastError ? (
+                                                                        <p className="break-words text-[11px] text-red-300 [overflow-wrap:anywhere]">{watch.lastError}</p>
+                                                                    ) : null}
                                                                     {provider === 'posterdb' ? (
-                                                                        <p className="text-[11px] text-muted">TPDB has no title cards</p>
+                                                                        <p className="text-[10px] text-muted">TPDB has no title cards</p>
                                                                     ) : (
-                                                                        <div className="flex flex-wrap gap-1.5">
+                                                                        <div className="flex flex-wrap gap-1">
                                                                             {MEDIUX_FILTER_OPTIONS.map((option) => {
                                                                                 const current = (watch.mediuxFilters?.length
                                                                                     ? watch.mediuxFilters
@@ -2596,7 +2620,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                                     <button
                                                                                         key={option.id}
                                                                                         type="button"
-                                                                                        className={`${active ? primaryButtonClass : buttonClass} !px-2 !py-1 text-[10px]`}
+                                                                                        className={`rounded-full border px-2 py-0.5 text-[9px] font-bold tracking-wide transition ${
+                                                                                            active
+                                                                                                ? 'border-plex/50 bg-plex/20 text-plex'
+                                                                                                : 'border-white/10 bg-white/5 text-muted hover:border-white/20'
+                                                                                        }`}
                                                                                         disabled={busy !== null}
                                                                                         onClick={async () => {
                                                                                             const base = watch.mediuxFilters?.length
@@ -2624,21 +2652,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                         </div>
                                                                     )}
                                                                 </div>
-                                                                {watch.url ? (
-                                                                    <a
-                                                                        href={watch.url}
-                                                                        target="_blank"
-                                                                        rel="noreferrer"
-                                                                        className="inline-flex items-center gap-1 text-xs font-semibold text-plex no-underline hover:underline"
-                                                                    >
-                                                                        Open set <ExternalLink className="h-3 w-3" />
-                                                                    </a>
-                                                                ) : null}
                                                             </div>
-                                                            <div className="flex shrink-0 flex-wrap gap-2">
+                                                            <div className="flex flex-wrap gap-1.5">
                                                                 <button
                                                                     type="button"
-                                                                    className={buttonClass}
+                                                                    className={`${buttonClass} !px-2 !py-1 text-[10px]`}
                                                                     disabled={busy !== null}
                                                                     onClick={async () => {
                                                                         setBusy('watches');
@@ -2651,13 +2669,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                             setBusy(null);
                                                                         }
                                                                     }}
+                                                                    title={watch.enabled === false ? 'Enable' : 'Pause'}
                                                                 >
-                                                                    {watch.enabled === false ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                                                                    {watch.enabled === false ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
                                                                     {watch.enabled === false ? 'Enable' : 'Pause'}
                                                                 </button>
                                                                 <button
                                                                     type="button"
-                                                                    className={buttonClass}
+                                                                    className={`${buttonClass} !px-2 !py-1 text-[10px]`}
                                                                     disabled={busy !== null}
                                                                     onClick={async () => {
                                                                         setBusy('watches');
@@ -2680,11 +2699,21 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                         }
                                                                     }}
                                                                 >
-                                                                    <RefreshCw className="h-4 w-4" /> Check now
+                                                                    <RefreshCw className="h-3.5 w-3.5" /> Check
                                                                 </button>
+                                                                {watch.url ? (
+                                                                    <a
+                                                                        href={watch.url}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        className={`${buttonClass} !px-2 !py-1 text-[10px] no-underline`}
+                                                                    >
+                                                                        <ExternalLink className="h-3.5 w-3.5" /> Open
+                                                                    </a>
+                                                                ) : null}
                                                                 <button
                                                                     type="button"
-                                                                    className={buttonClass}
+                                                                    className={`${buttonClass} !px-2 !py-1 text-[10px] text-red-200 hover:border-red-400/40`}
                                                                     disabled={busy !== null}
                                                                     onClick={async () => {
                                                                         const ok = await askConfirm(`Remove ${setLabel} watch for “${group.title}”?`, {
@@ -2705,19 +2734,19 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                         }
                                                                     }}
                                                                 >
-                                                                    <Trash2 className="h-4 w-4" /> Remove
+                                                                    <Trash2 className="h-3.5 w-3.5" /> Remove
                                                                 </button>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                                                    );
+                                                })}
+                                            </div>
+                                        </article>
+                                    );
+                                })}
+                            </div>
                             {watchesPageCount > 1 ? (
-                                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                                     <button
                                         type="button"
                                         className={buttonClass}
