@@ -59,7 +59,7 @@ import {
     selectMediaAdapter,
     spawnCommand,
 } from './lib/media-automation/index.js';
-import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest } from './lib/poster-sets/index.js';
+import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook } from './lib/poster-sets/index.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
 const resolveAppVersion = () => {
@@ -19263,6 +19263,9 @@ const handleArrTrigger = async (req, res, kind) => {
                 title: meta.title || `${kind.charAt(0).toUpperCase()}${kind.slice(1)} webhook`,
                 error: `${eventType || 'Unknown'} webhook contained no usable media paths.`,
             }, { countProcessed: false });
+            if (kind === 'sonarr' && /^download$/i.test(eventType)) {
+                void schedulePosterSetsArrHook(event).catch(() => undefined);
+            }
             return res.status(200).json({ ok: true, queued: 0 });
         }
 
@@ -19274,6 +19277,9 @@ const handleArrTrigger = async (req, res, kind) => {
         });
         await enqueueScans(scans);
         log(`[scanner] Queued ${scans.length} from ${kind}:${trigger.name} (${eventType}${scans[0]?.reason ? ` · ${scans[0].reason}` : ''}): ${scans.map((s) => s.folder).join(' | ')}`);
+        if (kind === 'sonarr' && /^download$/i.test(eventType)) {
+            void schedulePosterSetsArrHook(event).catch(() => undefined);
+        }
         return res.status(200).json({ ok: true, queued: scans.length, folders: scans.map((s) => s.folder) });
     } catch (e) {
         log(`[scanner] ${kind} trigger failed: ${e?.message || e}`);

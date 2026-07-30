@@ -13,6 +13,8 @@ export type PosterSetsConfig = {
     watchIntervalHours?: number;
     autoWatchOnApply?: boolean;
     notifyOnWatcherDigest?: boolean;
+    /** Debounced watch check when Sonarr On Import fires (Scanner webhook). */
+    arrWatchHookEnabled?: boolean;
     hasToken?: boolean;
     configured?: boolean;
 };
@@ -25,6 +27,8 @@ export type PosterSetsWatch = {
     setId?: string | null;
     title?: string | null;
     user?: string | null;
+    tmdbId?: string | null;
+    tvdbId?: string | null;
     thumbUrl?: string;
     mediuxFilters?: string[];
     knownAssetIds?: string[];
@@ -48,6 +52,8 @@ export type PosterSetsSetMeta = {
     url?: string | null;
     title?: string | null;
     user?: string | null;
+    tmdbId?: string | null;
+    tvdbId?: string | null;
     thumbUrl?: string;
     assetCount?: number | null;
 };
@@ -256,4 +262,5 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     watchIntervalHours: 6,
     autoWatchOnApply: true,
     notifyOnWatcherDigest: true,
+    arrWatchHookEnabled: true,
 };

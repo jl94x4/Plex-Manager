@@ -550,6 +550,17 @@ def extract_creator_from_soup(soup) -> Optional[str]:
     return None
 
 
+def _pick_id(value) -> Optional[str]:
+    if value is None or value is False:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"none", "null", "0"}:
+        return None
+    if text.isdigit() or text.replace("-", "").isalnum():
+        return text
+    return text or None
+
+
 def extract_mediux_creator(data_dict, soup=None) -> Optional[str]:
     aset = (data_dict or {}).get("set") if isinstance(data_dict, dict) else None
     if isinstance(aset, dict):
@@ -588,14 +599,20 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
 
     page_meta["user"] = extract_mediux_creator(data_dict, soup)
     try:
-        show = (data_dict.get("set") or {}).get("show") or {}
+        aset = data_dict.get("set") or {}
+        show = aset.get("show") or {}
+        movie = aset.get("movie") or {}
         if isinstance(show, dict) and show.get("name"):
             page_meta["title"] = str(show.get("name") or "").strip() or None
-        elif (data_dict.get("set") or {}).get("movie"):
-            page_meta["title"] = str(((data_dict.get("set") or {}).get("movie") or {}).get("title") or "").strip() or None
-        elif (data_dict.get("set") or {}).get("collection"):
+            page_meta["tmdbId"] = _pick_id(show.get("id") or show.get("tmdb_id") or show.get("tmdbId"))
+            page_meta["tvdbId"] = _pick_id(show.get("tvdb_id") or show.get("tvdbId") or show.get("tvdb"))
+        elif isinstance(movie, dict) and movie.get("title"):
+            page_meta["title"] = str(movie.get("title") or "").strip() or None
+            page_meta["tmdbId"] = _pick_id(movie.get("id") or movie.get("tmdb_id") or movie.get("tmdbId"))
+            page_meta["tvdbId"] = _pick_id(movie.get("tvdb_id") or movie.get("tvdbId"))
+        elif (aset.get("collection") or {}).get("collection_name"):
             page_meta["title"] = str(
-                ((data_dict.get("set") or {}).get("collection") or {}).get("collection_name") or ""
+                (aset.get("collection") or {}).get("collection_name") or ""
             ).strip() or None
     except Exception:
         pass
@@ -826,6 +843,8 @@ def build_set_meta(
         "url": ref.get("url") or str(url or "").strip(),
         "title": title,
         "user": user,
+        "tmdbId": _pick_id(meta.get("tmdbId") or meta.get("tmdb_id")),
+        "tvdbId": _pick_id(meta.get("tvdbId") or meta.get("tvdb_id")),
         "thumbUrl": thumb,
         "assetCount": total or None,
     }

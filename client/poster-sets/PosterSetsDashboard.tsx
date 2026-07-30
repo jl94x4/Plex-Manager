@@ -1597,6 +1597,7 @@ export const PosterSetsDashboard: React.FC = () => {
                     {!watches.length ? (
                         <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
                             Apply a set and keep watching, or pin a MediUX/TPDB URL.
+                            Sonarr On Import (same Scanner webhook) also refreshes matching watches after a short debounce.
                         </p>
                     ) : (
                         <div className="space-y-2">
@@ -2942,6 +2943,12 @@ export const PosterSetsDashboard: React.FC = () => {
                             description="Send a digest notification when set watchers enqueue new posters."
                             checked={configDraft.notifyOnWatcherDigest !== false}
                             onChange={(next) => setConfigDraft((prev) => ({ ...prev, notifyOnWatcherDigest: next }))}
+                        />
+                        <SettingsToggleRow
+                            title="Check watches when Sonarr imports episodes"
+                            description="Uses the existing Scanner Sonarr On Import webhook. Debounces 3 minutes per show/season, then checks matching watches for new title cards."
+                            checked={configDraft.arrWatchHookEnabled !== false}
+                            onChange={(next) => setConfigDraft((prev) => ({ ...prev, arrWatchHookEnabled: next }))}
                             border={false}
                         />
                     </div>
