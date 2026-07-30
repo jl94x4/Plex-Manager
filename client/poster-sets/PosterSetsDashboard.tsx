@@ -365,15 +365,26 @@ const providerPillClass = (provider?: string | null) => {
     return 'border-white/10 bg-white/5 text-muted';
 };
 
-const MetaPill: React.FC<{ children: React.ReactNode; className?: string; title?: string; truncate?: boolean }> = ({
+const MetaPill: React.FC<{
+    children: React.ReactNode;
+    className?: string;
+    title?: string;
+    truncate?: boolean;
+    compact?: boolean;
+}> = ({
     children,
     className = '',
     title,
     truncate = true,
+    compact = false,
 }) => (
     <span
         title={title}
-        className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold tracking-wide sm:px-2.5 sm:py-1 sm:text-[11px] ${
+        className={`inline-flex items-center rounded-full border font-bold tracking-wide ${
+            compact
+                ? 'px-1.5 py-px text-[8px] sm:text-[9px]'
+                : 'px-1.5 py-0.5 text-[9px] sm:px-2.5 sm:py-1 sm:text-[11px]'
+        } ${
             truncate ? 'max-w-full shrink truncate' : 'max-w-full shrink-0 whitespace-normal break-all'
         } ${className}`}
     >
@@ -381,27 +392,91 @@ const MetaPill: React.FC<{ children: React.ReactNode; className?: string; title?
     </span>
 );
 
-const ProviderPill: React.FC<{ provider?: string | null }> = ({ provider }) => {
+const ProviderPill: React.FC<{ provider?: string | null; compact?: boolean }> = ({ provider, compact }) => {
     const key = normalizeProviderKey(provider);
     if (!key) return null;
     return (
-        <MetaPill className={`uppercase ${providerPillClass(provider)}`} title={providerLabel(provider)}>
+        <MetaPill
+            compact={compact}
+            className={`uppercase ${providerPillClass(provider)}`}
+            title={providerLabel(provider)}
+        >
             {key === 'posterdb' ? 'TPDB' : 'MediUX'}
         </MetaPill>
     );
 };
 
-const CreatorPill: React.FC<{ user?: string | null }> = ({ user }) => {
-    const handle = String(user || '').trim().replace(/^@/, '');
-    if (!handle) return null;
+/** Proxied poster thumb with graceful fallback when upstream / Cloudflare flakes. */
+const PosterThumb: React.FC<{
+    src?: string | null;
+    alt?: string;
+    className?: string;
+    imgClassName?: string;
+    loading?: 'lazy' | 'eager';
+}> = ({ src, alt = '', className = '', imgClassName = '', loading = 'lazy' }) => {
+    const [failed, setFailed] = useState(false);
+    const resolved = String(src || '').trim();
+    useEffect(() => {
+        setFailed(false);
+    }, [resolved]);
+    if (!resolved || failed) {
+        return (
+            <div className={`flex items-center justify-center bg-black text-muted ${className}`}>
+                <ImageIcon className="h-8 w-8 opacity-40 sm:h-10 sm:w-10" />
+            </div>
+        );
+    }
     return (
-        <MetaPill
-            truncate={false}
-            className="border-white/15 bg-white/10 text-text/90 normal-case"
-            title={`@${handle}`}
+        <div className={`overflow-hidden bg-black ${className}`}>
+            <img
+                src={resolved}
+                alt={alt}
+                loading={loading}
+                decoding="async"
+                className={imgClassName || 'h-full w-full object-contain object-center'}
+                onError={() => setFailed(true)}
+            />
+        </div>
+    );
+};
+
+const CreatorPill: React.FC<{
+    user?: string | null;
+    onOpen?: (user: string) => void;
+    compact?: boolean;
+}> = ({ user, onOpen, compact }) => {
+    const handle = String(user || '').trim().replace(/^@+/, '');
+    if (!handle) return null;
+    const label = `@${handle}`;
+    if (!onOpen) {
+        return (
+            <MetaPill
+                compact={compact}
+                truncate={false}
+                className="border-white/15 bg-white/10 text-text/90 normal-case"
+                title={label}
+            >
+                {label}
+            </MetaPill>
+        );
+    }
+    return (
+        <button
+            type="button"
+            title={`View all posters by ${label}`}
+            onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onOpen(handle);
+            }}
+            className={`inline-flex max-w-full shrink-0 items-center whitespace-normal break-all rounded-full border border-white/15 bg-white/10 font-bold tracking-wide text-text/90 normal-case transition hover:border-plex/50 hover:bg-plex/15 hover:text-plex ${
+                compact
+                    ? 'px-1.5 py-px text-[8px] sm:text-[9px]'
+                    : 'px-1.5 py-0.5 text-[9px] sm:px-2.5 sm:py-1 sm:text-[11px]'
+            }`}
         >
-            @{handle}
-        </MetaPill>
+            {label}
+        </button>
     );
 };
 
@@ -418,18 +493,21 @@ const isTitleCardRail = (rail?: PosterSetsBrowseRail | null) => {
     return sample.length > 0 && sample.every((set) => isTitleCardSet(set));
 };
 
-const SetKindPill: React.FC<{ set?: { title?: string | null; setKind?: string | null } | null }> = ({ set }) => {
+const SetKindPill: React.FC<{
+    set?: { title?: string | null; setKind?: string | null } | null;
+    compact?: boolean;
+}> = ({ set, compact }) => {
     const kind = String(set?.setKind || '').trim().toLowerCase();
     if (kind === 'boxset') {
         return (
-            <MetaPill className="border-emerald-400/35 bg-emerald-500/15 text-emerald-100" title="Full boxset">
+            <MetaPill compact={compact} className="border-emerald-400/35 bg-emerald-500/15 text-emerald-100" title="Full boxset">
                 Boxset
             </MetaPill>
         );
     }
     if (isTitleCardSet(set)) {
         return (
-            <MetaPill className="border-violet-400/35 bg-violet-500/15 text-violet-100" title="Title card pack">
+            <MetaPill compact={compact} className="border-violet-400/35 bg-violet-500/15 text-violet-100" title="Title card pack">
                 Title cards
             </MetaPill>
         );
@@ -440,44 +518,48 @@ const SetKindPill: React.FC<{ set?: { title?: string | null; setKind?: string | 
 function BrowseSetCard({
     set,
     onOpen,
+    onOpenCreator,
     disabled,
 }: {
     set: PosterSetsSearchSet;
     onOpen: (set: PosterSetsSearchSet) => void;
+    onOpenCreator?: (user: string) => void;
     disabled?: boolean;
 }) {
     const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
     const landscape = isTitleCardSet(set);
     return (
-        <button
-            type="button"
-            disabled={disabled}
-            onClick={() => onOpen(set)}
-            className={`group flex w-full min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border border-white/10 bg-black/20 text-left transition hover:border-plex/40`}
-        >
-            <div className={`relative w-full shrink-0 overflow-hidden bg-black ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
-                {set.thumbUrl ? (
-                    <img
-                        src={posterSetsApi.imageUrl(set.thumbUrl)}
-                        alt={setTitle}
-                        loading="lazy"
-                        className="absolute inset-0 h-full w-full object-contain object-center"
-                    />
-                ) : (
-                    <div className="absolute inset-0 flex items-center justify-center text-muted">
-                        <ImageIcon className="h-8 w-8 opacity-40" />
-                    </div>
-                )}
-            </div>
-            <div className="min-w-0 space-y-1.5 p-2 sm:p-2.5">
-                <p className="line-clamp-2 text-xs font-semibold text-text sm:text-sm" title={setTitle}>{setTitle}</p>
-                <div className="flex flex-wrap items-center gap-1">
-                    <CreatorPill user={set.user} />
-                    <SetKindPill set={set} />
-                    <ProviderPill provider={set.provider} />
+        <div className={`group flex w-full min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border border-white/10 bg-black/20 text-left transition hover:border-plex/40`}>
+            <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onOpen(set)}
+                className="flex w-full min-w-0 flex-col text-left disabled:opacity-50"
+            >
+                <div className={`relative w-full shrink-0 overflow-hidden bg-black ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
+                    {set.thumbUrl ? (
+                        <img
+                            src={posterSetsApi.imageUrl(set.thumbUrl)}
+                            alt={setTitle}
+                            loading="lazy"
+                            className="absolute inset-0 h-full w-full object-contain object-center"
+                        />
+                    ) : (
+                        <div className="absolute inset-0 flex items-center justify-center text-muted">
+                            <ImageIcon className="h-8 w-8 opacity-40" />
+                        </div>
+                    )}
                 </div>
+                <div className="min-w-0 px-1.5 pt-1.5 sm:px-2 sm:pt-1.5">
+                    <p className="line-clamp-2 text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={setTitle}>{setTitle}</p>
+                </div>
+            </button>
+            <div className="flex flex-wrap items-center gap-0.5 px-1.5 pb-1.5 pt-1 sm:px-2 sm:pb-2">
+                <CreatorPill user={set.user} onOpen={onOpenCreator} compact />
+                <SetKindPill set={set} compact />
+                <ProviderPill provider={set.provider} compact />
             </div>
-        </button>
+        </div>
     );
 }
 
@@ -645,7 +727,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const initialLocation = useMemo(
         () => (typeof window !== 'undefined'
             ? parsePosterSetsUrl()
-            : { tab: 'apply' as TabId, rail: null, setUrl: null, titleCardsOnly: false }),
+            : { tab: 'apply' as TabId, rail: null, setUrl: null, creator: null, titleCardsOnly: false }),
         [],
     );
     const [tab, setTab] = useState<TabId>(initialLocation.tab);
@@ -654,14 +736,15 @@ export const PosterSetsDashboard: React.FC = () => {
     const [configDraft, setConfigDraft] = useState<PosterSetsConfig>(DEFAULT_POSTER_SETS_CONFIG);
     const [tvText, setTvText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.tv_library));
     const [movieText, setMovieText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.movie_library));
+    const [whitelistText, setWhitelistText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.creatorWhitelist));
     const [url, setUrl] = useState(initialLocation.setUrl || '');
     const [titleCardsOnly, setTitleCardsOnly] = useState(Boolean(initialLocation.titleCardsOnly));
     const [bulkText, setBulkText] = useState('');
     const [findProvider, setFindProvider] = useState<SetProvider>('mediux');
     const [findId, setFindId] = useState('');
     const [searchProvider, setSearchProvider] = useState<SearchProvider>('both');
-    const [searchMode, setSearchMode] = useState<'title' | 'creator'>('title');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchMode, setSearchMode] = useState<'title' | 'creator'>(initialLocation.creator ? 'creator' : 'title');
+    const [searchQuery, setSearchQuery] = useState(initialLocation.creator || '');
     const [searchTitles, setSearchTitles] = useState<PosterSetsSearchTitle[]>([]);
     const [searchSets, setSearchSets] = useState<PosterSetsSearchSet[]>([]);
     const [searchSetsPage, setSearchSetsPage] = useState(1);
@@ -704,6 +787,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const syncedSetUrlRef = useRef<string | null>(initialLocation.setUrl);
     const titleCardsOnlyRef = useRef(Boolean(initialLocation.titleCardsOnly));
     const deepLinkHandledRef = useRef(false);
+    const openCreatorCatalogRef = useRef<(username: string, options?: { skipUrl?: boolean }) => void>(() => {});
 
     const loadHistory = useCallback(async () => {
         try {
@@ -764,11 +848,18 @@ export const PosterSetsDashboard: React.FC = () => {
         setSelectedAssetIds([]);
         setTitleCardsOnly(false);
         syncedSetUrlRef.current = null;
-        writePosterSetsUrl({ tab: 'apply', rail: null, setUrl: null, titleCardsOnly: false }, 'replace');
+        const creator = searchMode === 'creator' ? String(searchQuery || '').trim().replace(/^@+/, '') || null : null;
+        writePosterSetsUrl({
+            tab: 'apply',
+            rail: null,
+            setUrl: null,
+            creator,
+            titleCardsOnly: false,
+        }, 'replace');
         requestAnimationFrame(() => {
             searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
-    }, []);
+    }, [searchMode, searchQuery]);
 
     const pushPosterLocation = useCallback((next: PosterSetsUrlState, mode: 'push' | 'replace' = 'push') => {
         syncedSetUrlRef.current = next.tab === 'apply' ? next.setUrl : null;
@@ -792,6 +883,7 @@ export const PosterSetsDashboard: React.FC = () => {
             tab: id,
             rail,
             setUrl: null,
+            creator: null,
             titleCardsOnly: false,
         }, options?.mode || 'push');
         if (id === 'history') {
@@ -806,7 +898,13 @@ export const PosterSetsDashboard: React.FC = () => {
     const openBrowseRail = useCallback((railId: string | null) => {
         setTab('browse');
         setBrowseSeeAllId(railId);
-        pushPosterLocation({ tab: 'browse', rail: railId, setUrl: null, titleCardsOnly: false }, 'push');
+        pushPosterLocation({
+            tab: 'browse',
+            rail: railId,
+            setUrl: null,
+            creator: null,
+            titleCardsOnly: false,
+        }, 'push');
     }, [pushPosterLocation]);
 
     const currentSetMeta = useCallback((): PosterSetsSetMeta | null => {
@@ -845,6 +943,7 @@ export const PosterSetsDashboard: React.FC = () => {
             });
             setTvText(listToText(cfg.tv_library));
             setMovieText(listToText(cfg.movie_library));
+            setWhitelistText(listToText(cfg.creatorWhitelist));
             await loadHistory();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load Poster Sets', 'error');
@@ -952,6 +1051,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 ...configDraft,
                 tv_library: textToList(tvText),
                 movie_library: textToList(movieText),
+                creatorWhitelist: textToList(whitelistText).map((item) => item.replace(/^@+/, '')),
             };
             const response = await posterSetsApi.saveConfig(payload);
             setConfigDraft({
@@ -960,8 +1060,10 @@ export const PosterSetsDashboard: React.FC = () => {
             });
             setTvText(listToText(response.config.tv_library));
             setMovieText(listToText(response.config.movie_library));
+            setWhitelistText(listToText(response.config.creatorWhitelist));
             toast('Poster Sets settings saved.');
             await load();
+            void loadBrowse({ refresh: true, silent: true });
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to save settings', 'error');
         } finally {
@@ -982,6 +1084,7 @@ export const PosterSetsDashboard: React.FC = () => {
             });
             setTvText(listToText(cfg.tv_library));
             setMovieText(listToText(cfg.movie_library));
+            setWhitelistText(listToText(cfg.creatorWhitelist));
             const tvCount = response.imported?.tv_library?.length || 0;
             const movieCount = response.imported?.movie_library?.length || 0;
             toast(`Imported from Media Player (${tvCount} TV, ${movieCount} movie libraries).`);
@@ -1109,6 +1212,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 tab: 'apply',
                 rail: null,
                 setUrl: target,
+                creator: null,
                 titleCardsOnly: restrictTitleCards,
             }, 'push');
         } else {
@@ -1130,6 +1234,7 @@ export const PosterSetsDashboard: React.FC = () => {
             tab: initialLocation.tab,
             rail: initialLocation.rail,
             setUrl: initialLocation.setUrl,
+            creator: initialLocation.creator,
             titleCardsOnly: Boolean(initialLocation.titleCardsOnly),
         }, 'replace');
     }, [initialLocation]);
@@ -1137,14 +1242,20 @@ export const PosterSetsDashboard: React.FC = () => {
     useEffect(() => {
         if (deepLinkHandledRef.current) return;
         deepLinkHandledRef.current = true;
+        if (initialLocation.tab !== 'apply') return;
         const target = initialLocation.setUrl;
-        if (!target || initialLocation.tab !== 'apply') return;
-        void openSetForApplyRef.current({
-            setId: '',
-            title: '',
-            url: target,
-            setKind: initialLocation.titleCardsOnly ? 'title_cards' : null,
-        }, { skipUrl: true });
+        if (target) {
+            void openSetForApplyRef.current({
+                setId: '',
+                title: '',
+                url: target,
+                setKind: initialLocation.titleCardsOnly ? 'title_cards' : null,
+            }, { skipUrl: true });
+            return;
+        }
+        if (initialLocation.creator) {
+            void openCreatorCatalogRef.current(initialLocation.creator, { skipUrl: true });
+        }
     }, [initialLocation]);
 
     useEffect(() => {
@@ -1168,6 +1279,18 @@ export const PosterSetsDashboard: React.FC = () => {
                         setKind: nextTitleCards ? 'title_cards' : null,
                     }, { skipUrl: true });
                 }
+                return;
+            }
+
+            if (parsed.tab === 'apply' && parsed.creator) {
+                syncedSetUrlRef.current = null;
+                titleCardsOnlyRef.current = false;
+                setTitleCardsOnly(false);
+                setPreview(null);
+                setSelectedSearchSet(null);
+                setSelectedAssetIds([]);
+                setUrl('');
+                void openCreatorCatalogRef.current(parsed.creator, { skipUrl: true });
                 return;
             }
 
@@ -1505,7 +1628,7 @@ export const PosterSetsDashboard: React.FC = () => {
         });
         setUrl(built);
         if (andPreview) {
-            pushPosterLocation({ tab: 'apply', rail: null, setUrl: built, titleCardsOnly: false }, 'push');
+            pushPosterLocation({ tab: 'apply', rail: null, setUrl: built, creator: null, titleCardsOnly: false }, 'push');
             await runPreview(built, { titleCardsOnly: false });
         } else toast('Set URL filled — preview or apply when ready.');
     };
@@ -1532,10 +1655,16 @@ export const PosterSetsDashboard: React.FC = () => {
         [searchSets],
     );
 
-    const runCatalogSearch = async () => {
-        const q = searchQuery.trim();
+    const runCatalogSearch = async (options?: {
+        mode?: 'title' | 'creator';
+        query?: string;
+        provider?: SearchProvider;
+    }) => {
+        const mode = options?.mode || searchMode;
+        const q = String(options?.query ?? searchQuery).trim().replace(/^@+/, '');
+        const provider = options?.provider || searchProvider;
         if (!q) {
-            toast(searchMode === 'creator' ? 'Enter a creator username.' : 'Enter a title to search.', 'error');
+            toast(mode === 'creator' ? 'Enter a creator username.' : 'Enter a title to search.', 'error');
             return;
         }
         creatorSearchAbortRef.current?.abort();
@@ -1552,12 +1681,12 @@ export const PosterSetsDashboard: React.FC = () => {
         setSelectedSearchSet(null);
         setPreview(null);
         try {
-            if (searchMode === 'creator') {
+            if (mode === 'creator') {
                 toast("Loading first pages… more will fill in as they're found.");
                 setSearchLoadingMore(true);
                 let sawFirstBatch = false;
                 const finalEvent = await posterSetsApi.searchCreatorStream({
-                    provider: searchProvider,
+                    provider,
                     query: q,
                     mode: 'creator',
                     dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
@@ -1569,7 +1698,7 @@ export const PosterSetsDashboard: React.FC = () => {
                         if (abort.signal.aborted) return;
                         const sets = event.sets || [];
                         setSearchSets(sets);
-                        setSearchContext(event.title || `@${q.replace(/^@/, '')}`);
+                        setSearchContext(event.title || `@${q}`);
                         if (!sawFirstBatch && sets.length) {
                             sawFirstBatch = true;
                             setBusy(null);
@@ -1600,9 +1729,9 @@ export const PosterSetsDashboard: React.FC = () => {
             }
 
             const response = await posterSetsApi.search({
-                provider: searchProvider,
+                provider,
                 query: q,
-                mode: searchMode,
+                mode,
                 dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
                 limit: 24,
             });
@@ -1636,6 +1765,46 @@ export const PosterSetsDashboard: React.FC = () => {
             if (!abort.signal.aborted) setSearchLoadingMore(false);
         }
     };
+
+    const openCreatorCatalog = (username: string, options?: { skipUrl?: boolean }) => {
+        const handle = String(username || '').trim().replace(/^@+/, '');
+        if (!handle) return;
+        setTab('apply');
+        setBrowseSeeAllId(null);
+        setSearchMode('creator');
+        setSearchQuery(handle);
+        setSearchProvider('both');
+        setTitleCardsOnly(false);
+        titleCardsOnlyRef.current = false;
+        syncedSetUrlRef.current = null;
+        setPreview(null);
+        setSelectedSearchSet(null);
+        setSelectedSearchTitle(null);
+        setSelectedAssetIds([]);
+        setUrl('');
+        if (!options?.skipUrl) {
+            pushPosterLocation({
+                tab: 'apply',
+                rail: null,
+                setUrl: null,
+                creator: handle,
+                titleCardsOnly: false,
+            }, 'push');
+        } else {
+            writePosterSetsUrl({
+                tab: 'apply',
+                rail: null,
+                setUrl: null,
+                creator: handle,
+                titleCardsOnly: false,
+            }, 'replace');
+        }
+        requestAnimationFrame(() => {
+            searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        void runCatalogSearch({ mode: 'creator', query: handle, provider: 'both' });
+    };
+    openCreatorCatalogRef.current = openCreatorCatalog;
 
     const openSearchTitle = async (title: PosterSetsSearchTitle) => {
         setBusy('search');
@@ -1697,6 +1866,7 @@ export const PosterSetsDashboard: React.FC = () => {
             tab: 'apply',
             rail: null,
             setUrl: String(set.url || '').trim() || null,
+            creator: null,
             titleCardsOnly: restrictTitleCards,
         }, 'push');
         await runPreview(set.url, { titleCardsOnly: restrictTitleCards });
@@ -1726,7 +1896,7 @@ export const PosterSetsDashboard: React.FC = () => {
         setUrl('');
         setTitleCardsOnly(false);
         titleCardsOnlyRef.current = false;
-        pushPosterLocation({ tab: 'apply', rail: null, setUrl: null, titleCardsOnly: false }, 'push');
+        pushPosterLocation({ tab: 'apply', rail: null, setUrl: null, creator: null, titleCardsOnly: false }, 'push');
     };
 
     const matchedAssetCount = useMemo(() => {
@@ -2081,6 +2251,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                         set={set}
                                         disabled={busy !== null}
                                         onOpen={(item) => void openSetForApply(item)}
+                                        onOpenCreator={openCreatorCatalog}
                                     />
                                 ))}
                             </div>
@@ -2098,6 +2269,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     <h2 className={sectionTitleClass}>Browse recently added</h2>
                                     <p className={sectionBodyClass}>
                                         First results appear immediately; more fill in the background (up to 600 per row). Tap a row title to see all.
+                                        Add creators in Settings to get a “Creators you follow” row. Click any @username to open their catalog.
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
@@ -2156,6 +2328,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 set={set}
                                                 disabled={busy !== null}
                                                 onOpen={(item) => void openSetForApply(item)}
+                                                onOpenCreator={openCreatorCatalog}
                                             />
                                         ))}
                                     </div>
@@ -2271,7 +2444,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                                     <StatusPill value={job.state} />
                                                     <ProviderPill provider={meta?.provider} />
-                                                    <CreatorPill user={meta?.user} />
+                                                    <CreatorPill user={meta?.user} onOpen={openCreatorCatalog} />
                                                 </div>
                                                 <p className="break-words text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]" title={showName}>
                                                     {showName}
@@ -2523,30 +2696,13 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     : 'border-white/10 hover:border-plex/40'
                                             }`}
                                         >
-                                            <div className="relative aspect-[2/3] overflow-hidden bg-black">
-                                                {thumbSrc ? (
-                                                    <img
-                                                        src={thumbSrc}
-                                                        alt=""
-                                                        loading="lazy"
-                                                        className={`absolute inset-0 h-full w-full object-contain object-center transition duration-300 group-hover:scale-[1.02] ${
-                                                            anyPaused ? 'opacity-55' : ''
-                                                        }`}
-                                                    />
-                                                ) : (
-                                                    <div className="absolute inset-0 flex items-center justify-center text-muted">
-                                                        <ImageIcon className="h-10 w-10 opacity-40" />
-                                                    </div>
-                                                )}
-                                                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/45 to-transparent px-2.5 pb-2.5 pt-10">
-                                                    <p className="line-clamp-2 text-sm font-bold leading-snug text-white drop-shadow" title={group.title}>
-                                                        {group.title}
-                                                    </p>
-                                                    <p className="mt-0.5 text-[11px] text-white/70">
-                                                        {multi ? `${group.watches.length} sets` : '1 set'}
-                                                        {group.lastCheckedAt ? ` · ${formatTime(group.lastCheckedAt)}` : ''}
-                                                    </p>
-                                                </div>
+                                            <div className={`relative aspect-[2/3] overflow-hidden bg-black ${anyPaused ? 'opacity-55' : ''}`}>
+                                                <PosterThumb
+                                                    src={thumbSrc}
+                                                    alt={group.title}
+                                                    className="absolute inset-0 h-full w-full"
+                                                    imgClassName="absolute inset-0 h-full w-full object-contain object-center transition duration-300 group-hover:scale-[1.02]"
+                                                />
                                                 {group.errored ? (
                                                     <span className="absolute left-2 top-2 rounded-full border border-red-400/40 bg-red-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
                                                         Error
@@ -2560,6 +2716,16 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         Watching
                                                     </span>
                                                 )}
+                                            </div>
+
+                                            <div className="min-w-0 space-y-1 border-b border-white/10 px-2.5 py-2 sm:px-3">
+                                                <p className="line-clamp-2 text-sm font-bold leading-snug text-text" title={group.title}>
+                                                    {group.title}
+                                                </p>
+                                                <p className="text-[11px] text-muted">
+                                                    {multi ? `${group.watches.length} sets` : '1 set'}
+                                                    {group.lastCheckedAt ? ` · ${formatTime(group.lastCheckedAt)}` : ''}
+                                                </p>
                                             </div>
 
                                             <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-2.5 sm:p-3">
@@ -2586,18 +2752,17 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         >
                                                             <div className="flex min-w-0 items-start gap-2">
                                                                 {multi && watchThumbSrc ? (
-                                                                    <img
+                                                                    <PosterThumb
                                                                         src={watchThumbSrc}
-                                                                        alt=""
-                                                                        className="h-12 w-8 shrink-0 rounded object-contain bg-black"
-                                                                        loading="lazy"
+                                                                        className="h-12 w-8 shrink-0 rounded"
+                                                                        imgClassName="h-full w-full object-contain"
                                                                     />
                                                                 ) : null}
                                                                 <div className="min-w-0 flex-1 space-y-1.5">
                                                                     <div className="flex min-w-0 flex-wrap items-center gap-1">
                                                                         <StatusPill value={watch.enabled === false ? 'Paused' : 'Watching'} />
                                                                         <ProviderPill provider={provider} />
-                                                                        <CreatorPill user={creator} />
+                                                                        <CreatorPill user={creator} onOpen={openCreatorCatalog} />
                                                                     </div>
                                                                     <p className="text-[10px] leading-relaxed text-muted sm:text-[11px]">
                                                                         {(watch.knownAssetIds || []).length} known
@@ -3357,23 +3522,23 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         </div>
                                                     ) : null}
                                                 </div>
-                                                <div className="space-y-1.5 p-3">
+                                                <div className="px-3 pt-3">
                                                     <p className="truncate text-sm font-semibold text-text" title={setTitle}>{setTitle}</p>
-                                                    <div className="flex flex-wrap items-center gap-1.5">
-                                                        <CreatorPill user={set.user} />
-                                                        <SetKindPill set={set} />
-                                                        <ProviderPill provider={set.provider} />
-                                                        {set.alsoOn?.length ? (
-                                                            <span className="truncate text-[11px] text-muted">
-                                                                also {set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}
-                                                            </span>
-                                                        ) : null}
-                                                        {set.posterCount ? (
-                                                            <span className="truncate text-[11px] text-muted">{set.posterCount}</span>
-                                                        ) : null}
-                                                    </div>
                                                 </div>
                                                 </button>
+                                                <div className="flex flex-wrap items-center gap-1.5 px-3 pb-3 pt-1.5">
+                                                    <CreatorPill user={set.user} onOpen={openCreatorCatalog} />
+                                                    <SetKindPill set={set} />
+                                                    <ProviderPill provider={set.provider} />
+                                                    {set.alsoOn?.length ? (
+                                                        <span className="truncate text-[11px] text-muted">
+                                                            also {set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}
+                                                        </span>
+                                                    ) : null}
+                                                    {set.posterCount ? (
+                                                        <span className="truncate text-[11px] text-muted">{set.posterCount}</span>
+                                                    ) : null}
+                                                </div>
                                             </div>
                                             );
                                         })}
@@ -3604,6 +3769,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             tab: 'apply',
                                                             rail: null,
                                                             setUrl: target,
+                                                            creator: null,
                                                             titleCardsOnly: false,
                                                         }, 'push');
                                                     }
@@ -3987,6 +4153,18 @@ export const PosterSetsDashboard: React.FC = () => {
                             />
                             <span className="mt-1 block text-[11px] text-muted">
                                 Filename under config/poster-sets/ for “Apply from file”.
+                            </span>
+                        </label>
+                        <label className="block sm:col-span-2">
+                            <span className="text-xs font-bold uppercase tracking-wide text-muted">Creators you follow</span>
+                            <textarea
+                                className={`${fieldClass} mt-2 min-h-24`}
+                                placeholder={'kaster\nTheDoctor30'}
+                                value={whitelistText}
+                                onChange={(event) => setWhitelistText(event.target.value)}
+                            />
+                            <span className="mt-1 block text-[11px] text-muted">
+                                One MediUX / ThePosterDB username per line (no @ needed). Browse adds a “Creators you follow” row with only their sets. Click any @username to open their full catalog.
                             </span>
                         </label>
                     </div>

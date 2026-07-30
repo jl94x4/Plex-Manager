@@ -15,6 +15,8 @@ export type PosterSetsConfig = {
     notifyOnWatcherDigest?: boolean;
     /** Debounced watch check when Sonarr On Import fires (Scanner webhook). */
     arrWatchHookEnabled?: boolean;
+    /** Creator usernames shown on Browse → Following (MediUX / ThePosterDB). */
+    creatorWhitelist?: string[];
     hasToken?: boolean;
     configured?: boolean;
 };
@@ -309,4 +311,5 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     autoWatchOnApply: true,
     notifyOnWatcherDigest: true,
     arrWatchHookEnabled: true,
+    creatorWhitelist: [],
 };
