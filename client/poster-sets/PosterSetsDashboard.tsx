@@ -1394,7 +1394,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 {([
                     ['apply', 'Apply', Sparkles],
                     ['queue', 'Queue', ListOrdered],
-                    ['watches', 'Watches', Eye],
+                    ['watches', 'Watching', Eye],
                     ['recent', 'Recent', Clock],
                     ['history', 'History', History],
                     ['settings', 'Settings', Settings2],
@@ -1605,7 +1605,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 <section className={`${cardClass} space-y-4 overflow-hidden p-4 sm:p-5`}>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                            <h2 className={sectionTitleClass}>Watches</h2>
+                            <h2 className={sectionTitleClass}>Watching</h2>
                             <p className={sectionBodyClass}>
                                 Pin MediUX / ThePosterDB sets. New art (including MediUX title cards) is queued automatically.
                             </p>
@@ -1737,7 +1737,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </>
                                 ) : (
                                     <span className="text-xs text-muted">
-                                        {filteredWatches.length} watch{filteredWatches.length === 1 ? '' : 'es'}
+                                        {filteredWatches.length} set{filteredWatches.length === 1 ? '' : 's'}
                                         {watchesFilter.trim() ? ` (of ${watches.length})` : ''}
                                     </span>
                                 )}
@@ -1752,7 +1752,7 @@ export const PosterSetsDashboard: React.FC = () => {
                         </p>
                     ) : !filteredWatches.length ? (
                         <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
-                            No watches match “{watchesFilter.trim()}”.
+                            No sets match “{watchesFilter.trim()}”.
                         </p>
                     ) : (
                         <div className="min-w-0 space-y-2 overflow-hidden">
@@ -2377,7 +2377,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 {watching ? (
                                                     <span
                                                         className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-lg"
-                                                        title="Already in Watches"
+                                                        title="Already watching"
                                                     >
                                                         <Eye className="h-3 w-3" /> Watching
                                                     </span>
@@ -2404,7 +2404,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     {watching ? (
                                                         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-emerald-950/80 to-transparent px-2 pb-2 pt-8">
                                                             <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
-                                                                In watches
+                                                                Watching
                                                             </span>
                                                         </div>
                                                     ) : null}
