@@ -2718,17 +2718,17 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 )}
                                             </div>
 
-                                            <div className="min-w-0 space-y-1 border-b border-white/10 px-2.5 py-2 sm:px-3">
-                                                <p className="line-clamp-2 text-sm font-bold leading-snug text-text" title={group.title}>
+                                            <div className="min-w-0 space-y-0.5 border-b border-white/10 px-1.5 py-1.5 sm:px-2">
+                                                <p className="line-clamp-2 text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={group.title}>
                                                     {group.title}
                                                 </p>
-                                                <p className="text-[11px] text-muted">
+                                                <p className="text-[9px] text-muted sm:text-[10px]">
                                                     {multi ? `${group.watches.length} sets` : '1 set'}
                                                     {group.lastCheckedAt ? ` · ${formatTime(group.lastCheckedAt)}` : ''}
                                                 </p>
                                             </div>
 
-                                            <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-2.5 sm:p-3">
+                                            <div className="flex min-w-0 flex-1 flex-col gap-2 p-1.5 sm:p-2">
                                                 {group.watches.map((watch) => {
                                                     const creator = String(watch.user || '').trim().replace(/^@/, '');
                                                     const provider = String(watch.provider || '').toLowerCase();
@@ -2741,10 +2741,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             ? posterSetsApi.imageUrl(watchThumb)
                                                             : watchThumb)
                                                         : '';
+                                                    const iconBtnClass = 'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/20 text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
                                                     return (
                                                         <div
                                                             key={watch.id}
-                                                            className={`min-w-0 space-y-2 rounded-lg border p-2 ${
+                                                            className={`min-w-0 space-y-1.5 rounded-lg border p-1.5 ${
                                                                 watch.lastError
                                                                     ? 'border-red-500/30 bg-red-500/10'
                                                                     : 'border-white/10 bg-black/30'
@@ -2758,24 +2759,27 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                         imgClassName="h-full w-full object-contain"
                                                                     />
                                                                 ) : null}
-                                                                <div className="min-w-0 flex-1 space-y-1.5">
-                                                                    <div className="flex min-w-0 flex-wrap items-center gap-1">
-                                                                        <StatusPill value={watch.enabled === false ? 'Paused' : 'Watching'} />
-                                                                        <ProviderPill provider={provider} />
-                                                                        <CreatorPill user={creator} onOpen={openCreatorCatalog} />
+                                                                <div className="min-w-0 flex-1 space-y-1">
+                                                                    <div className="flex min-w-0 flex-wrap items-center gap-0.5">
+                                                                        <StatusPill
+                                                                            value={watch.enabled === false ? 'Paused' : 'Watching'}
+                                                                            className="!px-1.5 !py-px !text-[8px] sm:!text-[9px]"
+                                                                        />
+                                                                        <ProviderPill provider={provider} compact />
+                                                                        <CreatorPill user={creator} onOpen={openCreatorCatalog} compact />
                                                                     </div>
-                                                                    <p className="text-[10px] leading-relaxed text-muted sm:text-[11px]">
+                                                                    <p className="text-[9px] leading-relaxed text-muted sm:text-[10px]">
                                                                         {(watch.knownAssetIds || []).length} known
                                                                         {watch.lastCheckedAt ? ` · ${formatTime(watch.lastCheckedAt)}` : ' · not checked'}
                                                                         {watch.lastNewCount ? ` · +${watch.lastNewCount} last` : ''}
                                                                     </p>
                                                                     {watch.lastError ? (
-                                                                        <p className="break-words text-[11px] text-red-300 [overflow-wrap:anywhere]">{watch.lastError}</p>
+                                                                        <p className="break-words text-[10px] text-red-300 [overflow-wrap:anywhere]">{watch.lastError}</p>
                                                                     ) : null}
                                                                     {provider === 'posterdb' ? (
-                                                                        <p className="text-[10px] text-muted">TPDB has no title cards</p>
+                                                                        <p className="text-[9px] text-muted">TPDB has no title cards</p>
                                                                     ) : (
-                                                                        <div className="flex flex-wrap gap-1">
+                                                                        <div className="flex flex-wrap gap-0.5">
                                                                             {MEDIUX_FILTER_OPTIONS.map((option) => {
                                                                                 const current = (watch.mediuxFilters?.length
                                                                                     ? watch.mediuxFilters
@@ -2785,7 +2789,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                                     <button
                                                                                         key={option.id}
                                                                                         type="button"
-                                                                                        className={`rounded-full border px-2 py-0.5 text-[9px] font-bold tracking-wide transition ${
+                                                                                        className={`rounded-full border px-1.5 py-px text-[8px] font-bold tracking-wide transition sm:text-[9px] ${
                                                                                             active
                                                                                                 ? 'border-plex/50 bg-plex/20 text-plex'
                                                                                                 : 'border-white/10 bg-white/5 text-muted hover:border-white/20'
@@ -2818,11 +2822,13 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                     )}
                                                                 </div>
                                                             </div>
-                                                            <div className="flex flex-wrap gap-1.5">
+                                                            <div className="flex items-center justify-center gap-1.5">
                                                                 <button
                                                                     type="button"
-                                                                    className={`${buttonClass} !px-2 !py-1 text-[10px]`}
+                                                                    className={iconBtnClass}
                                                                     disabled={busy !== null}
+                                                                    aria-label={watch.enabled === false ? 'Enable' : 'Pause'}
+                                                                    title={watch.enabled === false ? 'Enable' : 'Pause'}
                                                                     onClick={async () => {
                                                                         setBusy('watches');
                                                                         try {
@@ -2834,15 +2840,17 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                             setBusy(null);
                                                                         }
                                                                     }}
-                                                                    title={watch.enabled === false ? 'Enable' : 'Pause'}
                                                                 >
-                                                                    {watch.enabled === false ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
-                                                                    {watch.enabled === false ? 'Enable' : 'Pause'}
+                                                                    {watch.enabled === false
+                                                                        ? <Play className="h-3.5 w-3.5" />
+                                                                        : <Pause className="h-3.5 w-3.5" />}
                                                                 </button>
                                                                 <button
                                                                     type="button"
-                                                                    className={`${buttonClass} !px-2 !py-1 text-[10px]`}
+                                                                    className={iconBtnClass}
                                                                     disabled={busy !== null}
+                                                                    aria-label="Check for new art"
+                                                                    title="Check for new art"
                                                                     onClick={async () => {
                                                                         setBusy('watches');
                                                                         try {
@@ -2864,22 +2872,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                         }
                                                                     }}
                                                                 >
-                                                                    <RefreshCw className="h-3.5 w-3.5" /> Check
+                                                                    <RefreshCw className="h-3.5 w-3.5" />
                                                                 </button>
-                                                                {watch.url ? (
-                                                                    <a
-                                                                        href={watch.url}
-                                                                        target="_blank"
-                                                                        rel="noreferrer"
-                                                                        className={`${buttonClass} !px-2 !py-1 text-[10px] no-underline`}
-                                                                    >
-                                                                        <ExternalLink className="h-3.5 w-3.5" /> Open
-                                                                    </a>
-                                                                ) : null}
                                                                 <button
                                                                     type="button"
-                                                                    className={`${buttonClass} !px-2 !py-1 text-[10px] text-red-200 hover:border-red-400/40`}
+                                                                    className={`${iconBtnClass} text-red-200 hover:border-red-400/40`}
                                                                     disabled={busy !== null}
+                                                                    aria-label="Remove watch"
+                                                                    title="Remove watch"
                                                                     onClick={async () => {
                                                                         const ok = await askConfirm(`Remove ${setLabel} watch for “${group.title}”?`, {
                                                                             title: 'Remove watch?',
@@ -2899,7 +2899,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                         }
                                                                     }}
                                                                 >
-                                                                    <Trash2 className="h-3.5 w-3.5" /> Remove
+                                                                    <Trash2 className="h-3.5 w-3.5" />
                                                                 </button>
                                                             </div>
                                                         </div>
