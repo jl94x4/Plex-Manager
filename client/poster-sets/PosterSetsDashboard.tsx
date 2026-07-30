@@ -86,7 +86,7 @@ const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px
 const sectionTitleClass = 'text-base font-bold text-text sm:text-lg';
 const sectionBodyClass = 'mt-1 text-xs text-muted sm:text-sm';
 const posterMediaRadiusClass = 'rounded-md';
-const previewStripClass = 'flex w-full min-w-0 gap-3 overflow-x-auto overscroll-x-contain pb-2 touch-pan-x [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] custom-scrollbar';
+const previewStripClass = 'flex w-full min-w-0 gap-3 overflow-x-auto overscroll-x-contain scroll-smooth pb-1 touch-pan-x [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden';
 
 type TabId = 'apply' | 'browse' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed' | 'audit';
@@ -169,6 +169,105 @@ function PreviewAssetTile({
     );
 }
 
+function PreviewAssetStrip({
+    title,
+    count,
+    children,
+}: {
+    title: React.ReactNode;
+    count: number;
+    children: React.ReactNode;
+}) {
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [atStart, setAtStart] = useState(true);
+    const [atEnd, setAtEnd] = useState(true);
+
+    const updateScrollState = useCallback(() => {
+        const node = scrollRef.current;
+        if (!node) return;
+        const { scrollLeft, scrollWidth, clientWidth } = node;
+        const margin = 8;
+        const canScroll = scrollWidth > clientWidth + margin;
+        if (!canScroll) {
+            setAtStart(true);
+            setAtEnd(true);
+            return;
+        }
+        setAtStart(scrollLeft <= margin);
+        setAtEnd(scrollLeft >= scrollWidth - clientWidth - margin);
+    }, []);
+
+    useEffect(() => {
+        updateScrollState();
+        const node = scrollRef.current;
+        if (!node) return undefined;
+        const resizeObserver = typeof ResizeObserver !== 'undefined'
+            ? new ResizeObserver(() => updateScrollState())
+            : null;
+        resizeObserver?.observe(node);
+        const timer = window.setTimeout(updateScrollState, 120);
+        window.addEventListener('resize', updateScrollState);
+        return () => {
+            resizeObserver?.disconnect();
+            window.clearTimeout(timer);
+            window.removeEventListener('resize', updateScrollState);
+        };
+    }, [children, updateScrollState]);
+
+    const scrollByPage = (direction: 'left' | 'right') => {
+        const node = scrollRef.current;
+        if (!node) return;
+        const amount = Math.max(240, Math.floor(node.clientWidth * 0.85));
+        node.scrollBy({ left: direction === 'left' ? -amount : amount, behavior: 'smooth' });
+    };
+
+    const showArrows = !(atStart && atEnd);
+
+    return (
+        <section className="min-w-0 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-baseline gap-2">
+                    <h4 className="min-w-0 text-xs font-bold uppercase tracking-wide text-muted">{title}</h4>
+                    <span className="shrink-0 text-[11px] text-muted/80">{count}</span>
+                </div>
+                {showArrows ? (
+                    <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                            type="button"
+                            onClick={() => scrollByPage('left')}
+                            disabled={atStart}
+                            className={`rounded-md border border-white/10 p-1 transition ${
+                                atStart ? 'cursor-default text-muted/30' : 'text-muted hover:border-plex/40 hover:bg-white/5 hover:text-text'
+                            }`}
+                            aria-label="Scroll left"
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => scrollByPage('right')}
+                            disabled={atEnd}
+                            className={`rounded-md border border-white/10 p-1 transition ${
+                                atEnd ? 'cursor-default text-muted/30' : 'text-muted hover:border-plex/40 hover:bg-white/5 hover:text-text'
+                            }`}
+                            aria-label="Scroll right"
+                        >
+                            <ChevronRight className="h-4 w-4" />
+                        </button>
+                    </div>
+                ) : null}
+            </div>
+            <div
+                ref={scrollRef}
+                onScroll={updateScrollState}
+                className={previewStripClass}
+            >
+                {children}
+            </div>
+        </section>
+    );
+}
+
 function PreviewAssetGallery({
     sections,
     selectedAssetIds,
@@ -186,24 +285,18 @@ function PreviewAssetGallery({
     ) => {
         if (!assets.length) return null;
         return (
-            <section className="min-w-0 space-y-2.5">
-                <div className="flex items-baseline justify-between gap-2">
-                    <h4 className="text-xs font-bold uppercase tracking-wide text-muted">{title}</h4>
-                    <span className="text-[11px] text-muted/80">{assets.length}</span>
-                </div>
-                <div className={previewStripClass}>
-                    {assets.map((asset) => (
-                        <PreviewAssetTile
-                            key={asset.id}
-                            asset={asset}
-                            selected={selectedAssetIds.includes(asset.id)}
-                            layout={layout}
-                            caption={captionFor?.(asset)}
-                            onToggle={onToggle}
-                        />
-                    ))}
-                </div>
-            </section>
+            <PreviewAssetStrip title={title} count={assets.length}>
+                {assets.map((asset) => (
+                    <PreviewAssetTile
+                        key={asset.id}
+                        asset={asset}
+                        selected={selectedAssetIds.includes(asset.id)}
+                        layout={layout}
+                        caption={captionFor?.(asset)}
+                        onToggle={onToggle}
+                    />
+                ))}
+            </PreviewAssetStrip>
         );
     };
 
@@ -213,27 +306,27 @@ function PreviewAssetGallery({
             {renderStrip('Posters', sections.posters, 'poster')}
             {renderStrip('Backgrounds', sections.backgrounds, 'landscape', (asset) => asset.label || 'Background')}
             {sections.titleCardSeasons.map((season) => (
-                <section key={season.key} className="min-w-0 space-y-2.5">
-                    <div className="flex items-baseline justify-between gap-2">
-                        <h4 className="text-xs font-bold uppercase tracking-wide text-muted">
+                <PreviewAssetStrip
+                    key={season.key}
+                    count={season.assets.length}
+                    title={(
+                        <>
                             {season.label}
                             <span className="ml-2 font-semibold normal-case tracking-normal text-muted/70">title cards</span>
-                        </h4>
-                        <span className="text-[11px] text-muted/80">{season.assets.length}</span>
-                    </div>
-                    <div className={previewStripClass}>
-                        {season.assets.map((asset) => (
-                            <PreviewAssetTile
-                                key={asset.id}
-                                asset={asset}
-                                selected={selectedAssetIds.includes(asset.id)}
-                                layout="landscape"
-                                caption={previewAssetEpisodeLabel(asset)}
-                                onToggle={onToggle}
-                            />
-                        ))}
-                    </div>
-                </section>
+                        </>
+                    )}
+                >
+                    {season.assets.map((asset) => (
+                        <PreviewAssetTile
+                            key={asset.id}
+                            asset={asset}
+                            selected={selectedAssetIds.includes(asset.id)}
+                            layout="landscape"
+                            caption={previewAssetEpisodeLabel(asset)}
+                            onToggle={onToggle}
+                        />
+                    ))}
+                </PreviewAssetStrip>
             ))}
             {renderStrip('Other assets', sections.other, 'poster')}
         </div>
@@ -360,23 +453,23 @@ function BrowseSetCard({
             type="button"
             disabled={disabled}
             onClick={() => onOpen(set)}
-            className={`group w-full min-w-0 overflow-hidden ${posterMediaRadiusClass} border border-white/10 bg-black/20 text-left transition hover:border-plex/40`}
+            className={`group flex w-full min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border border-white/10 bg-black/20 text-left transition hover:border-plex/40`}
         >
-            <div className={`relative bg-black/40 ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
+            <div className={`relative w-full shrink-0 overflow-hidden bg-black ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
                 {set.thumbUrl ? (
                     <img
                         src={posterSetsApi.imageUrl(set.thumbUrl)}
                         alt={setTitle}
                         loading="lazy"
-                        className={`h-full w-full ${landscape ? 'object-contain' : 'object-cover'}`}
+                        className="absolute inset-0 h-full w-full object-contain object-center"
                     />
                 ) : (
-                    <div className="flex h-full items-center justify-center text-muted">
+                    <div className="absolute inset-0 flex items-center justify-center text-muted">
                         <ImageIcon className="h-8 w-8 opacity-40" />
                     </div>
                 )}
             </div>
-            <div className="space-y-1.5 p-2 sm:p-2.5">
+            <div className="min-w-0 space-y-1.5 p-2 sm:p-2.5">
                 <p className="line-clamp-2 text-xs font-semibold text-text sm:text-sm" title={setTitle}>{setTitle}</p>
                 <div className="flex flex-wrap items-center gap-1">
                     <CreatorPill user={set.user} />
@@ -2719,16 +2812,16 @@ export const PosterSetsDashboard: React.FC = () => {
                                         }}
                                         title={`Preview ${label}`}
                                     >
-                                        <div className="relative aspect-[2/3] bg-black/40">
+                                        <div className="relative aspect-[2/3] overflow-hidden bg-black">
                                             {item.thumbUrl ? (
                                                 <img
                                                     src={posterSetsApi.imageUrl(item.thumbUrl)}
                                                     alt={label}
                                                     loading="lazy"
-                                                    className="h-full w-full object-cover"
+                                                    className="absolute inset-0 h-full w-full object-contain object-center"
                                                 />
                                             ) : (
-                                                <div className="flex h-full items-center justify-center text-muted">
+                                                <div className="absolute inset-0 flex items-center justify-center text-muted">
                                                     <ImageIcon className="h-8 w-8 opacity-40" />
                                                 </div>
                                             )}
@@ -3216,16 +3309,16 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     disabled={busy !== null && busy !== 'preview'}
                                                     onClick={() => void pickSearchSet(set)}
                                                 >
-                                                <div className={`relative bg-black/40 ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
+                                                <div className={`relative overflow-hidden bg-black ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
                                                     {set.thumbUrl ? (
                                                         <img
                                                             src={posterSetsApi.imageUrl(set.thumbUrl)}
                                                             alt={setLabel}
-                                                            className={`h-full w-full ${landscape ? 'object-contain' : 'object-cover'} ${watching ? 'opacity-80' : ''}`}
+                                                            className={`absolute inset-0 h-full w-full object-contain object-center ${watching ? 'opacity-80' : ''}`}
                                                             loading="lazy"
                                                         />
                                                     ) : (
-                                                        <div className="flex h-full items-center justify-center text-muted">
+                                                        <div className="absolute inset-0 flex items-center justify-center text-muted">
                                                             <ImageIcon className="h-8 w-8 opacity-40" />
                                                         </div>
                                                     )}
