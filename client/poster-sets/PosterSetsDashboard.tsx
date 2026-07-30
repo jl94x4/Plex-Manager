@@ -54,12 +54,20 @@ import {
 const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
 const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
 const SEARCH_SETS_PAGE_SIZE = 24;
+const WATCHES_PAGE_SIZE_OPTIONS = [
+    { value: '25', label: '25 per page' },
+    { value: '50', label: '50 per page' },
+    { value: '75', label: '75 per page' },
+    { value: '100', label: '100 per page' },
+] as const;
 const ALL_MEDIUX_FILTER_IDS = MEDIUX_FILTER_OPTIONS.map((option) => option.id);
 
 const cardClass = 'glass-card shadow-xl';
-const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
-const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
-const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
+const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
+const primaryButtonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-plex px-2.5 py-1.5 text-xs font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
+const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-xs text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex sm:py-2.5 sm:text-sm';
+const sectionTitleClass = 'text-base font-bold text-text sm:text-lg';
+const sectionBodyClass = 'mt-1 text-xs text-muted sm:text-sm';
 
 type TabId = 'apply' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed' | 'audit';
@@ -105,7 +113,7 @@ const MetaPill: React.FC<{ children: React.ReactNode; className?: string; title?
 }) => (
     <span
         title={title}
-        className={`inline-flex max-w-full shrink-0 items-center truncate rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide sm:px-2.5 sm:py-1 sm:text-[11px] ${className}`}
+        className={`inline-flex max-w-[9rem] shrink-0 items-center truncate rounded-full border px-1.5 py-0.5 text-[9px] font-bold tracking-wide sm:max-w-full sm:px-2.5 sm:py-1 sm:text-[11px] ${className}`}
     >
         {children}
     </span>
@@ -336,6 +344,9 @@ export const PosterSetsDashboard: React.FC = () => {
     const [watches, setWatches] = useState<PosterSetsWatch[]>([]);
     const [watchStatsState, setWatchStatsState] = useState<PosterSetsWatchStats>({});
     const [watchUrlDraft, setWatchUrlDraft] = useState('');
+    const [watchesPage, setWatchesPage] = useState(1);
+    const [watchesPageSize, setWatchesPageSize] = useState(25);
+    const [watchesFilter, setWatchesFilter] = useState('');
     const [selectedBulkSets, setSelectedBulkSets] = useState<Record<string, BulkSetSelection>>({});
 
     const loadHistory = useCallback(async () => {
@@ -1145,6 +1156,33 @@ export const PosterSetsDashboard: React.FC = () => {
         return watchedUrlSet.setKeys.has(`${provider}:${setId}`);
     }, [watchedUrlSet]);
 
+    const filteredWatches = useMemo(() => {
+        const needle = watchesFilter.trim().toLowerCase();
+        if (!needle) return watches;
+        return watches.filter((watch) => {
+            const haystack = [
+                watch.title,
+                watch.user,
+                watch.url,
+                watch.setId,
+                watch.provider,
+                watch.lastError,
+            ].map((value) => String(value || '').toLowerCase()).join(' ');
+            return haystack.includes(needle);
+        });
+    }, [watches, watchesFilter]);
+
+    const watchesPageCount = Math.max(1, Math.ceil(filteredWatches.length / Math.max(1, watchesPageSize)));
+    const pagedWatches = useMemo(() => {
+        const page = Math.min(Math.max(1, watchesPage), watchesPageCount);
+        const start = (page - 1) * watchesPageSize;
+        return filteredWatches.slice(start, start + watchesPageSize);
+    }, [filteredWatches, watchesPage, watchesPageCount, watchesPageSize]);
+
+    useEffect(() => {
+        setWatchesPage((page) => Math.min(page, watchesPageCount));
+    }, [watchesPageCount]);
+
     const readyToApply = Boolean(preview?.assets?.length);
 
     const toggleAsset = (id: string) => {
@@ -1275,15 +1313,15 @@ export const PosterSetsDashboard: React.FC = () => {
     });
 
     return (
-        <div className="flex w-full animate-fade-in flex-col gap-6 pb-10">
+        <div className="flex w-full min-w-0 animate-fade-in flex-col gap-4 overflow-x-hidden pb-10 sm:gap-6">
             <ToastContainer toasts={toasts} setToasts={setToasts} />
 
-            <header className={`${cardClass} overflow-hidden p-6`}>
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-plex">Poster Sets</p>
-                        <h1 className="mt-2 text-3xl font-bold tracking-tight text-text">Artwork from MediUX & ThePosterDB</h1>
-                        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
+            <header className={`${cardClass} overflow-hidden p-4 sm:p-6`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-plex sm:text-xs">Poster Sets</p>
+                        <h1 className="mt-1.5 text-xl font-bold tracking-tight text-text sm:mt-2 sm:text-3xl">Artwork from MediUX & ThePosterDB</h1>
+                        <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted sm:mt-2 sm:text-sm">
                             Find a title, choose a poster set, preview the art, then apply.
                             Re-run past sets from the Recent tab. Connection settings live in this section.
                         </p>
@@ -1322,7 +1360,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 </div>
             </header>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex min-w-0 flex-wrap gap-1.5 sm:gap-2">
                 {([
                     ['apply', 'Apply', Sparkles],
                     ['queue', 'Queue', ListOrdered],
@@ -1345,7 +1383,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             if (id === 'watches') void loadWatches();
                         }}
                     >
-                        <Icon className="h-4 w-4" /> {label}
+                        <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {label}
                         {id === 'queue' && (queueStats.pending || 0) > 0 ? (
                             <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
                                 {queueStats.pending}
@@ -1365,14 +1403,14 @@ export const PosterSetsDashboard: React.FC = () => {
             </div>
 
             {tab === 'queue' ? (
-                <section className={`${cardClass} space-y-4 p-5`}>
+                <section className={`${cardClass} space-y-4 overflow-hidden p-4 sm:p-5`}>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                            <h2 className="text-lg font-bold text-text">Apply queue</h2>
-                            <p className="mt-1 text-sm text-muted">
+                        <div className="min-w-0">
+                            <h2 className={sectionTitleClass}>Apply queue</h2>
+                            <p className={sectionBodyClass}>
                                 Sets apply one at a time in the background. You can keep queueing while paused.
                             </p>
-                            <p className="mt-2 text-xs text-muted">
+                            <p className="mt-2 text-[11px] text-muted sm:text-xs">
                                 {queuePaused ? 'Paused' : 'Running'}
                                 {' · '}
                                 {queueStats.queued || 0} waiting
@@ -1442,26 +1480,27 @@ export const PosterSetsDashboard: React.FC = () => {
                             Queue is empty. Apply a poster set from the Apply tab to add one.
                         </p>
                     ) : (
-                        <div className="space-y-2">
+                        <div className="min-w-0 space-y-2 overflow-hidden">
                             {queueJobs.map((job) => {
                                 const meta = jobSetMeta(job);
                                 const state = String(job.state || '').toLowerCase();
+                                const showName = String(meta?.title || '').trim() || jobTitle(job);
                                 return (
                                     <div
                                         key={job.id}
-                                        className={`rounded-xl border border-white/10 px-4 py-3 ${jobCardTone(job)}`}
+                                        className={`min-w-0 overflow-hidden rounded-xl border border-white/10 px-3 py-3 sm:px-4 ${jobCardTone(job)}`}
                                     >
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                            <div className="min-w-0 space-y-1">
-                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="min-w-0 flex-1 space-y-1.5 overflow-hidden">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                                     <StatusPill value={job.state} />
                                                     <ProviderPill provider={meta?.provider} />
-                                                    <p className="min-w-0 truncate text-sm font-semibold text-text" title={String(meta?.title || jobTitle(job))}>
-                                                        {String(meta?.title || '').trim() || jobTitle(job)}
-                                                    </p>
                                                     <CreatorPill user={meta?.user} />
                                                 </div>
-                                                <p className="text-xs text-muted">
+                                                <p className="break-words text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]" title={showName}>
+                                                    {showName}
+                                                </p>
+                                                <p className="break-words text-[11px] text-muted sm:text-xs">
                                                     {formatTime(job.createdAt)}
                                                     {job.finishedAt ? ` · finished ${formatTime(job.finishedAt)}` : ''}
                                                     {typeof job.uploaded === 'number' ? ` · uploaded ${job.uploaded}` : ''}
@@ -1471,16 +1510,16 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     {job.input?.selectedCount ? ` · ${job.input.selectedCount} selected` : ''}
                                                 </p>
                                                 {job.error ? (
-                                                    <p className="text-sm text-red-300">{job.error}</p>
+                                                    <p className="break-words text-xs text-red-300 sm:text-sm [overflow-wrap:anywhere]">{job.error}</p>
                                                 ) : null}
                                                 {meta?.url ? (
                                                     <a
                                                         href={meta.url}
                                                         target="_blank"
                                                         rel="noreferrer"
-                                                        className="inline-flex items-center gap-1 text-xs font-semibold text-plex no-underline hover:underline"
+                                                        className="inline-flex max-w-full items-center gap-1 text-xs font-semibold text-plex no-underline hover:underline"
                                                     >
-                                                        Open set <ExternalLink className="h-3 w-3" />
+                                                        <span className="truncate">Open set</span> <ExternalLink className="h-3 w-3 shrink-0" />
                                                     </a>
                                                 ) : null}
                                             </div>
@@ -1533,14 +1572,14 @@ export const PosterSetsDashboard: React.FC = () => {
             ) : null}
 
             {tab === 'watches' ? (
-                <section className={`${cardClass} space-y-4 p-5`}>
+                <section className={`${cardClass} space-y-4 overflow-hidden p-4 sm:p-5`}>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                            <h2 className="text-lg font-bold text-text">Watches</h2>
-                            <p className="mt-1 text-sm text-muted">
+                        <div className="min-w-0">
+                            <h2 className={sectionTitleClass}>Watches</h2>
+                            <p className={sectionBodyClass}>
                                 Pin MediUX / ThePosterDB sets. New art (including MediUX title cards) is queued automatically.
                             </p>
-                            <p className="mt-2 text-xs text-muted">
+                            <p className="mt-2 text-[11px] text-muted sm:text-xs">
                                 {watchStatsState.enabled || 0} enabled
                                 {' · '}
                                 {watchStatsState.total || 0} total
@@ -1596,6 +1635,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             try {
                                 await posterSetsApi.addWatch({ url: target });
                                 setWatchUrlDraft('');
+                                setWatchesPage(1);
                                 await loadWatches();
                                 toast('Watch pinned. Current assets baselined — only future new art will queue.');
                             } catch (error) {
@@ -1616,56 +1656,119 @@ export const PosterSetsDashboard: React.FC = () => {
                         </button>
                     </form>
 
+                    {watches.length ? (
+                        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                            <input
+                                className={`${fieldClass} sm:max-w-xs`}
+                                placeholder="Filter by title, creator, URL…"
+                                value={watchesFilter}
+                                onChange={(event) => {
+                                    setWatchesFilter(event.target.value);
+                                    setWatchesPage(1);
+                                }}
+                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                                <CustomSelect
+                                    value={String(watchesPageSize)}
+                                    onChange={(value) => {
+                                        const next = Number(value) || 25;
+                                        setWatchesPageSize(next);
+                                        setWatchesPage(1);
+                                    }}
+                                    options={[...WATCHES_PAGE_SIZE_OPTIONS]}
+                                    className="w-full min-w-[140px] sm:w-auto"
+                                    compact
+                                />
+                                {watchesPageCount > 1 ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null || watchesPage <= 1}
+                                            onClick={() => setWatchesPage((page) => Math.max(1, page - 1))}
+                                        >
+                                            <ChevronLeft className="h-4 w-4" />
+                                            Prev
+                                        </button>
+                                        <span className="text-xs text-muted">
+                                            Page {Math.min(watchesPage, watchesPageCount)} / {watchesPageCount}
+                                            {' · '}
+                                            {filteredWatches.length} shown
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null || watchesPage >= watchesPageCount}
+                                            onClick={() => setWatchesPage((page) => Math.min(watchesPageCount, page + 1))}
+                                        >
+                                            Next
+                                            <ChevronRight className="h-4 w-4" />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <span className="text-xs text-muted">
+                                        {filteredWatches.length} watch{filteredWatches.length === 1 ? '' : 'es'}
+                                        {watchesFilter.trim() ? ` (of ${watches.length})` : ''}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    ) : null}
+
                     {!watches.length ? (
                         <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
                             Apply a set and keep watching, or pin a MediUX/TPDB URL.
                             Sonarr On Import (same Scanner webhook) also refreshes matching watches after a short debounce.
                         </p>
+                    ) : !filteredWatches.length ? (
+                        <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
+                            No watches match “{watchesFilter.trim()}”.
+                        </p>
                     ) : (
-                        <div className="space-y-2">
-                            {watches.map((watch) => {
+                        <div className="min-w-0 space-y-2 overflow-hidden">
+                            {pagedWatches.map((watch) => {
                                 const showName = String(watch.title || watch.setId || watch.url || 'Watch').trim();
                                 const creator = String(watch.user || '').trim().replace(/^@/, '');
                                 const provider = String(watch.provider || '').toLowerCase();
                                 return (
                                     <div
                                         key={watch.id}
-                                        className={`rounded-xl border px-4 py-3 ${
+                                        className={`min-w-0 overflow-hidden rounded-xl border px-3 py-3 sm:px-4 ${
                                             watch.lastError
                                                 ? 'border-red-500/30 bg-red-500/5'
                                                 : 'border-white/10 bg-black/10'
                                         }`}
                                     >
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                            <div className="flex min-w-0 gap-3">
+                                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="flex min-w-0 flex-1 gap-3 overflow-hidden">
                                                 {watch.thumbUrl ? (
                                                     <img
                                                         src={watch.thumbUrl}
                                                         alt=""
-                                                        className="h-16 w-12 shrink-0 rounded-lg object-cover"
+                                                        className="h-14 w-10 shrink-0 rounded-lg object-cover sm:h-16 sm:w-12"
                                                     />
                                                 ) : (
-                                                    <div className="flex h-16 w-12 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
+                                                    <div className="flex h-14 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30 sm:h-16 sm:w-12">
                                                         <ImageIcon className="h-5 w-5 text-muted" />
                                                     </div>
                                                 )}
-                                                <div className="min-w-0 space-y-1">
-                                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                                <div className="min-w-0 flex-1 space-y-1.5 overflow-hidden">
+                                                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                                         <StatusPill value={watch.enabled === false ? 'Paused' : 'Watching'} />
                                                         <ProviderPill provider={provider} />
-                                                        <p className="min-w-0 truncate text-sm font-semibold text-text" title={showName}>
-                                                            {showName}
-                                                        </p>
                                                         <CreatorPill user={creator} />
                                                     </div>
-                                                    <p className="text-xs text-muted">
+                                                    <p className="break-words text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]" title={showName}>
+                                                        {showName}
+                                                    </p>
+                                                    <p className="break-words text-[11px] text-muted sm:text-xs">
                                                         {(watch.knownAssetIds || []).length} known
                                                         {watch.lastCheckedAt ? ` · checked ${formatTime(watch.lastCheckedAt)}` : ' · not checked yet'}
                                                         {watch.lastNewCount ? ` · last new ${watch.lastNewCount}` : ''}
                                                         {watch.lastAppliedAt ? ` · applied ${formatTime(watch.lastAppliedAt)}` : ''}
                                                     </p>
                                                     {watch.lastError ? (
-                                                        <p className="text-sm text-red-300">{watch.lastError}</p>
+                                                        <p className="break-words text-xs text-red-300 sm:text-sm [overflow-wrap:anywhere]">{watch.lastError}</p>
                                                     ) : null}
                                                     <div className="pt-1">
                                                         {provider === 'posterdb' ? (
@@ -1798,6 +1901,31 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </div>
                                 );
                             })}
+                            {watchesPageCount > 1 ? (
+                                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null || watchesPage <= 1}
+                                        onClick={() => setWatchesPage((page) => Math.max(1, page - 1))}
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                        Prev
+                                    </button>
+                                    <span className="text-xs text-muted">
+                                        Page {Math.min(watchesPage, watchesPageCount)} / {watchesPageCount}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null || watchesPage >= watchesPageCount}
+                                        onClick={() => setWatchesPage((page) => Math.min(watchesPageCount, page + 1))}
+                                    >
+                                        Next
+                                        <ChevronRight className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            ) : null}
                         </div>
                     )}
                 </section>
@@ -1807,8 +1935,8 @@ export const PosterSetsDashboard: React.FC = () => {
                 <section className={`${cardClass} space-y-3 p-5`}>
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                            <h2 className="text-lg font-bold text-text">Recent sets</h2>
-                            <p className="mt-1 text-sm text-muted">
+                            <h2 className={sectionTitleClass}>Recent sets</h2>
+                            <p className={sectionBodyClass}>
                                 Re-preview or re-apply sets you&apos;ve already used.
                             </p>
                         </div>
@@ -2660,16 +2788,16 @@ export const PosterSetsDashboard: React.FC = () => {
                                 return (
                                     <article
                                         key={entry.id}
-                                        className={`${cardClass} space-y-2 p-4 ${entry.jobId ? 'cursor-pointer transition hover:border-plex/40' : ''}`}
+                                        className={`${cardClass} min-w-0 space-y-2 overflow-hidden p-3 sm:p-4 ${entry.jobId ? 'cursor-pointer transition hover:border-plex/40' : ''}`}
                                         onClick={() => {
                                             if (!entry.jobId) return;
                                             void openHistoryJob(entry.jobId);
                                             setHistoryFilter('all');
                                         }}
                                     >
-                                        <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <div className="min-w-0 space-y-1">
-                                                <div className="flex flex-wrap items-center gap-2">
+                                        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                                            <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                                     <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
                                                         source === 'watch'
                                                             ? 'border-plex/40 bg-plex/15 text-plex'
@@ -2681,7 +2809,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     </span>
                                                     {entry.state ? <StatusPill value={entry.state} /> : null}
                                                 </div>
-                                                <p className="truncate font-semibold text-text" title={label}>{label}</p>
+                                                <p className="break-words text-sm font-semibold text-text [overflow-wrap:anywhere]" title={label}>{label}</p>
                                                 {entry.jobId ? (
                                                     <p className="font-mono text-xs text-muted">job #{entry.jobId.slice(0, 8)}</p>
                                                 ) : null}
@@ -2722,11 +2850,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                 return (
                                     <article
                                         key={job.id}
-                                        className={`${cardClass} cursor-pointer space-y-2 p-4 transition hover:border-plex/40 ${selected ? 'border-plex/50' : ''} ${jobCardTone(job)}`}
+                                        className={`${cardClass} min-w-0 cursor-pointer space-y-2 overflow-hidden p-3 transition hover:border-plex/40 sm:p-4 ${selected ? 'border-plex/50' : ''} ${jobCardTone(job)}`}
                                         onClick={() => void openHistoryJob(job.id)}
                                     >
-                                        <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <div className="flex min-w-0 items-start gap-3">
+                                        <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                                            <div className="flex min-w-0 flex-1 items-start gap-3 overflow-hidden">
                                                 {meta?.thumbUrl ? (
                                                     <img
                                                         src={posterSetsApi.imageUrl(meta.thumbUrl)}
@@ -2735,8 +2863,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         loading="lazy"
                                                     />
                                                 ) : null}
-                                                <div className="min-w-0">
-                                                    <p className="truncate font-semibold text-text" title={jobTitle(job)}>
+                                                <div className="min-w-0 flex-1 overflow-hidden">
+                                                    <p className="break-words text-sm font-semibold text-text [overflow-wrap:anywhere]" title={jobTitle(job)}>
                                                         {jobTitle(job)}
                                                     </p>
                                                     <p className="mt-1 font-mono text-xs text-muted">
@@ -2852,8 +2980,8 @@ export const PosterSetsDashboard: React.FC = () => {
             {tab === 'settings' ? (
                 <section className={`${cardClass} space-y-5 p-5`}>
                     <div>
-                        <h2 className="text-lg font-bold text-text">Poster Sets config</h2>
-                        <p className="mt-1 text-sm text-muted">
+                        <h2 className={sectionTitleClass}>Poster Sets config</h2>
+                        <p className={sectionBodyClass}>
                             Same layout as the original helper config.json — used only by this feature.
                             You can pull URL, token, and libraries from Settings → Media Player.
                         </p>
