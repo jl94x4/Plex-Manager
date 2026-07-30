@@ -37,6 +37,7 @@ import { posterSetsApi } from './api';
 import {
     DEFAULT_POSTER_SETS_CONFIG,
     MEDIUX_FILTER_OPTIONS,
+    mediuxFiltersFromAssets,
     type PosterSetsAuditEntry,
     type PosterSetsConfig,
     type PosterSetsJob,
@@ -632,6 +633,14 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
+    const filtersForSelectedIds = (ids: string[]) => {
+        if (!ids.length) return undefined;
+        const byId = new Map((preview?.assets || []).map((asset) => [asset.id, asset]));
+        const selected = ids.map((id) => byId.get(id)).filter(Boolean) as PosterSetsPreviewAsset[];
+        const filters = mediuxFiltersFromAssets(selected);
+        return filters.length ? filters : undefined;
+    };
+
     const runApply = async (selectedOnly = false, overrideUrl?: string) => {
         const target = String(overrideUrl ?? url).trim();
         if (!target) {
@@ -645,10 +654,13 @@ export const PosterSetsDashboard: React.FC = () => {
         }
         setBusy('apply');
         try {
+            const selected = selectedOnly ? selectedAssetIds : undefined;
             const response = await posterSetsApi.apply(
                 target,
-                selectedOnly ? selectedAssetIds : undefined,
+                selected,
                 currentSetMeta(),
+                undefined,
+                selected ? filtersForSelectedIds(selected) : undefined,
             );
             setActiveJob(response.job);
             upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
@@ -689,7 +701,13 @@ export const PosterSetsDashboard: React.FC = () => {
         setBusy('apply');
         try {
             const target = url.trim();
-            const response = await posterSetsApi.apply(target, ids, currentSetMeta());
+            const response = await posterSetsApi.apply(
+                target,
+                ids,
+                currentSetMeta(),
+                undefined,
+                filtersForSelectedIds(ids),
+            );
             setActiveJob(response.job);
             upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
             setRecentTick((value) => value + 1);
@@ -726,7 +744,13 @@ export const PosterSetsDashboard: React.FC = () => {
         setBusy('apply');
         try {
             const target = url.trim();
-            const response = await posterSetsApi.apply(target, unmatchedIds, currentSetMeta());
+            const response = await posterSetsApi.apply(
+                target,
+                unmatchedIds,
+                currentSetMeta(),
+                undefined,
+                filtersForSelectedIds(unmatchedIds),
+            );
             setActiveJob(response.job);
             upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
             setRecentTick((value) => value + 1);
@@ -794,7 +818,13 @@ export const PosterSetsDashboard: React.FC = () => {
         if (!ok) return;
         setBusy('apply');
         try {
-            const response = await posterSetsApi.apply(target, newIds, currentSetMeta());
+            const response = await posterSetsApi.apply(
+                target,
+                newIds,
+                currentSetMeta(),
+                undefined,
+                filtersForSelectedIds(newIds),
+            );
             setActiveJob(response.job);
             upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
             setRecentTick((value) => value + 1);

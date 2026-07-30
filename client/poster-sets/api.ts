@@ -163,12 +163,19 @@ export const posterSetsApi = {
         }, signal);
         return finalEvent;
     },
-    apply: (url: string, selectedIds?: string[], setMeta?: PosterSetsSetMeta | null, source?: 'manual' | 'bulk' | 'watch') => (
+    apply: (
+        url: string,
+        selectedIds?: string[],
+        setMeta?: PosterSetsSetMeta | null,
+        source?: 'manual' | 'bulk' | 'watch',
+        mediuxFilters?: string[],
+    ) => (
         apiFetch(`${ROOT}/apply`, json({
             url,
             ...(selectedIds?.length ? { selectedIds } : {}),
             ...(setMeta ? { setMeta } : {}),
             ...(source ? { source } : {}),
+            ...(mediuxFilters?.length ? { mediuxFilters } : {}),
         })) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob; queued?: boolean }>
     ),
     imageUrl: (thumbUrl: string) => `${ROOT}/image?url=${encodeURIComponent(thumbUrl)}`,

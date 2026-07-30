@@ -125,6 +125,8 @@ export type PosterSetsPreviewAsset = {
     matched: boolean;
     matchDetail?: string;
     source?: string;
+    /** MediUX filter id when known (title_card, background, season_cover, show_cover). */
+    fileType?: string | null;
 };
 
 export type PosterSetsPreview = {
@@ -248,6 +250,29 @@ export const MEDIUX_FILTER_OPTIONS = [
     { id: 'background', label: 'Background' },
     { id: 'title_card', label: 'Title card' },
 ] as const;
+
+const MEDIUX_FILTER_IDS = new Set(MEDIUX_FILTER_OPTIONS.map((option) => option.id));
+
+/** Infer watch/apply mediux filter ids from the assets the user actually selected. */
+export const mediuxFiltersFromAssets = (assets: Array<Partial<PosterSetsPreviewAsset> | null | undefined>) => {
+    const filters = new Set<string>();
+    for (const asset of assets) {
+        if (!asset) continue;
+        const explicit = String(asset.fileType || '').trim();
+        if (MEDIUX_FILTER_IDS.has(explicit as typeof MEDIUX_FILTER_OPTIONS[number]['id'])) {
+            filters.add(explicit);
+            continue;
+        }
+        if (asset.kind !== 'show') continue;
+        const season = asset.season;
+        const episode = asset.episode;
+        if (season === 'Cover') filters.add('show_cover');
+        else if (season === 'Backdrop') filters.add('background');
+        else if (episode === 'Cover' || episode == null || episode === '') filters.add('season_cover');
+        else filters.add('title_card');
+    }
+    return MEDIUX_FILTER_OPTIONS.map((option) => option.id).filter((id) => filters.has(id));
+};
 
 export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     base_url: '',

@@ -104,6 +104,24 @@ def asset_label(kind: str, poster: dict) -> str:
     return f"S{season}E{episode}"
 
 
+def asset_file_type(kind: str, poster: dict) -> str | None:
+    """Map a poster row to a mediux_filters id (show assets only)."""
+    explicit = poster.get("file_type") or poster.get("fileType")
+    if explicit in {"title_card", "background", "season_cover", "show_cover"}:
+        return explicit
+    if kind != "show":
+        return None
+    season = poster.get("season")
+    episode = poster.get("episode")
+    if season == "Cover":
+        return "show_cover"
+    if season == "Backdrop":
+        return "background"
+    if episode == "Cover" or episode is None or episode == "":
+        return "season_cover"
+    return "title_card"
+
+
 def _image_suffix(content_type: str, url: str) -> str:
     ct = (content_type or "").lower()
     if "png" in ct or url.lower().endswith(".png"):
@@ -694,6 +712,7 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
                 "url": poster_url,
                 "source": "mediux",
                 "year": year,
+                "file_type": file_type,
             }
             if check_mediux_filter(mediux_filters, file_type or ""):
                 showposters.append(showposter)
@@ -939,6 +958,7 @@ def build_preview_assets(movieposters, showposters, collectionposters, tv=None, 
                 "matched": matched if tv is not None else None,
                 "matchDetail": detail,
                 "source": poster.get("source"),
+                "fileType": asset_file_type(kind, poster),
             }
         )
     for poster in showposters:
@@ -957,6 +977,7 @@ def build_preview_assets(movieposters, showposters, collectionposters, tv=None, 
                 "matched": matched if tv is not None else None,
                 "matchDetail": detail,
                 "source": poster.get("source"),
+                "fileType": asset_file_type(kind, poster),
             }
         )
     for poster in collectionposters:
@@ -975,6 +996,7 @@ def build_preview_assets(movieposters, showposters, collectionposters, tv=None, 
                 "matched": matched if tv is not None else None,
                 "matchDetail": detail,
                 "source": poster.get("source"),
+                "fileType": asset_file_type(kind, poster),
             }
         )
     return assets
@@ -1024,6 +1046,7 @@ def list_assets(url: str, config: dict | None = None, progress: ProgressFn = Non
                 "episode": asset.get("episode"),
                 "label": asset.get("label"),
                 "source": asset.get("source"),
+                "fileType": asset.get("fileType") or asset.get("file_type"),
             }
             for asset in assets
             if asset.get("id")
