@@ -512,7 +512,46 @@ def check_mediux_filter(mediux_filters: Optional[Sequence[str]], filter_name: st
     return filter_name in mediux_filters if mediux_filters else True
 
 
-def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress: ProgressFn = None) -> Tuple[list, list, list]:
+def _pick_creator_username(value) -> Optional[str]:
+    if isinstance(value, str):
+        text = value.strip().lstrip("@")
+        return text or None
+    if isinstance(value, dict):
+        for key in ("username", "user_name", "name", "handle", "slug", "display_name"):
+            picked = _pick_creator_username(value.get(key))
+            if picked:
+                return picked
+    return None
+
+
+def extract_creator_from_soup(soup) -> Optional[str]:
+    if not soup:
+        return None
+    skip = {"login", "signup", "register", "settings", "logout", "home"}
+    for anchor in soup.select("a[href*='/user/']"):
+        href = str(anchor.get("href") or "")
+        match = re.search(r"/user/([^/?#]+)", href, re.I)
+        if match:
+            user = unquote(match.group(1)).strip().lstrip("@")
+            if user and user.lower() not in skip:
+                return user
+        text = (anchor.get_text(" ", strip=True) or "").strip().lstrip("@")
+        if text and 1 < len(text) < 64 and text.lower() not in skip:
+            return text
+    return None
+
+
+def extract_mediux_creator(data_dict, soup=None) -> Optional[str]:
+    aset = (data_dict or {}).get("set") if isinstance(data_dict, dict) else None
+    if isinstance(aset, dict):
+        for key in ("user", "author", "owner", "created_by", "uploader", "profile", "creator"):
+            picked = _pick_creator_username(aset.get(key))
+            if picked:
+                return picked
+    return extract_creator_from_soup(soup)
+
+
+def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress: ProgressFn = None) -> Tuple[list, list, list, dict]:
     # Direct API assets — MediUX's /_next/image proxy now 403s scrapers/Plex (blank posters).
     base_url = "https://api.mediux.pro/assets/"
     scripts = soup.find_all("script")
@@ -523,6 +562,7 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
     title = "Untitled"
     poster_data = None
     data_dict = None
+    page_meta: dict = {"user": None, "title": None}
 
     for script in scripts:
         if "files" in script.text and "set" in script.text and "Set Link\\" not in script.text:
@@ -536,6 +576,20 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
 
     if not poster_data or not data_dict:
         raise RuntimeError("Could not parse MediUX set data from page")
+
+    page_meta["user"] = extract_mediux_creator(data_dict, soup)
+    try:
+        show = (data_dict.get("set") or {}).get("show") or {}
+        if isinstance(show, dict) and show.get("name"):
+            page_meta["title"] = str(show.get("name") or "").strip() or None
+        elif (data_dict.get("set") or {}).get("movie"):
+            page_meta["title"] = str(((data_dict.get("set") or {}).get("movie") or {}).get("title") or "").strip() or None
+        elif (data_dict.get("set") or {}).get("collection"):
+            page_meta["title"] = str(
+                ((data_dict.get("set") or {}).get("collection") or {}).get("collection_name") or ""
+            ).strip() or None
+    except Exception:
+        pass
 
     media_type = None
     for data in poster_data:
@@ -634,19 +688,54 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
                     }
                 )
 
-    return movieposters, showposters, collectionposters
+    if not page_meta.get("title"):
+        for group in (showposters, movieposters, collectionposters):
+            for poster in group:
+                if poster.get("title"):
+                    page_meta["title"] = str(poster.get("title") or "").strip() or None
+                    break
+            if page_meta.get("title"):
+                break
+
+    return movieposters, showposters, collectionposters, page_meta
 
 
-def scrape(url: str, mediux_filters: Optional[Sequence[str]] = None, progress: ProgressFn = None) -> Tuple[list, list, list]:
+def scrape(url: str, mediux_filters: Optional[Sequence[str]] = None, progress: ProgressFn = None) -> Tuple[list, list, list, dict]:
     if "theposterdb.com" in url:
         if "/set/" in url or "/user/" in url:
-            return scrape_posterdb(cook_soup(url))
+            soup = cook_soup(url)
+            movieposters, showposters, collectionposters = scrape_posterdb(soup)
+            title = None
+            for group in (showposters, movieposters, collectionposters):
+                for poster in group:
+                    if poster.get("title"):
+                        title = str(poster.get("title") or "").strip() or None
+                        break
+                if title:
+                    break
+            return movieposters, showposters, collectionposters, {
+                "user": extract_creator_from_soup(soup),
+                "title": title,
+            }
         if "/poster/" in url:
             soup = cook_soup(url)
             set_url = scrape_posterdb_set_link(soup)
             if set_url is None:
                 raise RuntimeError("Poster set not found. Check the link you are inputting.")
-            return scrape_posterdb(cook_soup(set_url))
+            set_soup = cook_soup(set_url)
+            movieposters, showposters, collectionposters = scrape_posterdb(set_soup)
+            title = None
+            for group in (showposters, movieposters, collectionposters):
+                for poster in group:
+                    if poster.get("title"):
+                        title = str(poster.get("title") or "").strip() or None
+                        break
+                if title:
+                    break
+            return movieposters, showposters, collectionposters, {
+                "user": extract_creator_from_soup(set_soup),
+                "title": title,
+            }
         raise RuntimeError("Poster set not found. Check the link you are inputting.")
     if "mediux.pro" in url and "sets" in url:
         return scrape_mediux(cook_soup(url), mediux_filters=mediux_filters, progress=progress)
@@ -693,12 +782,20 @@ def parse_set_ref(url: str) -> dict:
     return {"provider": provider, "setId": set_id, "url": value}
 
 
-def build_set_meta(url: str, movieposters=None, showposters=None, collectionposters=None) -> dict:
-    """Compact set summary for Recent chips / history list (one thumb + title)."""
+def build_set_meta(
+    url: str,
+    movieposters=None,
+    showposters=None,
+    collectionposters=None,
+    page_meta: Optional[dict] = None,
+) -> dict:
+    """Compact set summary: show/movie name + creator (not season pack labels)."""
     ref = parse_set_ref(url)
-    title = None
+    meta = page_meta if isinstance(page_meta, dict) else {}
+    title = str(meta.get("title") or "").strip() or None
+    user = _pick_creator_username(meta.get("user"))
     thumb = ""
-    for group in (movieposters, showposters, collectionposters):
+    for group in (showposters, movieposters, collectionposters):
         for poster in group or []:
             if not title and poster.get("title"):
                 title = str(poster.get("title") or "").strip() or None
@@ -719,6 +816,7 @@ def build_set_meta(url: str, movieposters=None, showposters=None, collectionpost
         "setId": ref.get("setId"),
         "url": ref.get("url") or str(url or "").strip(),
         "title": title,
+        "user": user,
         "thumbUrl": thumb,
         "assetCount": total or None,
     }
@@ -861,9 +959,9 @@ def list_assets(url: str, config: dict | None = None, progress: ProgressFn = Non
         "show_cover",
     ]
     emit(progress, f"Listing assets from {url}")
-    movieposters, showposters, collectionposters = scrape(url, mediux_filters=filters, progress=progress)
+    movieposters, showposters, collectionposters, page_meta = scrape(url, mediux_filters=filters, progress=progress)
     assets = build_preview_assets(movieposters, showposters, collectionposters, tv=None, movies=None)
-    set_meta = build_set_meta(url, movieposters, showposters, collectionposters)
+    set_meta = build_set_meta(url, movieposters, showposters, collectionposters, page_meta=page_meta)
     return {
         "ok": True,
         "url": url,
@@ -894,7 +992,7 @@ def preview_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
         "show_cover",
     ]
     emit(progress, f"Scraping {url}")
-    movieposters, showposters, collectionposters = scrape(url, mediux_filters=filters, progress=progress)
+    movieposters, showposters, collectionposters, page_meta = scrape(url, mediux_filters=filters, progress=progress)
     summary = summarize_posters(movieposters, showposters, collectionposters)
 
     tv = movies = None
@@ -910,7 +1008,7 @@ def preview_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
     assets = build_preview_assets(movieposters, showposters, collectionposters, tv=tv, movies=movies)
     matched = sum(1 for asset in assets if asset.get("matched") is True)
     unmatched = sum(1 for asset in assets if asset.get("matched") is False)
-    set_meta = build_set_meta(url, movieposters, showposters, collectionposters)
+    set_meta = build_set_meta(url, movieposters, showposters, collectionposters, page_meta=page_meta)
     return {
         "ok": True,
         "url": url,
@@ -937,7 +1035,7 @@ def apply_url(
     ]
     tv, movies, _plex = connect_plex(config, progress=progress)
     emit(progress, f"Scraping {url}")
-    movieposters, showposters, collectionposters = scrape(url, mediux_filters=filters, progress=progress)
+    movieposters, showposters, collectionposters, page_meta = scrape(url, mediux_filters=filters, progress=progress)
     movieposters, showposters, collectionposters = filter_posters_by_ids(
         movieposters, showposters, collectionposters, selected_ids
     )
@@ -958,7 +1056,7 @@ def apply_url(
         poster = {**poster, "_config": config}
         results.append(upload_tv_poster(poster, tv, progress=progress))
     uploaded = sum(1 for item in results if item.get("ok"))
-    set_meta = build_set_meta(url, movieposters, showposters, collectionposters)
+    set_meta = build_set_meta(url, movieposters, showposters, collectionposters, page_meta=page_meta)
     return {
         "ok": True,
         "url": url,

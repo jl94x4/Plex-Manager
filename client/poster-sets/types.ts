@@ -23,6 +23,7 @@ export type PosterSetsWatch = {
     url: string;
     setId?: string | null;
     title?: string | null;
+    user?: string | null;
     thumbUrl?: string;
     mediuxFilters?: string[];
     knownAssetIds?: string[];
@@ -45,6 +46,7 @@ export type PosterSetsSetMeta = {
     setId?: string | null;
     url?: string | null;
     title?: string | null;
+    user?: string | null;
     thumbUrl?: string;
     assetCount?: number | null;
 };

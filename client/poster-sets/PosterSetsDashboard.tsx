@@ -192,8 +192,8 @@ const jobCardTone = (job: PosterSetsJob) => {
 const jobTitle = (job: PosterSetsJob) => {
     const meta = jobSetMeta(job);
     if (meta?.title) {
-        const provider = providerLabel(meta.provider);
-        return meta.setId ? `${meta.title} · ${provider} #${meta.setId}` : meta.title;
+        const user = String(meta.user || '').trim().replace(/^@/, '');
+        return user ? `${meta.title} · @${user}` : meta.title;
     }
     const input = job.input;
     if (input?.url) return input.url;
@@ -310,21 +310,23 @@ export const PosterSetsDashboard: React.FC = () => {
     }, []);
 
     const currentSetMeta = useCallback((): PosterSetsSetMeta | null => {
-        if (selectedSearchSet) {
+        if (selectedSearchSet || preview?.setMeta) {
+            const previewMeta = preview?.setMeta as PosterSetsSetMeta | undefined;
             return {
-                provider: selectedSearchSet.provider || null,
-                setId: selectedSearchSet.setId || null,
-                url: selectedSearchSet.url || url || null,
-                title: selectedSearchSet.title || preview?.setMeta?.title || null,
-                thumbUrl: selectedSearchSet.thumbUrl || preview?.setMeta?.thumbUrl || '',
-                assetCount: selectedSearchSet.posterCount
+                provider: selectedSearchSet?.provider || previewMeta?.provider || null,
+                setId: selectedSearchSet?.setId || previewMeta?.setId || null,
+                url: selectedSearchSet?.url || previewMeta?.url || url || null,
+                // Prefer scraped show/movie name over search card labels like "Season 3".
+                title: previewMeta?.title || selectedSearchSet?.title || null,
+                user: previewMeta?.user || selectedSearchSet?.user || null,
+                thumbUrl: selectedSearchSet?.thumbUrl || previewMeta?.thumbUrl || '',
+                assetCount: selectedSearchSet?.posterCount
                     ?? preview?.total
-                    ?? preview?.setMeta?.assetCount
+                    ?? previewMeta?.assetCount
                     ?? null,
             };
         }
-        if (preview?.setMeta) return preview.setMeta as PosterSetsSetMeta;
-        return url ? { url, title: preview?.setMeta?.title || null, thumbUrl: '' } : null;
+        return url ? { url, title: null, user: null, thumbUrl: '' } : null;
     }, [preview, selectedSearchSet, url]);
 
     const load = useCallback(async () => {
@@ -1295,7 +1297,9 @@ export const PosterSetsDashboard: React.FC = () => {
                     ) : (
                         <div className="space-y-2">
                             {watches.map((watch) => {
-                                const title = String(watch.title || watch.setId || watch.url || 'Watch').trim();
+                                const showName = String(watch.title || watch.setId || watch.url || 'Watch').trim();
+                                const creator = String(watch.user || '').trim().replace(/^@/, '');
+                                const title = creator ? `${showName} · @${creator}` : showName;
                                 const provider = String(watch.provider || '').toLowerCase();
                                 return (
                                     <div
@@ -1328,9 +1332,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             </span>
                                                         ) : null}
                                                         <p className="truncate text-sm font-semibold text-text" title={title}>
-                                                            {title}
+                                                            {showName}
                                                         </p>
                                                     </div>
+                                                    {creator ? (
+                                                        <p className="truncate text-xs font-medium text-muted" title={`@${creator}`}>
+                                                            @{creator}
+                                                        </p>
+                                                    ) : null}
                                                     <p className="text-xs text-muted">
                                                         {(watch.knownAssetIds || []).length} known
                                                         {watch.lastCheckedAt ? ` · checked ${formatTime(watch.lastCheckedAt)}` : ' · not checked yet'}
