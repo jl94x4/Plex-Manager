@@ -445,6 +445,10 @@ export type RequestOptionsPayload = {
     canRequestAdvanced?: boolean;
     has4kServer: boolean;
     hasHdServer: boolean;
+    /** Movie only — which qualities already have a file in Radarr. */
+    libraryQualities?: { hd?: boolean; '4k'?: boolean } | null;
+    /** Soft notice when one quality is in library but another can still be requested. */
+    availabilityNote?: string | null;
     standardQuotaBlocked?: boolean;
     fourKQuotaBlocked?: boolean;
     seerrUserId?: number | null;
@@ -582,8 +586,20 @@ export const getRequestButtonState = (
     });
 
     if (mediaType === 'movie') {
-        if (status === MEDIA_STATUS.AVAILABLE) {
+        const radarr = details?.radarrLibraryStatus;
+        const hdHasFile = !!radarr?.hdHasFile;
+        const fourKHasFile = !!radarr?.fourKHasFile;
+        // Only keep Request open when the *other* quality is monitored and still missing a file.
+        const qualityStillNeeded = !!radarr && (
+            (hdHasFile && !fourKHasFile && !!radarr.fourKMatched)
+            || (fourKHasFile && !hdHasFile && !!radarr.hdMatched)
+        );
+
+        if (status === MEDIA_STATUS.AVAILABLE && !qualityStillNeeded) {
             return { label: 'Available', disabled: true, variant: 'available' as const };
+        }
+        if (status === MEDIA_STATUS.AVAILABLE && qualityStillNeeded) {
+            return { label: 'Request Movie', disabled: false, variant: 'action' as const };
         }
         if (status === MEDIA_STATUS.PROCESSING) {
             const label = isMediaActivelyProcessing(mediaInfo, status) ? 'Processing' : 'Requested';
@@ -596,7 +612,10 @@ export const getRequestButtonState = (
             if (Number(activeRequest.status) === REQUEST_STATUS.PENDING) {
                 return { label: 'Request Pending', disabled: true, variant: 'pending' as const };
             }
-            return { label: 'Requested', disabled: true, variant: 'pending' as const };
+            // Active request for one quality should not block requesting the other.
+            if (!qualityStillNeeded) {
+                return { label: 'Requested', disabled: true, variant: 'pending' as const };
+            }
         }
         if (status === MEDIA_STATUS.BLACKLISTED) {
             return { label: 'Blacklisted', disabled: true, variant: 'blocked' as const };

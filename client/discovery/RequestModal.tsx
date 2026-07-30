@@ -274,11 +274,15 @@ export const RequestModal: React.FC<Props> = ({
             setOptions(payload);
 
             const initial = new Set<QualityKey>();
+            const hdInLibrary = !!payload.libraryQualities?.hd;
+            const fourKInLibrary = !!payload.libraryQualities?.['4k'];
             const hdOk = payload.hasHdServer !== false
+                && !hdInLibrary
                 && !(payload.standardQuotaBlocked
                     || (payload.quota?.standard && payload.quota.standard.limit > 0 && payload.quota.standard.remaining === 0));
             const fourKOk = !!payload.canRequest4k
                 && !!payload.has4kServer
+                && !fourKInLibrary
                 && !(payload.fourKQuotaBlocked
                     || (payload.quota?.fourK && payload.quota.fourK.limit > 0 && payload.quota.fourK.remaining === 0));
             if (hdOk) initial.add('hd');
@@ -354,11 +358,13 @@ export const RequestModal: React.FC<Props> = ({
         || (options?.quota?.fourK && options.quota.fourK.limit > 0 && options.quota.fourK.remaining === 0)
     );
 
-    const hdAllowed = !!options?.canRequest && !hdQuotaBlocked && options?.hasHdServer !== false;
+    const hdAllowed = !!options?.canRequest && !hdQuotaBlocked && options?.hasHdServer !== false
+        && !options?.libraryQualities?.hd;
     const fourKAllowed = !!options?.canRequest
         && !!options?.canRequest4k
         && !!options?.has4kServer
-        && !fourKQuotaBlocked;
+        && !fourKQuotaBlocked
+        && !options?.libraryQualities?.['4k'];
 
     const activeForm = qualityForms[advancedQuality];
     const filteredServers = useMemo(() => {
@@ -826,6 +832,12 @@ export const RequestModal: React.FC<Props> = ({
                                 </div>
                             )}
 
+                            {options.availabilityNote && options.canRequest && (
+                                <div className="rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+                                    {options.availabilityNote}
+                                </div>
+                            )}
+
                             {hdQuotaBlocked && selectedQualities.has('hd') && (
                                 <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                                     You have used all {options.quota?.standard?.limit} HD requests for this period.
@@ -854,9 +866,11 @@ export const RequestModal: React.FC<Props> = ({
                                                 badge: 'HD',
                                                 serverName: hdServerName,
                                                 allowed: hdAllowed,
-                                                blockedHint: hdQuotaBlocked
-                                                    ? 'HD quota used up'
-                                                    : 'HD requests unavailable',
+                                                blockedHint: options?.libraryQualities?.hd
+                                                    ? 'Already in library'
+                                                    : hdQuotaBlocked
+                                                        ? 'HD quota used up'
+                                                        : 'HD requests unavailable',
                                             },
                                             {
                                                 key: '4k' as QualityKey,
@@ -864,11 +878,13 @@ export const RequestModal: React.FC<Props> = ({
                                                 badge: '4K',
                                                 serverName: fourKServerName,
                                                 allowed: fourKAllowed,
-                                                blockedHint: fourKQuotaBlocked
-                                                    ? '4K quota used up'
-                                                    : (!options?.canRequest4k
-                                                        ? '4K requests disabled in settings'
-                                                        : 'No 4K server configured'),
+                                                blockedHint: options?.libraryQualities?.['4k']
+                                                    ? 'Already in library'
+                                                    : fourKQuotaBlocked
+                                                        ? '4K quota used up'
+                                                        : (!options?.canRequest4k
+                                                            ? '4K requests disabled in settings'
+                                                            : 'No 4K server configured'),
                                             },
                                         ]).map((entry) => {
                                             const selected = selectedQualities.has(entry.key);
@@ -1153,19 +1169,29 @@ export const RequestModal: React.FC<Props> = ({
                     >
                         Cancel
                     </button>
-                    <button
-                        type="button"
-                        onClick={handleSubmit}
-                        disabled={submitting || loading || !canSubmitRequest}
-                        className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                        {submitting
-                            ? 'Submitting…'
-                            : selectedQualities.size > 1
-                                ? 'Submit HD + 4K'
-                                : 'Submit Request'}
-                    </button>
+                    {!options?.canRequest && !loading ? (
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors"
+                        >
+                            Close
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={handleSubmit}
+                            disabled={submitting || loading || !canSubmitRequest}
+                            className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                            {submitting
+                                ? 'Submitting…'
+                                : selectedQualities.size > 1
+                                    ? 'Submit HD + 4K'
+                                    : 'Submit Request'}
+                        </button>
+                    )}
                 </div>
             </div>
         </div>

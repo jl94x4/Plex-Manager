@@ -26,6 +26,51 @@ export const portalRequestToDiscoveryRowItem = (item: PortalRequestItem) => ({
     },
 });
 
+/** One discovery poster for a title that may have both HD and 4K request rows. */
+export const mergedPortalRequestsToDiscoveryRowItem = (
+    primary: PortalRequestItem,
+    variants: PortalRequestItem[],
+) => {
+    const rows = variants.length ? variants : [primary];
+    const downloading = rows.some((row) => !!row.isDownloading);
+    const mediaStatuses = rows
+        .map((row) => Number(row.mediaStatus))
+        .filter((value) => Number.isFinite(value));
+    const mediaStatus = mediaStatuses.length
+        ? Math.max(...mediaStatuses)
+        : primary.mediaStatus;
+
+    return {
+        ...portalRequestToDiscoveryRowItem(primary),
+        isDownloading: downloading,
+        media: {
+            tmdbId: primary.tmdbId,
+            title: primary.title,
+            name: primary.title,
+            posterPath: primary.posterPath || null,
+            mediaType: primary.type,
+            status: mediaStatus,
+        },
+        mediaInfo: {
+            status: mediaStatus,
+            requests: rows.map((row) => ({
+                id: row.id,
+                status: row.status,
+                is4k: !!row.is4k,
+                seasons: Array.isArray(row.seasons) ? row.seasons : [],
+            })),
+            ...(downloading ? { downloadStatus: [{ status: 'downloading' }] } : {}),
+        },
+    };
+};
+
+/** Merge HD/4K portal requests, then map to discovery row items (one poster per title). */
+export const portalRequestsToDiscoveryRowItems = (items: PortalRequestItem[]) => (
+    mergeHd4kMemberRequests(items).map(({ primary, variants }) => (
+        mergedPortalRequestsToDiscoveryRowItem(primary, variants)
+    ))
+);
+
 export const memberRequestStatusClass = (label: string) => {
     if (label === 'Available') return 'bg-green-500/15 text-green-400 border-green-500/25';
     if (label === 'Processing' || label === 'Approved') return 'bg-blue-500/15 text-blue-300 border-blue-500/25';

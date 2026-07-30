@@ -12,7 +12,7 @@ import {
     buildGenreSliderImage,
 } from './discoverConstants';
 import { enrichDiscoveryItems, normalizeRawDiscoveryItem } from './discoverItemUtils';
-import { portalRequestToDiscoveryRowItem } from './myRequestUtils';
+import { portalRequestsToDiscoveryRowItems } from './myRequestUtils';
 import { filterHiddenAvailableItems, useDiscoveryPreferences } from './useDiscoveryPreferences';
 import { fetchDiscoverHomeRowResults } from './discoverFetchUtils';
 import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
@@ -285,7 +285,7 @@ export const DiscoverHome: React.FC<{
                     if (gen !== loadGenRef.current) return;
 
                     const myRequestItems = Array.isArray(reqRes?.results)
-                        ? reqRes.results.map(portalRequestToDiscoveryRowItem)
+                        ? portalRequestsToDiscoveryRowItems(reqRes.results)
                         : [];
 
                     // Normalize library/requests; enrich watchlist posters + availability (Request vs Available).

@@ -165,9 +165,14 @@ export const MediaDetailsPage: React.FC<{
         let cancelled = false;
 
         // Live library badge when disk cache missed (movies + TV).
-        const needsLive = !Number.isFinite(Number(details?.mediaInfo?.status));
+        // Movies always reconcile with Radarr so Request vs Available matches the modal.
+        const needsLive = mediaType === 'movie'
+            || !Number.isFinite(Number(details?.mediaInfo?.status));
         if (needsLive) {
-            enrichDiscoverItemsWithAvailability([details])
+            const enrichTarget = mediaType === 'movie'
+                ? { ...details, mediaInfo: null }
+                : details;
+            enrichDiscoverItemsWithAvailability([enrichTarget])
                 .then((enriched) => {
                     if (cancelled || !enriched?.[0]) return;
                     setDetails((prev) => (prev ? { ...prev, ...enriched[0] } : enriched[0]));
@@ -579,7 +584,12 @@ export const MediaDetailsPage: React.FC<{
                                 {details.status && (
                                     <>
                                         <span className="text-white/30">•</span>
-                                        <span className="text-[10px] font-bold text-white/60 uppercase tracking-wide">{details.status}</span>
+                                        <span
+                                            className="text-[10px] font-bold text-white/60 uppercase tracking-wide"
+                                            title="TMDB production status (not library availability)"
+                                        >
+                                            {details.status}
+                                        </span>
                                     </>
                                 )}
                             </div>
@@ -704,7 +714,12 @@ export const MediaDetailsPage: React.FC<{
                             {details.status && (
                                 <>
                                     <span className="text-white/30">•</span>
-                                    <span className="text-[10px] font-bold text-white/60 uppercase tracking-wide">{details.status}</span>
+                                    <span
+                                        className="text-[10px] font-bold text-white/60 uppercase tracking-wide"
+                                        title="TMDB production status (not library availability)"
+                                    >
+                                        {details.status}
+                                    </span>
                                 </>
                             )}
                         </div>
