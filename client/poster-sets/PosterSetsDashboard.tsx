@@ -1123,6 +1123,28 @@ export const PosterSetsDashboard: React.FC = () => {
         return searchSets.slice(start, start + SEARCH_SETS_PAGE_SIZE);
     }, [searchSets, searchSetsPage, searchSetsPageCount]);
 
+    const watchedUrlSet = useMemo(() => {
+        const urls = new Set<string>();
+        const setKeys = new Set<string>();
+        for (const watch of watches) {
+            const url = String(watch.url || '').trim();
+            if (url) urls.add(url);
+            const setId = watch.setId != null ? String(watch.setId) : '';
+            const provider = String(watch.provider || '').toLowerCase();
+            if (setId) setKeys.add(`${provider}:${setId}`);
+        }
+        return { urls, setKeys };
+    }, [watches]);
+
+    const isSetWatched = useCallback((set: { url?: string | null; setId?: string | null; provider?: string | null }) => {
+        const url = String(set.url || '').trim();
+        if (url && watchedUrlSet.urls.has(url)) return true;
+        const setId = set.setId != null ? String(set.setId) : '';
+        if (!setId) return false;
+        const provider = String(set.provider || '').toLowerCase();
+        return watchedUrlSet.setKeys.has(`${provider}:${setId}`);
+    }, [watchedUrlSet]);
+
     const readyToApply = Boolean(preview?.assets?.length);
 
     const toggleAsset = (id: string) => {
@@ -2161,6 +2183,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                         {pagedSearchSets.map((set) => {
                                             const setLabel = formatSetLabel(set) || set.title || `Set #${set.setId}`;
                                             const bulkSelected = Boolean(selectedBulkSets[set.url]);
+                                            const watching = isSetWatched(set);
                                             return (
                                             <div
                                                 key={`${set.provider || findProvider}-${set.setId}`}
@@ -2193,6 +2216,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         aria-label={`Select ${setLabel}`}
                                                     />
                                                 </label>
+                                                {watching ? (
+                                                    <span
+                                                        className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-lg"
+                                                        title="Already in Watches"
+                                                    >
+                                                        <Eye className="h-3 w-3" /> Watching
+                                                    </span>
+                                                ) : null}
                                                 <button
                                                     type="button"
                                                     className="block w-full text-left"
@@ -2204,7 +2235,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         <img
                                                             src={posterSetsApi.imageUrl(set.thumbUrl)}
                                                             alt={setLabel}
-                                                            className="h-full w-full object-cover"
+                                                            className={`h-full w-full object-cover ${watching ? 'opacity-80' : ''}`}
                                                             loading="lazy"
                                                         />
                                                     ) : (
@@ -2212,6 +2243,13 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             <ImageIcon className="h-8 w-8 opacity-40" />
                                                         </div>
                                                     )}
+                                                    {watching ? (
+                                                        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-emerald-950/80 to-transparent px-2 pb-2 pt-8">
+                                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
+                                                                In watches
+                                                            </span>
+                                                        </div>
+                                                    ) : null}
                                                     {busy === 'preview' && selectedSearchSet?.setId === set.setId ? (
                                                         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                                                             <Loader2 className="h-6 w-6 animate-spin text-plex" />
