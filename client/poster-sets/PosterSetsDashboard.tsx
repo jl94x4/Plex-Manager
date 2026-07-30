@@ -83,6 +83,54 @@ const providerLabel = (provider?: string | null) => {
     return provider || 'Provider';
 };
 
+const normalizeProviderKey = (provider?: string | null) => {
+    const value = String(provider || '').toLowerCase();
+    if (value === 'mediux') return 'mediux';
+    if (value === 'posterdb' || value === 'tpdb' || value === 'theposterdb') return 'posterdb';
+    return value || '';
+};
+
+/** MediUX blue / ThePosterDB orange source pills. */
+const providerPillClass = (provider?: string | null) => {
+    const key = normalizeProviderKey(provider);
+    if (key === 'mediux') return 'border-sky-400/40 bg-sky-500/20 text-sky-200';
+    if (key === 'posterdb') return 'border-orange-400/40 bg-orange-500/20 text-orange-200';
+    return 'border-white/10 bg-white/5 text-muted';
+};
+
+const MetaPill: React.FC<{ children: React.ReactNode; className?: string; title?: string }> = ({
+    children,
+    className = '',
+    title,
+}) => (
+    <span
+        title={title}
+        className={`inline-flex max-w-full shrink-0 items-center truncate rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide sm:px-2.5 sm:py-1 sm:text-[11px] ${className}`}
+    >
+        {children}
+    </span>
+);
+
+const ProviderPill: React.FC<{ provider?: string | null }> = ({ provider }) => {
+    const key = normalizeProviderKey(provider);
+    if (!key) return null;
+    return (
+        <MetaPill className={`uppercase ${providerPillClass(provider)}`} title={providerLabel(provider)}>
+            {key === 'posterdb' ? 'TPDB' : 'MediUX'}
+        </MetaPill>
+    );
+};
+
+const CreatorPill: React.FC<{ user?: string | null }> = ({ user }) => {
+    const handle = String(user || '').trim().replace(/^@/, '');
+    if (!handle) return null;
+    return (
+        <MetaPill className="border-white/15 bg-white/10 text-text/90 normal-case" title={`@${handle}`}>
+            @{handle}
+        </MetaPill>
+    );
+};
+
 const RECENT_SETS_KEY = 'poster-sets-recent-v1';
 const MAX_RECENT_SETS = 10;
 
@@ -1383,11 +1431,13 @@ export const PosterSetsDashboard: React.FC = () => {
                                     >
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div className="min-w-0 space-y-1">
-                                                <div className="flex flex-wrap items-center gap-2">
+                                                <div className="flex min-w-0 flex-wrap items-center gap-2">
                                                     <StatusPill value={job.state} />
-                                                    <p className="truncate text-sm font-semibold text-text" title={jobTitle(job)}>
-                                                        {jobTitle(job)}
+                                                    <ProviderPill provider={meta?.provider} />
+                                                    <p className="min-w-0 truncate text-sm font-semibold text-text" title={String(meta?.title || jobTitle(job))}>
+                                                        {String(meta?.title || '').trim() || jobTitle(job)}
                                                     </p>
+                                                    <CreatorPill user={meta?.user} />
                                                 </div>
                                                 <p className="text-xs text-muted">
                                                     {formatTime(job.createdAt)}
@@ -1553,7 +1603,6 @@ export const PosterSetsDashboard: React.FC = () => {
                             {watches.map((watch) => {
                                 const showName = String(watch.title || watch.setId || watch.url || 'Watch').trim();
                                 const creator = String(watch.user || '').trim().replace(/^@/, '');
-                                const title = creator ? `${showName} · @${creator}` : showName;
                                 const provider = String(watch.provider || '').toLowerCase();
                                 return (
                                     <div
@@ -1578,22 +1627,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     </div>
                                                 )}
                                                 <div className="min-w-0 space-y-1">
-                                                    <div className="flex flex-wrap items-center gap-2">
+                                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                                                         <StatusPill value={watch.enabled === false ? 'Paused' : 'Watching'} />
-                                                        {provider ? (
-                                                            <span className="text-[10px] font-bold uppercase tracking-wide text-muted">
-                                                                {provider === 'posterdb' ? 'ThePosterDB' : 'MediUX'}
-                                                            </span>
-                                                        ) : null}
-                                                        <p className="truncate text-sm font-semibold text-text" title={title}>
+                                                        <ProviderPill provider={provider} />
+                                                        <p className="min-w-0 truncate text-sm font-semibold text-text" title={showName}>
                                                             {showName}
                                                         </p>
+                                                        <CreatorPill user={creator} />
                                                     </div>
-                                                    {creator ? (
-                                                        <p className="truncate text-xs font-medium text-muted" title={`@${creator}`}>
-                                                            @{creator}
-                                                        </p>
-                                                    ) : null}
                                                     <p className="text-xs text-muted">
                                                         {(watch.knownAssetIds || []).length} known
                                                         {watch.lastCheckedAt ? ` · checked ${formatTime(watch.lastCheckedAt)}` : ' · not checked yet'}
@@ -1709,7 +1750,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     className={buttonClass}
                                                     disabled={busy !== null}
                                                     onClick={async () => {
-                                                        const ok = await askConfirm(`Remove watch for “${title}”?`, {
+                                                        const ok = await askConfirm(`Remove watch for “${showName}”?`, {
                                                             title: 'Remove watch?',
                                                             confirmLabel: 'Remove',
                                                             cancelLabel: 'Cancel',
