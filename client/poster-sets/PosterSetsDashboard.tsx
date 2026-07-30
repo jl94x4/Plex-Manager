@@ -293,7 +293,8 @@ export const PosterSetsDashboard: React.FC = () => {
             try {
                 const response = await posterSetsApi.job(activeJob.id);
                 setActiveJob(response.job);
-                if (response.job.state && response.job.state !== 'running') {
+                const state = String(response.job.state || '').toLowerCase();
+                if (state && state !== 'running' && state !== 'queued') {
                     const meta = jobSetMeta(response.job);
                     if (meta?.thumbUrl || meta?.title) {
                         upsertRecentSet(meta, response.job.input?.url);
@@ -301,13 +302,30 @@ export const PosterSetsDashboard: React.FC = () => {
                     }
                     await load();
                     await loadHistory();
+                    if (state === 'succeeded') {
+                        // Return to the search grid so the next set can be picked without hunting.
+                        setPreview(null);
+                        setSelectedSearchSet(null);
+                        setSelectedAssetIds([]);
+                        if (searchSetsSectionRef.current) {
+                            requestAnimationFrame(() => {
+                                searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            });
+                        }
+                        const uploaded = response.job.result && typeof response.job.result.uploaded === 'number'
+                            ? Number(response.job.result.uploaded)
+                            : null;
+                        toast(uploaded != null
+                            ? `Applied ${uploaded} poster${uploaded === 1 ? '' : 's'}. Pick another set anytime.`
+                            : 'Applied. Pick another set anytime.');
+                    }
                 }
             } catch {
                 // keep polling until terminal or user leaves
             }
         }, 1500);
         return () => window.clearInterval(timer);
-    }, [activeJob?.id, activeJob?.state, load, loadHistory]);
+    }, [activeJob?.id, activeJob?.state, load, loadHistory, toast]);
 
     useEffect(() => {
         if (tab !== 'history') return undefined;
