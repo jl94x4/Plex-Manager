@@ -51,6 +51,7 @@ import {
     type PosterSetsWatch,
     type PosterSetsWatchStats,
 } from './types';
+import { groupPosterSetsWatches } from './watchGroups';
 
 const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
 const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
@@ -1202,12 +1203,14 @@ export const PosterSetsDashboard: React.FC = () => {
         });
     }, [watches, watchesFilter]);
 
-    const watchesPageCount = Math.max(1, Math.ceil(filteredWatches.length / Math.max(1, watchesPageSize)));
-    const pagedWatches = useMemo(() => {
+    const watchGroups = useMemo(() => groupPosterSetsWatches(filteredWatches), [filteredWatches]);
+
+    const watchesPageCount = Math.max(1, Math.ceil(watchGroups.length / Math.max(1, watchesPageSize)));
+    const pagedWatchGroups = useMemo(() => {
         const page = Math.min(Math.max(1, watchesPage), watchesPageCount);
         const start = (page - 1) * watchesPageSize;
-        return filteredWatches.slice(start, start + watchesPageSize);
-    }, [filteredWatches, watchesPage, watchesPageCount, watchesPageSize]);
+        return watchGroups.slice(start, start + watchesPageSize);
+    }, [watchGroups, watchesPage, watchesPageCount, watchesPageSize]);
 
     useEffect(() => {
         setWatchesPage((page) => Math.min(page, watchesPageCount));
@@ -1723,7 +1726,10 @@ export const PosterSetsDashboard: React.FC = () => {
                                         <span className="text-xs text-muted">
                                             Page {Math.min(watchesPage, watchesPageCount)} / {watchesPageCount}
                                             {' · '}
-                                            {filteredWatches.length} shown
+                                            {watchGroups.length} shown
+                                            {filteredWatches.length !== watchGroups.length
+                                                ? ` · ${filteredWatches.length} sets`
+                                                : ''}
                                         </span>
                                         <button
                                             type="button"
@@ -1737,7 +1743,10 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </>
                                 ) : (
                                     <span className="text-xs text-muted">
-                                        {filteredWatches.length} set{filteredWatches.length === 1 ? '' : 's'}
+                                        {watchGroups.length} title{watchGroups.length === 1 ? '' : 's'}
+                                        {filteredWatches.length !== watchGroups.length
+                                            ? ` · ${filteredWatches.length} sets`
+                                            : ''}
                                         {watchesFilter.trim() ? ` (of ${watches.length})` : ''}
                                     </span>
                                 )}
@@ -1755,178 +1764,206 @@ export const PosterSetsDashboard: React.FC = () => {
                             No sets match “{watchesFilter.trim()}”.
                         </p>
                     ) : (
-                        <div className="min-w-0 space-y-2 overflow-hidden">
-                            {pagedWatches.map((watch) => {
-                                const showName = String(watch.title || watch.setId || watch.url || 'Watch').trim();
-                                const creator = String(watch.user || '').trim().replace(/^@/, '');
-                                const provider = String(watch.provider || '').toLowerCase();
+                        <div className="min-w-0 space-y-3 overflow-hidden">
+                            {pagedWatchGroups.map((group) => {
+                                const multi = group.watches.length > 1;
                                 return (
                                     <div
-                                        key={watch.id}
+                                        key={group.key}
                                         className={`min-w-0 overflow-hidden rounded-xl border px-3 py-3 sm:px-4 ${
-                                            watch.lastError
+                                            group.errored
                                                 ? 'border-red-500/30 bg-red-500/5'
                                                 : 'border-white/10 bg-black/10'
                                         }`}
                                     >
-                                        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                            <div className="flex min-w-0 flex-1 gap-3 overflow-hidden">
-                                                {watch.thumbUrl ? (
-                                                    <img
-                                                        src={watch.thumbUrl}
-                                                        alt=""
-                                                        className="h-14 w-10 shrink-0 rounded-lg object-cover sm:h-16 sm:w-12"
-                                                    />
-                                                ) : (
-                                                    <div className="flex h-14 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30 sm:h-16 sm:w-12">
-                                                        <ImageIcon className="h-5 w-5 text-muted" />
-                                                    </div>
-                                                )}
-                                                <div className="min-w-0 flex-1 space-y-1.5 overflow-hidden">
-                                                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                                                        <StatusPill value={watch.enabled === false ? 'Paused' : 'Watching'} />
-                                                        <ProviderPill provider={provider} />
-                                                        <CreatorPill user={creator} />
-                                                    </div>
-                                                    <p className="break-words text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]" title={showName}>
-                                                        {showName}
-                                                    </p>
-                                                    <p className="break-words text-[11px] text-muted sm:text-xs">
-                                                        {(watch.knownAssetIds || []).length} known
-                                                        {watch.lastCheckedAt ? ` · checked ${formatTime(watch.lastCheckedAt)}` : ' · not checked yet'}
-                                                        {watch.lastNewCount ? ` · last new ${watch.lastNewCount}` : ''}
-                                                        {watch.lastAppliedAt ? ` · applied ${formatTime(watch.lastAppliedAt)}` : ''}
-                                                    </p>
-                                                    {watch.lastError ? (
-                                                        <p className="break-words text-xs text-red-300 sm:text-sm [overflow-wrap:anywhere]">{watch.lastError}</p>
-                                                    ) : null}
-                                                    <div className="pt-1">
-                                                        {provider === 'posterdb' ? (
-                                                            <p className="text-[11px] text-muted">TPDB has no title cards</p>
-                                                        ) : (
-                                                            <div className="flex flex-wrap gap-1.5">
-                                                                {MEDIUX_FILTER_OPTIONS.map((option) => {
-                                                                    const current = (watch.mediuxFilters?.length
-                                                                        ? watch.mediuxFilters
-                                                                        : ALL_MEDIUX_FILTER_IDS);
-                                                                    const active = current.includes(option.id);
-                                                                    return (
-                                                                        <button
-                                                                            key={option.id}
-                                                                            type="button"
-                                                                            className={`${active ? primaryButtonClass : buttonClass} !px-2 !py-1 text-[10px]`}
-                                                                            disabled={busy !== null}
-                                                                            onClick={async () => {
-                                                                                const base = watch.mediuxFilters?.length
-                                                                                    ? [...watch.mediuxFilters]
-                                                                                    : [...ALL_MEDIUX_FILTER_IDS];
-                                                                                const next = new Set(base);
-                                                                                if (next.has(option.id)) next.delete(option.id);
-                                                                                else next.add(option.id);
-                                                                                const mediuxFilters = ALL_MEDIUX_FILTER_IDS.filter((id) => next.has(id));
-                                                                                setBusy('watches');
-                                                                                try {
-                                                                                    await posterSetsApi.patchWatch(watch.id, { mediuxFilters });
-                                                                                    await loadWatches();
-                                                                                } catch (error) {
-                                                                                    toast(error instanceof Error ? error.message : 'Failed to update filters', 'error');
-                                                                                } finally {
-                                                                                    setBusy(null);
-                                                                                }
-                                                                            }}
-                                                                        >
-                                                                            {option.label}
-                                                                        </button>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    {watch.url ? (
-                                                        <a
-                                                            href={watch.url}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="inline-flex items-center gap-1 text-xs font-semibold text-plex no-underline hover:underline"
-                                                        >
-                                                            Open set <ExternalLink className="h-3 w-3" />
-                                                        </a>
-                                                    ) : null}
+                                        <div className="flex min-w-0 gap-3 overflow-hidden">
+                                            {group.thumbUrl ? (
+                                                <img
+                                                    src={group.thumbUrl}
+                                                    alt=""
+                                                    className="h-14 w-10 shrink-0 rounded-lg object-cover sm:h-16 sm:w-12"
+                                                />
+                                            ) : (
+                                                <div className="flex h-14 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30 sm:h-16 sm:w-12">
+                                                    <ImageIcon className="h-5 w-5 text-muted" />
                                                 </div>
+                                            )}
+                                            <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
+                                                <p className="break-words text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]" title={group.title}>
+                                                    {group.title}
+                                                </p>
+                                                <p className="break-words text-[11px] text-muted sm:text-xs">
+                                                    {multi ? `${group.watches.length} sets` : '1 set'}
+                                                    {group.lastCheckedAt ? ` · checked ${formatTime(group.lastCheckedAt)}` : ''}
+                                                </p>
                                             </div>
-                                            <div className="flex shrink-0 flex-wrap gap-2">
-                                                <button
-                                                    type="button"
-                                                    className={buttonClass}
-                                                    disabled={busy !== null}
-                                                    onClick={async () => {
-                                                        setBusy('watches');
-                                                        try {
-                                                            await posterSetsApi.toggleWatch(watch.id);
-                                                            await loadWatches();
-                                                        } catch (error) {
-                                                            toast(error instanceof Error ? error.message : 'Toggle failed', 'error');
-                                                        } finally {
-                                                            setBusy(null);
-                                                        }
-                                                    }}
-                                                >
-                                                    {watch.enabled === false ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                                                    {watch.enabled === false ? 'Enable' : 'Pause'}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={buttonClass}
-                                                    disabled={busy !== null}
-                                                    onClick={async () => {
-                                                        setBusy('watches');
-                                                        try {
-                                                            const result = await posterSetsApi.checkWatch(watch.id);
-                                                            await loadWatches();
-                                                            await loadQueue();
-                                                            if (result.baseline) {
-                                                                toast('Baselined current assets.');
-                                                            } else if (result.queued) {
-                                                                toast(`Queued ${result.newIds?.length || 0} new asset(s).`);
-                                                            } else {
-                                                                toast('No new art on this set.');
-                                                            }
-                                                        } catch (error) {
-                                                            await loadWatches();
-                                                            toast(error instanceof Error ? error.message : 'Check failed', 'error');
-                                                        } finally {
-                                                            setBusy(null);
-                                                        }
-                                                    }}
-                                                >
-                                                    <RefreshCw className="h-4 w-4" /> Check now
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={buttonClass}
-                                                    disabled={busy !== null}
-                                                    onClick={async () => {
-                                                        const ok = await askConfirm(`Remove watch for “${showName}”?`, {
-                                                            title: 'Remove watch?',
-                                                            confirmLabel: 'Remove',
-                                                            cancelLabel: 'Cancel',
-                                                        });
-                                                        if (!ok) return;
-                                                        setBusy('watches');
-                                                        try {
-                                                            await posterSetsApi.deleteWatch(watch.id);
-                                                            await loadWatches();
-                                                            toast('Watch removed.');
-                                                        } catch (error) {
-                                                            toast(error instanceof Error ? error.message : 'Delete failed', 'error');
-                                                        } finally {
-                                                            setBusy(null);
-                                                        }
-                                                    }}
-                                                >
-                                                    <Trash2 className="h-4 w-4" /> Remove
-                                                </button>
-                                            </div>
+                                        </div>
+
+                                        <div className={`mt-3 space-y-2 ${multi ? 'border-t border-white/10 pt-3' : 'pt-2'}`}>
+                                            {group.watches.map((watch) => {
+                                                const creator = String(watch.user || '').trim().replace(/^@/, '');
+                                                const provider = String(watch.provider || '').toLowerCase();
+                                                const setLabel = creator
+                                                    ? `@${creator}`
+                                                    : (watch.setId ? `Set ${watch.setId}` : 'Set');
+                                                return (
+                                                    <div
+                                                        key={watch.id}
+                                                        className={`min-w-0 overflow-hidden rounded-lg border px-2.5 py-2.5 sm:px-3 ${
+                                                            watch.lastError
+                                                                ? 'border-red-500/25 bg-red-500/5'
+                                                                : 'border-white/10 bg-black/20'
+                                                        }`}
+                                                    >
+                                                        <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
+                                                            <div className="min-w-0 flex-1 space-y-1.5 overflow-hidden">
+                                                                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                                                    <StatusPill value={watch.enabled === false ? 'Paused' : 'Watching'} />
+                                                                    <ProviderPill provider={provider} />
+                                                                    <CreatorPill user={creator} />
+                                                                    {!creator && watch.setId ? (
+                                                                        <span className="text-[11px] text-muted">#{watch.setId}</span>
+                                                                    ) : null}
+                                                                </div>
+                                                                <p className="break-words text-[11px] text-muted sm:text-xs">
+                                                                    {(watch.knownAssetIds || []).length} known
+                                                                    {watch.lastCheckedAt ? ` · checked ${formatTime(watch.lastCheckedAt)}` : ' · not checked yet'}
+                                                                    {watch.lastNewCount ? ` · last new ${watch.lastNewCount}` : ''}
+                                                                    {watch.lastAppliedAt ? ` · applied ${formatTime(watch.lastAppliedAt)}` : ''}
+                                                                </p>
+                                                                {watch.lastError ? (
+                                                                    <p className="break-words text-xs text-red-300 sm:text-sm [overflow-wrap:anywhere]">{watch.lastError}</p>
+                                                                ) : null}
+                                                                <div className="pt-0.5">
+                                                                    {provider === 'posterdb' ? (
+                                                                        <p className="text-[11px] text-muted">TPDB has no title cards</p>
+                                                                    ) : (
+                                                                        <div className="flex flex-wrap gap-1.5">
+                                                                            {MEDIUX_FILTER_OPTIONS.map((option) => {
+                                                                                const current = (watch.mediuxFilters?.length
+                                                                                    ? watch.mediuxFilters
+                                                                                    : ALL_MEDIUX_FILTER_IDS);
+                                                                                const active = current.includes(option.id);
+                                                                                return (
+                                                                                    <button
+                                                                                        key={option.id}
+                                                                                        type="button"
+                                                                                        className={`${active ? primaryButtonClass : buttonClass} !px-2 !py-1 text-[10px]`}
+                                                                                        disabled={busy !== null}
+                                                                                        onClick={async () => {
+                                                                                            const base = watch.mediuxFilters?.length
+                                                                                                ? [...watch.mediuxFilters]
+                                                                                                : [...ALL_MEDIUX_FILTER_IDS];
+                                                                                            const next = new Set(base);
+                                                                                            if (next.has(option.id)) next.delete(option.id);
+                                                                                            else next.add(option.id);
+                                                                                            const mediuxFilters = ALL_MEDIUX_FILTER_IDS.filter((id) => next.has(id));
+                                                                                            setBusy('watches');
+                                                                                            try {
+                                                                                                await posterSetsApi.patchWatch(watch.id, { mediuxFilters });
+                                                                                                await loadWatches();
+                                                                                            } catch (error) {
+                                                                                                toast(error instanceof Error ? error.message : 'Failed to update filters', 'error');
+                                                                                            } finally {
+                                                                                                setBusy(null);
+                                                                                            }
+                                                                                        }}
+                                                                                    >
+                                                                                        {option.label}
+                                                                                    </button>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                {watch.url ? (
+                                                                    <a
+                                                                        href={watch.url}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        className="inline-flex items-center gap-1 text-xs font-semibold text-plex no-underline hover:underline"
+                                                                    >
+                                                                        Open set <ExternalLink className="h-3 w-3" />
+                                                                    </a>
+                                                                ) : null}
+                                                            </div>
+                                                            <div className="flex shrink-0 flex-wrap gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    className={buttonClass}
+                                                                    disabled={busy !== null}
+                                                                    onClick={async () => {
+                                                                        setBusy('watches');
+                                                                        try {
+                                                                            await posterSetsApi.toggleWatch(watch.id);
+                                                                            await loadWatches();
+                                                                        } catch (error) {
+                                                                            toast(error instanceof Error ? error.message : 'Toggle failed', 'error');
+                                                                        } finally {
+                                                                            setBusy(null);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    {watch.enabled === false ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                                                                    {watch.enabled === false ? 'Enable' : 'Pause'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className={buttonClass}
+                                                                    disabled={busy !== null}
+                                                                    onClick={async () => {
+                                                                        setBusy('watches');
+                                                                        try {
+                                                                            const result = await posterSetsApi.checkWatch(watch.id);
+                                                                            await loadWatches();
+                                                                            await loadQueue();
+                                                                            if (result.baseline) {
+                                                                                toast('Baselined current assets.');
+                                                                            } else if (result.queued) {
+                                                                                toast(`Queued ${result.newIds?.length || 0} new asset(s).`);
+                                                                            } else {
+                                                                                toast('No new art on this set.');
+                                                                            }
+                                                                        } catch (error) {
+                                                                            await loadWatches();
+                                                                            toast(error instanceof Error ? error.message : 'Check failed', 'error');
+                                                                        } finally {
+                                                                            setBusy(null);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <RefreshCw className="h-4 w-4" /> Check now
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className={buttonClass}
+                                                                    disabled={busy !== null}
+                                                                    onClick={async () => {
+                                                                        const ok = await askConfirm(`Remove ${setLabel} watch for “${group.title}”?`, {
+                                                                            title: 'Remove watch?',
+                                                                            confirmLabel: 'Remove',
+                                                                            cancelLabel: 'Cancel',
+                                                                        });
+                                                                        if (!ok) return;
+                                                                        setBusy('watches');
+                                                                        try {
+                                                                            await posterSetsApi.deleteWatch(watch.id);
+                                                                            await loadWatches();
+                                                                            toast('Watch removed.');
+                                                                        } catch (error) {
+                                                                            toast(error instanceof Error ? error.message : 'Delete failed', 'error');
+                                                                        } finally {
+                                                                            setBusy(null);
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" /> Remove
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 );
@@ -2401,13 +2438,6 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             <ImageIcon className="h-8 w-8 opacity-40" />
                                                         </div>
                                                     )}
-                                                    {watching ? (
-                                                        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-emerald-950/80 to-transparent px-2 pb-2 pt-8">
-                                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
-                                                                Watching
-                                                            </span>
-                                                        </div>
-                                                    ) : null}
                                                     {busy === 'preview' && selectedSearchSet?.setId === set.setId ? (
                                                         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                                                             <Loader2 className="h-6 w-6 animate-spin text-plex" />
