@@ -1,6 +1,15 @@
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE, portalRequestHeaders } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
-import type { PosterSetsConfig, PosterSetsJob, PosterSetsPreview, PosterSetsSearchResult, PosterSetsStatus } from './types';
+import type {
+    PosterSetsConfig,
+    PosterSetsJob,
+    PosterSetsPreview,
+    PosterSetsQueueResponse,
+    PosterSetsQueueStats,
+    PosterSetsSearchResult,
+    PosterSetsSetMeta,
+    PosterSetsStatus,
+} from './types';
 
 const ROOT = '/api/poster-sets';
 
@@ -151,14 +160,32 @@ export const posterSetsApi = {
         }, signal);
         return finalEvent;
     },
-    apply: (url: string, selectedIds?: string[]) => apiFetch(`${ROOT}/apply`, json({
-        url,
-        ...(selectedIds?.length ? { selectedIds } : {}),
-    })) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob }>,
+    apply: (url: string, selectedIds?: string[], setMeta?: PosterSetsSetMeta | null) => (
+        apiFetch(`${ROOT}/apply`, json({
+            url,
+            ...(selectedIds?.length ? { selectedIds } : {}),
+            ...(setMeta ? { setMeta } : {}),
+        })) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob; queued?: boolean }>
+    ),
     imageUrl: (thumbUrl: string) => `${ROOT}/image?url=${encodeURIComponent(thumbUrl)}`,
     bulk: (payload: { urls?: string[]; text?: string; fromFile?: boolean }) => (
-        apiFetch(`${ROOT}/bulk`, json(payload)) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob }>
+        apiFetch(`${ROOT}/bulk`, json(payload)) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob; queued?: boolean }>
     ),
     job: (id: string) => apiFetch(`${ROOT}/jobs/${encodeURIComponent(id)}`) as Promise<{ job: PosterSetsJob }>,
     jobs: () => apiFetch(`${ROOT}/jobs`) as Promise<{ ok?: boolean; jobs: PosterSetsJob[] }>,
+    queue: () => apiFetch(`${ROOT}/queue`) as Promise<PosterSetsQueueResponse>,
+    pauseQueue: (paused: boolean) => apiFetch(`${ROOT}/queue/pause`, json({ paused })) as Promise<{
+        ok: boolean;
+        paused: boolean;
+        stats: PosterSetsQueueStats;
+    }>,
+    cancelQueueJob: (id: string) => apiFetch(`${ROOT}/queue/cancel/${encodeURIComponent(id)}`, json({})) as Promise<{
+        ok: boolean;
+        job: PosterSetsJob;
+    }>,
+    clearFinishedQueue: () => apiFetch(`${ROOT}/queue/clear-finished`, json({})) as Promise<{
+        ok: boolean;
+        stats: PosterSetsQueueStats;
+        jobs: PosterSetsJob[];
+    }>,
 };

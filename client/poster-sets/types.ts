@@ -25,12 +25,31 @@ export type PosterSetsSetMeta = {
 export type PosterSetsJobInput = {
     url?: string;
     urls?: string[];
+    text?: string;
     count?: number;
     fromFile?: boolean;
     file?: string;
     lineCount?: number;
     selectedCount?: number;
+    selectedIds?: string[] | null;
     setMeta?: PosterSetsSetMeta | null;
+};
+
+export type PosterSetsQueueStats = {
+    paused?: boolean;
+    queued?: number;
+    running?: number;
+    succeeded?: number;
+    failed?: number;
+    cancelled?: number;
+    pending?: number;
+};
+
+export type PosterSetsQueueResponse = {
+    ok?: boolean;
+    paused: boolean;
+    stats: PosterSetsQueueStats;
+    jobs: PosterSetsJob[];
 };
 
 export type PosterSetsStatus = {
@@ -39,6 +58,7 @@ export type PosterSetsStatus = {
     configured?: boolean;
     appDir?: string;
     config?: PosterSetsConfig;
+    queue?: PosterSetsQueueStats;
     recentJobs?: Array<{
         id: string;
         type?: string;

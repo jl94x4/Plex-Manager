@@ -8,7 +8,10 @@ import {
     ExternalLink,
     History,
     Image as ImageIcon,
+    ListOrdered,
     Loader2,
+    Pause,
+    Play,
     RefreshCw,
     RotateCcw,
     Save,
@@ -36,6 +39,7 @@ import {
     type PosterSetsJob,
     type PosterSetsPreview,
     type PosterSetsPreviewAsset,
+    type PosterSetsQueueStats,
     type PosterSetsSearchSet,
     type PosterSetsSearchTitle,
     type PosterSetsSetMeta,
@@ -51,7 +55,7 @@ const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bo
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 
-type TabId = 'apply' | 'recent' | 'history' | 'settings';
+type TabId = 'apply' | 'queue' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed';
 type SetProvider = 'mediux' | 'posterdb';
 type SearchProvider = 'both' | SetProvider;
@@ -177,6 +181,7 @@ const jobCardTone = (job: PosterSetsJob) => {
     if (['failed', 'error'].includes(state)) return 'border-l-2 border-l-red-400/70 bg-red-500/[0.05]';
     if (['succeeded', 'completed', 'success'].includes(state)) return 'border-l-2 border-l-emerald-400/80 bg-emerald-500/[0.06]';
     if (['running', 'queued'].includes(state)) return 'border-l-2 border-l-plex/70 bg-plex/[0.06]';
+    if (state === 'cancelled') return 'border-l-2 border-l-white/20 bg-white/[0.03]';
     return '';
 };
 
@@ -254,6 +259,9 @@ export const PosterSetsDashboard: React.FC = () => {
     const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
     const [historySearch, setHistorySearch] = useState('');
     const [selectedHistoryJob, setSelectedHistoryJob] = useState<PosterSetsJob | null>(null);
+    const [queueJobs, setQueueJobs] = useState<PosterSetsJob[]>([]);
+    const [queuePaused, setQueuePaused] = useState(false);
+    const [queueStats, setQueueStats] = useState<PosterSetsQueueStats>({});
 
     const loadHistory = useCallback(async () => {
         try {
@@ -264,6 +272,44 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     }, [toast]);
 
+    const loadQueue = useCallback(async () => {
+        try {
+            const response = await posterSetsApi.queue();
+            setQueueJobs(response.jobs || []);
+            setQueuePaused(Boolean(response.paused));
+            setQueueStats(response.stats || {});
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to load queue', 'error');
+        }
+    }, [toast]);
+
+    const dismissPreviewToSearch = useCallback(() => {
+        setPreview(null);
+        setSelectedSearchSet(null);
+        setSelectedAssetIds([]);
+        requestAnimationFrame(() => {
+            searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }, []);
+
+    const currentSetMeta = useCallback((): PosterSetsSetMeta | null => {
+        if (selectedSearchSet) {
+            return {
+                provider: selectedSearchSet.provider || null,
+                setId: selectedSearchSet.setId || null,
+                url: selectedSearchSet.url || url || null,
+                title: selectedSearchSet.title || preview?.setMeta?.title || null,
+                thumbUrl: selectedSearchSet.thumbUrl || preview?.setMeta?.thumbUrl || '',
+                assetCount: selectedSearchSet.posterCount
+                    ?? preview?.total
+                    ?? preview?.setMeta?.assetCount
+                    ?? null,
+            };
+        }
+        if (preview?.setMeta) return preview.setMeta as PosterSetsSetMeta;
+        return url ? { url, title: preview?.setMeta?.title || null, thumbUrl: '' } : null;
+    }, [preview, selectedSearchSet, url]);
+
     const load = useCallback(async () => {
         try {
             const [nextStatus, configResponse] = await Promise.all([
@@ -271,6 +317,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 posterSetsApi.getConfig(),
             ]);
             setStatus(nextStatus);
+            if (nextStatus.queue) setQueueStats(nextStatus.queue);
             const cfg = configResponse.config || DEFAULT_POSTER_SETS_CONFIG;
             setConfigDraft({
                 ...DEFAULT_POSTER_SETS_CONFIG,
@@ -286,6 +333,13 @@ export const PosterSetsDashboard: React.FC = () => {
     }, [loadHistory, toast]);
 
     useEffect(() => { void load(); }, [load]);
+    useEffect(() => { void loadQueue(); }, [loadQueue]);
+
+    useEffect(() => {
+        if (tab !== 'queue' && !queueStats.pending) return undefined;
+        const timer = window.setInterval(() => { void loadQueue(); }, 2000);
+        return () => window.clearInterval(timer);
+    }, [tab, queueStats.pending, loadQueue]);
 
     useEffect(() => {
         if (!activeJob?.id || !['running', 'queued'].includes(String(activeJob.state || ''))) return undefined;
@@ -302,30 +356,14 @@ export const PosterSetsDashboard: React.FC = () => {
                     }
                     await load();
                     await loadHistory();
-                    if (state === 'succeeded') {
-                        // Return to the search grid so the next set can be picked without hunting.
-                        setPreview(null);
-                        setSelectedSearchSet(null);
-                        setSelectedAssetIds([]);
-                        if (searchSetsSectionRef.current) {
-                            requestAnimationFrame(() => {
-                                searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            });
-                        }
-                        const uploaded = response.job.result && typeof response.job.result.uploaded === 'number'
-                            ? Number(response.job.result.uploaded)
-                            : null;
-                        toast(uploaded != null
-                            ? `Applied ${uploaded} poster${uploaded === 1 ? '' : 's'}. Pick another set anytime.`
-                            : 'Applied. Pick another set anytime.');
-                    }
+                    await loadQueue();
                 }
             } catch {
                 // keep polling until terminal or user leaves
             }
         }, 1500);
         return () => window.clearInterval(timer);
-    }, [activeJob?.id, activeJob?.state, load, loadHistory, toast]);
+    }, [activeJob?.id, activeJob?.state, load, loadHistory, loadQueue]);
 
     useEffect(() => {
         if (tab !== 'history') return undefined;
@@ -486,16 +524,21 @@ export const PosterSetsDashboard: React.FC = () => {
             const response = await posterSetsApi.apply(
                 target,
                 selectedOnly ? selectedAssetIds : undefined,
+                currentSetMeta(),
             );
             setActiveJob(response.job);
-            upsertRecentSet(jobSetMeta(response.job), target);
+            upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
             setRecentTick((value) => value + 1);
-            toast(selectedOnly
-                ? `Apply started for ${selectedAssetIds.length} selected asset(s).`
-                : 'Apply started for the full set.');
+            await loadQueue();
+            dismissPreviewToSearch();
+            toast(queuePaused
+                ? 'Added to queue (paused — resume in Queue tab).'
+                : selectedOnly
+                    ? `Queued ${selectedAssetIds.length} selected asset(s).`
+                    : 'Queued full set apply.');
             await loadHistory();
         } catch (error) {
-            toast(error instanceof Error ? error.message : 'Apply failed', 'error');
+            toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
         } finally {
             setBusy(null);
         }
@@ -511,26 +554,29 @@ export const PosterSetsDashboard: React.FC = () => {
         }
         setSelectedAssetIds(ids);
         const label = matchedIds.length
-            ? `Apply ${matchedIds.length} matched poster${matchedIds.length === 1 ? '' : 's'} to Plex?`
-            : `Apply ${ids.length} poster${ids.length === 1 ? '' : 's'} to Plex?`;
+            ? `Queue ${matchedIds.length} matched poster${matchedIds.length === 1 ? '' : 's'} for apply?`
+            : `Queue ${ids.length} poster${ids.length === 1 ? '' : 's'} for apply?`;
         const ok = await askConfirm(label, {
-            title: 'Apply poster set?',
-            confirmLabel: 'Apply',
+            title: 'Add to apply queue?',
+            confirmLabel: 'Add to queue',
             cancelLabel: 'Cancel',
         });
         if (!ok) return;
-        // Ensure apply uses the matched selection even if state hasn't flushed.
         setBusy('apply');
         try {
             const target = url.trim();
-            const response = await posterSetsApi.apply(target, ids);
+            const response = await posterSetsApi.apply(target, ids, currentSetMeta());
             setActiveJob(response.job);
-            upsertRecentSet(jobSetMeta(response.job), target);
+            upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
             setRecentTick((value) => value + 1);
-            toast(`Apply started for ${ids.length} poster${ids.length === 1 ? '' : 's'}.`);
+            await loadQueue();
+            dismissPreviewToSearch();
+            toast(queuePaused
+                ? `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'} (queue paused).`
+                : `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'}.`);
             await loadHistory();
         } catch (error) {
-            toast(error instanceof Error ? error.message : 'Apply failed', 'error');
+            toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
         } finally {
             setBusy(null);
         }
@@ -796,7 +842,10 @@ export const PosterSetsDashboard: React.FC = () => {
                 ? await posterSetsApi.bulk({ fromFile: true })
                 : await posterSetsApi.bulk({ text: bulkText });
             setActiveJob(response.job);
-            toast(fromFile ? 'Bulk file apply started.' : 'Bulk apply started.');
+            await loadQueue();
+            toast(queuePaused
+                ? (fromFile ? 'Bulk file queued (paused).' : 'Bulk list queued (paused).')
+                : (fromFile ? 'Bulk file added to queue.' : 'Bulk list added to queue.'));
             await loadHistory();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Bulk apply failed', 'error');
@@ -919,6 +968,7 @@ export const PosterSetsDashboard: React.FC = () => {
             <div className="flex flex-wrap gap-2">
                 {([
                     ['apply', 'Apply', Sparkles],
+                    ['queue', 'Queue', ListOrdered],
                     ['recent', 'Recent', Clock],
                     ['history', 'History', History],
                     ['settings', 'Settings', Settings2],
@@ -930,12 +980,184 @@ export const PosterSetsDashboard: React.FC = () => {
                         onClick={() => {
                             setTab(id);
                             if (id === 'history') void loadHistory();
+                            if (id === 'queue') void loadQueue();
                         }}
                     >
                         <Icon className="h-4 w-4" /> {label}
+                        {id === 'queue' && (queueStats.pending || 0) > 0 ? (
+                            <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
+                                {queueStats.pending}
+                            </span>
+                        ) : null}
                     </button>
                 ))}
             </div>
+
+            {tab === 'queue' ? (
+                <section className={`${cardClass} space-y-4 p-5`}>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h2 className="text-lg font-bold text-text">Apply queue</h2>
+                            <p className="mt-1 text-sm text-muted">
+                                Sets apply one at a time in the background. You can keep queueing while paused.
+                            </p>
+                            <p className="mt-2 text-xs text-muted">
+                                {queuePaused ? 'Paused' : 'Running'}
+                                {' · '}
+                                {queueStats.queued || 0} waiting
+                                {' · '}
+                                {queueStats.running || 0} active
+                                {' · '}
+                                {queueStats.succeeded || 0} succeeded
+                                {' · '}
+                                {queueStats.failed || 0} failed
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy !== null}
+                                onClick={() => void loadQueue()}
+                            >
+                                <RefreshCw className="h-4 w-4" /> Refresh
+                            </button>
+                            <button
+                                type="button"
+                                className={queuePaused ? primaryButtonClass : buttonClass}
+                                disabled={busy !== null}
+                                onClick={async () => {
+                                    setBusy('queue');
+                                    try {
+                                        const response = await posterSetsApi.pauseQueue(!queuePaused);
+                                        setQueuePaused(Boolean(response.paused));
+                                        setQueueStats(response.stats || {});
+                                        toast(response.paused ? 'Queue paused — new applies still stack up.' : 'Queue resumed.');
+                                        await loadQueue();
+                                    } catch (error) {
+                                        toast(error instanceof Error ? error.message : 'Failed to update queue', 'error');
+                                    } finally {
+                                        setBusy(null);
+                                    }
+                                }}
+                            >
+                                {queuePaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                                {queuePaused ? 'Resume' : 'Pause'}
+                            </button>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy !== null}
+                                onClick={async () => {
+                                    setBusy('queue');
+                                    try {
+                                        await posterSetsApi.clearFinishedQueue();
+                                        await loadQueue();
+                                        toast('Cleared finished queue items.');
+                                    } catch (error) {
+                                        toast(error instanceof Error ? error.message : 'Failed to clear queue', 'error');
+                                    } finally {
+                                        setBusy(null);
+                                    }
+                                }}
+                            >
+                                Clear finished
+                            </button>
+                        </div>
+                    </div>
+
+                    {!queueJobs.length ? (
+                        <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
+                            Queue is empty. Apply a poster set from the Apply tab to add one.
+                        </p>
+                    ) : (
+                        <div className="space-y-2">
+                            {queueJobs.map((job) => {
+                                const meta = jobSetMeta(job);
+                                const state = String(job.state || '').toLowerCase();
+                                return (
+                                    <div
+                                        key={job.id}
+                                        className={`rounded-xl border border-white/10 px-4 py-3 ${jobCardTone(job)}`}
+                                    >
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="min-w-0 space-y-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <StatusPill value={job.state} />
+                                                    <p className="truncate text-sm font-semibold text-text" title={jobTitle(job)}>
+                                                        {jobTitle(job)}
+                                                    </p>
+                                                </div>
+                                                <p className="text-xs text-muted">
+                                                    {formatTime(job.createdAt)}
+                                                    {job.finishedAt ? ` · finished ${formatTime(job.finishedAt)}` : ''}
+                                                    {typeof job.uploaded === 'number' ? ` · uploaded ${job.uploaded}` : ''}
+                                                    {job.uploaded == null && typeof job.result?.uploaded === 'number'
+                                                        ? ` · uploaded ${job.result.uploaded as number}`
+                                                        : ''}
+                                                    {job.input?.selectedCount ? ` · ${job.input.selectedCount} selected` : ''}
+                                                </p>
+                                                {job.error ? (
+                                                    <p className="text-sm text-red-300">{job.error}</p>
+                                                ) : null}
+                                                {meta?.url ? (
+                                                    <a
+                                                        href={meta.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex items-center gap-1 text-xs font-semibold text-plex no-underline hover:underline"
+                                                    >
+                                                        Open set <ExternalLink className="h-3 w-3" />
+                                                    </a>
+                                                ) : null}
+                                            </div>
+                                            <div className="flex shrink-0 flex-wrap gap-2">
+                                                {state === 'queued' ? (
+                                                    <button
+                                                        type="button"
+                                                        className={buttonClass}
+                                                        disabled={busy !== null}
+                                                        onClick={async () => {
+                                                            setBusy('queue');
+                                                            try {
+                                                                await posterSetsApi.cancelQueueJob(job.id);
+                                                                await loadQueue();
+                                                                toast('Removed from queue.');
+                                                            } catch (error) {
+                                                                toast(error instanceof Error ? error.message : 'Cancel failed', 'error');
+                                                            } finally {
+                                                                setBusy(null);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <X className="h-4 w-4" /> Cancel
+                                                    </button>
+                                                ) : null}
+                                                {state === 'failed' && (job.input?.url || meta?.url) ? (
+                                                    <button
+                                                        type="button"
+                                                        className={buttonClass}
+                                                        disabled={busy !== null}
+                                                        onClick={() => {
+                                                            const target = String(job.input?.url || meta?.url || '').trim();
+                                                            if (!target) return;
+                                                            setTab('apply');
+                                                            setUrl(target);
+                                                            void runPreview(target);
+                                                        }}
+                                                    >
+                                                        Re-open
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </section>
+            ) : null}
 
             {tab === 'recent' ? (
                 <section className={`${cardClass} space-y-3 p-5`}>
@@ -1411,23 +1633,23 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 onClick={() => void applyMatched()}
                                             >
                                                 {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                                Apply matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
+                                                Queue matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
                                             </button>
                                             <button
                                                 type="button"
                                                 className={buttonClass}
                                                 disabled={busy !== null}
                                                 onClick={async () => {
-                                                    const ok = await askConfirm('Apply the entire set, including posters not matched in your libraries?', {
-                                                        title: 'Apply full set?',
-                                                        confirmLabel: 'Apply all',
+                                                    const ok = await askConfirm('Queue the entire set, including posters not matched in your libraries?', {
+                                                        title: 'Queue full set?',
+                                                        confirmLabel: 'Add to queue',
                                                         cancelLabel: 'Cancel',
                                                     });
                                                     if (!ok) return;
                                                     void runApply(false);
                                                 }}
                                             >
-                                                Apply entire set
+                                                Queue entire set
                                             </button>
                                         </div>
                                     </div>
@@ -1443,7 +1665,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 disabled={busy !== null || !selectedAssetIds.length}
                                                 onClick={() => void runApply(true)}
                                             >
-                                                Apply selected ({selectedAssetIds.length})
+                                                Queue selected ({selectedAssetIds.length})
                                             </button>
                                         </div>
                                         <div className={posterGridClass} style={posterGridStyle}>
@@ -1515,7 +1737,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             onClick={() => void applyMatched()}
                                         >
                                             {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                            Apply matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
+                                            Queue matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
                                         </button>
                                         <button
                                             type="button"
@@ -1523,7 +1745,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             disabled={busy !== null || !selectedAssetIds.length}
                                             onClick={() => void runApply(true)}
                                         >
-                                            Apply selected ({selectedAssetIds.length})
+                                            Queue selected ({selectedAssetIds.length})
                                         </button>
                                     </div>
                                 </div>
@@ -1590,7 +1812,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 onClick={() => void (readyToApply ? applyMatched() : runApply(false))}
                                             >
                                                 {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                                {readyToApply ? `Apply matched (${matchedAssetCount || selectedAssetIds.length})` : 'Apply to Plex'}
+                                                {readyToApply ? `Queue matched (${matchedAssetCount || selectedAssetIds.length})` : 'Queue apply'}
                                             </button>
                                         </div>
                                     </div>
