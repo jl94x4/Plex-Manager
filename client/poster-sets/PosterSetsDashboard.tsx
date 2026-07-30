@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     CheckCircle2,
     ChevronLeft,
+    ChevronRight,
     Clock,
     Download,
     ExternalLink,
@@ -43,6 +44,7 @@ import {
 
 const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
 const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
+const SEARCH_SETS_PAGE_SIZE = 24;
 
 const cardClass = 'glass-card shadow-xl';
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
@@ -230,6 +232,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [searchTitles, setSearchTitles] = useState<PosterSetsSearchTitle[]>([]);
     const [searchSets, setSearchSets] = useState<PosterSetsSearchSet[]>([]);
+    const [searchSetsPage, setSearchSetsPage] = useState(1);
     const [searchContext, setSearchContext] = useState('');
     const [selectedSearchTitle, setSelectedSearchTitle] = useState<PosterSetsSearchTitle | null>(null);
     const [selectedSearchSet, setSelectedSearchSet] = useState<PosterSetsSearchSet | null>(null);
@@ -554,20 +557,30 @@ export const PosterSetsDashboard: React.FC = () => {
         setBusy('search');
         setSearchTitles([]);
         setSearchSets([]);
+        setSearchSetsPage(1);
         setSearchContext('');
         setSelectedSearchTitle(null);
         setSelectedSearchSet(null);
         setPreview(null);
         try {
+            if (searchMode === 'creator') {
+                toast(
+                    searchProvider === 'both'
+                        ? 'Fetching all creator sets from MediUX and ThePosterDB — this can take a minute…'
+                        : 'Fetching all creator sets — this can take a minute…',
+                );
+            }
             const response = await posterSetsApi.search({
                 provider: searchProvider,
                 query: q,
                 mode: searchMode,
                 dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
-                limit: searchMode === 'creator' ? 40 : 24,
+                // Creator catalogs are paginated server-side; 0 means pull a large catalog.
+                limit: searchMode === 'creator' ? 0 : 24,
             });
             setSearchTitles(response.titles || []);
             setSearchSets(response.sets || []);
+            setSearchSetsPage(1);
             setSearchContext(response.title || (searchMode === 'creator' ? `@${q.replace(/^@/, '')}` : q));
             const titleCount = response.titles?.length || 0;
             const setCount = response.sets?.length || 0;
@@ -630,6 +643,7 @@ export const PosterSetsDashboard: React.FC = () => {
                         limit: 40,
                     }));
             setSearchSets(response.sets || []);
+            setSearchSetsPage(1);
             setSearchContext(response.title || title.title);
             // Focus on sets: titles list becomes a back action only.
             setSearchTitles([]);
@@ -661,6 +675,7 @@ export const PosterSetsDashboard: React.FC = () => {
         setSearchQuery('');
         setSearchTitles([]);
         setSearchSets([]);
+        setSearchSetsPage(1);
         setSearchContext('');
         setSelectedSearchTitle(null);
         setSelectedSearchSet(null);
@@ -673,6 +688,13 @@ export const PosterSetsDashboard: React.FC = () => {
         const assets = preview?.assets || [];
         return assets.filter((asset) => asset.matched === true).length;
     }, [preview]);
+
+    const searchSetsPageCount = Math.max(1, Math.ceil(searchSets.length / SEARCH_SETS_PAGE_SIZE));
+    const pagedSearchSets = useMemo(() => {
+        const page = Math.min(Math.max(1, searchSetsPage), searchSetsPageCount);
+        const start = (page - 1) * SEARCH_SETS_PAGE_SIZE;
+        return searchSets.slice(start, start + SEARCH_SETS_PAGE_SIZE);
+    }, [searchSets, searchSetsPage, searchSetsPageCount]);
 
     const readyToApply = Boolean(preview?.assets?.length);
 
@@ -978,6 +1000,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             if (id !== 'both') setFindProvider(id);
                                             setSearchTitles([]);
                                             setSearchSets([]);
+                                            setSearchSetsPage(1);
                                             setSearchContext('');
                                             setSelectedSearchTitle(null);
                                             setSelectedSearchSet(null);
@@ -998,6 +1021,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             setSearchMode(id);
                                             setSearchTitles([]);
                                             setSearchSets([]);
+                                            setSearchSetsPage(1);
                                             setSearchContext('');
                                             setSelectedSearchTitle(null);
                                             setSelectedSearchSet(null);
@@ -1146,11 +1170,41 @@ export const PosterSetsDashboard: React.FC = () => {
 
                             {searchSets.length && !readyToApply ? (
                                 <div className="mt-4 space-y-2">
-                                    <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                                        2. Choose a poster set{searchContext ? ` · ${searchContext}` : ''}
-                                    </p>
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                                            2. Choose a poster set{searchContext ? ` · ${searchContext}` : ''}
+                                            {searchSets.length > SEARCH_SETS_PAGE_SIZE
+                                                ? ` · ${searchSets.length} sets`
+                                                : ''}
+                                        </p>
+                                        {searchSetsPageCount > 1 ? (
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null || searchSetsPage <= 1}
+                                                    onClick={() => setSearchSetsPage((page) => Math.max(1, page - 1))}
+                                                >
+                                                    <ChevronLeft className="h-4 w-4" />
+                                                    Prev
+                                                </button>
+                                                <span className="text-xs text-muted">
+                                                    Page {Math.min(searchSetsPage, searchSetsPageCount)} / {searchSetsPageCount}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null || searchSetsPage >= searchSetsPageCount}
+                                                    onClick={() => setSearchSetsPage((page) => Math.min(searchSetsPageCount, page + 1))}
+                                                >
+                                                    Next
+                                                    <ChevronRight className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        ) : null}
+                                    </div>
                                     <div className={posterGridClass} style={posterGridStyle}>
-                                        {searchSets.map((set) => (
+                                        {pagedSearchSets.map((set) => (
                                             <button
                                                 key={`${set.provider || findProvider}-${set.setId}`}
                                                 type="button"
@@ -1197,6 +1251,31 @@ export const PosterSetsDashboard: React.FC = () => {
                                             </button>
                                         ))}
                                     </div>
+                                    {searchSetsPageCount > 1 ? (
+                                        <div className="flex items-center justify-center gap-2 pt-1">
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={busy !== null || searchSetsPage <= 1}
+                                                onClick={() => setSearchSetsPage((page) => Math.max(1, page - 1))}
+                                            >
+                                                <ChevronLeft className="h-4 w-4" />
+                                                Prev
+                                            </button>
+                                            <span className="text-xs text-muted">
+                                                Page {Math.min(searchSetsPage, searchSetsPageCount)} / {searchSetsPageCount}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={busy !== null || searchSetsPage >= searchSetsPageCount}
+                                                onClick={() => setSearchSetsPage((page) => Math.min(searchSetsPageCount, page + 1))}
+                                            >
+                                                Next
+                                                <ChevronRight className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ) : null}
                                 </div>
                             ) : null}
 

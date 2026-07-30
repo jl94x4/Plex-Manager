@@ -1254,22 +1254,119 @@ def _collect_posterdb_set_cards(soup, *, sets: dict, limit: int, default_user: s
             return
 
 
-def list_posterdb_user_sets(username: str, progress: ProgressFn = None, limit: int = 40, max_pages: int = 3) -> dict:
+def _mediux_thumb_from_img(img) -> str:
+    if not img:
+        return ""
+    for attr in ("src", "data-src"):
+        candidate = _decode_next_image_url(img.get(attr) or "")
+        if candidate:
+            return candidate
+        raw = str(img.get(attr) or "")
+        if "api.mediux.pro" in raw:
+            return raw if raw.startswith("http") else _absolute_url("https://mediux.pro", raw)
+    srcset = str(img.get("srcset") or "")
+    if srcset:
+        first = srcset.split(",")[0].strip().split(" ")[0]
+        candidate = _decode_next_image_url(first)
+        if candidate:
+            return candidate
+    return ""
+
+
+def _collect_mediux_set_cards(soup, *, sets: dict, default_user: str | None = None) -> int:
+    """Collect MediUX set cards from one page. Returns newly discovered count."""
+    added = 0
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "")
+        match = re.search(r"/sets/(\d+)", href)
+        if not match:
+            continue
+        set_id = match.group(1)
+        title = anchor.get_text(" ", strip=True)
+        if title.lower() in {"peek", "yaml", "download", "sets", "posters", "previous slide", "next slide"}:
+            title = ""
+        thumb = _mediux_thumb_from_img(anchor.find("img"))
+        if not thumb:
+            parent = anchor.parent
+            for _ in range(6):
+                if parent is None:
+                    break
+                for img in parent.find_all("img") if hasattr(parent, "find_all") else []:
+                    thumb = _mediux_thumb_from_img(img)
+                    if thumb:
+                        break
+                if thumb:
+                    break
+                if not title:
+                    heading_node = parent.find(["h2", "h3", "h4"]) if hasattr(parent, "find") else None
+                    if heading_node:
+                        title = heading_node.get_text(" ", strip=True) or title
+                parent = parent.parent
+
+        existing = sets.get(set_id)
+        if existing:
+            if title and (not existing.get("title") or existing["title"].startswith("Set ")):
+                existing["title"] = title[:160]
+            if thumb and not existing.get("thumbUrl"):
+                existing["thumbUrl"] = thumb
+            continue
+
+        sets[set_id] = {
+            "setId": set_id,
+            "url": f"https://mediux.pro/sets/{set_id}",
+            "title": (title or f"Set {set_id}")[:160],
+            "thumbUrl": thumb,
+            "user": default_user,
+            "posterCount": None,
+            "provider": "mediux",
+        }
+        added += 1
+    return added
+
+
+def _mediux_max_page(soup) -> int:
+    max_page = 1
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "")
+        match = re.search(r"[?&]page=(\d+)", href)
+        if match:
+            max_page = max(max_page, int(match.group(1)))
+        text = anchor.get_text(" ", strip=True)
+        if text.isdigit():
+            max_page = max(max_page, int(text))
+    return max_page
+
+
+def list_posterdb_user_sets(username: str, progress: ProgressFn = None, limit: int = 0, max_pages: int = 0) -> dict:
     user = _normalize_creator_username(username)
     base = f"https://theposterdb.com/user/{quote(user)}"
     emit(progress, f"Loading ThePosterDB creator @{user}…")
     first_url = f"{base}?section=uploads&page=1"
     soup = cook_soup(first_url)
     page_count = scrape_posterd_user_info(soup) or 1
-    pages = min(max(1, int(page_count)), max(1, int(max_pages or 3)))
+    # Cap runaway creators; UI paginates the returned set list.
+    hard_cap = max(1, int(max_pages or 80))
+    pages = min(max(1, int(page_count)), hard_cap)
+    take = max(0, int(limit or 0)) or 10_000
     sets: dict = {}
-    _collect_posterdb_set_cards(soup, sets=sets, limit=limit, default_user=user)
+    _collect_posterdb_set_cards(soup, sets=sets, limit=take, default_user=user)
+    stagnant = 0
+    last_page = 1
     for page in range(2, pages + 1):
-        if len(sets) >= max(1, int(limit or 40)):
+        before = len(sets)
+        if before >= take:
             break
         emit(progress, f"Creator page {page}/{pages}…")
         soup = cook_soup(f"{base}?section=uploads&page={page}")
-        _collect_posterdb_set_cards(soup, sets=sets, limit=limit, default_user=user)
+        _collect_posterdb_set_cards(soup, sets=sets, limit=take, default_user=user)
+        last_page = page
+        if len(sets) == before:
+            stagnant += 1
+            if stagnant >= 3:
+                emit(progress, f"Stopping early after {page} pages — no new sets.")
+                break
+        else:
+            stagnant = 0
     results = list(sets.values())
     if not results:
         raise ValueError(f"No sets found for ThePosterDB creator @{user}. Check the username.")
@@ -1283,10 +1380,12 @@ def list_posterdb_user_sets(username: str, progress: ProgressFn = None, limit: i
         "titleUrl": base,
         "titles": [],
         "sets": results,
+        "pagesFetched": last_page,
+        "pagesAvailable": page_count,
     }
 
 
-def list_mediux_user_sets(username: str, progress: ProgressFn = None, limit: int = 40) -> dict:
+def list_mediux_user_sets(username: str, progress: ProgressFn = None, limit: int = 0, max_pages: int = 0) -> dict:
     user = _normalize_creator_username(username)
     page_url = f"https://mediux.pro/user/{quote(user)}/sets"
     emit(progress, f"Loading MediUX creator @{user}…")
@@ -1297,48 +1396,22 @@ def list_mediux_user_sets(username: str, progress: ProgressFn = None, limit: int
         page_title = heading.get_text(" ", strip=True)
     elif soup.title:
         page_title = soup.title.get_text(" ", strip=True)
+    hard_cap = max(1, int(max_pages or 60))
+    pages = min(_mediux_max_page(soup), hard_cap)
+    take = max(0, int(limit or 0)) or 10_000
     sets: dict = {}
-    for anchor in soup.find_all("a", href=True):
-        href = str(anchor.get("href") or "")
-        match = re.search(r"/sets/(\d+)", href)
-        if not match:
-            continue
-        set_id = match.group(1)
-        if set_id in sets:
-            continue
-        title = anchor.get_text(" ", strip=True)
-        # Skip empty or nav-only anchors.
-        if not title or title.lower() in {"peek", "yaml", "download", "sets", "posters"}:
-            # Prefer sibling heading text when the link is an image-only card.
-            parent = anchor.parent
-            for _ in range(4):
-                if parent is None:
-                    break
-                heading_node = parent.find(["h2", "h3", "h4"]) if hasattr(parent, "find") else None
-                if heading_node:
-                    title = heading_node.get_text(" ", strip=True) or title
-                    break
-                parent = parent.parent
-        thumb = ""
-        img = anchor.find("img")
-        if img:
-            thumb = _decode_next_image_url(img.get("src") or "")
-            if not thumb:
-                candidate = img.get("src") or ""
-                if "api.mediux.pro" in candidate:
-                    thumb = candidate
-        sets[set_id] = {
-            "setId": set_id,
-            "url": f"https://mediux.pro/sets/{set_id}",
-            "title": (title or f"Set {set_id}")[:160],
-            "thumbUrl": thumb,
-            "user": user,
-            "posterCount": None,
-            "provider": "mediux",
-        }
-        if len(sets) >= max(1, int(limit or 40)):
+    _collect_mediux_set_cards(soup, sets=sets, default_user=user)
+    for page in range(2, pages + 1):
+        if len(sets) >= take:
             break
-    results = list(sets.values())
+        emit(progress, f"MediUX creator page {page}/{pages}…")
+        soup = cook_soup(f"{page_url}?page={page}")
+        added = _collect_mediux_set_cards(soup, sets=sets, default_user=user)
+        # Pagination links may under-report; keep going while pages add sets.
+        pages = max(pages, min(_mediux_max_page(soup), hard_cap))
+        if added <= 0:
+            break
+    results = list(sets.values())[:take]
     if not results:
         raise ValueError(f"No sets found for MediUX creator @{user}. Check the username.")
     return {
@@ -1351,6 +1424,7 @@ def list_mediux_user_sets(username: str, progress: ProgressFn = None, limit: int
         "titleUrl": page_url,
         "titles": [],
         "sets": results,
+        "pagesFetched": pages,
     }
 
 
@@ -1378,9 +1452,11 @@ def search_catalog(
     if search_mode in {"creator", "user", "author", "uploader"}:
         if not str(query or "").strip():
             raise ValueError("creator username is required")
+        # Creator mode: pull paginated set catalogs (limit 0 = practically unbounded).
+        creator_limit = max(0, int(limit or 0))
         if source == "posterdb":
-            return list_posterdb_user_sets(query, progress=progress, limit=limit)
-        return list_mediux_user_sets(query, progress=progress, limit=limit)
+            return list_posterdb_user_sets(query, progress=progress, limit=creator_limit)
+        return list_mediux_user_sets(query, progress=progress, limit=creator_limit)
 
     if source == "posterdb":
         if title_url:
