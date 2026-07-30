@@ -240,6 +240,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const [selectedSearchSet, setSelectedSearchSet] = useState<PosterSetsSearchSet | null>(null);
     const [manualUrlOpen, setManualUrlOpen] = useState(false);
     const previewPanelRef = useRef<HTMLDivElement | null>(null);
+    const searchSetsSectionRef = useRef<HTMLDivElement | null>(null);
     const [recentTick, setRecentTick] = useState(0);
     const [gridSize, setGridSize] = useState<UpgraderGridSize>(() => {
         if (typeof window === 'undefined') return 'medium';
@@ -1225,8 +1226,9 @@ export const PosterSetsDashboard: React.FC = () => {
                                 </div>
                             ) : null}
 
-                            {searchSets.length && !readyToApply ? (
-                                <div className="mt-4 space-y-2">
+                            <div className="flex flex-col">
+                            {searchSets.length ? (
+                                <div ref={searchSetsSectionRef} className="order-2 mt-4 space-y-2">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <p className="text-xs font-bold uppercase tracking-wide text-muted">
                                             2. Choose a poster set{searchContext ? ` · ${searchContext}` : ''}
@@ -1234,13 +1236,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 ? ` · ${searchSets.length} sets`
                                                 : ''}
                                             {searchLoadingMore ? ' · loading more…' : ''}
+                                            {readyToApply ? ' · pick another set anytime' : ''}
                                         </p>
                                         {searchSetsPageCount > 1 ? (
                                             <div className="flex items-center gap-2">
                                                 <button
                                                     type="button"
                                                     className={buttonClass}
-                                                    disabled={busy !== null || searchSetsPage <= 1}
+                                                    disabled={(busy !== null && busy !== 'preview') || searchSetsPage <= 1}
                                                     onClick={() => setSearchSetsPage((page) => Math.max(1, page - 1))}
                                                 >
                                                     <ChevronLeft className="h-4 w-4" />
@@ -1252,7 +1255,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className={buttonClass}
-                                                    disabled={busy !== null || searchSetsPage >= searchSetsPageCount}
+                                                    disabled={(busy !== null && busy !== 'preview') || searchSetsPage >= searchSetsPageCount}
                                                     onClick={() => setSearchSetsPage((page) => Math.min(searchSetsPageCount, page + 1))}
                                                 >
                                                     Next
@@ -1268,10 +1271,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 type="button"
                                                 className={`overflow-hidden rounded-2xl border text-left transition ${
                                                     selectedSearchSet?.setId === set.setId
+                                                    && (selectedSearchSet?.provider || '') === (set.provider || '')
                                                         ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/30'
                                                         : 'border-white/10 bg-black/20 hover:border-plex/40'
                                                 }`}
-                                                disabled={busy !== null}
+                                                disabled={busy !== null && busy !== 'preview'}
                                                 onClick={() => void pickSearchSet(set)}
                                             >
                                                 <div className="relative aspect-[2/3] bg-black/40">
@@ -1314,7 +1318,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             <button
                                                 type="button"
                                                 className={buttonClass}
-                                                disabled={busy !== null || searchSetsPage <= 1}
+                                                disabled={(busy !== null && busy !== 'preview') || searchSetsPage <= 1}
                                                 onClick={() => setSearchSetsPage((page) => Math.max(1, page - 1))}
                                             >
                                                 <ChevronLeft className="h-4 w-4" />
@@ -1326,7 +1330,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             <button
                                                 type="button"
                                                 className={buttonClass}
-                                                disabled={busy !== null || searchSetsPage >= searchSetsPageCount}
+                                                disabled={(busy !== null && busy !== 'preview') || searchSetsPage >= searchSetsPageCount}
                                                 onClick={() => setSearchSetsPage((page) => Math.min(searchSetsPageCount, page + 1))}
                                             >
                                                 Next
@@ -1338,7 +1342,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             ) : null}
 
                             {readyToApply ? (
-                                <div ref={previewPanelRef} className="mt-4 space-y-4 rounded-2xl border border-plex/30 bg-plex/10 p-4">
+                                <div ref={previewPanelRef} className="order-1 mt-4 space-y-4 rounded-2xl border border-plex/30 bg-plex/10 p-4">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div className="min-w-0">
                                             <p className="text-xs font-bold uppercase tracking-wide text-plex">3. Preview</p>
@@ -1363,9 +1367,13 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             setPreview(null);
                                                             setSelectedSearchSet(null);
                                                             setSelectedAssetIds([]);
+                                                            setUrl('');
+                                                            requestAnimationFrame(() => {
+                                                                searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                            });
                                                         }}
                                                     >
-                                                        Choose a different set
+                                                        Back to search results
                                                     </button>
                                                 ) : null}
                                                 <button
@@ -1502,6 +1510,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             ) : null}
+                            </div>
 
                             <div className="mt-5 border-t border-white/10 pt-4">
                                 <button
