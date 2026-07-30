@@ -551,21 +551,61 @@ def _pick_creator_username(value) -> Optional[str]:
     return None
 
 
+_CREATOR_PATH_SKIP = {"login", "signup", "register", "settings", "logout", "home"}
+
+
+def _creator_from_user_href(href: str) -> Optional[str]:
+    match = re.search(r"/user/([^/?#]+)", str(href or ""), re.I)
+    if not match:
+        return None
+    user = unquote(match.group(1)).strip().lstrip("@")
+    if not user or user.lower() in _CREATOR_PATH_SKIP:
+        return None
+    return user
+
+
 def extract_creator_from_soup(soup) -> Optional[str]:
     if not soup:
         return None
-    skip = {"login", "signup", "register", "settings", "logout", "home"}
     for anchor in soup.select("a[href*='/user/']"):
-        href = str(anchor.get("href") or "")
-        match = re.search(r"/user/([^/?#]+)", href, re.I)
-        if match:
-            user = unquote(match.group(1)).strip().lstrip("@")
-            if user and user.lower() not in skip:
-                return user
+        user = _creator_from_user_href(anchor.get("href") or "")
+        if user:
+            return user
         text = (anchor.get_text(" ", strip=True) or "").strip().lstrip("@")
-        if text and 1 < len(text) < 64 and text.lower() not in skip:
+        if text and 1 < len(text) < 64 and text.lower() not in _CREATOR_PATH_SKIP:
             return text
     return None
+
+
+def _extract_user_near_node(node, *, max_depth: int = 10) -> Optional[str]:
+    """Find the creator for a MediUX set card without picking up siblings from the list parent."""
+    best: Optional[str] = None
+    current = node
+    for _ in range(max(0, int(max_depth)) + 1):
+        if current is None:
+            break
+        users: list[str] = []
+        seen: set[str] = set()
+        if hasattr(current, "find_all"):
+            for anchor in current.find_all("a", href=True):
+                user = _creator_from_user_href(anchor.get("href") or "")
+                if not user:
+                    continue
+                key = user.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                users.append(user)
+        if len(users) == 1:
+            best = users[0]
+            classes = " ".join(current.get("class") or []) if hasattr(current, "get") else ""
+            # MediUX title/set rows use a bordered card container.
+            if "border-b" in classes:
+                return best
+        elif len(users) > 1:
+            return best
+        current = getattr(current, "parent", None)
+    return best
 
 
 def _pick_id(value) -> Optional[str]:
@@ -1311,6 +1351,74 @@ def list_posterdb_sets(title_url: str, progress: ProgressFn = None, limit: int =
     }
 
 
+def _infer_set_kind(*, title: str = "", card_text: str = "") -> Optional[str]:
+    blob = f"{title} {card_text}".strip().lower()
+    if not blob:
+        return None
+    if "boxset" in blob or "box set" in blob:
+        return "boxset"
+    if re.search(r"(title\s*cards?|episode\s*cards?|cover\s*style|episode\s*titles?)", blob, re.I):
+        return "title_cards"
+    return None
+
+
+def _mediux_card_row(node):
+    current = node
+    for _ in range(12):
+        if current is None:
+            break
+        classes = " ".join(current.get("class") or []) if hasattr(current, "get") else ""
+        if "border-b" in classes:
+            return current
+        current = getattr(current, "parent", None)
+    return None
+
+
+def _clean_mediux_set_title(value: str) -> str:
+    title = str(value or "").strip()
+    if not title:
+        return ""
+    if title.lower() in {
+        "peek",
+        "yaml",
+        "download",
+        "sets",
+        "posters",
+        "previous slide",
+        "next slide",
+        "boxset",
+        "collection",
+    }:
+        return ""
+    return title[:160]
+
+
+def _enrich_mediux_set_entry(anchor, entry: dict) -> None:
+    """Fill creator / title / setKind from the surrounding MediUX card row."""
+    card = _mediux_card_row(anchor)
+    card_text = card.get_text(" ", strip=True) if card is not None else ""
+    if (not entry.get("title") or str(entry.get("title") or "").startswith("Set ")) and card is not None and hasattr(card, "find"):
+        for tag in ("h2", "h3", "h4", "p"):
+            node = card.find(tag)
+            if not node:
+                continue
+            title = _clean_mediux_set_title(node.get_text(" ", strip=True))
+            if title:
+                entry["title"] = title
+                break
+    user = _extract_user_near_node(anchor)
+    if user and not entry.get("user"):
+        entry["user"] = user
+    kind = _infer_set_kind(title=str(entry.get("title") or ""), card_text=card_text)
+    existing_kind = str(entry.get("setKind") or "").strip()
+    if kind == "boxset" or (kind and not existing_kind):
+        entry["setKind"] = kind
+    elif not existing_kind:
+        inferred = _infer_set_kind(title=str(entry.get("title") or ""))
+        if inferred:
+            entry["setKind"] = inferred
+
+
 def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn = None, limit: int = 40) -> dict:
     kind = str(media_type or "movie").strip().lower()
     if kind in {"tv", "series", "show", "shows"}:
@@ -1335,7 +1443,7 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
         if not match:
             continue
         set_id = match.group(1)
-        title = anchor.get_text(" ", strip=True)
+        title = _clean_mediux_set_title(anchor.get_text(" ", strip=True))
         thumb = ""
         img = anchor.find("img")
         if img:
@@ -1353,11 +1461,13 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
             "user": None,
             "posterCount": None,
             "provider": "mediux",
+            "setKind": None,
         }
-        if title and not entry["title"]:
-            entry["title"] = title[:160]
+        if title and (not entry["title"] or entry["title"].startswith("Set ")):
+            entry["title"] = title
         if thumb and not entry["thumbUrl"]:
             entry["thumbUrl"] = thumb
+        _enrich_mediux_set_entry(anchor, entry)
         sets[set_id] = entry
         if len(sets) >= max(1, int(limit or 40)):
             break
@@ -1365,6 +1475,8 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
     for item in results:
         if not item.get("title"):
             item["title"] = page_title or f"Set {item['setId']}"
+        if not item.get("setKind"):
+            item["setKind"] = _infer_set_kind(title=str(item.get("title") or ""))
     return {
         "ok": True,
         "provider": "mediux",
@@ -1512,9 +1624,7 @@ def _collect_mediux_set_cards(soup, *, sets: dict, default_user: str | None = No
         if not match:
             continue
         set_id = match.group(1)
-        title = anchor.get_text(" ", strip=True)
-        if title.lower() in {"peek", "yaml", "download", "sets", "posters", "previous slide", "next slide"}:
-            title = ""
+        title = _clean_mediux_set_title(anchor.get_text(" ", strip=True))
         thumb = _mediux_thumb_from_img(anchor.find("img"))
         if not thumb:
             parent = anchor.parent
@@ -1530,26 +1640,34 @@ def _collect_mediux_set_cards(soup, *, sets: dict, default_user: str | None = No
                 if not title:
                     heading_node = parent.find(["h2", "h3", "h4"]) if hasattr(parent, "find") else None
                     if heading_node:
-                        title = heading_node.get_text(" ", strip=True) or title
+                        title = _clean_mediux_set_title(heading_node.get_text(" ", strip=True)) or title
                 parent = parent.parent
 
         existing = sets.get(set_id)
         if existing:
             if title and (not existing.get("title") or existing["title"].startswith("Set ")):
-                existing["title"] = title[:160]
+                existing["title"] = title
             if thumb and not existing.get("thumbUrl"):
                 existing["thumbUrl"] = thumb
+            _enrich_mediux_set_entry(anchor, existing)
+            if default_user and not existing.get("user"):
+                existing["user"] = default_user
             continue
 
-        sets[set_id] = {
+        entry = {
             "setId": set_id,
             "url": f"https://mediux.pro/sets/{set_id}",
-            "title": (title or f"Set {set_id}")[:160],
+            "title": title or f"Set {set_id}",
             "thumbUrl": thumb,
             "user": default_user,
             "posterCount": None,
             "provider": "mediux",
+            "setKind": None,
         }
+        _enrich_mediux_set_entry(anchor, entry)
+        if not entry.get("setKind"):
+            entry["setKind"] = _infer_set_kind(title=str(entry.get("title") or ""))
+        sets[set_id] = entry
         added += 1
     return added
 

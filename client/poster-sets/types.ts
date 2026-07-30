@@ -199,6 +199,8 @@ export type PosterSetsSearchSet = {
     user?: string | null;
     posterCount?: number | null;
     provider?: string;
+    /** MediUX card kind when known (boxset, title_cards). */
+    setKind?: string | null;
     alsoOn?: Array<{
         provider: string;
         setId: string;
@@ -206,6 +208,7 @@ export type PosterSetsSearchSet = {
         title?: string;
         user?: string | null;
         thumbUrl?: string;
+        setKind?: string | null;
     }>;
 };
 

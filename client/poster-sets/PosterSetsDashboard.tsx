@@ -294,6 +294,31 @@ const CreatorPill: React.FC<{ user?: string | null }> = ({ user }) => {
     );
 };
 
+const isTitleCardSet = (set?: { title?: string | null; setKind?: string | null } | null) => {
+    const kind = String(set?.setKind || '').trim().toLowerCase();
+    if (kind === 'title_cards' || kind === 'title-cards' || kind === 'titlecard') return true;
+    return /(title\s*cards?|episode\s*cards?|cover\s*style)/i.test(String(set?.title || ''));
+};
+
+const SetKindPill: React.FC<{ set?: { title?: string | null; setKind?: string | null } | null }> = ({ set }) => {
+    const kind = String(set?.setKind || '').trim().toLowerCase();
+    if (kind === 'boxset') {
+        return (
+            <MetaPill className="border-emerald-400/35 bg-emerald-500/15 text-emerald-100" title="Full boxset">
+                Boxset
+            </MetaPill>
+        );
+    }
+    if (isTitleCardSet(set)) {
+        return (
+            <MetaPill className="border-violet-400/35 bg-violet-500/15 text-violet-100" title="Title card pack">
+                Title cards
+            </MetaPill>
+        );
+    }
+    return null;
+};
+
 const RECENT_SETS_KEY = 'poster-sets-recent-v1';
 const MAX_RECENT_SETS = 10;
 
@@ -768,7 +793,12 @@ export const PosterSetsDashboard: React.FC = () => {
             upsertRecentSet(response.setMeta, target);
             setRecentTick((value) => value + 1);
             const matched = response.matched ?? matchedIds.length;
-            toast(`Ready: ${matched} matched in Plex · ${response.total || 0} in set.`);
+            const total = response.total || assets.length;
+            if (!total) {
+                toast('This set previewed with 0 assets. Check MediUX filters in Poster Sets settings (title cards may be off).', 'error');
+            } else {
+                toast(`Ready: ${matched} matched in Plex · ${total} in set.`);
+            }
             if (options?.scroll !== false) {
                 window.setTimeout(() => {
                     previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2534,9 +2564,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </div>
                                     <div className={posterGridClass} style={posterGridStyle}>
                                         {pagedSearchSets.map((set) => {
-                                            const setLabel = formatSetLabel(set) || set.title || `Set #${set.setId}`;
+                                            const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
+                                            const setLabel = formatSetLabel(set) || setTitle;
                                             const bulkSelected = Boolean(selectedBulkSets[set.url]);
                                             const watching = isSetWatched(set);
+                                            const landscape = isTitleCardSet(set);
                                             return (
                                             <div
                                                 key={`${set.provider || findProvider}-${set.setId}`}
@@ -2583,12 +2615,12 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     disabled={busy !== null && busy !== 'preview'}
                                                     onClick={() => void pickSearchSet(set)}
                                                 >
-                                                <div className="relative aspect-[2/3] bg-black/40">
+                                                <div className={`relative bg-black/40 ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
                                                     {set.thumbUrl ? (
                                                         <img
                                                             src={posterSetsApi.imageUrl(set.thumbUrl)}
                                                             alt={setLabel}
-                                                            className={`h-full w-full object-cover ${watching ? 'opacity-80' : ''}`}
+                                                            className={`h-full w-full ${landscape ? 'object-contain' : 'object-cover'} ${watching ? 'opacity-80' : ''}`}
                                                             loading="lazy"
                                                         />
                                                     ) : (
@@ -2602,15 +2634,21 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         </div>
                                                     ) : null}
                                                 </div>
-                                                <div className="space-y-1 p-3">
-                                                    <p className="truncate text-sm font-semibold text-text" title={setLabel}>{setLabel}</p>
-                                                    <p className="truncate text-[11px] text-muted">
-                                                        {providerLabel(set.provider)}
-                                                        {set.alsoOn?.length
-                                                            ? ` · also ${set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}`
-                                                            : ''}
-                                                        {set.posterCount ? ` · ${set.posterCount}` : ''}
-                                                    </p>
+                                                <div className="space-y-1.5 p-3">
+                                                    <p className="truncate text-sm font-semibold text-text" title={setTitle}>{setTitle}</p>
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        <CreatorPill user={set.user} />
+                                                        <SetKindPill set={set} />
+                                                        <ProviderPill provider={set.provider} />
+                                                        {set.alsoOn?.length ? (
+                                                            <span className="truncate text-[11px] text-muted">
+                                                                also {set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}
+                                                            </span>
+                                                        ) : null}
+                                                        {set.posterCount ? (
+                                                            <span className="truncate text-[11px] text-muted">{set.posterCount}</span>
+                                                        ) : null}
+                                                    </div>
                                                 </div>
                                                 </button>
                                             </div>
