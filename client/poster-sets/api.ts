@@ -1,6 +1,7 @@
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE, portalRequestHeaders } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import type {
+    PosterSetsAuditEntry,
     PosterSetsConfig,
     PosterSetsJob,
     PosterSetsPreview,
@@ -162,11 +163,12 @@ export const posterSetsApi = {
         }, signal);
         return finalEvent;
     },
-    apply: (url: string, selectedIds?: string[], setMeta?: PosterSetsSetMeta | null) => (
+    apply: (url: string, selectedIds?: string[], setMeta?: PosterSetsSetMeta | null, source?: 'manual' | 'bulk' | 'watch') => (
         apiFetch(`${ROOT}/apply`, json({
             url,
             ...(selectedIds?.length ? { selectedIds } : {}),
             ...(setMeta ? { setMeta } : {}),
+            ...(source ? { source } : {}),
         })) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob; queued?: boolean }>
     ),
     imageUrl: (thumbUrl: string) => `${ROOT}/image?url=${encodeURIComponent(thumbUrl)}`,
@@ -195,9 +197,34 @@ export const posterSetsApi = {
         watches: PosterSetsWatch[];
         stats?: PosterSetsWatchStats;
     }>,
-    addWatch: (payload: { url: string; title?: string; thumbUrl?: string; provider?: string; setId?: string }) => (
+    watchByUrl: (url: string) => apiFetch(`${ROOT}/watches?url=${encodeURIComponent(url)}`) as Promise<{
+        ok?: boolean;
+        watch: PosterSetsWatch | null;
+        watches?: PosterSetsWatch[];
+        stats?: PosterSetsWatchStats;
+    }>,
+    addWatch: (payload: {
+        url: string;
+        title?: string;
+        user?: string;
+        thumbUrl?: string;
+        provider?: string;
+        setId?: string;
+        mediuxFilters?: string[];
+    }) => (
         apiFetch(`${ROOT}/watches`, json(payload)) as Promise<{ ok: boolean; watch: PosterSetsWatch }>
     ),
+    patchWatch: (id: string, patch: {
+        mediuxFilters?: string[];
+        enabled?: boolean;
+        title?: string;
+        user?: string;
+        thumbUrl?: string;
+    }) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+    }) as Promise<{ ok: boolean; watch: PosterSetsWatch }>,
     toggleWatch: (id: string, enabled?: boolean) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}/toggle`, json(
         enabled === undefined ? {} : { enabled },
     )) as Promise<{ ok: boolean; watch: PosterSetsWatch }>,
@@ -212,10 +239,15 @@ export const posterSetsApi = {
         ok: boolean;
         checked?: number;
         queued?: number;
+        assetsQueued?: number;
         errors?: Array<{ id: string; error: string }>;
     }>,
     deleteWatch: (id: string) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
     }) as Promise<{ ok: boolean; watch: PosterSetsWatch }>,
+    audit: (limit = 100) => apiFetch(`${ROOT}/audit?limit=${encodeURIComponent(String(limit))}`) as Promise<{
+        ok?: boolean;
+        entries: PosterSetsAuditEntry[];
+    }>,
 };

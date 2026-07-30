@@ -59,7 +59,7 @@ import {
     selectMediaAdapter,
     spawnCommand,
 } from './lib/media-automation/index.js';
-import { createPosterSetsRouter, startPosterSetsWatcher } from './lib/poster-sets/index.js';
+import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest } from './lib/poster-sets/index.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
 const resolveAppVersion = () => {
@@ -22036,6 +22036,10 @@ app.listen(PORT, BIND_HOST, async () => {
     startScannerWorker(async () => scannerPortalConfig(await loadFile(CONFIG_PATH, {})));
     void refreshScannerAuthCache();
     try {
+        setPosterSetsNotifyDigest(async ({ title, message }) => {
+            const config = await loadFile(CONFIG_PATH, {});
+            await sendGotifyAlert(config, title || 'Poster Sets watcher', message || '');
+        });
         startPosterSetsWatcher();
         log('[poster-sets] Watcher scheduled');
     } catch (error) {

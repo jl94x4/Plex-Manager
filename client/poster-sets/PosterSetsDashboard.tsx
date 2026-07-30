@@ -37,6 +37,7 @@ import { posterSetsApi } from './api';
 import {
     DEFAULT_POSTER_SETS_CONFIG,
     MEDIUX_FILTER_OPTIONS,
+    type PosterSetsAuditEntry,
     type PosterSetsConfig,
     type PosterSetsJob,
     type PosterSetsPreview,
@@ -53,6 +54,7 @@ import {
 const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
 const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
 const SEARCH_SETS_PAGE_SIZE = 24;
+const ALL_MEDIUX_FILTER_IDS = MEDIUX_FILTER_OPTIONS.map((option) => option.id);
 
 const cardClass = 'glass-card shadow-xl';
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
@@ -60,9 +62,18 @@ const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounde
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 
 type TabId = 'apply' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
-type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed';
+type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed' | 'audit';
 type SetProvider = 'mediux' | 'posterdb';
 type SearchProvider = 'both' | SetProvider;
+
+type BulkSetSelection = {
+    url: string;
+    title?: string | null;
+    user?: string | null;
+    thumbUrl?: string;
+    provider?: string | null;
+    setId?: string | null;
+};
 
 const providerLabel = (provider?: string | null) => {
     const value = String(provider || '').toLowerCase();
@@ -78,11 +89,19 @@ const MAX_RECENT_SETS = 10;
 type RecentSetChip = {
     url: string;
     title: string;
+    user?: string | null;
     provider: string | null;
     setId: string | null;
     thumbUrl: string;
     assetCount: number | null;
     at: string;
+};
+
+const formatSetLabel = (meta?: { title?: string | null; user?: string | null } | null) => {
+    const title = String(meta?.title || '').trim();
+    const user = String(meta?.user || '').trim().replace(/^@/, '');
+    if (!title) return user ? `@${user}` : '';
+    return user ? `${title} · @${user}` : title;
 };
 
 const listToText = (value: string[] | undefined) => (Array.isArray(value) ? value.join('\n') : '');
@@ -135,6 +154,7 @@ const upsertRecentSet = (meta: PosterSetsSetMeta | null | undefined, fallbackUrl
     const next: RecentSetChip = {
         url,
         title: String(meta?.title || (ref.setId ? `Set ${ref.setId}` : 'Poster set')).trim() || 'Poster set',
+        user: meta?.user != null ? String(meta.user).trim().replace(/^@/, '') || null : null,
         provider: meta?.provider || ref.provider,
         setId: meta?.setId != null ? String(meta.setId) : ref.setId,
         thumbUrl: String(meta?.thumbUrl || ''),
@@ -191,10 +211,8 @@ const jobCardTone = (job: PosterSetsJob) => {
 
 const jobTitle = (job: PosterSetsJob) => {
     const meta = jobSetMeta(job);
-    if (meta?.title) {
-        const user = String(meta.user || '').trim().replace(/^@/, '');
-        return user ? `${meta.title} · @${user}` : meta.title;
-    }
+    const labeled = formatSetLabel(meta);
+    if (labeled) return labeled;
     const input = job.input;
     if (input?.url) return input.url;
     if (input?.fromFile) {
@@ -263,12 +281,14 @@ export const PosterSetsDashboard: React.FC = () => {
     const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
     const [historySearch, setHistorySearch] = useState('');
     const [selectedHistoryJob, setSelectedHistoryJob] = useState<PosterSetsJob | null>(null);
+    const [auditEntries, setAuditEntries] = useState<PosterSetsAuditEntry[]>([]);
     const [queueJobs, setQueueJobs] = useState<PosterSetsJob[]>([]);
     const [queuePaused, setQueuePaused] = useState(false);
     const [queueStats, setQueueStats] = useState<PosterSetsQueueStats>({});
     const [watches, setWatches] = useState<PosterSetsWatch[]>([]);
     const [watchStatsState, setWatchStatsState] = useState<PosterSetsWatchStats>({});
     const [watchUrlDraft, setWatchUrlDraft] = useState('');
+    const [selectedBulkSets, setSelectedBulkSets] = useState<Record<string, BulkSetSelection>>({});
 
     const loadHistory = useCallback(async () => {
         try {
@@ -276,6 +296,15 @@ export const PosterSetsDashboard: React.FC = () => {
             setHistoryJobs(response.jobs || []);
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load job history', 'error');
+        }
+    }, [toast]);
+
+    const loadAudit = useCallback(async () => {
+        try {
+            const response = await posterSetsApi.audit();
+            setAuditEntries(response.entries || []);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to load audit log', 'error');
         }
     }, [toast]);
 
@@ -618,6 +647,202 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
+    const applyUnmatched = async () => {
+        const assets = preview?.assets || [];
+        const unmatchedIds = assets.filter((asset) => asset.matched === false).map((asset) => asset.id);
+        if (!unmatchedIds.length) {
+            toast('No unmatched posters to queue.', 'error');
+            return;
+        }
+        setSelectedAssetIds(unmatchedIds);
+        const ok = await askConfirm(
+            `Queue ${unmatchedIds.length} unmatched poster${unmatchedIds.length === 1 ? '' : 's'} for apply?`,
+            {
+                title: 'Queue unmatched?',
+                confirmLabel: 'Add to queue',
+                cancelLabel: 'Cancel',
+            },
+        );
+        if (!ok) return;
+        setBusy('apply');
+        try {
+            const target = url.trim();
+            const response = await posterSetsApi.apply(target, unmatchedIds, currentSetMeta());
+            setActiveJob(response.job);
+            upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
+            setRecentTick((value) => value + 1);
+            await loadQueue();
+            dismissPreviewToSearch();
+            toast(queuePaused
+                ? `Queued ${unmatchedIds.length} unmatched poster${unmatchedIds.length === 1 ? '' : 's'} (queue paused).`
+                : `Queued ${unmatchedIds.length} unmatched poster${unmatchedIds.length === 1 ? '' : 's'}.`);
+            await loadHistory();
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const applyNewSinceWatch = async () => {
+        const target = url.trim();
+        if (!target) {
+            toast('Preview a set URL first.', 'error');
+            return;
+        }
+        const assets = preview?.assets || [];
+        if (!assets.length) {
+            toast('No preview assets available.', 'error');
+            return;
+        }
+        setBusy('apply');
+        let newIds: string[] = [];
+        try {
+            let watch = watches.find((entry) => String(entry.url || '').trim() === target) || null;
+            if (!watch) {
+                const response = await posterSetsApi.watchByUrl(target);
+                watch = response.watch || null;
+            }
+            const known = watch?.knownAssetIds;
+            if (!watch || !Array.isArray(known)) {
+                toast('Pin a watch on this set first, then try again.', 'error');
+                return;
+            }
+            const knownSet = new Set(known.map((id) => String(id)));
+            newIds = assets
+                .map((asset) => asset.id)
+                .filter((id) => id && !knownSet.has(String(id)));
+            if (!newIds.length) {
+                toast('No new assets since this watch was last checked.', 'error');
+                return;
+            }
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to check watch', 'error');
+            return;
+        } finally {
+            setBusy(null);
+        }
+
+        setSelectedAssetIds(newIds);
+        const ok = await askConfirm(
+            `Queue ${newIds.length} new poster${newIds.length === 1 ? '' : 's'} since watch?`,
+            {
+                title: 'Queue new since watch?',
+                confirmLabel: 'Add to queue',
+                cancelLabel: 'Cancel',
+            },
+        );
+        if (!ok) return;
+        setBusy('apply');
+        try {
+            const response = await posterSetsApi.apply(target, newIds, currentSetMeta());
+            setActiveJob(response.job);
+            upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
+            setRecentTick((value) => value + 1);
+            await loadQueue();
+            dismissPreviewToSearch();
+            toast(queuePaused
+                ? `Queued ${newIds.length} new poster${newIds.length === 1 ? '' : 's'} (queue paused).`
+                : `Queued ${newIds.length} new poster${newIds.length === 1 ? '' : 's'}.`);
+            await loadHistory();
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to queue new assets', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const toggleBulkSet = (entry: BulkSetSelection) => {
+        const key = String(entry.url || '').trim();
+        if (!key) return;
+        setSelectedBulkSets((prev) => {
+            const next = { ...prev };
+            if (next[key]) delete next[key];
+            else {
+                next[key] = {
+                    url: key,
+                    title: entry.title ?? null,
+                    user: entry.user ?? null,
+                    thumbUrl: entry.thumbUrl || '',
+                    provider: entry.provider ?? null,
+                    setId: entry.setId != null ? String(entry.setId) : null,
+                };
+            }
+            return next;
+        });
+    };
+
+    const clearBulkSelection = () => setSelectedBulkSets({});
+
+    const queueBulkSelected = async () => {
+        const entries = Object.values(selectedBulkSets);
+        if (!entries.length) return;
+        if (entries.length > 5) {
+            const ok = await askConfirm(`Queue ${entries.length} selected sets for apply?`, {
+                title: 'Queue selected sets?',
+                confirmLabel: 'Add to queue',
+                cancelLabel: 'Cancel',
+            });
+            if (!ok) return;
+        }
+        setBusy('bulk-select');
+        let queued = 0;
+        try {
+            for (const entry of entries) {
+                const setMeta: PosterSetsSetMeta = {
+                    url: entry.url,
+                    title: entry.title ?? null,
+                    user: entry.user ?? null,
+                    thumbUrl: entry.thumbUrl || '',
+                    provider: entry.provider ?? null,
+                    setId: entry.setId ?? null,
+                };
+                const response = await posterSetsApi.apply(entry.url, undefined, setMeta, 'bulk');
+                setActiveJob(response.job);
+                upsertRecentSet(jobSetMeta(response.job) || setMeta, entry.url);
+                queued += 1;
+            }
+            setRecentTick((value) => value + 1);
+            clearBulkSelection();
+            await loadQueue();
+            await loadHistory();
+            toast(queuePaused
+                ? `Queued ${queued} set${queued === 1 ? '' : 's'} (queue paused).`
+                : `Queued ${queued} set${queued === 1 ? '' : 's'}.`);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to queue selected sets', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const watchBulkSelected = async () => {
+        const entries = Object.values(selectedBulkSets);
+        if (!entries.length) return;
+        setBusy('bulk-watch');
+        let added = 0;
+        try {
+            for (const entry of entries) {
+                await posterSetsApi.addWatch({
+                    url: entry.url,
+                    title: entry.title || undefined,
+                    user: entry.user || undefined,
+                    thumbUrl: entry.thumbUrl || undefined,
+                    provider: entry.provider || undefined,
+                    setId: entry.setId || undefined,
+                });
+                added += 1;
+            }
+            clearBulkSelection();
+            await loadWatches();
+            toast(`Watching ${added} set${added === 1 ? '' : 's'}.`);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to watch selected sets', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
     const useFindId = async (andPreview: boolean) => {
         const built = buildSetUrl(findProvider, findId);
         if (!built) {
@@ -921,6 +1146,7 @@ export const PosterSetsDashboard: React.FC = () => {
             push({
                 url: urlValue,
                 title: String(meta?.title || (ref.setId ? `Set ${ref.setId}` : 'Poster set')),
+                user: meta?.user != null ? String(meta.user).trim().replace(/^@/, '') || null : null,
                 provider: meta?.provider || ref.provider,
                 setId: meta?.setId != null ? String(meta.setId) : ref.setId,
                 thumbUrl: String(meta?.thumbUrl || ''),
@@ -933,22 +1159,47 @@ export const PosterSetsDashboard: React.FC = () => {
             .slice(0, MAX_RECENT_SETS);
     }, [historyJobs, recentTick]);
 
-    const filteredHistory = historyJobs.filter((job) => {
-        const state = String(job.state || '').toLowerCase();
-        if (historyFilter === 'running') return ['running', 'queued'].includes(state);
-        if (historyFilter === 'succeeded') return ['succeeded', 'completed', 'success'].includes(state);
-        if (historyFilter === 'failed') return ['failed', 'error'].includes(state);
-        return true;
-    }).filter((job) => {
+    const selectedBulkCount = Object.keys(selectedBulkSets).length;
+    const previewHeaderLabel = formatSetLabel(preview?.setMeta)
+        || formatSetLabel(selectedSearchSet)
+        || selectedSearchSet?.title
+        || preview?.setMeta?.title
+        || 'Poster set';
+
+    const filteredHistory = historyFilter === 'audit'
+        ? []
+        : historyJobs.filter((job) => {
+            const state = String(job.state || '').toLowerCase();
+            if (historyFilter === 'running') return ['running', 'queued'].includes(state);
+            if (historyFilter === 'succeeded') return ['succeeded', 'completed', 'success'].includes(state);
+            if (historyFilter === 'failed') return ['failed', 'error'].includes(state);
+            return true;
+        }).filter((job) => {
+            if (!historySearch.trim()) return true;
+            const needle = historySearch.toLowerCase();
+            const haystack = [
+                job.id,
+                job.type,
+                job.state,
+                job.error,
+                jobTitle(job),
+                ...(job.input?.urls || []),
+            ].join(' ').toLowerCase();
+            return haystack.includes(needle);
+        });
+
+    const filteredAudit = auditEntries.filter((entry) => {
         if (!historySearch.trim()) return true;
         const needle = historySearch.toLowerCase();
         const haystack = [
-            job.id,
-            job.type,
-            job.state,
-            job.error,
-            jobTitle(job),
-            ...(job.input?.urls || []),
+            entry.id,
+            entry.action,
+            entry.source,
+            entry.state,
+            entry.error,
+            entry.jobId,
+            entry.url,
+            formatSetLabel(entry),
         ].join(' ').toLowerCase();
         return haystack.includes(needle);
     });
@@ -1016,7 +1267,10 @@ export const PosterSetsDashboard: React.FC = () => {
                         className={`${tab === id ? primaryButtonClass : buttonClass}`}
                         onClick={() => {
                             setTab(id);
-                            if (id === 'history') void loadHistory();
+                            if (id === 'history') {
+                                void loadHistory();
+                                if (historyFilter === 'audit') void loadAudit();
+                            }
                             if (id === 'queue') void loadQueue();
                             if (id === 'watches') void loadWatches();
                         }}
@@ -1349,6 +1603,48 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     {watch.lastError ? (
                                                         <p className="text-sm text-red-300">{watch.lastError}</p>
                                                     ) : null}
+                                                    <div className="pt-1">
+                                                        {provider === 'posterdb' ? (
+                                                            <p className="text-[11px] text-muted">TPDB has no title cards</p>
+                                                        ) : (
+                                                            <div className="flex flex-wrap gap-1.5">
+                                                                {MEDIUX_FILTER_OPTIONS.map((option) => {
+                                                                    const current = (watch.mediuxFilters?.length
+                                                                        ? watch.mediuxFilters
+                                                                        : ALL_MEDIUX_FILTER_IDS);
+                                                                    const active = current.includes(option.id);
+                                                                    return (
+                                                                        <button
+                                                                            key={option.id}
+                                                                            type="button"
+                                                                            className={`${active ? primaryButtonClass : buttonClass} !px-2 !py-1 text-[10px]`}
+                                                                            disabled={busy !== null}
+                                                                            onClick={async () => {
+                                                                                const base = watch.mediuxFilters?.length
+                                                                                    ? [...watch.mediuxFilters]
+                                                                                    : [...ALL_MEDIUX_FILTER_IDS];
+                                                                                const next = new Set(base);
+                                                                                if (next.has(option.id)) next.delete(option.id);
+                                                                                else next.add(option.id);
+                                                                                const mediuxFilters = ALL_MEDIUX_FILTER_IDS.filter((id) => next.has(id));
+                                                                                setBusy('watches');
+                                                                                try {
+                                                                                    await posterSetsApi.patchWatch(watch.id, { mediuxFilters });
+                                                                                    await loadWatches();
+                                                                                } catch (error) {
+                                                                                    toast(error instanceof Error ? error.message : 'Failed to update filters', 'error');
+                                                                                } finally {
+                                                                                    setBusy(null);
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            {option.label}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                     {watch.url ? (
                                                         <a
                                                             href={watch.url}
@@ -1462,11 +1758,36 @@ export const PosterSetsDashboard: React.FC = () => {
                     </div>
                     {recentSets.length ? (
                         <div className={posterGridClass} style={posterGridStyle}>
-                            {recentSets.map((item) => (
+                            {recentSets.map((item) => {
+                                const label = formatSetLabel(item) || item.title;
+                                const bulkSelected = Boolean(selectedBulkSets[item.url]);
+                                return (
                                 <div
                                     key={item.url}
-                                    className="overflow-hidden rounded-2xl border border-white/10 bg-black/20"
+                                    className={`relative overflow-hidden rounded-2xl border bg-black/20 ${
+                                        bulkSelected ? 'border-plex/50 ring-1 ring-plex/30' : 'border-white/10'
+                                    }`}
                                 >
+                                    <label
+                                        className="absolute left-2 top-2 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-black/60"
+                                        onClick={(event) => event.stopPropagation()}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            className="h-3.5 w-3.5 accent-[var(--plex,#e5a00d)]"
+                                            checked={bulkSelected}
+                                            onChange={() => toggleBulkSet({
+                                                url: item.url,
+                                                title: item.title,
+                                                user: item.user,
+                                                thumbUrl: item.thumbUrl,
+                                                provider: item.provider,
+                                                setId: item.setId,
+                                            })}
+                                            onClick={(event) => event.stopPropagation()}
+                                            aria-label={`Select ${label}`}
+                                        />
+                                    </label>
                                     <button
                                         type="button"
                                         className="block w-full text-left"
@@ -1477,19 +1798,20 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 title: item.title,
                                                 url: item.url,
                                                 thumbUrl: item.thumbUrl,
+                                                user: item.user,
                                                 provider: item.provider || undefined,
                                                 posterCount: item.assetCount,
                                             });
                                             setTab('apply');
                                             void runPreview(item.url);
                                         }}
-                                        title={`Preview ${item.title}`}
+                                        title={`Preview ${label}`}
                                     >
                                         <div className="relative aspect-[2/3] bg-black/40">
                                             {item.thumbUrl ? (
                                                 <img
                                                     src={posterSetsApi.imageUrl(item.thumbUrl)}
-                                                    alt={item.title}
+                                                    alt={label}
                                                     loading="lazy"
                                                     className="h-full w-full object-cover"
                                                 />
@@ -1498,12 +1820,12 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     <ImageIcon className="h-8 w-8 opacity-40" />
                                                 </div>
                                             )}
-                                            <span className="absolute left-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text">
+                                            <span className="absolute right-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text">
                                                 {providerLabel(item.provider)}
                                             </span>
                                         </div>
                                         <div className="space-y-1 p-3">
-                                            <p className="truncate text-sm font-semibold text-text" title={item.title}>{item.title}</p>
+                                            <p className="truncate text-sm font-semibold text-text" title={label}>{label}</p>
                                             <p className="truncate text-[11px] text-muted">
                                                 {item.setId ? `#${item.setId}` : 'Set'}
                                                 {item.assetCount ? ` · ${item.assetCount} assets` : ''}
@@ -1521,6 +1843,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     title: item.title,
                                                     url: item.url,
                                                     thumbUrl: item.thumbUrl,
+                                                    user: item.user,
                                                     provider: item.provider || undefined,
                                                     posterCount: item.assetCount,
                                                 });
@@ -1545,7 +1868,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                         </button>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     ) : (
                         <p className="rounded-xl border border-white/10 bg-black/20 p-5 text-sm text-muted">
@@ -1682,7 +2006,10 @@ export const PosterSetsDashboard: React.FC = () => {
                                     ) : null}
                                     {selectedSearchSet ? (
                                         <span className="inline-flex items-center gap-1.5 rounded-full border border-plex/30 bg-plex/10 px-2.5 py-1 text-plex">
-                                            {selectedSearchSet.title || `Set #${selectedSearchSet.setId}`}
+                                            {formatSetLabel(preview?.setMeta)
+                                                || formatSetLabel(selectedSearchSet)
+                                                || selectedSearchSet.title
+                                                || `Set #${selectedSearchSet.setId}`}
                                             <button
                                                 type="button"
                                                 className="rounded-full p-0.5 text-plex/80 hover:bg-plex/20 hover:text-plex"
@@ -1789,24 +2116,52 @@ export const PosterSetsDashboard: React.FC = () => {
                                         ) : null}
                                     </div>
                                     <div className={posterGridClass} style={posterGridStyle}>
-                                        {pagedSearchSets.map((set) => (
-                                            <button
+                                        {pagedSearchSets.map((set) => {
+                                            const setLabel = formatSetLabel(set) || set.title || `Set #${set.setId}`;
+                                            const bulkSelected = Boolean(selectedBulkSets[set.url]);
+                                            return (
+                                            <div
                                                 key={`${set.provider || findProvider}-${set.setId}`}
-                                                type="button"
-                                                className={`overflow-hidden rounded-2xl border text-left transition ${
+                                                className={`relative overflow-hidden rounded-2xl border text-left transition ${
                                                     selectedSearchSet?.setId === set.setId
                                                     && (selectedSearchSet?.provider || '') === (set.provider || '')
                                                         ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/30'
-                                                        : 'border-white/10 bg-black/20 hover:border-plex/40'
+                                                        : bulkSelected
+                                                            ? 'border-plex/40 bg-black/20 ring-1 ring-plex/20'
+                                                            : 'border-white/10 bg-black/20 hover:border-plex/40'
                                                 }`}
-                                                disabled={busy !== null && busy !== 'preview'}
-                                                onClick={() => void pickSearchSet(set)}
                                             >
+                                                <label
+                                                    className="absolute left-2 top-2 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-black/60"
+                                                    onClick={(event) => event.stopPropagation()}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        className="h-3.5 w-3.5 accent-[var(--plex,#e5a00d)]"
+                                                        checked={bulkSelected}
+                                                        onChange={() => toggleBulkSet({
+                                                            url: set.url,
+                                                            title: set.title,
+                                                            user: set.user,
+                                                            thumbUrl: set.thumbUrl,
+                                                            provider: set.provider,
+                                                            setId: set.setId,
+                                                        })}
+                                                        onClick={(event) => event.stopPropagation()}
+                                                        aria-label={`Select ${setLabel}`}
+                                                    />
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    className="block w-full text-left"
+                                                    disabled={busy !== null && busy !== 'preview'}
+                                                    onClick={() => void pickSearchSet(set)}
+                                                >
                                                 <div className="relative aspect-[2/3] bg-black/40">
                                                     {set.thumbUrl ? (
                                                         <img
                                                             src={posterSetsApi.imageUrl(set.thumbUrl)}
-                                                            alt={set.title}
+                                                            alt={setLabel}
                                                             className="h-full w-full object-cover"
                                                             loading="lazy"
                                                         />
@@ -1822,20 +2177,19 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     ) : null}
                                                 </div>
                                                 <div className="space-y-1 p-3">
-                                                    <p className="truncate text-sm font-semibold text-text" title={set.title}>{set.title}</p>
+                                                    <p className="truncate text-sm font-semibold text-text" title={setLabel}>{setLabel}</p>
                                                     <p className="truncate text-[11px] text-muted">
                                                         {providerLabel(set.provider)}
                                                         {set.alsoOn?.length
                                                             ? ` · also ${set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}`
                                                             : ''}
-                                                        {' · '}
-                                                        #{set.setId}
-                                                        {set.user ? ` · ${set.user}` : ''}
                                                         {set.posterCount ? ` · ${set.posterCount}` : ''}
                                                     </p>
                                                 </div>
-                                            </button>
-                                        ))}
+                                                </button>
+                                            </div>
+                                            );
+                                        })}
                                     </div>
                                     {searchSetsPageCount > 1 ? (
                                         <div className="flex items-center justify-center gap-2 pt-1">
@@ -1870,8 +2224,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div className="min-w-0">
                                             <p className="text-xs font-bold uppercase tracking-wide text-plex">3. Preview</p>
-                                            <h3 className="mt-1 truncate text-lg font-bold text-text">
-                                                {selectedSearchSet?.title || preview?.setMeta?.title || 'Poster set'}
+                                            <h3 className="mt-1 truncate text-lg font-bold text-text" title={previewHeaderLabel}>
+                                                {previewHeaderLabel}
                                             </h3>
                                             <p className="mt-1 text-sm text-muted">
                                                 <span className="text-emerald-300">{matchedAssetCount} matched</span>
@@ -1881,6 +2235,9 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 {preview?.total || 0} in set
                                                 {' · '}
                                                 {selectedAssetIds.length} selected
+                                            </p>
+                                            <p className="mt-1 text-xs text-muted">
+                                                Unmatched posters show the reason under each card.
                                             </p>
                                             <div className="mt-2 flex flex-wrap gap-3">
                                                 {searchSets.length ? (
@@ -1941,6 +2298,22 @@ export const PosterSetsDashboard: React.FC = () => {
                                     <div className="space-y-3 border-t border-white/10 pt-4">
                                         <div className="flex flex-wrap gap-2">
                                             <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('matched')}>Matched only</button>
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={busy !== null}
+                                                onClick={() => void applyUnmatched()}
+                                            >
+                                                Queue unmatched
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={busy !== null}
+                                                onClick={() => void applyNewSinceWatch()}
+                                            >
+                                                Queue new since watch
+                                            </button>
                                             <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('all')}>Select all</button>
                                             <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('none')}>Clear selection</button>
                                             <button
@@ -1965,7 +2338,9 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         className={`group overflow-hidden rounded-2xl border text-left transition ${
                                                             selected
                                                                 ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/40'
-                                                                : 'border-white/10 bg-black/20 hover:border-plex/35'
+                                                                : unmatched
+                                                                    ? 'border-amber-500/45 bg-amber-500/[0.06] hover:border-amber-400/60'
+                                                                    : 'border-white/10 bg-black/20 hover:border-plex/35'
                                                         }`}
                                                     >
                                                         <div className="relative aspect-[2/3] bg-black/40">
@@ -2156,9 +2531,13 @@ export const PosterSetsDashboard: React.FC = () => {
                 <div className="space-y-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                         <div>
-                            <h2 className="text-lg font-bold text-text">Job history</h2>
+                            <h2 className="text-lg font-bold text-text">
+                                {historyFilter === 'audit' ? 'Audit log' : 'Job history'}
+                            </h2>
                             <p className="mt-1 text-sm text-muted">
-                                Apply and bulk runs with logs. Recent jobs survive restarts.
+                                {historyFilter === 'audit'
+                                    ? 'Manual, watch, and bulk apply events with upload counts.'
+                                    : 'Apply and bulk runs with logs. Recent jobs survive restarts.'}
                             </p>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -2167,12 +2546,16 @@ export const PosterSetsDashboard: React.FC = () => {
                                 ['running', 'Running'],
                                 ['succeeded', 'Succeeded'],
                                 ['failed', 'Failed'],
+                                ['audit', 'Audit log'],
                             ] as const).map(([value, label]) => (
                                 <button
                                     key={value}
                                     type="button"
                                     className={`${buttonClass} ${historyFilter === value ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
-                                    onClick={() => setHistoryFilter(value)}
+                                    onClick={() => {
+                                        setHistoryFilter(value);
+                                        if (value === 'audit') void loadAudit();
+                                    }}
                                 >
                                     {label}
                                 </button>
@@ -2184,9 +2567,71 @@ export const PosterSetsDashboard: React.FC = () => {
                         className={fieldClass}
                         value={historySearch}
                         onChange={(event) => setHistorySearch(event.target.value)}
-                        placeholder="Search URL, job id, type…"
+                        placeholder={historyFilter === 'audit'
+                            ? 'Search title, source, job id…'
+                            : 'Search URL, job id, type…'}
                     />
 
+                    {historyFilter === 'audit' ? (
+                        <div className="space-y-2">
+                            {filteredAudit.map((entry) => {
+                                const label = formatSetLabel(entry) || entry.url || entry.action || 'Audit entry';
+                                const source = String(entry.source || 'manual').toLowerCase();
+                                return (
+                                    <article
+                                        key={entry.id}
+                                        className={`${cardClass} space-y-2 p-4 ${entry.jobId ? 'cursor-pointer transition hover:border-plex/40' : ''}`}
+                                        onClick={() => {
+                                            if (!entry.jobId) return;
+                                            void openHistoryJob(entry.jobId);
+                                            setHistoryFilter('all');
+                                        }}
+                                    >
+                                        <div className="flex flex-wrap items-start justify-between gap-3">
+                                            <div className="min-w-0 space-y-1">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                                                        source === 'watch'
+                                                            ? 'border-plex/40 bg-plex/15 text-plex'
+                                                            : source === 'bulk'
+                                                                ? 'border-sky-500/40 bg-sky-500/15 text-sky-200'
+                                                                : 'border-white/10 bg-white/5 text-muted'
+                                                    }`}>
+                                                        {source}
+                                                    </span>
+                                                    {entry.state ? <StatusPill value={entry.state} /> : null}
+                                                </div>
+                                                <p className="truncate font-semibold text-text" title={label}>{label}</p>
+                                                {entry.jobId ? (
+                                                    <p className="font-mono text-xs text-muted">job #{entry.jobId.slice(0, 8)}</p>
+                                                ) : null}
+                                            </div>
+                                            <time className="shrink-0 text-xs text-muted" dateTime={entry.at || undefined}>
+                                                {formatTime(entry.at)}
+                                            </time>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 text-[11px] text-muted">
+                                            {typeof entry.uploaded === 'number' ? (
+                                                <span className="text-emerald-300">
+                                                    Uploaded {entry.uploaded}
+                                                    {typeof entry.attempted === 'number' ? ` / ${entry.attempted}` : ''}
+                                                </span>
+                                            ) : null}
+                                            {typeof entry.selectedCount === 'number' ? (
+                                                <span>{entry.selectedCount} selected</span>
+                                            ) : null}
+                                            {entry.error ? <span className="text-red-300">{entry.error}</span> : null}
+                                        </div>
+                                    </article>
+                                );
+                            })}
+                            {!filteredAudit.length ? (
+                                <p className={`${cardClass} p-5 text-sm text-muted`}>
+                                    No audit entries yet. Applies and watch checks will appear here.
+                                </p>
+                            ) : null}
+                        </div>
+                    ) : (
                     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                         <div className="space-y-2">
                             {filteredHistory.map((job) => {
@@ -2320,6 +2765,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             )}
                         </section>
                     </div>
+                    )}
                 </div>
             ) : null}
 
@@ -2449,6 +2895,12 @@ export const PosterSetsDashboard: React.FC = () => {
                             description="After a successful apply from a set URL, pin that set so future new art is queued automatically."
                             checked={configDraft.autoWatchOnApply !== false}
                             onChange={(next) => setConfigDraft((prev) => ({ ...prev, autoWatchOnApply: next }))}
+                        />
+                        <SettingsToggleRow
+                            title="Gotify digest when watchers queue new art"
+                            description="Send a digest notification when set watchers enqueue new posters."
+                            checked={configDraft.notifyOnWatcherDigest !== false}
+                            onChange={(next) => setConfigDraft((prev) => ({ ...prev, notifyOnWatcherDigest: next }))}
                             border={false}
                         />
                     </div>
@@ -2479,6 +2931,39 @@ export const PosterSetsDashboard: React.FC = () => {
                     </div>
                     {testResult ? <p className="text-sm text-muted">{testResult}</p> : null}
                 </section>
+            ) : null}
+            {selectedBulkCount > 0 ? (
+                <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-plex/40 bg-card/95 p-3 shadow-lg backdrop-blur">
+                    <span className="text-sm font-semibold text-text">
+                        {selectedBulkCount} selected
+                    </span>
+                    <button
+                        type="button"
+                        className={primaryButtonClass}
+                        disabled={busy !== null}
+                        onClick={() => void queueBulkSelected()}
+                    >
+                        {busy === 'bulk-select' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListOrdered className="h-4 w-4" />}
+                        Queue selected
+                    </button>
+                    <button
+                        type="button"
+                        className={buttonClass}
+                        disabled={busy !== null}
+                        onClick={() => void watchBulkSelected()}
+                    >
+                        {busy === 'bulk-watch' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+                        Watch selected
+                    </button>
+                    <button
+                        type="button"
+                        className={buttonClass}
+                        disabled={busy !== null}
+                        onClick={clearBulkSelection}
+                    >
+                        Clear
+                    </button>
+                </div>
             ) : null}
         </div>
     );

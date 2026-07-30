@@ -269,6 +269,15 @@ def parse_string_to_dict(input_string: str) -> dict:
     return json.loads(json_data)
 
 
+def _library_titles(libraries) -> str:
+    names = []
+    for lib in libraries or []:
+        title = getattr(lib, "title", None) or str(lib)
+        if title:
+            names.append(str(title))
+    return ", ".join(names) if names else "configured libraries"
+
+
 def find_in_library(library, poster):
     items = []
     for lib in library:
@@ -825,44 +834,64 @@ def build_set_meta(
 def match_show_target(tv_show, poster: dict) -> Tuple[bool, str]:
     season = poster.get("season")
     episode = poster.get("episode")
+    section = getattr(tv_show, "librarySectionTitle", None) or "library"
     try:
         if season == "Cover" or season == "Backdrop":
-            return True, tv_show.librarySectionTitle
+            return True, section
         if season == 0:
-            season_obj = tv_show.season("Specials")
+            try:
+                season_obj = tv_show.season("Specials")
+            except Exception:
+                return False, f"Specials season not in library ({section})"
             if episode == "Cover" or episode is None:
-                return True, f"{tv_show.librarySectionTitle} · Specials"
-            season_obj.episode(episode)
-            return True, f"{tv_show.librarySectionTitle} · Specials E{episode}"
+                return True, f"{section} · Specials"
+            try:
+                season_obj.episode(episode)
+                return True, f"{section} · Specials E{episode}"
+            except Exception:
+                return False, f"Specials E{episode} not in library ({section})"
         if isinstance(season, int) and season >= 1:
-            season_obj = tv_show.season(season)
+            try:
+                season_obj = tv_show.season(season)
+            except Exception:
+                return False, f"Season {season} not in library ({section})"
             if episode == "Cover" or episode is None:
-                return True, f"{tv_show.librarySectionTitle} · Season {season}"
-            season_obj.episode(episode)
-            return True, f"{tv_show.librarySectionTitle} · S{season}E{episode}"
-        return False, "Unhandled season target"
+                return True, f"{section} · Season {season}"
+            try:
+                season_obj.episode(episode)
+                return True, f"{section} · S{season}E{episode}"
+            except Exception:
+                return False, f"S{season}E{episode} not in library ({section})"
+        return False, f"Unhandled season target ({season!r})"
     except Exception:
-        if isinstance(episode, int):
-            return False, f"S{season}E{episode} not in library"
+        if isinstance(episode, int) and isinstance(season, int):
+            return False, f"S{season}E{episode} not in library ({section})"
         if isinstance(season, int):
-            return False, f"Season {season} not in library"
-        return False, "Target not in library"
+            return False, f"Season {season} not in library ({section})"
+        return False, f"Target not in library ({section})"
 
 
 def match_poster(kind: str, poster: dict, tv, movies) -> Tuple[bool, str]:
+    title = str(poster.get("title") or "Untitled").strip() or "Untitled"
+    year = poster.get("year")
+    title_year = f"{title} ({year})" if year is not None else title
     if kind == "movie":
         items = find_in_library(movies, poster)
         if not items:
-            return False, "Not found in movie libraries"
+            libs = _library_titles(movies)
+            year_note = f"; tried year {year}" if year is not None else ""
+            return False, f"{title_year} not found in movie libraries ({libs}){year_note}"
         return True, items[0].librarySectionTitle
     if kind == "collection":
         items = find_collection(movies, poster)
         if not items:
-            return False, "Collection not found"
+            libs = _library_titles(movies)
+            return False, f"Collection “{title}” not found ({libs})"
         return True, items[0].librarySectionTitle
     items = find_in_library(tv, poster)
     if not items:
-        return False, "Not found in TV libraries"
+        libs = _library_titles(tv)
+        return False, f"{title_year} not found in TV libraries ({libs})"
     matched_any = False
     detail = ""
     for show in items:
@@ -870,7 +899,7 @@ def match_poster(kind: str, poster: dict, tv, movies) -> Tuple[bool, str]:
         if ok:
             matched_any = True
             break
-    return matched_any, detail or "Show found, target missing"
+    return matched_any, detail or f"{title_year} found, season/episode target missing"
 
 
 def build_preview_assets(movieposters, showposters, collectionposters, tv=None, movies=None) -> List[dict]:

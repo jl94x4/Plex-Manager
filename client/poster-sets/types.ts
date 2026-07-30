@@ -12,6 +12,7 @@ export type PosterSetsConfig = {
     watchersEnabled?: boolean;
     watchIntervalHours?: number;
     autoWatchOnApply?: boolean;
+    notifyOnWatcherDigest?: boolean;
     hasToken?: boolean;
     configured?: boolean;
 };
@@ -64,6 +65,7 @@ export type PosterSetsJobInput = {
     setMeta?: PosterSetsSetMeta | null;
     watchId?: string | null;
     mediuxFilters?: string[];
+    source?: 'manual' | 'watch' | 'bulk' | string;
 };
 
 export type PosterSetsQueueStats = {
@@ -217,6 +219,23 @@ export type PosterSetsSearchResult = {
     code?: string;
 };
 
+export type PosterSetsAuditEntry = {
+    id: string;
+    at?: string;
+    action?: string;
+    source?: 'manual' | 'watch' | 'bulk' | string;
+    url?: string | null;
+    title?: string | null;
+    user?: string | null;
+    watchId?: string | null;
+    jobId?: string | null;
+    uploaded?: number | null;
+    attempted?: number | null;
+    selectedCount?: number | null;
+    state?: string | null;
+    error?: string | null;
+};
+
 export const MEDIUX_FILTER_OPTIONS = [
     { id: 'show_cover', label: 'Show cover' },
     { id: 'season_cover', label: 'Season cover' },
@@ -236,4 +255,5 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     watchersEnabled: true,
     watchIntervalHours: 6,
     autoWatchOnApply: true,
+    notifyOnWatcherDigest: true,
 };
