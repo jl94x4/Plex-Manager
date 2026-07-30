@@ -19,7 +19,11 @@ from urllib.parse import quote, unquote
 import plexapi.exceptions
 import requests
 from bs4 import BeautifulSoup
-from plexapi.server import PlexServer
+
+from plex_identity import configure_plex_identity
+
+configure_plex_identity()
+from plexapi.server import PlexServer  # noqa: E402 — after identity patch
 
 ProgressFn = Optional[Callable[[str], None]]
 BatchFn = Optional[Callable[[dict], None]]
@@ -188,6 +192,7 @@ def normalize_library_list(value: Any) -> List[str]:
 
 
 def connect_plex(config: dict, progress: ProgressFn = None) -> Tuple[list, list, PlexServer]:
+    configure_plex_identity()
     base_url = str(config.get("base_url") or "").strip()
     token = str(config.get("token") or "").strip()
     if not base_url or not token:

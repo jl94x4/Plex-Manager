@@ -8467,7 +8467,7 @@ app.post('/api/setup/import-seerr', setupRateLimit, async (req, res) => {
                         Accept: 'application/json',
                         'X-Plex-Token': plexToken,
                         'X-Plex-Product': 'Server Manager Portal',
-                        'X-Plex-Client-Identifier': process.env.CLIENT_ID || 'server-manager-portal',
+                        'X-Plex-Client-Identifier': CLIENT_ID,
                     },
                 }, 10000).then((r) => (r.ok ? r.json() : null)).catch(() => null);
                 if (account?.id != null) fallbackUserId = String(account.id);
@@ -21990,6 +21990,15 @@ app.listen(PORT, BIND_HOST, async () => {
             await saveFile(CONFIG_PATH, config);
         }
     }
+    // Publish identity to process.env so every Python/child worker (Collexions, Poster Sets)
+    // inherits the same durable Plex client — never the Docker hostname/MAC.
+    process.env.CLIENT_ID = CLIENT_ID;
+    process.env.PLEX_CLIENT_IDENTIFIER = CLIENT_ID;
+    process.env.PLEXAPI_HEADER_IDENTIFIER = CLIENT_ID;
+    process.env.PLEXAPI_HEADER_PRODUCT = 'Server Manager Portal';
+    process.env.PLEXAPI_HEADER_DEVICE = 'Server';
+    process.env.PLEXAPI_HEADER_DEVICE_NAME = 'Server Manager Portal';
+    process.env.PLEXAPI_HEADER_PLATFORM = 'Server Manager Portal';
     log(`Plex client identity: product=Server Manager Portal clientId=${String(CLIENT_ID).slice(0, 8)}…`);
     await syncAdminPlexIdFromConfigToken(config, { persist: true });
 
