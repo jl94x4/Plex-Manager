@@ -56,7 +56,11 @@ def main() -> int:
             url = str(request.get("url") or "").strip()
             if not url:
                 raise ValueError("url is required")
-            result = preview_url(url, config, progress=progress)
+            filters = request.get("mediuxFilters") or request.get("mediux_filters")
+            preview_config = {**config}
+            if isinstance(filters, list) and filters:
+                preview_config["mediux_filters"] = filters
+            result = preview_url(url, preview_config, progress=progress)
             write_event(
                 "result",
                 ok=True,

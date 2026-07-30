@@ -107,7 +107,10 @@ export const posterSetsApi = {
         logs?: string[];
         error?: string;
     }>,
-    preview: (url: string) => apiFetch(`${ROOT}/preview`, json({ url })) as Promise<PosterSetsPreview>,
+    preview: (url: string, options?: { mediuxFilters?: string[] }) => apiFetch(`${ROOT}/preview`, json({
+        url,
+        ...(options?.mediuxFilters?.length ? { mediuxFilters: options.mediuxFilters } : {}),
+    })) as Promise<PosterSetsPreview>,
     search: (payload: PosterSetsSearchPayload) => (
         apiFetch(`${ROOT}/search`, json(payload)) as Promise<PosterSetsSearchResult>
     ),

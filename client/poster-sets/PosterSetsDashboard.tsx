@@ -35,6 +35,7 @@ import {
 import {
     normalizeUpgraderGridSize,
     UPGRADER_GRID_SIZE_OPTIONS,
+    upgraderLandscapeGridStyle,
     upgraderPosterGridClass,
     upgraderPosterGridStyle,
     type UpgraderGridSize,
@@ -76,6 +77,7 @@ const WATCHES_PAGE_SIZE_OPTIONS = [
     { value: '100', label: '100 per page' },
 ] as const;
 const ALL_MEDIUX_FILTER_IDS = MEDIUX_FILTER_OPTIONS.map((option) => option.id);
+const TITLE_CARD_ONLY_FILTERS = ['title_card'];
 
 const cardClass = 'glass-card shadow-xl';
 const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
@@ -316,6 +318,13 @@ const isTitleCardSet = (set?: { title?: string | null; setKind?: string | null }
     return /(title\s*cards?|episode\s*cards?|cover\s*style)/i.test(String(set?.title || ''));
 };
 
+const isTitleCardRail = (rail?: PosterSetsBrowseRail | null) => {
+    if (!rail) return false;
+    if (rail.id === 'mediux_title_cards') return true;
+    const sample = rail.sets.slice(0, 8);
+    return sample.length > 0 && sample.every((set) => isTitleCardSet(set));
+};
+
 const SetKindPill: React.FC<{ set?: { title?: string | null; setKind?: string | null } | null }> = ({ set }) => {
     const kind = String(set?.setKind || '').trim().toLowerCase();
     if (kind === 'boxset') {
@@ -369,12 +378,10 @@ function BrowseSetCard({
             </div>
             <div className="space-y-1.5 p-2 sm:p-2.5">
                 <p className="line-clamp-2 text-xs font-semibold text-text sm:text-sm" title={setTitle}>{setTitle}</p>
-                <div className="flex flex-col items-start gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                     <CreatorPill user={set.user} />
-                    <div className="flex flex-wrap items-center gap-1">
-                        <SetKindPill set={set} />
-                        <ProviderPill provider={set.provider} />
-                    </div>
+                    <SetKindPill set={set} />
+                    <ProviderPill provider={set.provider} />
                 </div>
             </div>
         </button>
@@ -543,7 +550,9 @@ export const PosterSetsDashboard: React.FC = () => {
     }, []);
 
     const initialLocation = useMemo(
-        () => (typeof window !== 'undefined' ? parsePosterSetsUrl() : { tab: 'apply' as TabId, rail: null, setUrl: null }),
+        () => (typeof window !== 'undefined'
+            ? parsePosterSetsUrl()
+            : { tab: 'apply' as TabId, rail: null, setUrl: null, titleCardsOnly: false }),
         [],
     );
     const [tab, setTab] = useState<TabId>(initialLocation.tab);
@@ -553,6 +562,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const [tvText, setTvText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.tv_library));
     const [movieText, setMovieText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.movie_library));
     const [url, setUrl] = useState(initialLocation.setUrl || '');
+    const [titleCardsOnly, setTitleCardsOnly] = useState(Boolean(initialLocation.titleCardsOnly));
     const [bulkText, setBulkText] = useState('');
     const [findProvider, setFindProvider] = useState<SetProvider>('mediux');
     const [findId, setFindId] = useState('');
@@ -599,6 +609,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const [browseSeeAllId, setBrowseSeeAllId] = useState<string | null>(initialLocation.rail);
     const scrollPreviewAfterLoadRef = useRef(false);
     const syncedSetUrlRef = useRef<string | null>(initialLocation.setUrl);
+    const titleCardsOnlyRef = useRef(Boolean(initialLocation.titleCardsOnly));
     const deepLinkHandledRef = useRef(false);
 
     const loadHistory = useCallback(async () => {
@@ -658,8 +669,9 @@ export const PosterSetsDashboard: React.FC = () => {
         setPreview(null);
         setSelectedSearchSet(null);
         setSelectedAssetIds([]);
+        setTitleCardsOnly(false);
         syncedSetUrlRef.current = null;
-        writePosterSetsUrl({ tab: 'apply', rail: null, setUrl: null }, 'replace');
+        writePosterSetsUrl({ tab: 'apply', rail: null, setUrl: null, titleCardsOnly: false }, 'replace');
         requestAnimationFrame(() => {
             searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
@@ -667,6 +679,9 @@ export const PosterSetsDashboard: React.FC = () => {
 
     const pushPosterLocation = useCallback((next: PosterSetsUrlState, mode: 'push' | 'replace' = 'push') => {
         syncedSetUrlRef.current = next.tab === 'apply' ? next.setUrl : null;
+        const nextTitleCards = Boolean(next.tab === 'apply' && next.titleCardsOnly && next.setUrl);
+        titleCardsOnlyRef.current = nextTitleCards;
+        setTitleCardsOnly(nextTitleCards);
         writePosterSetsUrl(next, mode);
     }, []);
 
@@ -677,11 +692,14 @@ export const PosterSetsDashboard: React.FC = () => {
         else setBrowseSeeAllId(null);
         if (id !== 'apply') {
             syncedSetUrlRef.current = null;
+            titleCardsOnlyRef.current = false;
+            setTitleCardsOnly(false);
         }
         pushPosterLocation({
             tab: id,
             rail,
             setUrl: null,
+            titleCardsOnly: false,
         }, options?.mode || 'push');
         if (id === 'history') {
             void loadHistory();
@@ -695,7 +713,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const openBrowseRail = useCallback((railId: string | null) => {
         setTab('browse');
         setBrowseSeeAllId(railId);
-        pushPosterLocation({ tab: 'browse', rail: railId, setUrl: null }, 'push');
+        pushPosterLocation({ tab: 'browse', rail: railId, setUrl: null, titleCardsOnly: false }, 'push');
     }, [pushPosterLocation]);
 
     const currentSetMeta = useCallback((): PosterSetsSetMeta | null => {
@@ -910,18 +928,27 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
-    const runPreview = async (overrideUrl?: string, options?: { scroll?: boolean; keepSearch?: boolean }) => {
+    const runPreview = async (overrideUrl?: string, options?: {
+        scroll?: boolean;
+        keepSearch?: boolean;
+        titleCardsOnly?: boolean;
+    }) => {
         const target = String(overrideUrl ?? url).trim();
         if (!target) {
             toast('Paste a MediUX or ThePosterDB set URL first.', 'error');
             return null;
         }
         if (overrideUrl) setUrl(target);
+        const restrictTitleCards = options?.titleCardsOnly ?? titleCardsOnly;
+        titleCardsOnlyRef.current = Boolean(restrictTitleCards);
+        setTitleCardsOnly(Boolean(restrictTitleCards));
         setBusy('preview');
         setPreview(null);
         setSelectedAssetIds([]);
         try {
-            const response = await posterSetsApi.preview(target);
+            const response = await posterSetsApi.preview(target, {
+                mediuxFilters: restrictTitleCards ? TITLE_CARD_ONLY_FILTERS : undefined,
+            });
             setPreview(response);
             const assets = response.assets || [];
             const matchedIds = assets.filter((asset) => asset.matched === true).map((asset) => asset.id);
@@ -932,9 +959,13 @@ export const PosterSetsDashboard: React.FC = () => {
             const matched = response.matched ?? matchedIds.length;
             const total = response.total || assets.length;
             if (!total) {
-                toast('This set previewed with 0 assets. Check MediUX filters in Poster Sets settings (title cards may be off).', 'error');
+                toast(restrictTitleCards
+                    ? 'This title-card pack previewed with 0 title cards. The set may only contain covers/backgrounds, or MediUX changed the listing.'
+                    : 'This set previewed with 0 assets. Check MediUX filters in Poster Sets settings (title cards may be off).', 'error');
             } else {
-                toast(`Ready: ${matched} matched in Plex · ${total} in set.`);
+                toast(restrictTitleCards
+                    ? `Ready: ${matched} matched title cards · ${total} in pack.`
+                    : `Ready: ${matched} matched in Plex · ${total} in set.`);
             }
             if (options?.scroll !== false) {
                 window.setTimeout(() => {
@@ -961,6 +992,7 @@ export const PosterSetsDashboard: React.FC = () => {
             toast('This set is missing a URL.', 'error');
             return;
         }
+        const restrictTitleCards = isTitleCardSet(set);
         setBrowseSeeAllId(null);
         creatorSearchAbortRef.current?.abort();
         creatorSearchAbortRef.current = null;
@@ -973,16 +1005,23 @@ export const PosterSetsDashboard: React.FC = () => {
         setSelectedSearchTitle(null);
         setSelectedSearchSet(set);
         setUrl(target);
+        setTitleCardsOnly(restrictTitleCards);
+        titleCardsOnlyRef.current = restrictTitleCards;
         setPreview(null);
         setSelectedAssetIds([]);
         scrollPreviewAfterLoadRef.current = true;
         setTab('apply');
         if (!options?.skipUrl) {
-            pushPosterLocation({ tab: 'apply', rail: null, setUrl: target }, 'push');
+            pushPosterLocation({
+                tab: 'apply',
+                rail: null,
+                setUrl: target,
+                titleCardsOnly: restrictTitleCards,
+            }, 'push');
         } else {
             syncedSetUrlRef.current = target;
         }
-        await runPreview(target, { scroll: false, keepSearch: false });
+        await runPreview(target, { scroll: false, keepSearch: false, titleCardsOnly: restrictTitleCards });
         // Scroll after React paints the preview panel at the top of Apply.
         window.setTimeout(() => {
             previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -998,6 +1037,7 @@ export const PosterSetsDashboard: React.FC = () => {
             tab: initialLocation.tab,
             rail: initialLocation.rail,
             setUrl: initialLocation.setUrl,
+            titleCardsOnly: Boolean(initialLocation.titleCardsOnly),
         }, 'replace');
     }, [initialLocation]);
 
@@ -1010,6 +1050,7 @@ export const PosterSetsDashboard: React.FC = () => {
             setId: '',
             title: '',
             url: target,
+            setKind: initialLocation.titleCardsOnly ? 'title_cards' : null,
         }, { skipUrl: true });
     }, [initialLocation]);
 
@@ -1018,14 +1059,20 @@ export const PosterSetsDashboard: React.FC = () => {
             const parsed = parsePosterSetsUrl();
             setTab(parsed.tab);
             setBrowseSeeAllId(parsed.tab === 'browse' ? parsed.rail : null);
+            const nextTitleCards = Boolean(parsed.titleCardsOnly);
 
             if (parsed.tab === 'apply' && parsed.setUrl) {
-                if (syncedSetUrlRef.current !== parsed.setUrl) {
-                    syncedSetUrlRef.current = parsed.setUrl;
+                const changed = syncedSetUrlRef.current !== parsed.setUrl
+                    || titleCardsOnlyRef.current !== nextTitleCards;
+                syncedSetUrlRef.current = parsed.setUrl;
+                titleCardsOnlyRef.current = nextTitleCards;
+                setTitleCardsOnly(nextTitleCards);
+                if (changed) {
                     void openSetForApplyRef.current({
                         setId: '',
                         title: '',
                         url: parsed.setUrl,
+                        setKind: nextTitleCards ? 'title_cards' : null,
                     }, { skipUrl: true });
                 }
                 return;
@@ -1033,10 +1080,15 @@ export const PosterSetsDashboard: React.FC = () => {
 
             if (syncedSetUrlRef.current) {
                 syncedSetUrlRef.current = null;
+                titleCardsOnlyRef.current = false;
+                setTitleCardsOnly(false);
                 setPreview(null);
                 setSelectedSearchSet(null);
                 setSelectedAssetIds([]);
                 setUrl('');
+            } else {
+                titleCardsOnlyRef.current = false;
+                setTitleCardsOnly(false);
             }
         };
         window.addEventListener('popstate', onPopState);
@@ -1070,7 +1122,9 @@ export const PosterSetsDashboard: React.FC = () => {
                 selected,
                 currentSetMeta(),
                 undefined,
-                selected ? filtersForSelectedIds(selected) : undefined,
+                selected
+                    ? filtersForSelectedIds(selected)
+                    : (titleCardsOnly ? TITLE_CARD_ONLY_FILTERS : undefined),
             );
             setActiveJob(response.job);
             upsertRecentSet(jobSetMeta(response.job) || currentSetMeta(), target);
@@ -1358,8 +1412,8 @@ export const PosterSetsDashboard: React.FC = () => {
         });
         setUrl(built);
         if (andPreview) {
-            pushPosterLocation({ tab: 'apply', rail: null, setUrl: built }, 'push');
-            await runPreview(built);
+            pushPosterLocation({ tab: 'apply', rail: null, setUrl: built, titleCardsOnly: false }, 'push');
+            await runPreview(built, { titleCardsOnly: false });
         } else toast('Set URL filled — preview or apply when ready.');
     };
 
@@ -1375,6 +1429,14 @@ export const PosterSetsDashboard: React.FC = () => {
     const posterGridStyle = useMemo(
         () => upgraderPosterGridStyle(gridSize === 'list' ? 'medium' : gridSize),
         [gridSize],
+    );
+    const titleCardGridStyle = useMemo(
+        () => upgraderLandscapeGridStyle(gridSize === 'list' ? 'medium' : gridSize),
+        [gridSize],
+    );
+    const searchSetsUseTitleCardGrid = useMemo(
+        () => searchSets.length > 0 && searchSets.every((set) => isTitleCardSet(set)),
+        [searchSets],
     );
 
     const runCatalogSearch = async () => {
@@ -1535,10 +1597,16 @@ export const PosterSetsDashboard: React.FC = () => {
     };
 
     const pickSearchSet = async (set: PosterSetsSearchSet) => {
+        const restrictTitleCards = isTitleCardSet(set);
         setSelectedSearchSet(set);
         setUrl(set.url);
-        pushPosterLocation({ tab: 'apply', rail: null, setUrl: String(set.url || '').trim() || null }, 'push');
-        await runPreview(set.url);
+        pushPosterLocation({
+            tab: 'apply',
+            rail: null,
+            setUrl: String(set.url || '').trim() || null,
+            titleCardsOnly: restrictTitleCards,
+        }, 'push');
+        await runPreview(set.url, { titleCardsOnly: restrictTitleCards });
     };
 
     const backToTitles = () => {
@@ -1563,7 +1631,9 @@ export const PosterSetsDashboard: React.FC = () => {
         setPreview(null);
         setSelectedAssetIds([]);
         setUrl('');
-        pushPosterLocation({ tab: 'apply', rail: null, setUrl: null }, 'push');
+        setTitleCardsOnly(false);
+        titleCardsOnlyRef.current = false;
+        pushPosterLocation({ tab: 'apply', rail: null, setUrl: null, titleCardsOnly: false }, 'push');
     };
 
     const matchedAssetCount = useMemo(() => {
@@ -1780,7 +1850,7 @@ export const PosterSetsDashboard: React.FC = () => {
     });
 
     return (
-        <div className={`flex w-full min-w-0 animate-fade-in flex-col gap-4 sm:gap-6 ${selectedBulkCount > 0 ? 'pb-28' : 'pb-10'}`}>
+        <div className={`flex w-full min-w-0 animate-fade-in flex-col gap-4 sm:gap-6 ${selectedBulkCount > 0 || (tab === 'apply' && readyToApply) ? 'pb-28' : 'pb-10'}`}>
             <ToastContainer toasts={toasts} setToasts={setToasts} />
 
             <header className={`${cardClass} overflow-hidden p-4 sm:p-6`}>
@@ -1911,7 +1981,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
-                            <div className={posterGridClass} style={posterGridStyle}>
+                            <div className={posterGridClass} style={isTitleCardRail(browseSeeAllRail) ? titleCardGridStyle : posterGridStyle}>
                                 {browseSeeAllRail.sets.map((set) => (
                                     <BrowseSetCard
                                         key={`${set.provider}-${set.setId}`}
@@ -1986,7 +2056,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     {rail.error ? (
                                         <p className="text-xs text-amber-200">{rail.error}</p>
                                     ) : null}
-                                    <div className={posterGridClass} style={posterGridStyle}>
+                                    <div className={posterGridClass} style={isTitleCardRail(rail) ? titleCardGridStyle : posterGridStyle}>
                                         {rail.sets.slice(0, 24).map((set) => (
                                             <BrowseSetCard
                                                 key={`${set.provider}-${set.setId}`}
@@ -2762,7 +2832,9 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     {selectedAssetIds.length} selected
                                                 </p>
                                                 <p className="mt-1 text-xs text-muted">
-                                                    Covers are tall posters; title cards show as landscape galleries by season. Tap to select.
+                                                    {titleCardsOnly
+                                                        ? 'Title-card pack — only episode title cards from this set. Tap to select.'
+                                                        : 'Covers are tall posters; title cards show as landscape galleries by season. Tap to select.'}
                                                 </p>
                                                 <div className="mt-2 flex flex-wrap gap-3">
                                                     <button
@@ -2832,7 +2904,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 This set previewed with no assets. Check MediUX filters in Settings, or try another set.
                                             </p>
                                         )}
-                                        <div className="sticky bottom-3 z-10 flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/95 p-3 shadow-lg backdrop-blur">
+                                        <div className="flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/80 p-3">
                                             <button
                                                 type="button"
                                                 className={`${primaryButtonClass} flex-1 sm:flex-none sm:min-w-[220px]`}
@@ -3091,7 +3163,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             </div>
                                         ) : null}
                                     </div>
-                                    <div className={posterGridClass} style={posterGridStyle}>
+                                    <div className={posterGridClass} style={searchSetsUseTitleCardGrid ? titleCardGridStyle : posterGridStyle}>
                                         {pagedSearchSets.map((set) => {
                                             const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
                                             const setLabel = formatSetLabel(set) || setTitle;
@@ -3165,20 +3237,18 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 </div>
                                                 <div className="space-y-1.5 p-3">
                                                     <p className="truncate text-sm font-semibold text-text" title={setTitle}>{setTitle}</p>
-                                                    <div className="flex flex-col items-start gap-1">
+                                                    <div className="flex flex-wrap items-center gap-1.5">
                                                         <CreatorPill user={set.user} />
-                                                        <div className="flex flex-wrap items-center gap-1.5">
-                                                            <SetKindPill set={set} />
-                                                            <ProviderPill provider={set.provider} />
-                                                            {set.alsoOn?.length ? (
-                                                                <span className="truncate text-[11px] text-muted">
-                                                                    also {set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}
-                                                                </span>
-                                                            ) : null}
-                                                            {set.posterCount ? (
-                                                                <span className="truncate text-[11px] text-muted">{set.posterCount}</span>
-                                                            ) : null}
-                                                        </div>
+                                                        <SetKindPill set={set} />
+                                                        <ProviderPill provider={set.provider} />
+                                                        {set.alsoOn?.length ? (
+                                                            <span className="truncate text-[11px] text-muted">
+                                                                also {set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}
+                                                            </span>
+                                                        ) : null}
+                                                        {set.posterCount ? (
+                                                            <span className="truncate text-[11px] text-muted">{set.posterCount}</span>
+                                                        ) : null}
                                                     </div>
                                                 </div>
                                                 </button>
@@ -3232,7 +3302,9 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 {selectedAssetIds.length} selected
                                             </p>
                                             <p className="mt-1 text-xs text-muted">
-                                                Covers are tall posters; title cards show as landscape galleries by season. Tap to select.
+                                                {titleCardsOnly
+                                                    ? 'Title-card pack — only episode title cards from this set. Tap to select.'
+                                                    : 'Covers are tall posters; title cards show as landscape galleries by season. Tap to select.'}
                                             </p>
                                             <div className="mt-2 flex flex-wrap gap-3">
                                                 {searchSets.length ? (
@@ -3327,7 +3399,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                         />
                                     </div>
 
-                                    <div className="sticky bottom-3 z-10 flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/95 p-3 shadow-lg backdrop-blur">
+                                    <div className="flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/80 p-3">
                                         <button
                                             type="button"
                                             className={`${primaryButtonClass} flex-1 sm:flex-none sm:min-w-[220px]`}
@@ -3406,9 +3478,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 onClick={() => {
                                                     const target = String(url).trim();
                                                     if (target) {
-                                                        pushPosterLocation({ tab: 'apply', rail: null, setUrl: target }, 'push');
+                                                        pushPosterLocation({
+                                                            tab: 'apply',
+                                                            rail: null,
+                                                            setUrl: target,
+                                                            titleCardsOnly: false,
+                                                        }, 'push');
                                                     }
-                                                    void runPreview();
+                                                    void runPreview(undefined, { titleCardsOnly: false });
                                                 }}
                                             >
                                                 {busy === 'preview' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}

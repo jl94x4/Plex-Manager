@@ -18,14 +18,23 @@ export type PosterSetsUrlState = {
     rail: string | null;
     /** Apply deep-link: set URL to preview */
     setUrl: string | null;
+    /** Restrict MediUX preview/apply to title_card assets only */
+    titleCardsOnly: boolean;
 };
 
 const isTab = (value: string): value is PosterSetsTabId =>
     (POSTER_SETS_TABS as readonly string[]).includes(value);
 
+const emptyState = (): PosterSetsUrlState => ({
+    tab: 'apply',
+    rail: null,
+    setUrl: null,
+    titleCardsOnly: false,
+});
+
 export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window.location.hash : ''): PosterSetsUrlState {
     const raw = String(hash || '').replace(/^#/, '').trim();
-    if (!raw) return { tab: 'apply', rail: null, setUrl: null };
+    if (!raw) return emptyState();
 
     const qIndex = raw.indexOf('?');
     const pathPart = (qIndex >= 0 ? raw.slice(0, qIndex) : raw).trim();
@@ -45,8 +54,14 @@ export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window
     const params = new URLSearchParams(queryPart);
     const setUrlRaw = tab === 'apply' ? String(params.get('url') || '').trim() : '';
     const setUrl = setUrlRaw || null;
+    const assets = String(params.get('assets') || '').trim().toLowerCase();
+    const titleCardsOnly = tab === 'apply' && Boolean(setUrl) && (
+        assets === 'title_cards'
+        || assets === 'title_card'
+        || assets === 'titlecards'
+    );
 
-    return { tab, rail, setUrl };
+    return { tab, rail, setUrl, titleCardsOnly };
 }
 
 export function buildPosterSetsHash(state: PosterSetsUrlState): string {
@@ -55,7 +70,10 @@ export function buildPosterSetsHash(state: PosterSetsUrlState): string {
         hash += `/${encodeURIComponent(state.rail)}`;
     }
     if (state.tab === 'apply' && state.setUrl) {
-        hash += `?url=${encodeURIComponent(state.setUrl)}`;
+        const params = new URLSearchParams();
+        params.set('url', state.setUrl);
+        if (state.titleCardsOnly) params.set('assets', 'title_cards');
+        hash += `?${params.toString()}`;
     }
     return hash;
 }
@@ -84,5 +102,6 @@ export function writePosterSetsUrl(state: PosterSetsUrlState, mode: 'push' | 're
 export function posterSetsUrlEquals(a: PosterSetsUrlState, b: PosterSetsUrlState): boolean {
     return a.tab === b.tab
         && (a.rail || null) === (b.rail || null)
-        && (a.setUrl || null) === (b.setUrl || null);
+        && (a.setUrl || null) === (b.setUrl || null)
+        && Boolean(a.titleCardsOnly) === Boolean(b.titleCardsOnly);
 }

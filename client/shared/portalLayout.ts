@@ -28,6 +28,15 @@ export const UPGRADER_GRID_MIN_WIDTH: Record<UpgraderGridSize, string> = {
     list: '100%',
 };
 
+/** Wider columns for landscape title-card packs (roughly 16:9 vs 2:3 posters). */
+export const UPGRADER_LANDSCAPE_GRID_MIN_WIDTH: Record<UpgraderGridSize, string> = {
+    small: '10rem',
+    medium: '14rem',
+    large: '18rem',
+    xlarge: '22rem',
+    list: '100%',
+};
+
 /** Match discover-poster-grid @container breakpoints (width in px). */
 export const discoverPosterGridColumnsAtWidth = (containerWidth: number): number => {
     if (containerWidth >= 896) return 10;
@@ -57,6 +66,10 @@ export const carouselRowSkeletonCount = (containerWidth = estimatePortalContentW
 
 export const upgraderPosterGridStyle = (size: UpgraderGridSize): CSSProperties => size === 'list' ? {} : ({
     gridTemplateColumns: `repeat(auto-fill, minmax(${UPGRADER_GRID_MIN_WIDTH[size]}, 1fr))`,
+});
+
+export const upgraderLandscapeGridStyle = (size: UpgraderGridSize): CSSProperties => size === 'list' ? {} : ({
+    gridTemplateColumns: `repeat(auto-fill, minmax(${UPGRADER_LANDSCAPE_GRID_MIN_WIDTH[size]}, 1fr))`,
 });
 
 /** Fixed carousel poster widths for Discover home rails (mirrors Movies/Series grid density). */
