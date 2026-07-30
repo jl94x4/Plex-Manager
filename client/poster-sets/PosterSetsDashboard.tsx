@@ -86,7 +86,7 @@ const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px
 const sectionTitleClass = 'text-base font-bold text-text sm:text-lg';
 const sectionBodyClass = 'mt-1 text-xs text-muted sm:text-sm';
 const posterMediaRadiusClass = 'rounded-md';
-const previewStripClass = 'flex gap-3 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]';
+const previewStripClass = 'flex w-full min-w-0 gap-3 overflow-x-auto overscroll-x-contain pb-2 touch-pan-x [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] custom-scrollbar';
 
 type TabId = 'apply' | 'browse' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed' | 'audit';
@@ -115,7 +115,7 @@ function PreviewAssetTile({
             type="button"
             onClick={() => onToggle(asset.id)}
             className={`group shrink-0 overflow-hidden ${posterMediaRadiusClass} border text-left transition ${
-                layout === 'landscape' ? 'w-[min(100%,17rem)] sm:w-72' : 'w-[7.25rem] sm:w-36'
+                layout === 'landscape' ? 'w-64 sm:w-72' : 'w-[7.25rem] sm:w-36'
             } ${
                 selected
                     ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/40'
@@ -186,7 +186,7 @@ function PreviewAssetGallery({
     ) => {
         if (!assets.length) return null;
         return (
-            <section className="space-y-2.5">
+            <section className="min-w-0 space-y-2.5">
                 <div className="flex items-baseline justify-between gap-2">
                     <h4 className="text-xs font-bold uppercase tracking-wide text-muted">{title}</h4>
                     <span className="text-[11px] text-muted/80">{assets.length}</span>
@@ -208,12 +208,12 @@ function PreviewAssetGallery({
     };
 
     return (
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
             {renderStrip('Show & season covers', sections.covers, 'poster', (asset) => asset.label || asset.title)}
             {renderStrip('Posters', sections.posters, 'poster')}
             {renderStrip('Backgrounds', sections.backgrounds, 'landscape', (asset) => asset.label || 'Background')}
             {sections.titleCardSeasons.map((season) => (
-                <section key={season.key} className="space-y-2.5">
+                <section key={season.key} className="min-w-0 space-y-2.5">
                     <div className="flex items-baseline justify-between gap-2">
                         <h4 className="text-xs font-bold uppercase tracking-wide text-muted">
                             {season.label}
@@ -2790,8 +2790,8 @@ export const PosterSetsDashboard: React.FC = () => {
             ) : null}
 
             {tab === 'apply' ? (
-                <div className="space-y-4">
-                    <section className={`${cardClass} space-y-4 p-5`}>
+                <div className="min-w-0 space-y-4">
+                    <section className={`${cardClass} min-w-0 space-y-4 overflow-hidden p-5`}>
                         {directPreviewMode ? (
                             <>
                                 <div>
@@ -2815,7 +2815,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </div>
                                 ) : null}
                                 {readyToApply ? (
-                                    <div ref={previewPanelRef} className="space-y-4 rounded-xl border border-plex/30 bg-plex/10 p-4">
+                                    <div ref={previewPanelRef} className="min-w-0 space-y-4 rounded-xl border border-plex/30 bg-plex/10 p-4">
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div className="min-w-0">
                                                 <p className="text-xs font-bold uppercase tracking-wide text-plex">Preview</p>
@@ -3285,7 +3285,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             ) : null}
 
                             {readyToApply ? (
-                                <div ref={previewPanelRef} className="order-1 mt-4 space-y-4 rounded-xl border border-plex/30 bg-plex/10 p-4">
+                                <div ref={previewPanelRef} className="order-1 mt-4 min-w-0 space-y-4 rounded-xl border border-plex/30 bg-plex/10 p-4">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div className="min-w-0">
                                             <p className="text-xs font-bold uppercase tracking-wide text-plex">3. Preview</p>
