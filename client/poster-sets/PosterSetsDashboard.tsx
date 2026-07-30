@@ -1313,7 +1313,7 @@ export const PosterSetsDashboard: React.FC = () => {
     });
 
     return (
-        <div className="flex w-full min-w-0 animate-fade-in flex-col gap-4 overflow-x-hidden pb-10 sm:gap-6">
+        <div className={`flex w-full min-w-0 animate-fade-in flex-col gap-4 sm:gap-6 ${selectedBulkCount > 0 ? 'pb-28' : 'pb-10'}`}>
             <ToastContainer toasts={toasts} setToasts={setToasts} />
 
             <header className={`${cardClass} overflow-hidden p-4 sm:p-6`}>
@@ -3147,36 +3147,38 @@ export const PosterSetsDashboard: React.FC = () => {
                 </section>
             ) : null}
             {selectedBulkCount > 0 ? (
-                <div className="sticky bottom-3 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-plex/40 bg-card/95 p-3 shadow-lg backdrop-blur">
-                    <span className="text-sm font-semibold text-text">
-                        {selectedBulkCount} selected
-                    </span>
-                    <button
-                        type="button"
-                        className={primaryButtonClass}
-                        disabled={busy !== null}
-                        onClick={() => void queueBulkSelected()}
-                    >
-                        {busy === 'bulk-select' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListOrdered className="h-4 w-4" />}
-                        Queue selected
-                    </button>
-                    <button
-                        type="button"
-                        className={buttonClass}
-                        disabled={busy !== null}
-                        onClick={() => void watchBulkSelected()}
-                    >
-                        {busy === 'bulk-watch' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-                        Watch selected
-                    </button>
-                    <button
-                        type="button"
-                        className={buttonClass}
-                        disabled={busy !== null}
-                        onClick={clearBulkSelection}
-                    >
-                        Clear
-                    </button>
+                <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] z-50 flex justify-center px-4 md:bottom-6">
+                    <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-xl border border-plex/40 bg-card/95 p-3 shadow-lg backdrop-blur">
+                        <span className="text-sm font-semibold text-text">
+                            {selectedBulkCount} selected
+                        </span>
+                        <button
+                            type="button"
+                            className={primaryButtonClass}
+                            disabled={busy !== null}
+                            onClick={() => void queueBulkSelected()}
+                        >
+                            {busy === 'bulk-select' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListOrdered className="h-4 w-4" />}
+                            Queue selected
+                        </button>
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={busy !== null}
+                            onClick={() => void watchBulkSelected()}
+                        >
+                            {busy === 'bulk-watch' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
+                            Watch selected
+                        </button>
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={busy !== null}
+                            onClick={clearBulkSelection}
+                        >
+                            Clear
+                        </button>
+                    </div>
                 </div>
             ) : null}
         </div>
