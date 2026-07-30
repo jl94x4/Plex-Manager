@@ -28,6 +28,11 @@ import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
 import {
+    parsePosterSetsUrl,
+    writePosterSetsUrl,
+    type PosterSetsUrlState,
+} from './urlState';
+import {
     normalizeUpgraderGridSize,
     UPGRADER_GRID_SIZE_OPTIONS,
     upgraderPosterGridClass,
@@ -78,6 +83,7 @@ const primaryButtonClass = 'inline-flex items-center justify-center gap-1.5 roun
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-xs text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex sm:py-2.5 sm:text-sm';
 const sectionTitleClass = 'text-base font-bold text-text sm:text-lg';
 const sectionBodyClass = 'mt-1 text-xs text-muted sm:text-sm';
+const posterMediaRadiusClass = 'rounded-md';
 const previewStripClass = 'flex gap-3 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]';
 
 type TabId = 'apply' | 'browse' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
@@ -106,7 +112,7 @@ function PreviewAssetTile({
         <button
             type="button"
             onClick={() => onToggle(asset.id)}
-            className={`group shrink-0 overflow-hidden rounded-2xl border text-left transition ${
+            className={`group shrink-0 overflow-hidden ${posterMediaRadiusClass} border text-left transition ${
                 layout === 'landscape' ? 'w-[min(100%,17rem)] sm:w-72' : 'w-[7.25rem] sm:w-36'
             } ${
                 selected
@@ -264,14 +270,17 @@ const providerPillClass = (provider?: string | null) => {
     return 'border-white/10 bg-white/5 text-muted';
 };
 
-const MetaPill: React.FC<{ children: React.ReactNode; className?: string; title?: string }> = ({
+const MetaPill: React.FC<{ children: React.ReactNode; className?: string; title?: string; truncate?: boolean }> = ({
     children,
     className = '',
     title,
+    truncate = true,
 }) => (
     <span
         title={title}
-        className={`inline-flex max-w-[9rem] shrink-0 items-center truncate rounded-full border px-1.5 py-0.5 text-[9px] font-bold tracking-wide sm:max-w-full sm:px-2.5 sm:py-1 sm:text-[11px] ${className}`}
+        className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold tracking-wide sm:px-2.5 sm:py-1 sm:text-[11px] ${
+            truncate ? 'max-w-full shrink truncate' : 'max-w-full shrink-0 whitespace-normal break-all'
+        } ${className}`}
     >
         {children}
     </span>
@@ -291,7 +300,11 @@ const CreatorPill: React.FC<{ user?: string | null }> = ({ user }) => {
     const handle = String(user || '').trim().replace(/^@/, '');
     if (!handle) return null;
     return (
-        <MetaPill className="border-white/15 bg-white/10 text-text/90 normal-case" title={`@${handle}`}>
+        <MetaPill
+            truncate={false}
+            className="border-white/15 bg-white/10 text-text/90 normal-case"
+            title={`@${handle}`}
+        >
             @{handle}
         </MetaPill>
     );
@@ -338,9 +351,7 @@ function BrowseSetCard({
             type="button"
             disabled={disabled}
             onClick={() => onOpen(set)}
-            className={`group shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 text-left transition hover:border-plex/40 ${
-                landscape ? 'w-[min(100%,16rem)] sm:w-64' : 'w-[7.25rem] sm:w-36'
-            }`}
+            className={`group w-full min-w-0 overflow-hidden ${posterMediaRadiusClass} border border-white/10 bg-black/20 text-left transition hover:border-plex/40`}
         >
             <div className={`relative bg-black/40 ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
                 {set.thumbUrl ? (
@@ -356,12 +367,14 @@ function BrowseSetCard({
                     </div>
                 )}
             </div>
-            <div className="space-y-1.5 p-2.5 sm:p-3">
-                <p className="truncate text-xs font-semibold text-text sm:text-sm" title={setTitle}>{setTitle}</p>
-                <div className="flex flex-wrap items-center gap-1.5">
+            <div className="space-y-1.5 p-2 sm:p-2.5">
+                <p className="line-clamp-2 text-xs font-semibold text-text sm:text-sm" title={setTitle}>{setTitle}</p>
+                <div className="flex flex-col items-start gap-1">
                     <CreatorPill user={set.user} />
-                    <SetKindPill set={set} />
-                    <ProviderPill provider={set.provider} />
+                    <div className="flex flex-wrap items-center gap-1">
+                        <SetKindPill set={set} />
+                        <ProviderPill provider={set.provider} />
+                    </div>
                 </div>
             </div>
         </button>
@@ -529,13 +542,17 @@ export const PosterSetsDashboard: React.FC = () => {
         setToasts((current) => pushToast(current, message, type));
     }, []);
 
-    const [tab, setTab] = useState<TabId>('apply');
+    const initialLocation = useMemo(
+        () => (typeof window !== 'undefined' ? parsePosterSetsUrl() : { tab: 'apply' as TabId, rail: null, setUrl: null }),
+        [],
+    );
+    const [tab, setTab] = useState<TabId>(initialLocation.tab);
     const [busy, setBusy] = useState<string | null>(null);
     const [status, setStatus] = useState<PosterSetsStatus | null>(null);
     const [configDraft, setConfigDraft] = useState<PosterSetsConfig>(DEFAULT_POSTER_SETS_CONFIG);
     const [tvText, setTvText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.tv_library));
     const [movieText, setMovieText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.movie_library));
-    const [url, setUrl] = useState('');
+    const [url, setUrl] = useState(initialLocation.setUrl || '');
     const [bulkText, setBulkText] = useState('');
     const [findProvider, setFindProvider] = useState<SetProvider>('mediux');
     const [findId, setFindId] = useState('');
@@ -579,7 +596,10 @@ export const PosterSetsDashboard: React.FC = () => {
     const [selectedBulkSets, setSelectedBulkSets] = useState<Record<string, BulkSetSelection>>({});
     const [browseRails, setBrowseRails] = useState<PosterSetsBrowseRail[]>([]);
     const [browseLoading, setBrowseLoading] = useState(false);
-    const [browseSeeAllId, setBrowseSeeAllId] = useState<string | null>(null);
+    const [browseSeeAllId, setBrowseSeeAllId] = useState<string | null>(initialLocation.rail);
+    const scrollPreviewAfterLoadRef = useRef(false);
+    const syncedSetUrlRef = useRef<string | null>(initialLocation.setUrl);
+    const deepLinkHandledRef = useRef(false);
 
     const loadHistory = useCallback(async () => {
         try {
@@ -638,10 +658,45 @@ export const PosterSetsDashboard: React.FC = () => {
         setPreview(null);
         setSelectedSearchSet(null);
         setSelectedAssetIds([]);
+        syncedSetUrlRef.current = null;
+        writePosterSetsUrl({ tab: 'apply', rail: null, setUrl: null }, 'replace');
         requestAnimationFrame(() => {
             searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
     }, []);
+
+    const pushPosterLocation = useCallback((next: PosterSetsUrlState, mode: 'push' | 'replace' = 'push') => {
+        syncedSetUrlRef.current = next.tab === 'apply' ? next.setUrl : null;
+        writePosterSetsUrl(next, mode);
+    }, []);
+
+    const goToTab = useCallback((id: TabId, options?: { rail?: string | null; mode?: 'push' | 'replace' }) => {
+        setTab(id);
+        const rail = id === 'browse' ? (options?.rail !== undefined ? options.rail : null) : null;
+        if (id === 'browse') setBrowseSeeAllId(rail);
+        else setBrowseSeeAllId(null);
+        if (id !== 'apply') {
+            syncedSetUrlRef.current = null;
+        }
+        pushPosterLocation({
+            tab: id,
+            rail,
+            setUrl: null,
+        }, options?.mode || 'push');
+        if (id === 'history') {
+            void loadHistory();
+            if (historyFilter === 'audit') void loadAudit();
+        }
+        if (id === 'queue') void loadQueue();
+        if (id === 'watches') void loadWatches();
+        if (id === 'browse') void loadBrowse();
+    }, [historyFilter, loadAudit, loadBrowse, loadHistory, loadQueue, loadWatches, pushPosterLocation]);
+
+    const openBrowseRail = useCallback((railId: string | null) => {
+        setTab('browse');
+        setBrowseSeeAllId(railId);
+        pushPosterLocation({ tab: 'browse', rail: railId, setUrl: null }, 'push');
+    }, [pushPosterLocation]);
 
     const currentSetMeta = useCallback((): PosterSetsSetMeta | null => {
         if (selectedSearchSet || preview?.setMeta) {
@@ -884,7 +939,7 @@ export const PosterSetsDashboard: React.FC = () => {
             if (options?.scroll !== false) {
                 window.setTimeout(() => {
                     previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }, 50);
+                }, 200);
             }
             if (!options?.keepSearch) {
                 // Keep context for the ready card, but get titles out of the way.
@@ -899,13 +954,94 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
-    const openBrowseSet = async (set: PosterSetsSearchSet) => {
+    /** Open Apply with this set selected and kick off preview (Browse / Recent). */
+    const openSetForApply = async (set: PosterSetsSearchSet, options?: { skipUrl?: boolean }) => {
+        const target = String(set.url || '').trim();
+        if (!target) {
+            toast('This set is missing a URL.', 'error');
+            return;
+        }
         setBrowseSeeAllId(null);
-        setTab('apply');
+        creatorSearchAbortRef.current?.abort();
+        creatorSearchAbortRef.current = null;
+        setSearchQuery('');
+        setSearchTitles([]);
+        setSearchSets([]);
+        setSearchSetsPage(1);
+        setSearchLoadingMore(false);
+        setSearchContext('');
+        setSelectedSearchTitle(null);
         setSelectedSearchSet(set);
-        setUrl(set.url);
-        await runPreview(set.url);
+        setUrl(target);
+        setPreview(null);
+        setSelectedAssetIds([]);
+        scrollPreviewAfterLoadRef.current = true;
+        setTab('apply');
+        if (!options?.skipUrl) {
+            pushPosterLocation({ tab: 'apply', rail: null, setUrl: target }, 'push');
+        } else {
+            syncedSetUrlRef.current = target;
+        }
+        await runPreview(target, { scroll: false, keepSearch: false });
+        // Scroll after React paints the preview panel at the top of Apply.
+        window.setTimeout(() => {
+            previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            scrollPreviewAfterLoadRef.current = false;
+        }, 250);
     };
+    const openSetForApplyRef = useRef(openSetForApply);
+    openSetForApplyRef.current = openSetForApply;
+
+    // Keep /poster-sets#… in sync so refresh and browser Back stay inside Poster Sets.
+    useEffect(() => {
+        writePosterSetsUrl({
+            tab: initialLocation.tab,
+            rail: initialLocation.rail,
+            setUrl: initialLocation.setUrl,
+        }, 'replace');
+    }, [initialLocation]);
+
+    useEffect(() => {
+        if (deepLinkHandledRef.current) return;
+        deepLinkHandledRef.current = true;
+        const target = initialLocation.setUrl;
+        if (!target || initialLocation.tab !== 'apply') return;
+        void openSetForApplyRef.current({
+            setId: '',
+            title: '',
+            url: target,
+        }, { skipUrl: true });
+    }, [initialLocation]);
+
+    useEffect(() => {
+        const onPopState = () => {
+            const parsed = parsePosterSetsUrl();
+            setTab(parsed.tab);
+            setBrowseSeeAllId(parsed.tab === 'browse' ? parsed.rail : null);
+
+            if (parsed.tab === 'apply' && parsed.setUrl) {
+                if (syncedSetUrlRef.current !== parsed.setUrl) {
+                    syncedSetUrlRef.current = parsed.setUrl;
+                    void openSetForApplyRef.current({
+                        setId: '',
+                        title: '',
+                        url: parsed.setUrl,
+                    }, { skipUrl: true });
+                }
+                return;
+            }
+
+            if (syncedSetUrlRef.current) {
+                syncedSetUrlRef.current = null;
+                setPreview(null);
+                setSelectedSearchSet(null);
+                setSelectedAssetIds([]);
+                setUrl('');
+            }
+        };
+        window.addEventListener('popstate', onPopState);
+        return () => window.removeEventListener('popstate', onPopState);
+    }, []);
 
     const filtersForSelectedIds = (ids: string[]) => {
         if (!ids.length) return undefined;
@@ -1221,8 +1357,10 @@ export const PosterSetsDashboard: React.FC = () => {
             provider: findProvider,
         });
         setUrl(built);
-        if (andPreview) await runPreview(built);
-        else toast('Set URL filled — preview or apply when ready.');
+        if (andPreview) {
+            pushPosterLocation({ tab: 'apply', rail: null, setUrl: built }, 'push');
+            await runPreview(built);
+        } else toast('Set URL filled — preview or apply when ready.');
     };
 
     useEffect(() => {
@@ -1399,6 +1537,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const pickSearchSet = async (set: PosterSetsSearchSet) => {
         setSelectedSearchSet(set);
         setUrl(set.url);
+        pushPosterLocation({ tab: 'apply', rail: null, setUrl: String(set.url || '').trim() || null }, 'push');
         await runPreview(set.url);
     };
 
@@ -1424,6 +1563,7 @@ export const PosterSetsDashboard: React.FC = () => {
         setPreview(null);
         setSelectedAssetIds([]);
         setUrl('');
+        pushPosterLocation({ tab: 'apply', rail: null, setUrl: null }, 'push');
     };
 
     const matchedAssetCount = useMemo(() => {
@@ -1494,7 +1634,18 @@ export const PosterSetsDashboard: React.FC = () => {
         setWatchesPage((page) => Math.min(page, watchesPageCount));
     }, [watchesPageCount]);
 
-    const readyToApply = Boolean(preview?.assets?.length);
+    const readyToApply = Boolean(preview);
+    const directPreviewMode = !searchSets.length && !searchTitles.length
+        && (Boolean(preview) || (busy === 'preview' && Boolean(String(url || '').trim())));
+
+    useEffect(() => {
+        if (tab !== 'apply' || !preview || !scrollPreviewAfterLoadRef.current) return undefined;
+        const timer = window.setTimeout(() => {
+            previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            scrollPreviewAfterLoadRef.current = false;
+        }, 150);
+        return () => window.clearTimeout(timer);
+    }, [tab, preview]);
 
     const browseSeeAllRail = useMemo(
         () => browseRails.find((rail) => rail.id === browseSeeAllId) || null,
@@ -1691,17 +1842,11 @@ export const PosterSetsDashboard: React.FC = () => {
                         type="button"
                         className={`${tab === id ? primaryButtonClass : buttonClass}`}
                         onClick={() => {
-                            setTab(id);
-                            if (id === 'history') {
-                                void loadHistory();
-                                if (historyFilter === 'audit') void loadAudit();
+                            if (id === tab) {
+                                if (id === 'browse' && browseSeeAllId) openBrowseRail(null);
+                                return;
                             }
-                            if (id === 'queue') void loadQueue();
-                            if (id === 'watches') void loadWatches();
-                            if (id === 'browse') {
-                                setBrowseSeeAllId(null);
-                                void loadBrowse();
-                            }
+                            goToTab(id);
                         }}
                     >
                         <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {label}
@@ -1732,7 +1877,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     <button
                                         type="button"
                                         className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-plex hover:underline"
-                                        onClick={() => setBrowseSeeAllId(null)}
+                                        onClick={() => openBrowseRail(null)}
                                     >
                                         <ChevronLeft className="h-3.5 w-3.5" />
                                         Back to Browse
@@ -1747,23 +1892,32 @@ export const PosterSetsDashboard: React.FC = () => {
                                         <p className="mt-1 text-xs text-amber-200">{browseSeeAllRail.error}</p>
                                     ) : null}
                                 </div>
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={browseLoading || busy !== null}
-                                    onClick={() => void loadBrowse({ refresh: true })}
-                                >
-                                    {browseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                                    Refresh
-                                </button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <CustomSelect
+                                        value={gridSize === 'list' ? 'medium' : gridSize}
+                                        onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
+                                        options={POSTER_SETS_GRID_OPTIONS}
+                                        className="w-full min-w-[140px] sm:w-auto"
+                                        compact
+                                    />
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={browseLoading || busy !== null}
+                                        onClick={() => void loadBrowse({ refresh: true })}
+                                    >
+                                        {browseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                        Refresh
+                                    </button>
+                                </div>
                             </div>
-                            <div className={`flex flex-wrap gap-3 ${isTitleCardSet(browseSeeAllRail.sets[0]) ? '' : ''}`}>
+                            <div className={posterGridClass} style={posterGridStyle}>
                                 {browseSeeAllRail.sets.map((set) => (
                                     <BrowseSetCard
                                         key={`${set.provider}-${set.setId}`}
                                         set={set}
                                         disabled={busy !== null}
-                                        onOpen={(item) => void openBrowseSet(item)}
+                                        onOpen={(item) => void openSetForApply(item)}
                                     />
                                 ))}
                             </div>
@@ -1783,15 +1937,24 @@ export const PosterSetsDashboard: React.FC = () => {
                                         First results appear immediately; more fill in the background (up to 600 per row). Tap a row title to see all.
                                     </p>
                                 </div>
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={browseLoading || busy !== null}
-                                    onClick={() => void loadBrowse({ refresh: true })}
-                                >
-                                    {browseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                                    Refresh
-                                </button>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <CustomSelect
+                                        value={gridSize === 'list' ? 'medium' : gridSize}
+                                        onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
+                                        options={POSTER_SETS_GRID_OPTIONS}
+                                        className="w-full min-w-[140px] sm:w-auto"
+                                        compact
+                                    />
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={browseLoading || busy !== null}
+                                        onClick={() => void loadBrowse({ refresh: true })}
+                                    >
+                                        {browseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                        Refresh
+                                    </button>
+                                </div>
                             </div>
                             {browseLoading && !browseRails.length ? (
                                 <div className="flex items-center gap-2 text-sm text-muted">
@@ -1805,7 +1968,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                         <button
                                             type="button"
                                             className="group inline-flex min-w-0 items-center gap-2 text-left"
-                                            onClick={() => setBrowseSeeAllId(rail.id)}
+                                            onClick={() => openBrowseRail(rail.id)}
                                         >
                                             <h3 className="text-sm font-bold text-text group-hover:text-plex sm:text-base">
                                                 {rail.title}
@@ -1823,19 +1986,28 @@ export const PosterSetsDashboard: React.FC = () => {
                                     {rail.error ? (
                                         <p className="text-xs text-amber-200">{rail.error}</p>
                                     ) : null}
-                                    <div className={previewStripClass}>
-                                        {rail.sets.map((set) => (
+                                    <div className={posterGridClass} style={posterGridStyle}>
+                                        {rail.sets.slice(0, 24).map((set) => (
                                             <BrowseSetCard
                                                 key={`${set.provider}-${set.setId}`}
                                                 set={set}
                                                 disabled={busy !== null}
-                                                onOpen={(item) => void openBrowseSet(item)}
+                                                onOpen={(item) => void openSetForApply(item)}
                                             />
                                         ))}
-                                        {!rail.sets.length && !rail.error ? (
-                                            <p className="py-6 text-sm text-muted">No sets yet.</p>
-                                        ) : null}
                                     </div>
+                                    {!rail.sets.length && !rail.error ? (
+                                        <p className="py-6 text-sm text-muted">No sets yet.</p>
+                                    ) : null}
+                                    {rail.sets.length > 24 ? (
+                                        <button
+                                            type="button"
+                                            className="text-xs font-semibold text-plex hover:underline"
+                                            onClick={() => openBrowseRail(rail.id)}
+                                        >
+                                            See all {rail.sets.length} sets
+                                        </button>
+                                    ) : null}
                                 </div>
                             ))}
                         </>
@@ -1994,9 +2166,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         onClick={() => {
                                                             const target = String(job.input?.url || meta?.url || '').trim();
                                                             if (!target) return;
-                                                            setTab('apply');
-                                                            setUrl(target);
-                                                            void runPreview(target);
+                                                            void openSetForApply({
+                                                                setId: String(meta?.setId || ''),
+                                                                title: String(meta?.title || ''),
+                                                                url: target,
+                                                                thumbUrl: meta?.thumbUrl,
+                                                                user: meta?.user,
+                                                                provider: meta?.provider || undefined,
+                                                            });
                                                         }}
                                                     >
                                                         Re-open
@@ -2431,7 +2608,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                 return (
                                 <div
                                     key={item.url}
-                                    className={`relative overflow-hidden rounded-2xl border bg-black/20 ${
+                                    className={`relative overflow-hidden ${posterMediaRadiusClass} border bg-black/20 ${
                                         bulkSelected ? 'border-plex/50 ring-1 ring-plex/30' : 'border-white/10'
                                     }`}
                                 >
@@ -2460,7 +2637,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                         className="block w-full text-left"
                                         disabled={busy !== null}
                                         onClick={() => {
-                                            setSelectedSearchSet({
+                                            void openSetForApply({
                                                 setId: item.setId || '',
                                                 title: item.title,
                                                 url: item.url,
@@ -2469,8 +2646,6 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 provider: item.provider || undefined,
                                                 posterCount: item.assetCount,
                                             });
-                                            setTab('apply');
-                                            void runPreview(item.url);
                                         }}
                                         title={`Preview ${label}`}
                                     >
@@ -2505,7 +2680,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             className={`${buttonClass} flex-1 !px-2 !py-1.5 text-xs`}
                                             disabled={busy !== null}
                                             onClick={() => {
-                                                setSelectedSearchSet({
+                                                void openSetForApply({
                                                     setId: item.setId || '',
                                                     title: item.title,
                                                     url: item.url,
@@ -2514,8 +2689,6 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     provider: item.provider || undefined,
                                                     posterCount: item.assetCount,
                                                 });
-                                                setTab('apply');
-                                                void runPreview(item.url);
                                             }}
                                         >
                                             {busy === 'preview' && url === item.url ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
@@ -2526,7 +2699,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             className={`${primaryButtonClass} flex-1 !px-2 !py-1.5 text-xs`}
                                             disabled={busy !== null}
                                             onClick={() => {
-                                                setTab('apply');
+                                                goToTab('apply');
                                                 void runApply(false, item.url);
                                             }}
                                         >
@@ -2549,6 +2722,142 @@ export const PosterSetsDashboard: React.FC = () => {
             {tab === 'apply' ? (
                 <div className="space-y-4">
                     <section className={`${cardClass} space-y-4 p-5`}>
+                        {directPreviewMode ? (
+                            <>
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wide text-plex">Preview & queue</p>
+                                    <p className="mt-1 text-sm text-muted">
+                                        Review this set, then queue matched or selected art to Plex.
+                                    </p>
+                                </div>
+                                {busy === 'preview' && !preview ? (
+                                    <div
+                                        ref={previewPanelRef}
+                                        className="flex items-center gap-3 rounded-xl border border-plex/40 bg-plex/10 p-4"
+                                    >
+                                        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-plex" />
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-semibold text-text">Loading set preview…</p>
+                                            <p className="truncate text-xs text-muted" title={formatSetLabel(selectedSearchSet) || url}>
+                                                {formatSetLabel(selectedSearchSet) || url}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : null}
+                                {readyToApply ? (
+                                    <div ref={previewPanelRef} className="space-y-4 rounded-xl border border-plex/30 bg-plex/10 p-4">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-bold uppercase tracking-wide text-plex">Preview</p>
+                                                <h3 className="mt-1 truncate text-lg font-bold text-text" title={previewHeaderLabel}>
+                                                    {previewHeaderLabel}
+                                                </h3>
+                                                <p className="mt-1 text-sm text-muted">
+                                                    <span className="text-emerald-300">{matchedAssetCount} matched</span>
+                                                    {' · '}
+                                                    <span className="text-amber-200">{preview?.unmatched ?? 0} missing</span>
+                                                    {' · '}
+                                                    {preview?.total || 0} in set
+                                                    {' · '}
+                                                    {selectedAssetIds.length} selected
+                                                </p>
+                                                <p className="mt-1 text-xs text-muted">
+                                                    Covers are tall posters; title cards show as landscape galleries by season. Tap to select.
+                                                </p>
+                                                <div className="mt-2 flex flex-wrap gap-3">
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs font-semibold text-plex hover:underline"
+                                                        onClick={clearSearch}
+                                                    >
+                                                        Search for another set
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs font-semibold text-muted hover:text-text"
+                                                        onClick={() => goToTab('browse')}
+                                                    >
+                                                        Back to Browse
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                                                <button
+                                                    type="button"
+                                                    className={`${primaryButtonClass} sm:min-w-[220px]`}
+                                                    disabled={busy !== null || (matchedAssetCount < 1 && !selectedAssetIds.length)}
+                                                    onClick={() => void applyMatched()}
+                                                >
+                                                    {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                                    Queue matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null}
+                                                    onClick={async () => {
+                                                        const ok = await askConfirm('Queue the entire set, including posters not matched in your libraries?', {
+                                                            title: 'Queue full set?',
+                                                            confirmLabel: 'Add to queue',
+                                                            cancelLabel: 'Cancel',
+                                                        });
+                                                        if (!ok) return;
+                                                        void runApply(false);
+                                                    }}
+                                                >
+                                                    Queue entire set
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {(preview?.assets || []).length ? (
+                                            <div className="space-y-3 border-t border-white/10 pt-4">
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('matched')}>Matched only</button>
+                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void applyUnmatched()}>Queue unmatched</button>
+                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void applyNewSinceWatch()}>Queue new since watch</button>
+                                                    <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('all')}>Select all</button>
+                                                    <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('none')}>Clear selection</button>
+                                                    <button type="button" className={buttonClass} disabled={busy !== null || !selectedAssetIds.length} onClick={() => void runApply(true)}>
+                                                        Queue selected ({selectedAssetIds.length})
+                                                    </button>
+                                                </div>
+                                                <PreviewAssetGallery
+                                                    sections={previewSections}
+                                                    selectedAssetIds={selectedAssetIds}
+                                                    onToggle={toggleAsset}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <p className="border-t border-white/10 pt-4 text-sm text-amber-200">
+                                                This set previewed with no assets. Check MediUX filters in Settings, or try another set.
+                                            </p>
+                                        )}
+                                        <div className="sticky bottom-3 z-10 flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/95 p-3 shadow-lg backdrop-blur">
+                                            <button
+                                                type="button"
+                                                className={`${primaryButtonClass} flex-1 sm:flex-none sm:min-w-[220px]`}
+                                                disabled={busy !== null || (matchedAssetCount < 1 && !selectedAssetIds.length)}
+                                                onClick={() => void applyMatched()}
+                                            >
+                                                {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                                Queue matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={busy !== null || !selectedAssetIds.length}
+                                                onClick={() => void runApply(true)}
+                                            >
+                                                Queue selected ({selectedAssetIds.length})
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </>
+                        ) : null}
+
+                        {!directPreviewMode ? (
+                        <>
                         <div>
                             <label className="text-xs font-bold uppercase tracking-wide text-muted">Search → choose set → preview → apply</label>
                             <p className="mt-1 text-sm text-muted">
@@ -2792,7 +3101,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                             return (
                                             <div
                                                 key={`${set.provider || findProvider}-${set.setId}`}
-                                                className={`relative overflow-hidden rounded-2xl border text-left transition ${
+                                                className={`relative overflow-hidden ${posterMediaRadiusClass} border text-left transition ${
                                                     selectedSearchSet?.setId === set.setId
                                                     && (selectedSearchSet?.provider || '') === (set.provider || '')
                                                         ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/30'
@@ -2856,18 +3165,20 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 </div>
                                                 <div className="space-y-1.5 p-3">
                                                     <p className="truncate text-sm font-semibold text-text" title={setTitle}>{setTitle}</p>
-                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                    <div className="flex flex-col items-start gap-1">
                                                         <CreatorPill user={set.user} />
-                                                        <SetKindPill set={set} />
-                                                        <ProviderPill provider={set.provider} />
-                                                        {set.alsoOn?.length ? (
-                                                            <span className="truncate text-[11px] text-muted">
-                                                                also {set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}
-                                                            </span>
-                                                        ) : null}
-                                                        {set.posterCount ? (
-                                                            <span className="truncate text-[11px] text-muted">{set.posterCount}</span>
-                                                        ) : null}
+                                                        <div className="flex flex-wrap items-center gap-1.5">
+                                                            <SetKindPill set={set} />
+                                                            <ProviderPill provider={set.provider} />
+                                                            {set.alsoOn?.length ? (
+                                                                <span className="truncate text-[11px] text-muted">
+                                                                    also {set.alsoOn.map((entry) => providerLabel(entry.provider)).join(', ')}
+                                                                </span>
+                                                            ) : null}
+                                                            {set.posterCount ? (
+                                                                <span className="truncate text-[11px] text-muted">{set.posterCount}</span>
+                                                            ) : null}
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 </button>
@@ -2904,7 +3215,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             ) : null}
 
                             {readyToApply ? (
-                                <div ref={previewPanelRef} className="order-1 mt-4 space-y-4 rounded-2xl border border-plex/30 bg-plex/10 p-4">
+                                <div ref={previewPanelRef} className="order-1 mt-4 space-y-4 rounded-xl border border-plex/30 bg-plex/10 p-4">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div className="min-w-0">
                                             <p className="text-xs font-bold uppercase tracking-wide text-plex">3. Preview</p>
@@ -3088,7 +3399,18 @@ export const PosterSetsDashboard: React.FC = () => {
                                             onChange={(event) => setUrl(event.target.value)}
                                         />
                                         <div className="flex flex-wrap gap-2">
-                                            <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runPreview()}>
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={busy !== null}
+                                                onClick={() => {
+                                                    const target = String(url).trim();
+                                                    if (target) {
+                                                        pushPosterLocation({ tab: 'apply', rail: null, setUrl: target }, 'push');
+                                                    }
+                                                    void runPreview();
+                                                }}
+                                            >
                                                 {busy === 'preview' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
                                                 Preview
                                             </button>
@@ -3106,6 +3428,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                 ) : null}
                             </div>
                         </div>
+                        </>
+                        ) : null}
                     </section>
 
                     {activeJob ? (
@@ -3356,8 +3680,11 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 onClick={() => {
                                                     const target = String(selectedHistoryJob.input?.url || '').trim();
                                                     if (!target) return;
-                                                    setTab('apply');
-                                                    void runPreview(target);
+                                                    void openSetForApply({
+                                                        setId: '',
+                                                        title: '',
+                                                        url: target,
+                                                    });
                                                 }}
                                             >
                                                 <ImageIcon className="h-4 w-4" /> Re-preview
@@ -3369,7 +3696,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 onClick={() => {
                                                     const target = String(selectedHistoryJob.input?.url || '').trim();
                                                     if (!target) return;
-                                                    setTab('apply');
+                                                    goToTab('apply');
                                                     void runApply(false, target);
                                                 }}
                                             >
