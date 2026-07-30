@@ -19,11 +19,13 @@ from urllib.parse import quote, unquote
 import plexapi.exceptions
 import requests
 from bs4 import BeautifulSoup
+from plexapi.server import PlexServer
 
-from plex_identity import configure_plex_identity
-
-configure_plex_identity()
-from plexapi.server import PlexServer  # noqa: E402 — after identity patch
+try:
+    from plex_identity import configure_plex_identity
+except ImportError:  # pragma: no cover - Dockerfile must COPY plex_identity.py
+    def configure_plex_identity(force: bool = False) -> str:
+        return ""
 
 ProgressFn = Optional[Callable[[str], None]]
 BatchFn = Optional[Callable[[dict], None]]
