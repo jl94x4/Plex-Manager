@@ -9573,8 +9573,8 @@ app.get('/api/users/:id/share-libraries', requireAdmin, async (req, res) => {
         const config = await loadFile(CONFIG_PATH, {});
         if (Array.isArray(user.libraryIds)) {
             return res.json({
-                selectedIds: normalizeLibraryIds(user.libraryIds),
-                source: 'stored',
+                selectedIds: user.libraryIds.length === 0 ? null : normalizeLibraryIds(user.libraryIds),
+                source: user.libraryIds.length === 0 ? 'all' : 'stored',
             });
         }
 
@@ -9583,7 +9583,7 @@ app.get('/api/users/:id/share-libraries', requireAdmin, async (req, res) => {
             return res.json({ selectedIds: normalizeLibraryIds(liveIds), source: 'plex' });
         }
 
-        // null = all libraries / unknown (UI starts with none checked)
+        // null = all libraries / unknown (UI starts with all checked)
         return res.json({ selectedIds: null, source: liveIds === null ? 'unknown' : 'all' });
     } catch (error) {
         log(`GET /api/users/:id/share-libraries failed: ${error.message}`);

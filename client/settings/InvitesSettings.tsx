@@ -47,7 +47,9 @@ export const InvitesSettings: React.FC<{
             const data = await apiFetch('/api/invites');
             setInvites(data);
             const libData = await apiFetch('/api/plex/libraries').catch(() => []);
-            setLibraries(libData || []);
+            const libs = libData || [];
+            setLibraries(libs);
+            setSelectedLibraries(libs.map((l: any) => String(l.id)));
         } catch (e) {
             addToast('Failed to load invites', 'error');
         } finally {
@@ -59,9 +61,12 @@ export const InvitesSettings: React.FC<{
 
     const handleCreate = async () => {
         try {
+            const allIds = libraries.map((l) => String(l.id));
+            const allSelected = allIds.length > 0 && allIds.every((id) => selectedLibraries.includes(id));
+            const libraryIds = allSelected || selectedLibraries.length === 0 ? [] : selectedLibraries;
             await apiFetch('/api/invites', {
                 method: 'POST',
-                body: JSON.stringify({ durationDays, maxUses, libraryIds: selectedLibraries })
+                body: JSON.stringify({ durationDays, maxUses, libraryIds })
             });
             addToast('Invite link created', 'success');
             fetchInvites();
@@ -74,9 +79,12 @@ export const InvitesSettings: React.FC<{
         if (!emailInvite) return addToast('Please enter an email address', 'error');
         setEmailing(true);
         try {
+            const allIds = libraries.map((l) => String(l.id));
+            const allSelected = allIds.length > 0 && allIds.every((id) => selectedLibraries.includes(id));
+            const libraryIds = allSelected || selectedLibraries.length === 0 ? [] : selectedLibraries;
             await apiFetch('/api/invites/email', {
                 method: 'POST',
-                body: JSON.stringify({ email: emailInvite, durationDays, libraryIds: selectedLibraries })
+                body: JSON.stringify({ email: emailInvite, durationDays, libraryIds })
             });
             addToast('Email invite sent!', 'success');
             setEmailInvite('');
@@ -161,7 +169,7 @@ export const InvitesSettings: React.FC<{
 
                 {libraries.length > 0 && (
                     <div className="mb-6">
-                        <label className="block text-sm mb-2 font-medium">Libraries to Share (Leave unselected to share ALL libraries)</label>
+                        <label className="block text-sm mb-2 font-medium">Libraries to Share (all start checked — uncheck any to exclude)</label>
                         <div className="flex flex-wrap gap-2">
                             {libraries.map(lib => (
                                 <label key={lib.id} className="flex items-center gap-2 bg-background border border-border px-3 py-2 rounded-lg cursor-pointer hover:border-plex transition-colors">

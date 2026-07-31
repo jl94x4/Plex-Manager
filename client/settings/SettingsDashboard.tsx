@@ -271,6 +271,14 @@ export const SettingsDashboard: React.FC = () => {
         apiFetch('/api/plex/libraries').then((libData) => setLibraries(libData || [])).catch(() => setLibraries([]));
     }, [addToast, fetchStatusConfig]);
 
+    useEffect(() => {
+        if (!libraries.length) return;
+        setDefaultLibraryIds((prev) => {
+            if (prev.length > 0) return prev;
+            return libraries.map((l: any) => String(l.id));
+        });
+    }, [libraries]);
+
     const handleSaveConfig = async (newConfig: any) => {
         setLoading(true);
         try {
@@ -1075,7 +1083,13 @@ export const SettingsDashboard: React.FC = () => {
             setHideStreamUsers(initialSettings.hideStreamUsers === true ? 'anonymous' : (initialSettings.hideStreamUsers || 'false'));
             setShowUsernamesInAnalytics(!!initialSettings.showUsernamesInAnalytics);
             setUseTrendingSlideshowOnLogin(initialSettings.useTrendingSlideshowOnLogin !== false);
-            if (initialSettings.defaultLibraryIds) setDefaultLibraryIds(initialSettings.defaultLibraryIds);
+            if (Array.isArray(initialSettings.defaultLibraryIds) && initialSettings.defaultLibraryIds.length > 0) {
+                setDefaultLibraryIds(initialSettings.defaultLibraryIds.map(String));
+            } else if (libraries.length > 0) {
+                setDefaultLibraryIds(libraries.map((l: any) => String(l.id)));
+            } else {
+                setDefaultLibraryIds([]);
+            }
             if (initialSettings.use24HourClock !== undefined) setUse24HourClock(!!initialSettings.use24HourClock);
             if (initialSettings.showPosterQualityBadges !== undefined) setShowPosterQualityBadges(initialSettings.showPosterQualityBadges !== false);
             if (initialSettings.showDashboardWatchingBadge !== undefined) setShowDashboardWatchingBadge(!!initialSettings.showDashboardWatchingBadge);
@@ -1467,7 +1481,17 @@ export const SettingsDashboard: React.FC = () => {
             hideStreamUsers,
             showUsernamesInAnalytics,
             useTrendingSlideshowOnLogin,
-            defaultLibraryIds,
+            defaultLibraryIds: (() => {
+                const allIds = libraries.map((l: any) => String(l.id));
+                if (
+                    allIds.length > 0 &&
+                    (defaultLibraryIds.length === 0 ||
+                        (defaultLibraryIds.length >= allIds.length && allIds.every((id) => defaultLibraryIds.map(String).includes(id))))
+                ) {
+                    return [];
+                }
+                return defaultLibraryIds;
+            })(),
             use24HourClock,
             allowTemporaryAccess,
             showPosterQualityBadges,
@@ -1869,7 +1893,7 @@ export const SettingsDashboard: React.FC = () => {
                                         <SettingFieldLabel
                                             hint={(
                                                 <SettingHint>
-                                                    Libraries to share automatically when users request temporary access or link their account. Leave empty to share ALL libraries.
+                                                    All libraries start checked — uncheck any you don&apos;t want shared for temporary access / auto-invite. Leaving all checked shares everything.
                                                 </SettingHint>
                                             )}
                                         >

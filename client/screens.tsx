@@ -394,13 +394,16 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             .then(([libs, share]) => {
                 if (cancelled) return;
                 const list = Array.isArray(libs) ? libs : (Array.isArray(libs?.libraries) ? libs.libraries : []);
-                setLibraries(list.map((l: any) => ({ id: String(l.id), title: l.title || `Library ${l.id}`, type: l.type })));
-                if (Array.isArray(user.libraryIds)) {
+                const mapped = list.map((l: any) => ({ id: String(l.id), title: l.title || `Library ${l.id}`, type: l.type }));
+                const allIds = mapped.map((l) => l.id);
+                setLibraries(mapped);
+                if (Array.isArray(user.libraryIds) && user.libraryIds.length > 0) {
                     setSelectedLibraries(user.libraryIds.map(String));
-                } else if (share && Array.isArray(share.selectedIds)) {
+                } else if (share && Array.isArray(share.selectedIds) && share.selectedIds.length > 0) {
                     setSelectedLibraries(share.selectedIds.map(String));
                 } else {
-                    setSelectedLibraries([]);
+                    // Empty / all / unknown → check every library (uncheck to restrict)
+                    setSelectedLibraries(allIds);
                 }
             })
             .finally(() => {
@@ -426,13 +429,20 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             allowRequest4kTv: triTo(allowRequest4kTv),
             allowAdvancedRequests: triTo(allowAdvancedRequests),
         };
+        const allLibraryIds = libraries.map((l) => l.id);
+        const allSelected =
+            allLibraryIds.length > 0 &&
+            selectedLibraries.length >= allLibraryIds.length &&
+            allLibraryIds.every((id) => selectedLibraries.includes(id));
+        // All checked (or none) → [] means share all on the backend
+        const libraryIdsToSave = allSelected || selectedLibraries.length === 0 ? [] : selectedLibraries;
         const updatedUser: User = {
             ...user,
             expiryDate,
             exemptFromCleanup,
             optOutNewsletter,
             requestOverrides,
-            libraryIds: selectedLibraries,
+            libraryIds: libraryIdsToSave,
         };
         onSave(updatedUser);
     };
@@ -524,7 +534,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
 
                 <div className="mb-4 pt-4 border-t border-border">
                     <h3 className="text-lg font-bold text-text mb-1">Library Access</h3>
-                    <p className="text-xs text-muted mb-3">Leave unselected to share all libraries. Save updates Plex access.</p>
+                    <p className="text-xs text-muted mb-3">All libraries start checked — uncheck any you don&apos;t want to share. Save updates Plex access.</p>
                     {librariesLoading ? (
                         <div className="text-sm text-muted py-2">Loading libraries…</div>
                     ) : libraries.length === 0 ? (
@@ -3820,16 +3830,16 @@ return (
                                             }
                                         }}
                                         placeholder="e.g. username or email…"
-                                        className="w-full rounded-lg border border-border bg-black/40 py-2.5 pl-10 pr-3 text-sm text-text outline-none transition focus:border-plex"
+                                        className="w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-3 text-sm text-text outline-none transition focus:border-plex"
                                         autoComplete="off"
                                     />
                                     {userSearchOpen && userSearchQuery.trim() ? (
-                                        <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-border bg-card/95 shadow-xl backdrop-blur custom-scrollbar">
+                                        <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-border bg-card shadow-2xl custom-scrollbar">
                                             {userSearchMatches.length ? userSearchMatches.map((match) => (
                                                 <button
                                                     key={match.username}
                                                     type="button"
-                                                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/5"
+                                                    className="flex w-full items-center gap-3 bg-card px-3 py-2.5 text-left transition hover:bg-white/5"
                                                     onMouseDown={(event) => event.preventDefault()}
                                                     onClick={() => openUserAnalytics(match)}
                                                 >
@@ -4618,12 +4628,19 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
 
     const openBulkLibraries = async () => {
         setBulkLibrariesOpen(true);
-        if (bulkLibraries.length > 0) return;
+        if (bulkLibraries.length > 0) {
+            if (bulkSelectedLibraries.length === 0) {
+                setBulkSelectedLibraries(bulkLibraries.map((l) => l.id));
+            }
+            return;
+        }
         setBulkLibrariesLoading(true);
         try {
             const libs = await apiFetch('/api/plex/libraries');
             const list = Array.isArray(libs) ? libs : [];
-            setBulkLibraries(list.map((l: any) => ({ id: String(l.id), title: l.title || `Library ${l.id}` })));
+            const mapped = list.map((l: any) => ({ id: String(l.id), title: l.title || `Library ${l.id}` }));
+            setBulkLibraries(mapped);
+            setBulkSelectedLibraries(mapped.map((l) => l.id));
         } catch (error) {
             addToast(error instanceof Error ? error.message : 'Failed to load libraries.', 'error');
             setBulkLibrariesOpen(false);
@@ -4634,9 +4651,15 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
 
     const handleBulkLibraries = () => {
         const count = selectedUserIds.length;
-        const label = bulkSelectedLibraries.length === 0
+        const allIds = bulkLibraries.map((l) => l.id);
+        const allSelected =
+            allIds.length > 0 &&
+            bulkSelectedLibraries.length >= allIds.length &&
+            allIds.every((id) => bulkSelectedLibraries.includes(id));
+        const libraryIds = allSelected || bulkSelectedLibraries.length === 0 ? [] : bulkSelectedLibraries;
+        const label = libraryIds.length === 0
             ? `Share ALL libraries with ${count} selected user${count === 1 ? '' : 's'}?`
-            : `Share ${bulkSelectedLibraries.length} selected librar${bulkSelectedLibraries.length === 1 ? 'y' : 'ies'} with ${count} user${count === 1 ? '' : 's'}?`;
+            : `Share ${libraryIds.length} selected librar${libraryIds.length === 1 ? 'y' : 'ies'} with ${count} user${count === 1 ? '' : 's'}?`;
         appConfirm(`${label} This updates their live Plex access.`, async () => {
             setLoading(true);
             try {
@@ -4644,7 +4667,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                     method: 'POST',
                     body: JSON.stringify({
                         userIds: selectedUserIds,
-                        libraryIds: bulkSelectedLibraries,
+                        libraryIds,
                     }),
                 });
                 const failed = Number(result?.plexFailedCount) || 0;
@@ -4862,7 +4885,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                         {bulkLibrariesOpen && (
                             <div className="pt-3 border-t border-border">
                                 <p className="text-xs text-muted mb-3">
-                                    Set library access for {selectedUserIds.length} selected user{selectedUserIds.length === 1 ? '' : 's'}. Leave unselected to share all libraries.
+                                    Set library access for {selectedUserIds.length} selected user{selectedUserIds.length === 1 ? '' : 's'}. All start checked — uncheck any to remove.
                                 </p>
                                 {bulkLibrariesLoading ? (
                                     <div className="text-sm text-muted py-2">Loading libraries…</div>
@@ -4898,9 +4921,9 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     <button
                                         type="button"
                                         className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors"
-                                        onClick={() => setBulkSelectedLibraries([])}
+                                        onClick={() => setBulkSelectedLibraries(bulkLibraries.map((l) => l.id))}
                                     >
-                                        Clear (All Libs)
+                                        Select All
                                     </button>
                                 </div>
                             </div>
