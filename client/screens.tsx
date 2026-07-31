@@ -700,6 +700,15 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
         return `Status ${status}`;
     };
 
+    const formatSeasonEpisode = (season?: number | null, episode?: number | null) => {
+        const s = season != null && Number.isFinite(Number(season)) ? Number(season) : null;
+        const e = episode != null && Number.isFinite(Number(episode)) ? Number(episode) : null;
+        if (s == null && e == null) return null;
+        if (s != null && e != null) return `S${String(s).padStart(2, '0')}E${String(e).padStart(2, '0')}`;
+        if (s != null) return `S${String(s).padStart(2, '0')}`;
+        return `E${String(e!).padStart(2, '0')}`;
+    };
+
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
     return (
@@ -804,9 +813,9 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                 <div>
                                     <h3 className="text-lg font-bold text-text uppercase tracking-wider flex items-center gap-2"><Activity className="text-plex w-4 h-4" /> Full Watch History</h3>
                                     {historySource === 'plex' ? (
-                                        <p className="mt-1 text-[11px] text-muted">Pause counts need Tautulli configured — showing Plex history only. Click a row for details.</p>
+                                        <p className="mt-1 text-[11px] text-muted">Pause time needs Tautulli configured — showing Plex history only. Click a row for details.</p>
                                     ) : historySource === 'tautulli' ? (
-                                        <p className="mt-1 text-[11px] text-muted">Click a row for session details (pauses, player, stream). Powered by Tautulli.</p>
+                                        <p className="mt-1 text-[11px] text-muted">Click a row for session details (paused time, player, stream). Powered by Tautulli.</p>
                                     ) : null}
                                 </div>
                                 <div className="relative w-full sm:w-64">
@@ -833,7 +842,9 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                             const expanded = expandedHistoryId === rowId;
                                             const durationLabel = formatHistoryDuration(h.duration);
                                             const playDurationLabel = formatHistoryDuration(h.playDuration);
-                                            const paused = Number(h.pausedCount) || 0;
+                                            const pausedSeconds = Number(h.pausedCount) || 0;
+                                            const pausedLabel = formatHistoryDuration(pausedSeconds);
+                                            const seasonEpisode = formatSeasonEpisode(h.seasonNumber, h.episodeNumber);
                                             const playerLabel = [h.player, h.platform].filter(Boolean).join(' · ');
                                             const startedLabel = formatHistoryTimestamp(h.startedAt ?? h.viewedAt);
                                             const stoppedLabel = formatHistoryTimestamp(h.stoppedAt);
@@ -844,7 +855,8 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                 playDurationLabel ? { label: 'Watched for', value: playDurationLabel } : null,
                                                 durationLabel ? { label: 'Media length', value: durationLabel } : null,
                                                 h.percentComplete != null ? { label: 'Progress', value: `${h.percentComplete}%` } : null,
-                                                historySource === 'tautulli' ? { label: 'Pauses', value: paused > 0 ? `${paused} time${paused === 1 ? '' : 's'}` : 'None' } : null,
+                                                historySource === 'tautulli' ? { label: 'Paused for', value: pausedLabel || 'None' } : null,
+                                                seasonEpisode ? { label: 'Episode', value: seasonEpisode } : null,
                                                 watchedLabel ? { label: 'Status', value: watchedLabel } : null,
                                                 h.player ? { label: 'Player', value: String(h.player) } : null,
                                                 h.platform ? { label: 'Platform', value: String(h.platform) } : null,
@@ -874,9 +886,12 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                     </div>
                                                     <div className="flex flex-col overflow-hidden w-full min-w-0">
                                                         <span className="font-bold text-sm text-text truncate w-[95%]">{h.title}</span>
-                                                        {(h.parentTitle || h.episodeTitle) && h.type !== 'movie' && (
+                                                        {(h.parentTitle || h.episodeTitle || seasonEpisode) && h.type !== 'movie' && (
                                                             <span className="text-muted text-xs truncate w-[95%]">
-                                                                {h.parentTitle || h.episodeTitle}
+                                                                {seasonEpisode ? (
+                                                                    <span className="text-plex font-mono mr-1.5">{seasonEpisode}</span>
+                                                                ) : null}
+                                                                {h.parentTitle || h.episodeTitle || ''}
                                                             </span>
                                                         )}
                                                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
@@ -889,9 +904,9 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                             {h.percentComplete != null && h.percentComplete < 100 && (
                                                                 <span className="text-yellow-500 font-mono text-[10px]">{h.percentComplete}%</span>
                                                             )}
-                                                            {paused > 0 ? (
-                                                                <span className="inline-flex items-center gap-0.5 text-amber-300 font-mono text-[10px]" title="Times paused">
-                                                                    <Pause className="w-3 h-3" /> {paused}
+                                                            {pausedLabel ? (
+                                                                <span className="inline-flex items-center gap-0.5 text-amber-300 font-mono text-[10px]" title={`Paused for ${pausedLabel}`}>
+                                                                    <Pause className="w-3 h-3" /> {pausedLabel}
                                                                 </span>
                                                             ) : null}
                                                         </div>
@@ -915,11 +930,11 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                         </div>
                                                         {historySource === 'tautulli' ? (
                                                             <p className="mt-3 text-[10px] text-muted">
-                                                                Tautulli stores how many times they paused, not the exact pause timestamps.
+                                                                Tautulli&apos;s pause value is time spent paused (seconds), not how many times they hit pause.
                                                             </p>
                                                         ) : (
                                                             <p className="mt-3 text-[10px] text-muted">
-                                                                Session detail (pauses, player, stream) needs Tautulli.
+                                                                Session detail (paused time, player, stream) needs Tautulli.
                                                             </p>
                                                         )}
                                                     </div>

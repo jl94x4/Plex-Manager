@@ -12487,6 +12487,10 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
                         title: item.full_title || item.title,
                         parentTitle: item.grandparent_title || item.parent_title || null,
                         episodeTitle: item.media_type === 'episode' || item.media_type === 'track' ? item.title : null,
+                        seasonNumber: item.media_type === 'episode' && item.parent_media_index != null && item.parent_media_index !== ''
+                            ? Number(item.parent_media_index) : null,
+                        episodeNumber: item.media_type === 'episode' && item.media_index != null && item.media_index !== ''
+                            ? Number(item.media_index) : null,
                         type: item.media_type,
                         viewedAt: item.date,
                         startedAt: item.started != null ? Number(item.started) : null,
@@ -12518,6 +12522,10 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
                 title: item.type === 'episode' ? (item.grandparentTitle || item.parentTitle || item.title) : item.type === 'track' ? (item.parentTitle || item.grandparentTitle || item.title) : item.title,
                 episodeTitle: item.type === 'episode' || item.type === 'track' ? item.title : null,
                 parentTitle: item.type === 'episode' ? (item.grandparentTitle || item.parentTitle || null) : null,
+                seasonNumber: item.type === 'episode' && item.parentIndex != null && item.parentIndex !== ''
+                    ? Number(item.parentIndex) : null,
+                episodeNumber: item.type === 'episode' && item.index != null && item.index !== ''
+                    ? Number(item.index) : null,
                 viewedAt: item.viewedAt,
                 startedAt: null,
                 stoppedAt: null,
