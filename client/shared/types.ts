@@ -14,6 +14,8 @@ export interface User {
     isTrial?: boolean;
     optOutNewsletter?: boolean;
     lastLogin?: string;
+    /** Plex library section ids shared with this user. Empty/absent = all libraries. */
+    libraryIds?: string[] | null;
     requestOverrides?: {
         movieQuotaLimit?: number | null;
         movieQuotaDays?: number | null;

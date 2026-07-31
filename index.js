@@ -2096,6 +2096,147 @@ const syncJellyfinUsers = async (config) => {
     return { message, count: jellyfinUsers.length, newUserCount };
 };
 
+const normalizeLibraryIds = (libraryIds) => {
+    if (!Array.isArray(libraryIds)) return [];
+    return [...new Set(libraryIds.map((id) => String(id)).filter(Boolean))];
+};
+
+/** Resolve library ids for invites: empty array / null / undefined = share all (omit section filter). */
+const resolveInviteLibraryIds = (user, config) => {
+    if (Array.isArray(user?.libraryIds)) return normalizeLibraryIds(user.libraryIds);
+    if (Array.isArray(config?.defaultLibraryIds)) return normalizeLibraryIds(config.defaultLibraryIds);
+    return [];
+};
+
+const parseSectionIdsFromXmlBlock = (xmlBlock) => {
+    if (!xmlBlock) return null;
+    const ids = [];
+    const sectionRegex = /<Section\b[^>]*>/gi;
+    let match;
+    while ((match = sectionRegex.exec(xmlBlock)) !== null) {
+        const tag = match[0];
+        const idMatch = tag.match(/\bid="([^"]+)"/i) || tag.match(/\bkey="([^"]+)"/i);
+        if (idMatch?.[1]) ids.push(String(idMatch[1]));
+    }
+    return ids.length > 0 ? [...new Set(ids)] : null;
+};
+
+/**
+ * Find this user's share on the configured server.
+ * Prefer plex.tv shared_servers list; fall back to friends XML (same path revoke used).
+ * @returns {{ shareId: string, libraryIds: string[] | null } | null}
+ */
+const findPlexShare = async (user, config) => {
+    const plexUserId = String(user?.plexId || user?.id || '');
+    if (!plexUserId || !config?.serverIdentifier || !config?.plexToken) return null;
+
+    try {
+        const sharedRes = await apiFetch(
+            `https://plex.tv/api/servers/${config.serverIdentifier}/shared_servers`,
+            config.plexToken
+        );
+        if (sharedRes.ok) {
+            const xmlText = await sharedRes.text();
+            const serverRegex = /<SharedServer\b[^>]*>[\s\S]*?<\/SharedServer>/gi;
+            let match;
+            while ((match = serverRegex.exec(xmlText)) !== null) {
+                const block = match[0];
+                const openTag = block.match(/<SharedServer\b[^>]*>/i)?.[0] || '';
+                const userIdMatch = openTag.match(/\buserID="([^"]+)"/i) || openTag.match(/\binvitedId="([^"]+)"/i);
+                if (!userIdMatch || String(userIdMatch[1]) !== plexUserId) continue;
+                const shareIdMatch = openTag.match(/\bid="([^"]+)"/i);
+                if (!shareIdMatch?.[1]) continue;
+                return {
+                    shareId: shareIdMatch[1],
+                    libraryIds: parseSectionIdsFromXmlBlock(block),
+                };
+            }
+        }
+    } catch (error) {
+        log(`findPlexShare shared_servers lookup failed for ${user?.username}: ${error.message}`);
+    }
+
+    try {
+        const usersListRes = await apiFetch(`${PLEX_API}/users`, config.plexToken);
+        if (!usersListRes.ok) return null;
+        const xmlText = await usersListRes.text();
+        const userBlockRegex = new RegExp(`<User\\b[^>]*id="${plexUserId}"[^>]*>.*?<\\/User>`, 's');
+        const userBlockMatch = xmlText.match(userBlockRegex);
+        if (!userBlockMatch) return null;
+
+        const serverBlockRegex = new RegExp(
+            `<Server\\b[^>]*machineIdentifier="${config.serverIdentifier}"[^>]*(?:/>|>[\\s\\S]*?</Server>)`,
+            'i'
+        );
+        const serverBlockMatch = userBlockMatch[0].match(serverBlockRegex);
+        if (!serverBlockMatch) return null;
+
+        const shareIdMatch = serverBlockMatch[0].match(/\bid="([^"]+)"/i);
+        if (!shareIdMatch?.[1]) return null;
+        return {
+            shareId: shareIdMatch[1],
+            libraryIds: parseSectionIdsFromXmlBlock(serverBlockMatch[0]),
+        };
+    } catch (error) {
+        log(`findPlexShare friends lookup failed for ${user?.username}: ${error.message}`);
+        return null;
+    }
+};
+
+const getPlexShareLibraryIds = async (user, config) => {
+    const share = await findPlexShare(user, config);
+    if (!share) return null;
+    return share.libraryIds;
+};
+
+/**
+ * Update live share libraries. Empty libraryIds = share all (sends every local section id on PUT).
+ * If no share exists, falls back to inviteUserToPlex.
+ */
+const updatePlexShareLibraries = async (user, config, libraryIds = []) => {
+    if (!config?.serverIdentifier || !config?.plexToken) {
+        log(`Error: Cannot update libraries for ${user?.username} — missing server ID or token.`);
+        return false;
+    }
+
+    const selected = normalizeLibraryIds(libraryIds);
+    try {
+        const share = await findPlexShare(user, config);
+        if (share?.shareId) {
+            let sectionIds = selected;
+            if (sectionIds.length === 0) {
+                const libs = await listPlexLibrariesForConfig(config).catch(() => []);
+                sectionIds = normalizeLibraryIds((libs || []).map((l) => l.id));
+            }
+            log(`Updating Plex share libraries for ${user.username} (share ${share.shareId}): ${sectionIds.join(',') || '(none)'}`);
+            const res = await apiFetch(
+                `https://plex.tv/api/servers/${config.serverIdentifier}/shared_servers/${share.shareId}`,
+                config.plexToken,
+                {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        server_id: config.serverIdentifier,
+                        shared_server: { library_section_ids: sectionIds },
+                    }),
+                    headers: { 'Content-Type': 'application/json' },
+                }
+            );
+            if (!res.ok) {
+                const errText = await res.text();
+                log(`Error: Failed to update share libraries for ${user.username}. Status: ${res.status}. Response: ${errText}`);
+                return false;
+            }
+            return true;
+        }
+
+        // No existing share — invite (empty selected = all libraries)
+        return inviteUserToPlex(user, config, selected.length > 0 ? selected : null);
+    } catch (error) {
+        log(`An exception occurred while updating libraries for ${user?.username}: ${error.message}`);
+        return false;
+    }
+};
+
 const revokePlexAccess = async (user, config) => {
     // The Plex friends list keys users by their Plex account id, which is stored
     // in plexId. Invite/referral users keep a portal UUID in `id`, so always
@@ -2108,48 +2249,14 @@ const revokePlexAccess = async (user, config) => {
     log(`Revoking Plex access for expired user: ${user.username} (ID: ${plexUserId})`);
 
     try {
-        // Step 1: Find the Share ID for the user on the specific server by fetching ALL users
-        const usersListRes = await apiFetch(
-            `${PLEX_API}/users`,
-            config.plexToken
-        );
-
-        if (!usersListRes.ok) {
-            const errorText = await usersListRes.text();
-            log(`Error fetching Plex users list for revocation. Status: ${usersListRes.status}. Response: ${errorText}`);
-            return false;
-        }
-
-        const xmlText = await usersListRes.text();
-
-        const userBlockRegex = new RegExp(`<User\\b[^>]*id="${plexUserId}"[^>]*>.*?<\\/User>`, 's');
-        const userBlockMatch = xmlText.match(userBlockRegex);
-
-        if (!userBlockMatch) {
-            log(`User ${user.username} not found in friends list. Assuming already revoked.`);
+        const share = await findPlexShare(user, config);
+        if (!share?.shareId) {
+            log(`User ${user.username} not found with a share on server ${config.serverIdentifier}. Assuming already revoked.`);
             return true;
         }
-
-        const serverTagRegex = new RegExp(`<Server\\b[^>]*machineIdentifier="${config.serverIdentifier}"[^>]*>`);
-        const serverTagMatch = userBlockMatch[0].match(serverTagRegex);
-
-        if (!serverTagMatch) {
-            log(`--- DIAGNOSTIC: User XML Block for ${user.username} ---`);
-            log(userBlockMatch[0]);
-            log(`--- END DIAGNOSTIC ---`);
-            log(`User ${user.username} does not have access to server ${config.serverIdentifier}. Assuming already revoked.`);
-            return true;
-        }
-
-        const shareIdMatch = serverTagMatch[0].match(/id="([^"]+)"/);
-        if (!shareIdMatch || !shareIdMatch[1]) {
-            log(`Could not find share ID for user ${user.username} on server ${config.serverIdentifier}.`);
-            return false;
-        }
-        const shareId = shareIdMatch[1];
+        const shareId = share.shareId;
         log(`Found share ID for ${user.username}: ${shareId}`);
 
-        // Step 2: Delete the share entirely using a DELETE request
         const res = await apiFetch(
             `https://plex.tv/api/servers/${config.serverIdentifier}/shared_servers/${shareId}`,
             config.plexToken,
@@ -2181,8 +2288,9 @@ const inviteUserToPlex = async (user, config, libraryIds = null) => {
     log(`Inviting user to Plex: ${user.username} (${user.email})`);
     try {
         const sharedServer = { invited_email: user.email };
-        if (libraryIds && Array.isArray(libraryIds) && libraryIds.length > 0) {
-            sharedServer.library_section_ids = libraryIds;
+        const normalized = normalizeLibraryIds(libraryIds);
+        if (normalized.length > 0) {
+            sharedServer.library_section_ids = normalized;
         }
 
         const inviteRes = await apiFetch(`https://plex.tv/api/servers/${config.serverIdentifier}/shared_servers`, config.plexToken, {
@@ -8831,6 +8939,7 @@ app.post('/api/invites/:code/claim', authRateLimit, async (req, res) => {
         today.setDate(today.getDate() + invite.durationDays);
         const expiryDate = today.toISOString();
 
+        const inviteLibraryIds = normalizeLibraryIds(invite.libraryIds);
         const newUser = {
             id: randomUUID(),
             plexId: plexUser.id,
@@ -8840,14 +8949,15 @@ app.post('/api/invites/:code/claim', authRateLimit, async (req, res) => {
             expiryDate: expiryDate,
             joiningDate: new Date().toISOString(),
             plexAccessStatus: 'pending',
-            isTrial: false
+            isTrial: false,
+            libraryIds: inviteLibraryIds,
         };
 
         users.push(newUser);
         await saveFile(USERS_PATH, users);
 
         // Send actual Plex invite
-        await inviteUserToPlex(newUser, config, invite.libraryIds).catch(e => log('Failed to invite claimed user: ' + e.message));
+        await inviteUserToPlex(newUser, config, inviteLibraryIds.length > 0 ? inviteLibraryIds : null).catch(e => log('Failed to invite claimed user: ' + e.message));
 
         // Update invite usage
         // Re-read to prevent race condition during long Plex API calls
@@ -9368,12 +9478,15 @@ app.get('/api/audit-log', requireAdmin, async (req, res) => {
 
 app.put('/api/users/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
-    const { expiryDate, exemptFromCleanup, optOutNewsletter, requestOverrides } = req.body;
+    const { expiryDate, exemptFromCleanup, optOutNewsletter, requestOverrides, libraryIds } = req.body;
     let users = await loadFile(USERS_PATH, []);
     const userIndex = users.findIndex(u => u.id === id);
     if (userIndex === -1) return res.status(404).json({ error: 'User not found.' });
 
     const previousExpiryDate = users[userIndex].expiryDate;
+    const libraryIdsProvided = libraryIds !== undefined;
+    let plexShareUpdated = false;
+    let plexShareError = null;
 
     if (expiryDate !== undefined) {
         users[userIndex].expiryDate = expiryDate;
@@ -9387,15 +9500,39 @@ app.put('/api/users/:id', requireAdmin, async (req, res) => {
     if (requestOverrides !== undefined) {
         users[userIndex].requestOverrides = normalizeUserRequestOverrides(requestOverrides);
     }
+    if (libraryIdsProvided) {
+        users[userIndex].libraryIds = normalizeLibraryIds(libraryIds);
+    }
 
     reconcileTrialAccessFlag(users[userIndex]);
 
     await saveFile(USERS_PATH, users);
 
+    const config = await loadFile(CONFIG_PATH, {});
+
+    if (libraryIdsProvided) {
+        try {
+            plexShareUpdated = await updatePlexShareLibraries(users[userIndex], config, users[userIndex].libraryIds);
+            if (plexShareUpdated && users[userIndex].plexAccessStatus === 'revoked') {
+                users[userIndex].plexAccessStatus = 'pending';
+                await saveFile(USERS_PATH, users);
+            }
+            if (plexShareUpdated) {
+                await appendAuditLog('user_libraries_updated', req.user, users[userIndex], {
+                    libraryIds: users[userIndex].libraryIds,
+                });
+            } else {
+                plexShareError = 'Saved locally but failed to update Plex library access.';
+            }
+        } catch (error) {
+            plexShareError = error.message || 'Failed to update Plex library access.';
+            log(`PUT /api/users/:id library update failed: ${plexShareError}`);
+        }
+    }
+
     if (expiryDate !== undefined && expiryDate !== previousExpiryDate) {
         await appendAuditLog('user_expiry_updated', req.user, users[userIndex], { previousExpiryDate, expiryDate });
         // Send adjustment email
-        const config = await loadFile(CONFIG_PATH, {});
         const logoPath = path.join(process.cwd(), 'static', 'logo.png');
         let hasLogo = false;
         try { await fs.access(logoPath); hasLogo = true; } catch (e) { }
@@ -9405,7 +9542,8 @@ app.put('/api/users/:id', requireAdmin, async (req, res) => {
         if (users[userIndex].plexAccessStatus === 'revoked') {
             const days = getDaysUntilExpiry(users[userIndex].expiryDate);
             if (days === null || days >= 0) {
-                const invited = await inviteUserToPlex(users[userIndex], config, config.defaultLibraryIds);
+                const inviteLibs = resolveInviteLibraryIds(users[userIndex], config);
+                const invited = await inviteUserToPlex(users[userIndex], config, inviteLibs.length > 0 ? inviteLibs : null);
                 if (invited) {
                     users[userIndex].plexAccessStatus = 'pending';
                     await saveFile(USERS_PATH, users);
@@ -9415,7 +9553,42 @@ app.put('/api/users/:id', requireAdmin, async (req, res) => {
         }
     }
 
-    res.json(sanitizeUserForApi(users[userIndex]));
+    const payload = sanitizeUserForApi(users[userIndex]);
+    if (plexShareError) {
+        return res.status(200).json({ ...payload, warning: plexShareError, plexShareUpdated: false });
+    }
+    if (libraryIdsProvided) {
+        return res.json({ ...payload, plexShareUpdated });
+    }
+    res.json(payload);
+});
+
+app.get('/api/users/:id/share-libraries', requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const users = await loadFile(USERS_PATH, []);
+        const user = users.find((u) => u.id === id);
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        const config = await loadFile(CONFIG_PATH, {});
+        if (Array.isArray(user.libraryIds)) {
+            return res.json({
+                selectedIds: normalizeLibraryIds(user.libraryIds),
+                source: 'stored',
+            });
+        }
+
+        const liveIds = await getPlexShareLibraryIds(user, config);
+        if (liveIds && liveIds.length > 0) {
+            return res.json({ selectedIds: normalizeLibraryIds(liveIds), source: 'plex' });
+        }
+
+        // null = all libraries / unknown (UI starts with none checked)
+        return res.json({ selectedIds: null, source: liveIds === null ? 'unknown' : 'all' });
+    } catch (error) {
+        log(`GET /api/users/:id/share-libraries failed: ${error.message}`);
+        return res.status(500).json({ error: 'Failed to load share libraries.' });
+    }
 });
 
 const applyBulkAction = (user, action, customDate) => {
@@ -9466,7 +9639,8 @@ app.post('/api/users/bulk-update', requireAdmin, async (req, res) => {
                 if (user.plexAccessStatus === 'revoked') {
                     const days = getDaysUntilExpiry(user.expiryDate);
                     if (days === null || days >= 0) {
-                        const invited = await inviteUserToPlex(user, config, config.defaultLibraryIds);
+                        const inviteLibs = resolveInviteLibraryIds(user, config);
+                        const invited = await inviteUserToPlex(user, config, inviteLibs.length > 0 ? inviteLibs : null);
                         if (invited) {
                             user.plexAccessStatus = 'pending';
                             await appendAuditLog('relink_invite_sent', req.user, user);
@@ -9481,6 +9655,60 @@ app.post('/api/users/bulk-update', requireAdmin, async (req, res) => {
         res.json({ message: `Successfully updated ${updatedCount} users.` });
     } catch (error) {
         res.status(500).json({ error: 'Failed to process bulk update.' });
+    }
+});
+
+app.post('/api/users/bulk-libraries', requireAdmin, async (req, res) => {
+    const { userIds, libraryIds } = req.body;
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+        return res.status(400).json({ error: 'userIds is required.' });
+    }
+    if (libraryIds !== undefined && !Array.isArray(libraryIds)) {
+        return res.status(400).json({ error: 'libraryIds must be an array.' });
+    }
+
+    try {
+        let users = await loadFile(USERS_PATH, []);
+        const config = await loadFile(CONFIG_PATH, {});
+        const normalized = normalizeLibraryIds(libraryIds);
+        const idSet = new Set(userIds.map(String));
+        let updatedCount = 0;
+        let plexUpdatedCount = 0;
+        let plexFailedCount = 0;
+
+        for (const user of users) {
+            if (!idSet.has(String(user.id))) continue;
+            user.libraryIds = normalized;
+            updatedCount++;
+            await appendAuditLog('user_bulk_libraries_updated', req.user, user, { libraryIds: normalized });
+
+            try {
+                const ok = await updatePlexShareLibraries(user, config, normalized);
+                if (ok) {
+                    plexUpdatedCount++;
+                    if (user.plexAccessStatus === 'revoked') {
+                        user.plexAccessStatus = 'pending';
+                    }
+                } else {
+                    plexFailedCount++;
+                }
+            } catch (error) {
+                plexFailedCount++;
+                log(`Bulk library update failed for ${user.username}: ${error.message}`);
+            }
+        }
+
+        await saveFile(USERS_PATH, users);
+        log(`Bulk library update: ${updatedCount} users saved, ${plexUpdatedCount} Plex shares updated, ${plexFailedCount} failed`);
+        res.json({
+            message: `Updated libraries for ${updatedCount} user${updatedCount === 1 ? '' : 's'}.`,
+            updatedCount,
+            plexUpdatedCount,
+            plexFailedCount,
+        });
+    } catch (error) {
+        log(`POST /api/users/bulk-libraries failed: ${error.message}`);
+        res.status(500).json({ error: 'Failed to process bulk library update.' });
     }
 });
 
@@ -9609,7 +9837,8 @@ app.post('/api/users/relink', requireAuth, requireMember, async (req, res) => {
 
     try {
         log(`Re-linking user ${user.username}...`);
-        await inviteUserToPlex(user, config, config.defaultLibraryIds).catch(e => log('Failed to re-link user: ' + e.message));
+        const inviteLibs = resolveInviteLibraryIds(user, config);
+        await inviteUserToPlex(user, config, inviteLibs.length > 0 ? inviteLibs : null).catch(e => log('Failed to re-link user: ' + e.message));
 
         user.plexAccessStatus = 'pending';
         await saveFile(USERS_PATH, users);

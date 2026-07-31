@@ -316,6 +316,9 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
     const [expiryDate, setExpiryDate] = useState<string | null>(formatDate(addMonths(new Date(), 1).toISOString()));
     const [exemptFromCleanup, setExemptFromCleanup] = useState(false);
     const [optOutNewsletter, setOptOutNewsletter] = useState(false);
+    const [libraries, setLibraries] = useState<Array<{ id: string; title: string; type?: string }>>([]);
+    const [selectedLibraries, setSelectedLibraries] = useState<string[]>([]);
+    const [librariesLoading, setLibrariesLoading] = useState(false);
     const [overrideMovieQuota, setOverrideMovieQuota] = useState(false);
     const [movieQuotaLimit, setMovieQuotaLimit] = useState(0);
     const [movieQuotaDays, setMovieQuotaDays] = useState(7);
@@ -346,6 +349,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             setExpiryDate(user.expiryDate ? formatDate(user.expiryDate) : null);
             setExemptFromCleanup(!!user.exemptFromCleanup);
             setOptOutNewsletter(!!user.optOutNewsletter);
+            setSelectedLibraries(Array.isArray(user.libraryIds) ? user.libraryIds.map(String) : []);
             const ov = user.requestOverrides || {};
             setOverrideMovieQuota(ov.movieQuotaLimit != null);
             setMovieQuotaLimit(Number(ov.movieQuotaLimit) || 0);
@@ -364,6 +368,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             setExpiryDate(formatDate(addMonths(new Date(), 1).toISOString()));
             setExemptFromCleanup(false);
             setOptOutNewsletter(false);
+            setSelectedLibraries([]);
             setOverrideMovieQuota(false);
             setMovieQuotaLimit(0);
             setMovieQuotaDays(7);
@@ -377,6 +382,32 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             setAllowAdvancedRequests('default');
         }
     }, [user, isOpen]);
+
+    useEffect(() => {
+        if (!isOpen || !user?.id) return;
+        let cancelled = false;
+        setLibrariesLoading(true);
+        Promise.all([
+            apiFetch('/api/plex/libraries').catch(() => []),
+            apiFetch(`/api/users/${user.id}/share-libraries`).catch(() => null),
+        ])
+            .then(([libs, share]) => {
+                if (cancelled) return;
+                const list = Array.isArray(libs) ? libs : (Array.isArray(libs?.libraries) ? libs.libraries : []);
+                setLibraries(list.map((l: any) => ({ id: String(l.id), title: l.title || `Library ${l.id}`, type: l.type })));
+                if (Array.isArray(user.libraryIds)) {
+                    setSelectedLibraries(user.libraryIds.map(String));
+                } else if (share && Array.isArray(share.selectedIds)) {
+                    setSelectedLibraries(share.selectedIds.map(String));
+                } else {
+                    setSelectedLibraries([]);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setLibrariesLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [isOpen, user?.id]);
 
     if (!isOpen) return null;
 
@@ -395,7 +426,14 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             allowRequest4kTv: triTo(allowRequest4kTv),
             allowAdvancedRequests: triTo(allowAdvancedRequests),
         };
-        const updatedUser: User = { ...user, expiryDate, exemptFromCleanup, optOutNewsletter, requestOverrides };
+        const updatedUser: User = {
+            ...user,
+            expiryDate,
+            exemptFromCleanup,
+            optOutNewsletter,
+            requestOverrides,
+            libraryIds: selectedLibraries,
+        };
         onSave(updatedUser);
     };
 
@@ -482,6 +520,33 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                             <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${optOutNewsletter ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
                     </div>
+                </div>
+
+                <div className="mb-4 pt-4 border-t border-border">
+                    <h3 className="text-lg font-bold text-text mb-1">Library Access</h3>
+                    <p className="text-xs text-muted mb-3">Leave unselected to share all libraries. Save updates Plex access.</p>
+                    {librariesLoading ? (
+                        <div className="text-sm text-muted py-2">Loading libraries…</div>
+                    ) : libraries.length === 0 ? (
+                        <div className="text-sm text-muted py-2">No libraries found. Check Plex connection in Settings.</div>
+                    ) : (
+                        <div className="flex flex-wrap gap-2">
+                            {libraries.map((lib) => (
+                                <label key={lib.id} className="flex items-center gap-2 bg-background border border-border px-3 py-2 rounded-lg cursor-pointer hover:border-plex transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedLibraries.includes(lib.id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) setSelectedLibraries([...selectedLibraries, lib.id]);
+                                            else setSelectedLibraries(selectedLibraries.filter((id) => id !== lib.id));
+                                        }}
+                                        className="accent-plex"
+                                    />
+                                    <span className="text-sm font-medium">{lib.title}</span>
+                                </label>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 <div className="mt-2 pt-4 border-t border-border">
@@ -4310,6 +4375,10 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
     const [bulkCustomDate, setBulkCustomDate] = useState('');
+    const [bulkLibrariesOpen, setBulkLibrariesOpen] = useState(false);
+    const [bulkLibraries, setBulkLibraries] = useState<Array<{ id: string; title: string }>>([]);
+    const [bulkSelectedLibraries, setBulkSelectedLibraries] = useState<string[]>([]);
+    const [bulkLibrariesLoading, setBulkLibrariesLoading] = useState(false);
     const [deletedUsers, setDeletedUsers] = useState<DeletedUser[]>([]);
     const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
 
@@ -4468,11 +4537,18 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                     exemptFromCleanup: userToSave.exemptFromCleanup,
                     optOutNewsletter: userToSave.optOutNewsletter,
                     requestOverrides: userToSave.requestOverrides || {},
+                    libraryIds: Array.isArray(userToSave.libraryIds) ? userToSave.libraryIds : [],
                 })
             });
             setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
             handleCloseModal();
-            addToast('User updated successfully!');
+            if (updatedUser.warning) {
+                addToast(updatedUser.warning, 'error');
+            } else if (updatedUser.plexShareUpdated === false) {
+                addToast('User saved, but Plex library access was not updated.', 'error');
+            } else {
+                addToast('User updated successfully!');
+            }
             await fetchSecurityData();
         } catch (error) {
             addToast(error instanceof Error ? error.message : 'Failed to save user.', 'error');
@@ -4515,6 +4591,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             addToast(`Successfully updated ${selectedUserIds.length} users.`);
             setSelectedUserIds([]);
             setBulkCustomDate('');
+            setBulkLibrariesOpen(false);
             await fetchUsers();
             await fetchSecurityData();
         } catch (error) {
@@ -4522,6 +4599,56 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
         } finally {
             setLoading(false);
         }
+    };
+
+    const openBulkLibraries = async () => {
+        setBulkLibrariesOpen(true);
+        if (bulkLibraries.length > 0) return;
+        setBulkLibrariesLoading(true);
+        try {
+            const libs = await apiFetch('/api/plex/libraries');
+            const list = Array.isArray(libs) ? libs : [];
+            setBulkLibraries(list.map((l: any) => ({ id: String(l.id), title: l.title || `Library ${l.id}` })));
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Failed to load libraries.', 'error');
+            setBulkLibrariesOpen(false);
+        } finally {
+            setBulkLibrariesLoading(false);
+        }
+    };
+
+    const handleBulkLibraries = () => {
+        const count = selectedUserIds.length;
+        const label = bulkSelectedLibraries.length === 0
+            ? `Share ALL libraries with ${count} selected user${count === 1 ? '' : 's'}?`
+            : `Share ${bulkSelectedLibraries.length} selected librar${bulkSelectedLibraries.length === 1 ? 'y' : 'ies'} with ${count} user${count === 1 ? '' : 's'}?`;
+        appConfirm(`${label} This updates their live Plex access.`, async () => {
+            setLoading(true);
+            try {
+                const result = await apiFetch('/api/users/bulk-libraries', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        userIds: selectedUserIds,
+                        libraryIds: bulkSelectedLibraries,
+                    }),
+                });
+                const failed = Number(result?.plexFailedCount) || 0;
+                if (failed > 0) {
+                    addToast(`${result.message || 'Saved.'} ${failed} Plex share update${failed === 1 ? '' : 's'} failed.`, 'error');
+                } else {
+                    addToast(result.message || `Updated libraries for ${count} users.`);
+                }
+                setSelectedUserIds([]);
+                setBulkSelectedLibraries([]);
+                setBulkLibrariesOpen(false);
+                await fetchUsers();
+                await fetchSecurityData();
+            } catch (error) {
+                addToast(error instanceof Error ? error.message : 'Bulk library update failed.', 'error');
+            } finally {
+                setLoading(false);
+            }
+        });
     };
 
     const handleUnblockDeletedUser = async (deletedUser: DeletedUser) => {
@@ -4667,44 +4794,102 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 )}
 
                 {selectedUserIds.length > 0 && (
-                    <div className="glass-card-sm p-4 flex justify-between items-center mb-8 flex-wrap gap-4 w-full">
-                        <div className="flex items-center flex-wrap gap-4 text-sm font-medium">
-                            <span className="text-plex">{selectedUserIds.length} selected</span>
-                            {allFilteredSelected ? (
-                                <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds(prev => prev.filter(id => !filteredUserIds.includes(id)))}>Unselect Filtered</button>
-                            ) : (
-                                <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds(prev => Array.from(new Set([...prev, ...filteredUserIds])))}>Select Filtered ({filteredAndSortedUsers.length})</button>
-                            )}
-                            {selectedUserIds.length < users.length && (
-                                <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds(users.map(user => user.id))}>Select All ({users.length})</button>
-                            )}
-                            <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds([])}>Unselect All</button>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={() => handleBulkUpdate('addMonth')}>+1 Month</button>
-                            <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={() => handleBulkUpdate('addYear')}>+1 Year</button>
-                            <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={() => handleBulkUpdate('unlimited')}>Unlimited</button>
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="date"
-                                    value={bulkCustomDate}
-                                    onChange={(e) => setBulkCustomDate(e.target.value)}
-                                    className="p-2 rounded-md border border-border bg-background text-text text-sm outline-none focus:border-plex cursor-pointer"
-                                />
+                    <div className="glass-card-sm p-4 mb-8 w-full space-y-4">
+                        <div className="flex justify-between items-center flex-wrap gap-4">
+                            <div className="flex items-center flex-wrap gap-4 text-sm font-medium">
+                                <span className="text-plex">{selectedUserIds.length} selected</span>
+                                {allFilteredSelected ? (
+                                    <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds(prev => prev.filter(id => !filteredUserIds.includes(id)))}>Unselect Filtered</button>
+                                ) : (
+                                    <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds(prev => Array.from(new Set([...prev, ...filteredUserIds])))}>Select Filtered ({filteredAndSortedUsers.length})</button>
+                                )}
+                                {selectedUserIds.length < users.length && (
+                                    <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds(users.map(user => user.id))}>Select All ({users.length})</button>
+                                )}
+                                <button className="text-muted hover:text-text transition-colors underline" onClick={() => { setSelectedUserIds([]); setBulkLibrariesOpen(false); }}>Unselect All</button>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={() => handleBulkUpdate('addMonth')}>+1 Month</button>
+                                <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={() => handleBulkUpdate('addYear')}>+1 Year</button>
+                                <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={() => handleBulkUpdate('unlimited')}>Unlimited</button>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="date"
+                                        value={bulkCustomDate}
+                                        onChange={(e) => setBulkCustomDate(e.target.value)}
+                                        className="p-2 rounded-md border border-border bg-background text-text text-sm outline-none focus:border-plex cursor-pointer"
+                                    />
+                                    <button
+                                        className="px-4 py-2 bg-plex text-background rounded-md font-medium hover:bg-plex-hover transition-colors flex items-center justify-center gap-2"
+                                        onClick={() => {
+                                            if (!bulkCustomDate) {
+                                                addToast('Please select a custom expiry date.', 'error');
+                                                return;
+                                            }
+                                            handleBulkUpdate('custom', bulkCustomDate);
+                                        }}
+                                    >
+                                        Set Custom Date
+                                    </button>
+                                </div>
                                 <button
-                                    className="px-4 py-2 bg-plex text-background rounded-md font-medium hover:bg-plex-hover transition-colors flex items-center justify-center gap-2"
+                                    type="button"
+                                    className={`px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center gap-2 ${bulkLibrariesOpen ? 'bg-plex text-background' : 'bg-border text-text hover:bg-opacity-80'}`}
                                     onClick={() => {
-                                        if (!bulkCustomDate) {
-                                            addToast('Please select a custom expiry date.', 'error');
-                                            return;
-                                        }
-                                        handleBulkUpdate('custom', bulkCustomDate);
+                                        if (bulkLibrariesOpen) setBulkLibrariesOpen(false);
+                                        else openBulkLibraries();
                                     }}
                                 >
-                                    Set Custom Date
+                                    Libraries
                                 </button>
                             </div>
                         </div>
+                        {bulkLibrariesOpen && (
+                            <div className="pt-3 border-t border-border">
+                                <p className="text-xs text-muted mb-3">
+                                    Set library access for {selectedUserIds.length} selected user{selectedUserIds.length === 1 ? '' : 's'}. Leave unselected to share all libraries.
+                                </p>
+                                {bulkLibrariesLoading ? (
+                                    <div className="text-sm text-muted py-2">Loading libraries…</div>
+                                ) : bulkLibraries.length === 0 ? (
+                                    <div className="text-sm text-muted py-2">No libraries found. Check Plex connection in Settings.</div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        {bulkLibraries.map((lib) => (
+                                            <label key={lib.id} className="flex items-center gap-2 bg-background border border-border px-3 py-2 rounded-lg cursor-pointer hover:border-plex transition-colors">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={bulkSelectedLibraries.includes(lib.id)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) setBulkSelectedLibraries([...bulkSelectedLibraries, lib.id]);
+                                                        else setBulkSelectedLibraries(bulkSelectedLibraries.filter((id) => id !== lib.id));
+                                                    }}
+                                                    className="accent-plex"
+                                                />
+                                                <span className="text-sm font-medium">{lib.title}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <button
+                                        type="button"
+                                        className="px-4 py-2 bg-plex text-background rounded-md font-medium hover:bg-plex-hover transition-colors disabled:opacity-50"
+                                        disabled={bulkLibrariesLoading || bulkLibraries.length === 0}
+                                        onClick={handleBulkLibraries}
+                                    >
+                                        Apply Libraries
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors"
+                                        onClick={() => setBulkSelectedLibraries([])}
+                                    >
+                                        Clear (All Libs)
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
