@@ -17200,18 +17200,20 @@ const resolveUpgraderMaHandoff = async (config, item) => {
     }
 
     // Next: any candidate that exists on disk (even without an owning library yet).
+    // Always recompute matchingLibrary for the chosen path — never keep a library
+    // that does not contain resolvedPath.
     if (!resolvedPath || !(await pathExists(resolvedPath))) {
         for (const candidate of candidates) {
             if (await pathExists(candidate)) {
                 resolvedPath = candidate;
-                matchingLibrary = matchingLibrary || findOwningLibrary(candidate);
+                matchingLibrary = findOwningLibrary(candidate);
                 break;
             }
         }
     }
 
     if (!resolvedPath) resolvedPath = candidates.find((c) => findOwningLibrary(c)) || candidates[0] || arrPath;
-    if (!matchingLibrary) matchingLibrary = findOwningLibrary(resolvedPath);
+    matchingLibrary = findOwningLibrary(resolvedPath);
 
     const titleLabel = `${item?.title || 'Title'}${item?.year ? ` (${item.year})` : ''}`.slice(0, 120);
     return {

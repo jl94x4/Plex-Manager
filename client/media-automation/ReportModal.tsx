@@ -157,7 +157,11 @@ export const ReportModal: React.FC<Props> = ({
             setResult(response);
             const matched = (response.rows || []).filter((row) => row.matched);
             setSelected(new Set(matched.map((row) => row.path)));
-            toast(`Report ready: ${matched.length} matched of ${response.totals?.analyzed || 0} analyzed.`);
+            toast(
+                `Report ready: ${matched.length} matched of ${response.totals?.analyzed || 0} analyzed`
+                + (Number(response.totals?.probeFailed) > 0 ? ` · ${response.totals.probeFailed} probe failed` : '')
+                + '.',
+            );
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Report failed', 'error');
         } finally {
@@ -303,7 +307,10 @@ export const ReportModal: React.FC<Props> = ({
                                     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Matched</p>
                                         <p className="mt-1 text-xl font-black text-text">{totals?.matched ?? 0}</p>
-                                        <p className="mt-1 text-xs text-muted">of {totals?.analyzed ?? 0} analyzed</p>
+                                        <p className="mt-1 text-xs text-muted">
+                                            of {totals?.analyzed ?? 0} analyzed
+                                            {Number(totals?.probeFailed) > 0 ? ` · ${totals.probeFailed} probe failed` : ''}
+                                        </p>
                                     </div>
                                     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
                                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Source size</p>

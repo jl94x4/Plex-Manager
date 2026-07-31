@@ -1108,7 +1108,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [libraryPathHealth, setLibraryPathHealth] = useState<Record<string, { ok: boolean; message: string }>>({});
     const [reportSeed, setReportSeed] = useState<ReportModalSeed | null>(null);
     const reportDeepLinkHandled = React.useRef(false);
-    const editLibraryDeepLinkHandled = React.useRef(false);
+    const editLibraryDeepLinkHandled = React.useRef<string | null>(null);
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
@@ -1281,11 +1281,18 @@ export const MediaAutomationDashboard: React.FC = () => {
         options: { preview?: boolean; planOnly?: boolean; libraryId?: string | number | null } = {},
         rootsForConfirm?: string[],
     ) => {
+        if (options.libraryId != null) {
+            const target = libraries.find((library) => String(library.id) === String(options.libraryId));
+            if (target && target.enabled === false) {
+                toast('That library is disabled. Enable it before scanning.', 'error');
+                return;
+            }
+        }
         const roots = rootsForConfirm ?? (
             !options.preview && !options.planOnly
                 ? (options.libraryId != null
                     ? libraries
-                        .filter((library) => String(library.id) === String(options.libraryId))
+                        .filter((library) => String(library.id) === String(options.libraryId) && library.enabled !== false)
                         .map((library) => String(library.rootPath || '').trim())
                         .filter(Boolean)
                     : libraries
@@ -3469,7 +3476,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className={buttonClass}
-                                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
+                                                    disabled={busy !== null || library.enabled === false || !!(status.scanning || status.scanProgress?.running)}
+                                                    title={library.enabled === false ? 'Enable this library to scan' : undefined}
                                                     onClick={() => void runScanNow({ preview: true, libraryId: library.id })}
                                                 >
                                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
@@ -3478,7 +3486,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className={buttonClass}
-                                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
+                                                    disabled={busy !== null || library.enabled === false || !!(status.scanning || status.scanProgress?.running)}
+                                                    title={library.enabled === false ? 'Enable this library to scan' : undefined}
                                                     onClick={() => void runScanNow({ planOnly: true, libraryId: library.id })}
                                                 >
                                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -3487,7 +3496,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className={buttonClass}
-                                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
+                                                    disabled={busy !== null || library.enabled === false || !!(status.scanning || status.scanProgress?.running)}
+                                                    title={library.enabled === false ? 'Enable this library to scan' : undefined}
                                                     onClick={() => void runScanNow({ libraryId: library.id }, [String(library.rootPath || '').trim()].filter(Boolean))}
                                                 >
                                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />}
