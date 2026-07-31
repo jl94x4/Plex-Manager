@@ -408,18 +408,21 @@ const ProviderPill: React.FC<{ provider?: string | null; compact?: boolean }> = 
     );
 };
 
-/** Proxied poster thumb with graceful fallback when upstream / Cloudflare flakes. */
+/** Proxied poster thumb with retry + graceful fallback when TPDB rate-limits. */
 const PosterThumb: React.FC<{
     src?: string | null;
     alt?: string;
     className?: string;
     imgClassName?: string;
     loading?: 'lazy' | 'eager';
-}> = ({ src, alt = '', className = '', imgClassName = '', loading = 'lazy' }) => {
+    onLoad?: (event: React.SyntheticEvent<HTMLImageElement>) => void;
+}> = ({ src, alt = '', className = '', imgClassName = '', loading = 'lazy', onLoad }) => {
     const [failed, setFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
     const resolved = String(src || '').trim();
     useEffect(() => {
         setFailed(false);
+        setAttempt(0);
     }, [resolved]);
     if (!resolved || failed) {
         return (
@@ -431,12 +434,20 @@ const PosterThumb: React.FC<{
     return (
         <div className={`overflow-hidden bg-black ${className}`}>
             <img
+                key={`${resolved}::${attempt}`}
                 src={resolved}
                 alt={alt}
                 loading={loading}
                 decoding="async"
                 className={imgClassName || 'h-full w-full object-contain object-center'}
-                onError={() => setFailed(true)}
+                onLoad={onLoad}
+                onError={() => {
+                    if (attempt < 2) {
+                        window.setTimeout(() => setAttempt((value) => value + 1), 900 + attempt * 700);
+                        return;
+                    }
+                    setFailed(true);
+                }}
             />
         </div>
     );
@@ -539,18 +550,12 @@ function BrowseSetCard({
                 className="flex w-full min-w-0 flex-col text-left disabled:opacity-50"
             >
                 <div className={`relative w-full shrink-0 overflow-hidden bg-black ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
-                    {set.thumbUrl ? (
-                        <img
-                            src={posterSetsApi.imageUrl(set.thumbUrl)}
-                            alt={setTitle}
-                            loading="lazy"
-                            className="absolute inset-0 h-full w-full object-contain object-center"
-                        />
-                    ) : (
-                        <div className="absolute inset-0 flex items-center justify-center text-muted">
-                            <ImageIcon className="h-8 w-8 opacity-40" />
-                        </div>
-                    )}
+                    <PosterThumb
+                        src={set.thumbUrl ? posterSetsApi.imageUrl(set.thumbUrl) : ''}
+                        alt={setTitle}
+                        className="absolute inset-0 h-full w-full"
+                        imgClassName="absolute inset-0 h-full w-full object-contain object-center"
+                    />
                 </div>
                 <div className="min-w-0 px-1.5 pt-1.5 sm:px-2 sm:pt-1.5">
                     <p className="line-clamp-2 text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={setTitle}>{setTitle}</p>
@@ -3182,30 +3187,24 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             title={`Preview ${label}`}
                                                         >
                                                             <div className={`relative overflow-hidden bg-black ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
-                                                                {item.thumbUrl ? (
-                                                                    <img
-                                                                        src={posterSetsApi.imageUrl(item.thumbUrl)}
-                                                                        alt={label}
-                                                                        loading="lazy"
-                                                                        className="absolute inset-0 h-full w-full object-contain object-center"
-                                                                        onLoad={(event) => {
-                                                                            const img = event.currentTarget;
-                                                                            if (!img.naturalWidth || !img.naturalHeight) return;
-                                                                            const ratio = img.naturalWidth / img.naturalHeight;
-                                                                            if (ratio < 1.2 || category.id !== 'posters') return;
-                                                                            // Landscape thumb parked under Posters — promote to title cards.
-                                                                            upsertRecentSet({
-                                                                                ...item,
-                                                                                setKind: 'title_cards',
-                                                                            }, item.url, { setKind: 'title_cards' });
-                                                                            setRecentTick((value) => value + 1);
-                                                                        }}
-                                                                    />
-                                                                ) : (
-                                                                    <div className="absolute inset-0 flex items-center justify-center text-muted">
-                                                                        <ImageIcon className="h-8 w-8 opacity-40" />
-                                                                    </div>
-                                                                )}
+                                                                <PosterThumb
+                                                                    src={item.thumbUrl ? posterSetsApi.imageUrl(item.thumbUrl) : ''}
+                                                                    alt={label}
+                                                                    className="absolute inset-0 h-full w-full"
+                                                                    imgClassName="absolute inset-0 h-full w-full object-contain object-center"
+                                                                    loading="lazy"
+                                                                    onLoad={(event) => {
+                                                                        const img = event.currentTarget;
+                                                                        if (!img.naturalWidth || !img.naturalHeight) return;
+                                                                        const ratio = img.naturalWidth / img.naturalHeight;
+                                                                        if (ratio < 1.2 || category.id !== 'posters') return;
+                                                                        upsertRecentSet({
+                                                                            ...item,
+                                                                            setKind: 'title_cards',
+                                                                        }, item.url, { setKind: 'title_cards' });
+                                                                        setRecentTick((value) => value + 1);
+                                                                    }}
+                                                                />
                                                                 <span className="absolute right-2 top-2 rounded-full border border-white/15 bg-black/55 px-1.5 py-px text-[8px] font-bold uppercase tracking-wide text-text sm:text-[9px]">
                                                                     {providerLabel(item.provider)}
                                                                 </span>
