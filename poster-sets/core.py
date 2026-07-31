@@ -664,10 +664,12 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
             page_meta["title"] = str(show.get("name") or "").strip() or None
             page_meta["tmdbId"] = _pick_id(show.get("id") or show.get("tmdb_id") or show.get("tmdbId"))
             page_meta["tvdbId"] = _pick_id(show.get("tvdb_id") or show.get("tvdbId") or show.get("tvdb"))
+            page_meta["mediaType"] = "show"
         elif isinstance(movie, dict) and movie.get("title"):
             page_meta["title"] = str(movie.get("title") or "").strip() or None
             page_meta["tmdbId"] = _pick_id(movie.get("id") or movie.get("tmdb_id") or movie.get("tmdbId"))
             page_meta["tvdbId"] = _pick_id(movie.get("tvdb_id") or movie.get("tvdbId"))
+            page_meta["mediaType"] = "movie"
         elif (aset.get("collection") or {}).get("collection_name"):
             page_meta["title"] = str(
                 (aset.get("collection") or {}).get("collection_name") or ""
@@ -686,6 +688,10 @@ def scrape_mediux(soup, mediux_filters: Optional[Sequence[str]] = None, progress
             media_type = "Show"
         else:
             media_type = "Movie"
+    if media_type == "Show":
+        page_meta["mediaType"] = "show"
+    elif media_type == "Movie" and not page_meta.get("mediaType"):
+        page_meta["mediaType"] = "movie"
 
     for data in poster_data:
         file_type = None
@@ -798,9 +804,11 @@ def scrape(url: str, mediux_filters: Optional[Sequence[str]] = None, progress: P
                         break
                 if title:
                     break
+            media_type = "show" if showposters else ("movie" if movieposters else None)
             return movieposters, showposters, collectionposters, {
                 "user": extract_creator_from_soup(soup),
                 "title": title,
+                "mediaType": media_type,
             }
         if "/poster/" in url:
             soup = cook_soup(url)
@@ -817,9 +825,11 @@ def scrape(url: str, mediux_filters: Optional[Sequence[str]] = None, progress: P
                         break
                 if title:
                     break
+            media_type = "show" if showposters else ("movie" if movieposters else None)
             return movieposters, showposters, collectionposters, {
                 "user": extract_creator_from_soup(set_soup),
                 "title": title,
+                "mediaType": media_type,
             }
         raise RuntimeError("Poster set not found. Check the link you are inputting.")
     if "mediux.pro" in url and "sets" in url:
@@ -896,6 +906,17 @@ def build_set_meta(
             title = f"Set {ref['setId']}"
         else:
             title = "Poster set"
+    media_type = str(meta.get("mediaType") or meta.get("media_type") or "").strip().lower()
+    if media_type in {"tv", "series", "shows", "show"}:
+        media_type = "show"
+    elif media_type in {"movies", "movie"}:
+        media_type = "movie"
+    elif showposters and not movieposters:
+        media_type = "show"
+    elif movieposters and not showposters:
+        media_type = "movie"
+    else:
+        media_type = media_type or None
     return {
         "provider": ref.get("provider"),
         "setId": ref.get("setId"),
@@ -904,6 +925,7 @@ def build_set_meta(
         "user": user,
         "tmdbId": _pick_id(meta.get("tmdbId") or meta.get("tmdb_id")),
         "tvdbId": _pick_id(meta.get("tvdbId") or meta.get("tvdb_id")),
+        "mediaType": media_type,
         "thumbUrl": thumb,
         "assetCount": total or None,
     }

@@ -80,6 +80,9 @@ const WATCHES_PAGE_SIZE_OPTIONS = [
 const ALL_MEDIUX_FILTER_IDS = MEDIUX_FILTER_OPTIONS.map((option) => option.id);
 const TITLE_CARD_ONLY_FILTERS = ['title_card'];
 
+/** Survive Poster Sets remounts so Browse doesn't flash empty while the server cache answers. */
+let browseRailsCache: PosterSetsBrowseRail[] = [];
+
 const cardClass = 'glass-card shadow-xl';
 const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-plex px-2.5 py-1.5 text-xs font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
@@ -570,6 +573,110 @@ function BrowseSetCard({
     );
 }
 
+function RelatedSetsRail({
+    sets,
+    loading,
+    mediaLabel,
+    disabled,
+    onOpen,
+    onOpenCreator,
+}: {
+    sets: PosterSetsSearchSet[];
+    loading: boolean;
+    mediaLabel: string;
+    disabled?: boolean;
+    onOpen: (set: PosterSetsSearchSet) => void;
+    onOpenCreator?: (user: string) => void;
+}) {
+    if (!loading && !sets.length) return null;
+    return (
+        <div className="space-y-2.5 border-t border-white/10 pt-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-muted">
+                    Other sets for this {mediaLabel}
+                </h3>
+                {loading ? (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Finding sets…
+                    </span>
+                ) : (
+                    <span className="text-[11px] text-muted">{sets.length} available</span>
+                )}
+            </div>
+            {sets.length ? (
+                <div className={previewStripClass}>
+                    {sets.map((set) => (
+                        <div
+                            key={`${set.provider || 'set'}-${set.setId}`}
+                            className="w-[7.5rem] shrink-0 sm:w-36"
+                        >
+                            <BrowseSetCard
+                                set={set}
+                                disabled={disabled}
+                                onOpen={onOpen}
+                                onOpenCreator={onOpenCreator}
+                            />
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <p className="text-xs text-muted">Looking for more packs on MediUX and ThePosterDB…</p>
+            )}
+        </div>
+    );
+}
+
+const normalizeRelatedTitle = (value?: string | null) => String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const inferPreviewMediaType = (
+    preview: PosterSetsPreview | null | undefined,
+): 'movie' | 'show' => {
+    const metaType = String(preview?.setMeta?.mediaType || '').trim().toLowerCase();
+    if (metaType === 'show' || metaType === 'tv' || metaType === 'series') return 'show';
+    if (metaType === 'movie' || metaType === 'movies') return 'movie';
+    const assets = preview?.assets || [];
+    if (assets.some((asset) => asset.kind === 'show')) return 'show';
+    if ((preview?.shows || 0) > 0) return 'show';
+    return 'movie';
+};
+
+const relatedSetKey = (set: { provider?: string | null; setId?: string | null; url?: string | null }) => {
+    const setId = set.setId != null ? String(set.setId).trim() : '';
+    const provider = String(set.provider || '').trim().toLowerCase();
+    if (provider && setId) return `${provider}:${setId}`;
+    const url = String(set.url || '').trim().toLowerCase().replace(/\/+$/, '');
+    return url || '';
+};
+
+const pickBestRelatedTitle = (
+    titles: PosterSetsSearchTitle[],
+    wantTitle: string,
+    wantYear?: number | null,
+) => {
+    const want = normalizeRelatedTitle(wantTitle);
+    if (!want || !titles.length) return null;
+    let best: PosterSetsSearchTitle | null = null;
+    let bestScore = 0;
+    for (const title of titles) {
+        const normalized = normalizeRelatedTitle(title.title);
+        if (!normalized) continue;
+        let score = 0;
+        if (normalized === want) score += 100;
+        else if (normalized.includes(want) || want.includes(normalized)) score += 45;
+        else continue;
+        if (wantYear && title.year && Number(title.year) === Number(wantYear)) score += 25;
+        if (score > bestScore) {
+            bestScore = score;
+            best = title;
+        }
+    }
+    return bestScore >= 45 ? best : null;
+};
+
 const RECENT_SETS_KEY = 'poster-sets-recent-v2';
 const RECENT_SETS_KEY_LEGACY = 'poster-sets-recent-v1';
 const MAX_RECENT_SETS = 36;
@@ -871,6 +978,9 @@ export const PosterSetsDashboard: React.FC = () => {
         return normalizeUpgraderGridSize(window.localStorage.getItem(POSTER_SETS_GRID_STORAGE_KEY));
     });
     const [preview, setPreview] = useState<PosterSetsPreview | null>(null);
+    const [relatedSets, setRelatedSets] = useState<PosterSetsSearchSet[]>([]);
+    const [relatedSetsLoading, setRelatedSetsLoading] = useState(false);
+    const relatedSetsAbortRef = useRef<AbortController | null>(null);
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
     const [activeJob, setActiveJob] = useState<PosterSetsJob | null>(null);
     const [testResult, setTestResult] = useState<string | null>(null);
@@ -889,7 +999,9 @@ export const PosterSetsDashboard: React.FC = () => {
     const [watchesPageSize, setWatchesPageSize] = useState(12);
     const [watchesFilter, setWatchesFilter] = useState('');
     const [selectedBulkSets, setSelectedBulkSets] = useState<Record<string, BulkSetSelection>>({});
-    const [browseRails, setBrowseRails] = useState<PosterSetsBrowseRail[]>([]);
+    const [browseRails, setBrowseRails] = useState<PosterSetsBrowseRail[]>(() => browseRailsCache);
+    const browseRailsRef = useRef<PosterSetsBrowseRail[]>(browseRailsCache);
+    browseRailsRef.current = browseRails;
     const [browseLoading, setBrowseLoading] = useState(false);
     const [browseSeeAllId, setBrowseSeeAllId] = useState<string | null>(initialLocation.rail);
     const scrollPreviewAfterLoadRef = useRef(false);
@@ -938,16 +1050,20 @@ export const PosterSetsDashboard: React.FC = () => {
     }, [toast]);
 
     const loadBrowse = useCallback(async (options?: { refresh?: boolean; silent?: boolean }) => {
-        if (!options?.silent) setBrowseLoading(true);
+        const hasCachedRails = browseRailsRef.current.length > 0;
+        const silent = Boolean(options?.silent || (hasCachedRails && !options?.refresh));
+        if (!silent) setBrowseLoading(true);
         try {
             const response: PosterSetsBrowseResponse = await posterSetsApi.browse({ refresh: options?.refresh });
-            setBrowseRails(response.rails || []);
+            const nextRails = response.rails || [];
+            setBrowseRails(nextRails);
+            browseRailsCache = nextRails;
         } catch (error) {
-            if (!options?.silent) {
+            if (!silent) {
                 toast(error instanceof Error ? error.message : 'Failed to load browse rails', 'error');
             }
         } finally {
-            if (!options?.silent) setBrowseLoading(false);
+            if (!silent) setBrowseLoading(false);
         }
     }, [toast]);
 
@@ -1001,7 +1117,7 @@ export const PosterSetsDashboard: React.FC = () => {
         }
         if (id === 'queue') void loadQueue();
         if (id === 'watches') void loadWatches();
-        if (id === 'browse') void loadBrowse();
+        if (id === 'browse') void loadBrowse({ silent: browseRailsRef.current.length > 0 });
     }, [historyFilter, loadAudit, loadBrowse, loadHistory, loadQueue, loadWatches, pushPosterLocation]);
 
     const openBrowseRail = useCallback((railId: string | null) => {
@@ -1103,7 +1219,7 @@ export const PosterSetsDashboard: React.FC = () => {
 
     useEffect(() => {
         if (tab !== 'browse') return undefined;
-        void loadBrowse();
+        void loadBrowse({ silent: browseRailsRef.current.length > 0 });
         return undefined;
     }, [tab, loadBrowse]);
 
@@ -1113,7 +1229,7 @@ export const PosterSetsDashboard: React.FC = () => {
         if (!stillLoading) return undefined;
         const timer = window.setInterval(() => {
             void loadBrowse({ silent: true });
-        }, 2500);
+        }, 4000);
         return () => window.clearInterval(timer);
     }, [tab, browseRails, loadBrowse]);
 
@@ -1276,6 +1392,9 @@ export const PosterSetsDashboard: React.FC = () => {
         setTitleCardsOnly(Boolean(restrictTitleCards));
         setBusy('preview');
         setPreview(null);
+        setRelatedSets([]);
+        setRelatedSetsLoading(false);
+        relatedSetsAbortRef.current?.abort();
         setSelectedAssetIds([]);
         try {
             const response = await posterSetsApi.preview(target, {
@@ -1367,6 +1486,152 @@ export const PosterSetsDashboard: React.FC = () => {
     };
     const openSetForApplyRef = useRef(openSetForApply);
     openSetForApplyRef.current = openSetForApply;
+
+    // After preview, load other packs for the same show/movie (MediUX + ThePosterDB).
+    useEffect(() => {
+        relatedSetsAbortRef.current?.abort();
+        if (!preview) {
+            setRelatedSets([]);
+            setRelatedSetsLoading(false);
+            return;
+        }
+
+        const meta = preview.setMeta;
+        const tmdbId = String(meta?.tmdbId || '').trim();
+        const title = String(meta?.title || '').trim();
+        if (!tmdbId && !title) {
+            setRelatedSets([]);
+            setRelatedSetsLoading(false);
+            return;
+        }
+
+        const currentKeys = new Set(
+            [
+                relatedSetKey({
+                    provider: meta?.provider,
+                    setId: meta?.setId,
+                    url: meta?.url || preview.url,
+                }),
+                relatedSetKey({ url: preview.url }),
+            ].filter(Boolean),
+        );
+        const mediaType = inferPreviewMediaType(preview);
+        const wantYear = (preview.assets || []).map((asset) => asset.year).find((year) => year != null) ?? null;
+        const dupePreference = configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb';
+        const controller = new AbortController();
+        relatedSetsAbortRef.current = controller;
+        let cancelled = false;
+
+        const pushUnique = (bucket: PosterSetsSearchSet[], incoming: PosterSetsSearchSet[]) => {
+            const seen = new Set(bucket.map((set) => relatedSetKey(set)).filter(Boolean));
+            for (const set of incoming) {
+                const key = relatedSetKey(set);
+                if (!key || currentKeys.has(key) || seen.has(key)) continue;
+                seen.add(key);
+                bucket.push(set);
+            }
+        };
+
+        const load = async () => {
+            setRelatedSetsLoading(true);
+            setRelatedSets([]);
+            const collected: PosterSetsSearchSet[] = [];
+            try {
+                if (tmdbId) {
+                    try {
+                        let response = await posterSetsApi.search({
+                            provider: 'mediux',
+                            tmdbId,
+                            mediaType,
+                            limit: 40,
+                        });
+                        if (cancelled) return;
+                        pushUnique(collected, response.sets || []);
+                        if (!collected.length) {
+                            response = await posterSetsApi.search({
+                                provider: 'mediux',
+                                tmdbId,
+                                mediaType: mediaType === 'show' ? 'movie' : 'show',
+                                limit: 40,
+                            });
+                            if (cancelled) return;
+                            pushUnique(collected, response.sets || []);
+                        }
+                        if (!cancelled) setRelatedSets([...collected]);
+                    } catch {
+                        // Title search below may still find packs.
+                    }
+                }
+
+                if (title && !/^set\s+\d+$/i.test(title) && title.toLowerCase() !== 'poster set') {
+                    try {
+                        const titleSearch = await posterSetsApi.search({
+                            provider: 'both',
+                            query: title,
+                            mode: 'title',
+                            limit: 12,
+                            dupePreference,
+                        });
+                        if (cancelled) return;
+                        const best = pickBestRelatedTitle(titleSearch.titles || [], title, wantYear);
+                        if (best) {
+                            const sources = (best.sources?.length
+                                ? best.sources
+                                : [{
+                                    provider: best.provider || 'mediux',
+                                    id: best.id,
+                                    url: best.url,
+                                    mediaType: best.mediaType,
+                                }]).filter((source) => source?.id || source?.url);
+
+                            const setsResponse = sources.length > 1
+                                ? await posterSetsApi.search({
+                                    provider: 'both',
+                                    query: best.title,
+                                    title: best.title,
+                                    titleSources: sources,
+                                    dupePreference,
+                                    limit: 40,
+                                })
+                                : (String(sources[0]?.provider || '').toLowerCase() === 'mediux'
+                                    ? await posterSetsApi.search({
+                                        provider: 'mediux',
+                                        tmdbId: sources[0].id,
+                                        mediaType: sources[0].mediaType === 'show' ? 'show' : 'movie',
+                                        limit: 40,
+                                    })
+                                    : await posterSetsApi.search({
+                                        provider: 'posterdb',
+                                        titleUrl: sources[0].url,
+                                        limit: 40,
+                                    }));
+                            if (cancelled) return;
+                            pushUnique(collected, setsResponse.sets || []);
+                        }
+                    } catch {
+                        // Soft-fail: related rail is optional QoL.
+                    }
+                }
+
+                if (!cancelled) {
+                    setRelatedSets(collected.slice(0, 36));
+                }
+            } finally {
+                if (!cancelled) {
+                    setRelatedSetsLoading(false);
+                }
+            }
+        };
+
+        void load();
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
+    }, [
+        preview,
+        configDraft.dupePreference,
+    ]);
 
     // Keep /poster-sets#… in sync so refresh and browser Back stay inside Poster Sets.
     useEffect(() => {
@@ -2279,12 +2544,12 @@ export const PosterSetsDashboard: React.FC = () => {
         <div className={`flex w-full min-w-0 animate-fade-in flex-col gap-4 sm:gap-6 ${selectedBulkCount > 0 || (tab === 'apply' && readyToApply) ? 'pb-28' : 'pb-10'}`}>
             <ToastContainer toasts={toasts} setToasts={setToasts} />
 
-            <header className={`${cardClass} overflow-hidden p-4 sm:p-6`}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-                    <div className="min-w-0">
+            <header className={`${cardClass} overflow-hidden p-4 text-center sm:p-6`}>
+                <div className="flex flex-col items-center gap-3">
+                    <div className="min-w-0 max-w-3xl">
                         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-plex sm:text-xs">Poster Sets</p>
                         <h1 className="mt-1.5 text-xl font-bold tracking-tight text-text sm:mt-2 sm:text-3xl">Artwork from MediUX & ThePosterDB</h1>
-                        <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted sm:mt-2 sm:text-sm">
+                        <p className="mt-1.5 text-xs leading-relaxed text-muted sm:mt-2 sm:text-sm">
                             Find a title, choose a poster set, preview the art, then apply.
                             Re-run past sets from the Recent tab. Connection settings live in this section.
                         </p>
@@ -2313,7 +2578,7 @@ export const PosterSetsDashboard: React.FC = () => {
                     ] as const).map((item) => (
                         <div
                             key={item.label}
-                            className="flex min-w-0 flex-col items-start gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-2.5 sm:px-3"
+                            className="flex min-w-0 flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-2.5 sm:px-3"
                             title={'title' in item ? item.title : undefined}
                         >
                             <p className="text-[10px] font-bold uppercase tracking-wide text-muted sm:text-[11px]">{item.label}</p>
@@ -2323,7 +2588,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 </div>
             </header>
 
-            <div className="flex min-w-0 flex-wrap justify-center gap-1.5 sm:justify-start sm:gap-2">
+            <div className="flex min-w-0 flex-wrap justify-center gap-1.5 sm:gap-2">
                 {([
                     ['apply', 'Apply', Sparkles],
                     ['browse', 'Browse', Compass],
@@ -2368,8 +2633,8 @@ export const PosterSetsDashboard: React.FC = () => {
                 <section className={`${cardClass} space-y-5 p-4 sm:p-5`}>
                     {browseSeeAllRail ? (
                         <>
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="min-w-0">
+                            <div className="flex flex-col items-center gap-3 text-center">
+                                <div className="min-w-0 max-w-3xl">
                                     <button
                                         type="button"
                                         className="mb-2 inline-flex items-center gap-1 text-xs font-semibold text-plex hover:underline"
@@ -2388,7 +2653,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                         <p className="mt-1 text-xs text-amber-200">{browseSeeAllRail.error}</p>
                                     ) : null}
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center justify-center gap-2">
                                     <CustomSelect
                                         value={gridSize === 'list' ? 'medium' : gridSize}
                                         onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
@@ -2427,15 +2692,15 @@ export const PosterSetsDashboard: React.FC = () => {
                         </>
                     ) : (
                         <>
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div>
+                            <div className="flex flex-col items-center gap-3 text-center">
+                                <div className="min-w-0 max-w-3xl">
                                     <h2 className={sectionTitleClass}>Browse recently added</h2>
                                     <p className={sectionBodyClass}>
                                         First results appear immediately; more fill in the background (up to 600 per row). Tap a row title to see all.
                                         Add creators in Settings to get a “Creators you follow” row. Click any @username to open their catalog.
                                     </p>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center justify-center gap-2">
                                     <CustomSelect
                                         value={gridSize === 'list' ? 'medium' : gridSize}
                                         onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
@@ -2516,8 +2781,8 @@ export const PosterSetsDashboard: React.FC = () => {
 
             {tab === 'queue' ? (
                 <section className={`${cardClass} space-y-4 overflow-hidden p-4 sm:p-5`}>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
+                    <div className="flex flex-col items-center gap-3 text-center">
+                        <div className="min-w-0 max-w-3xl">
                             <h2 className={sectionTitleClass}>Apply queue</h2>
                             <p className={sectionBodyClass}>
                                 Sets apply one at a time in the background. You can keep queueing while paused.
@@ -2534,7 +2799,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                 {queueStats.failed || 0} failed
                             </p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap justify-center gap-2">
                             <button
                                 type="button"
                                 className={buttonClass}
@@ -2690,14 +2955,14 @@ export const PosterSetsDashboard: React.FC = () => {
 
             {tab === 'watches' ? (
                 <section className={`${cardClass} min-w-0 space-y-5 overflow-hidden p-4 sm:p-5`}>
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                        <div className="min-w-0">
+                    <div className="flex flex-col items-center gap-4 text-center">
+                        <div className="min-w-0 max-w-3xl">
                             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-plex">Pinned artwork</p>
                             <h2 className="mt-1 text-xl font-bold tracking-tight text-text sm:text-2xl">Watching</h2>
                             <p className={sectionBodyClass}>
                                 Keep MediUX and ThePosterDB sets in view. New art — including title cards — queues automatically.
                             </p>
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="mt-3 flex flex-wrap justify-center gap-2">
                                 <MetaPill className="border-plex/35 bg-plex/15 text-plex" truncate={false}>
                                     {watchStatsState.enabled || 0} live
                                 </MetaPill>
@@ -2716,7 +2981,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                 ) : null}
                             </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap justify-center gap-2">
                             <button
                                 type="button"
                                 className={buttonClass}
@@ -3105,8 +3370,8 @@ export const PosterSetsDashboard: React.FC = () => {
 
             {tab === 'recent' ? (
                 <section className={`${cardClass} space-y-5 p-5`}>
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
+                    <div className="flex flex-col items-center gap-3 text-center">
+                        <div className="min-w-0 max-w-3xl">
                             <h2 className={sectionTitleClass}>Recent sets</h2>
                             <p className={sectionBodyClass}>
                                 Re-preview or re-apply sets you&apos;ve already used, grouped by art type.
@@ -3371,11 +3636,29 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     selectedAssetIds={selectedAssetIds}
                                                     onToggle={toggleAsset}
                                                 />
+                                                <RelatedSetsRail
+                                                    sets={relatedSets}
+                                                    loading={relatedSetsLoading}
+                                                    mediaLabel={inferPreviewMediaType(preview) === 'show' ? 'show' : 'movie'}
+                                                    disabled={busy !== null}
+                                                    onOpen={(item) => void openSetForApply(item)}
+                                                    onOpenCreator={openCreatorCatalog}
+                                                />
                                             </div>
                                         ) : (
-                                            <p className="border-t border-white/10 pt-4 text-sm text-amber-200">
-                                                This set previewed with no assets. Check MediUX filters in Settings, or try another set.
-                                            </p>
+                                            <>
+                                                <p className="border-t border-white/10 pt-4 text-sm text-amber-200">
+                                                    This set previewed with no assets. Check MediUX filters in Settings, or try another set.
+                                                </p>
+                                                <RelatedSetsRail
+                                                    sets={relatedSets}
+                                                    loading={relatedSetsLoading}
+                                                    mediaLabel={inferPreviewMediaType(preview) === 'show' ? 'show' : 'movie'}
+                                                    disabled={busy !== null}
+                                                    onOpen={(item) => void openSetForApply(item)}
+                                                    onOpenCreator={openCreatorCatalog}
+                                                />
+                                            </>
                                         )}
                                         <div className="flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/80 p-3">
                                             <button
@@ -3870,6 +4153,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                             selectedAssetIds={selectedAssetIds}
                                             onToggle={toggleAsset}
                                         />
+                                        <RelatedSetsRail
+                                            sets={relatedSets}
+                                            loading={relatedSetsLoading}
+                                            mediaLabel={inferPreviewMediaType(preview) === 'show' ? 'show' : 'movie'}
+                                            disabled={busy !== null}
+                                            onOpen={(item) => void openSetForApply(item)}
+                                            onOpenCreator={openCreatorCatalog}
+                                        />
                                     </div>
 
                                     <div className="flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/80 p-3">
@@ -4032,8 +4323,8 @@ export const PosterSetsDashboard: React.FC = () => {
 
             {tab === 'history' ? (
                 <div className="space-y-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                        <div>
+                    <div className="flex flex-col items-center gap-3 text-center">
+                        <div className="min-w-0 max-w-3xl">
                             <h2 className="text-lg font-bold text-text">
                                 {historyFilter === 'audit' ? 'Audit log' : 'Job history'}
                             </h2>
@@ -4043,7 +4334,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     : 'Apply and bulk runs with logs. Recent jobs survive restarts.'}
                             </p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap justify-center gap-2">
                             {([
                                 ['all', 'All'],
                                 ['running', 'Running'],

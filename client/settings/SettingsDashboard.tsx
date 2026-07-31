@@ -271,14 +271,6 @@ export const SettingsDashboard: React.FC = () => {
         apiFetch('/api/plex/libraries').then((libData) => setLibraries(libData || [])).catch(() => setLibraries([]));
     }, [addToast, fetchStatusConfig]);
 
-    useEffect(() => {
-        if (!libraries.length) return;
-        setDefaultLibraryIds((prev) => {
-            if (prev.length > 0) return prev;
-            return libraries.map((l: any) => String(l.id));
-        });
-    }, [libraries]);
-
     const handleSaveConfig = async (newConfig: any) => {
         setLoading(true);
         try {
@@ -312,6 +304,13 @@ export const SettingsDashboard: React.FC = () => {
     const [useTrendingSlideshowOnLogin, setUseTrendingSlideshowOnLogin] = useState(false);
     const [defaultLibraryIds, setDefaultLibraryIds] = useState<string[]>([]);
     const [libraries, setLibraries] = useState<any[]>([]);
+    useEffect(() => {
+        if (!libraries.length) return;
+        setDefaultLibraryIds((prev) => {
+            if (prev.length > 0) return prev;
+            return libraries.map((l: any) => String(l.id));
+        });
+    }, [libraries]);
     const mediaServerLabel = mediaServerType === 'emby' ? 'Emby' : mediaServerType === 'jellyfin' ? 'Jellyfin' : 'Plex';
     const [activeTab, setActiveTab] = useState<SettingsTabId>(() => {
         const { tabId } = parseSettingsHash(window.location.hash);

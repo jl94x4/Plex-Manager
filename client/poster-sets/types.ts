@@ -56,6 +56,7 @@ export type PosterSetsSetMeta = {
     user?: string | null;
     tmdbId?: string | null;
     tvdbId?: string | null;
+    mediaType?: 'movie' | 'show' | string | null;
     thumbUrl?: string;
     assetCount?: number | null;
     /** Dominant art type when known (title_cards, backgrounds, posters). */
@@ -220,10 +221,12 @@ export type PosterSetsBrowseRail = {
     id: string;
     title: string;
     provider?: string;
+    kind?: string;
     sets: PosterSetsSearchSet[];
     buffered?: number;
     cap?: number;
     loading?: boolean;
+    hasMore?: boolean;
     error?: string | null;
 };
 
