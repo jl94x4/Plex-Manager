@@ -545,12 +545,12 @@ function BrowseSetCard({
     const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
     const landscape = isTitleCardSet(set);
     return (
-        <div className={`group flex w-full min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border border-white/10 bg-black/20 text-left transition hover:border-plex/40`}>
+        <div className={`group flex w-full min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border border-white/10 bg-black/20 text-center transition hover:border-plex/40`}>
             <button
                 type="button"
                 disabled={disabled}
                 onClick={() => onOpen(set)}
-                className="flex w-full min-w-0 flex-col text-left disabled:opacity-50"
+                className="flex w-full min-w-0 flex-col text-center disabled:opacity-50"
             >
                 <div className={`relative w-full shrink-0 overflow-hidden bg-black ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
                     <PosterThumb
@@ -561,10 +561,10 @@ function BrowseSetCard({
                     />
                 </div>
                 <div className="min-w-0 px-1.5 pt-1.5 sm:px-2 sm:pt-1.5">
-                    <p className="line-clamp-2 text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={setTitle}>{setTitle}</p>
+                    <p className="line-clamp-2 text-center text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={setTitle}>{setTitle}</p>
                 </div>
             </button>
-            <div className="flex flex-wrap items-center gap-0.5 px-1.5 pb-1.5 pt-1 sm:px-2 sm:pb-2">
+            <div className="flex flex-wrap items-center justify-center gap-0.5 px-1.5 pb-1.5 pt-1 sm:px-2 sm:pb-2">
                 <CreatorPill user={set.user} onOpen={onOpenCreator} compact />
                 <SetKindPill set={set} compact />
                 <ProviderPill provider={set.provider} compact />
@@ -3132,25 +3132,25 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     imgClassName="absolute inset-0 h-full w-full object-contain object-center transition duration-300 group-hover:scale-[1.02]"
                                                 />
                                                 {group.errored ? (
-                                                    <span className="absolute left-2 top-2 rounded-full border border-red-400/40 bg-red-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                                                    <span className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full border border-red-400/40 bg-red-500/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
                                                         Error
                                                     </span>
                                                 ) : anyPaused ? (
-                                                    <span className="absolute left-2 top-2 rounded-full border border-white/20 bg-black/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+                                                    <span className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full border border-white/20 bg-black/70 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
                                                         Paused
                                                     </span>
                                                 ) : (
-                                                    <span className="absolute left-2 top-2 rounded-full border border-plex/40 bg-plex/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-background">
+                                                    <span className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full border border-plex/40 bg-plex/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-background">
                                                         Watching
                                                     </span>
                                                 )}
                                             </div>
 
-                                            <div className="min-w-0 space-y-0.5 border-b border-white/10 px-1.5 py-1.5 sm:px-2">
-                                                <p className="line-clamp-2 text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={group.title}>
+                                            <div className="min-w-0 space-y-0.5 border-b border-white/10 px-1.5 py-1.5 text-center sm:px-2">
+                                                <p className="line-clamp-2 text-center text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={group.title}>
                                                     {group.title}
                                                 </p>
-                                                <p className="text-[9px] text-muted sm:text-[10px]">
+                                                <p className="text-center text-[9px] text-muted sm:text-[10px]">
                                                     {multi ? `${group.watches.length} sets` : '1 set'}
                                                     {group.lastCheckedAt ? ` · ${formatTime(group.lastCheckedAt)}` : ''}
                                                 </p>
@@ -3173,13 +3173,13 @@ export const PosterSetsDashboard: React.FC = () => {
                                                     return (
                                                         <div
                                                             key={watch.id}
-                                                            className={`min-w-0 space-y-1.5 rounded-lg border p-1.5 ${
+                                                            className={`min-w-0 space-y-1.5 rounded-lg border p-1.5 text-center ${
                                                                 watch.lastError
                                                                     ? 'border-red-500/30 bg-red-500/10'
                                                                     : 'border-white/10 bg-black/30'
                                                             }`}
                                                         >
-                                                            <div className="flex min-w-0 items-start gap-2">
+                                                            <div className="flex min-w-0 flex-col items-center gap-2">
                                                                 {multi && watchThumbSrc ? (
                                                                     <PosterThumb
                                                                         src={watchThumbSrc}
@@ -3187,8 +3187,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                         imgClassName="h-full w-full object-contain"
                                                                     />
                                                                 ) : null}
-                                                                <div className="min-w-0 flex-1 space-y-1">
-                                                                    <div className="flex min-w-0 flex-wrap items-center gap-0.5">
+                                                                <div className="min-w-0 w-full space-y-1">
+                                                                    <div className="flex min-w-0 flex-wrap items-center justify-center gap-0.5">
                                                                         <StatusPill
                                                                             value={watch.enabled === false ? 'Paused' : 'Watching'}
                                                                             className="!px-1.5 !py-px !text-[8px] sm:!text-[9px]"
@@ -3196,18 +3196,18 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                         <ProviderPill provider={provider} compact />
                                                                         <CreatorPill user={creator} onOpen={openCreatorCatalog} compact />
                                                                     </div>
-                                                                    <p className="text-[9px] leading-relaxed text-muted sm:text-[10px]">
+                                                                    <p className="text-center text-[9px] leading-relaxed text-muted sm:text-[10px]">
                                                                         {(watch.knownAssetIds || []).length} known
                                                                         {watch.lastCheckedAt ? ` · ${formatTime(watch.lastCheckedAt)}` : ' · not checked'}
                                                                         {watch.lastNewCount ? ` · +${watch.lastNewCount} last` : ''}
                                                                     </p>
                                                                     {watch.lastError ? (
-                                                                        <p className="break-words text-[10px] text-red-300 [overflow-wrap:anywhere]">{watch.lastError}</p>
+                                                                        <p className="break-words text-center text-[10px] text-red-300 [overflow-wrap:anywhere]">{watch.lastError}</p>
                                                                     ) : null}
                                                                     {provider === 'posterdb' ? (
-                                                                        <p className="text-[9px] text-muted">TPDB has no title cards</p>
+                                                                        <p className="text-center text-[9px] text-muted">TPDB has no title cards</p>
                                                                     ) : (
-                                                                        <div className="flex flex-wrap gap-0.5">
+                                                                        <div className="flex flex-wrap justify-center gap-0.5">
                                                                             {MEDIUX_FILTER_OPTIONS.map((option) => {
                                                                                 const current = (watch.mediuxFilters?.length
                                                                                     ? watch.mediuxFilters
@@ -3470,13 +3470,13 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                         setRecentTick((value) => value + 1);
                                                                     }}
                                                                 />
-                                                                <span className="absolute right-2 top-2 rounded-full border border-white/15 bg-black/55 px-1.5 py-px text-[8px] font-bold uppercase tracking-wide text-text sm:text-[9px]">
+                                                                <span className="absolute left-1/2 top-2 -translate-x-1/2 rounded-full border border-white/15 bg-black/55 px-1.5 py-px text-[8px] font-bold uppercase tracking-wide text-text sm:text-[9px]">
                                                                     {providerLabel(item.provider)}
                                                                 </span>
                                                             </div>
-                                                            <div className="min-w-0 space-y-0.5 px-1.5 py-1.5 sm:px-2">
-                                                                <p className="line-clamp-2 text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={label}>{label}</p>
-                                                                <p className="truncate text-[9px] text-muted sm:text-[10px]">
+                                                            <div className="min-w-0 space-y-0.5 px-1.5 py-1.5 text-center sm:px-2">
+                                                                <p className="line-clamp-2 text-center text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={label}>{label}</p>
+                                                                <p className="truncate text-center text-[9px] text-muted sm:text-[10px]">
                                                                     {item.setId ? `#${item.setId}` : 'Set'}
                                                                     {item.assetCount ? ` · ${item.assetCount} assets` : ''}
                                                                 </p>
@@ -3541,7 +3541,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                 {busy === 'preview' && !preview ? (
                                     <div
                                         ref={previewPanelRef}
-                                        className="flex items-center gap-3 rounded-xl border border-plex/40 bg-plex/10 p-4"
+                                        className="flex items-center gap-3"
                                     >
                                         <Loader2 className="h-5 w-5 shrink-0 animate-spin text-plex" />
                                         <div className="min-w-0">
@@ -3553,11 +3553,10 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </div>
                                 ) : null}
                                 {readyToApply ? (
-                                    <div ref={previewPanelRef} className="min-w-0 space-y-4 rounded-xl border border-plex/30 bg-plex/10 p-4">
+                                    <div ref={previewPanelRef} className="min-w-0 space-y-4">
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div className="min-w-0">
-                                                <p className="text-xs font-bold uppercase tracking-wide text-plex">Preview</p>
-                                                <h3 className="mt-1 truncate text-lg font-bold text-text" title={previewHeaderLabel}>
+                                                <h3 className="truncate text-lg font-bold text-text" title={previewHeaderLabel}>
                                                     {previewHeaderLabel}
                                                 </h3>
                                                 <p className="mt-1 text-sm text-muted">
@@ -3660,7 +3659,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 />
                                             </>
                                         )}
-                                        <div className="flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/80 p-3">
+                                        <div className="flex flex-wrap gap-2">
                                             <button
                                                 type="button"
                                                 className={`${primaryButtonClass} flex-1 sm:flex-none sm:min-w-[220px]`}
@@ -4041,7 +4040,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             ) : null}
 
                             {readyToApply ? (
-                                <div ref={previewPanelRef} className="order-1 mt-4 min-w-0 space-y-4 rounded-xl border border-plex/30 bg-plex/10 p-4">
+                                <div ref={previewPanelRef} className="order-1 mt-4 min-w-0 space-y-4 border-t border-white/10 pt-4">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                         <div className="min-w-0">
                                             <p className="text-xs font-bold uppercase tracking-wide text-plex">3. Preview</p>
@@ -4163,7 +4162,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                         />
                                     </div>
 
-                                    <div className="flex flex-wrap gap-2 rounded-xl border border-plex/40 bg-card/80 p-3">
+                                    <div className="flex flex-wrap gap-2">
                                         <button
                                             type="button"
                                             className={`${primaryButtonClass} flex-1 sm:flex-none sm:min-w-[220px]`}
