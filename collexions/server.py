@@ -116,6 +116,10 @@ def require_auth(f):
         if _service_key_ok():
             return f(*args, **kwargs)
 
+        # Embedded/portal mode: only the portal service key is accepted (no JWT bootstrap).
+        if PORTAL_MODE:
+            return jsonify({'error': 'Authentication required'}), 401
+
         auth_header = request.headers.get('Authorization')
         if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Authentication required'}), 401
@@ -133,6 +137,9 @@ def require_auth_or_query_token(f):
     def decorated(*args, **kwargs):
         if _service_key_ok():
             return f(*args, **kwargs)
+
+        if PORTAL_MODE:
+            return jsonify({'error': 'Authentication required'}), 401
 
         auth_header = request.headers.get('Authorization')
         token = None
@@ -1131,9 +1138,27 @@ def _match_external_to_plex(library, external_items, tmdb_cache=None):
     return matched
 
 
+def _managed_job_id(library_name, title):
+    """Stable unique id — avoid space-collapse collisions (Movies+'Top Rated' vs 'Movies Top'+'Rated')."""
+    lib = str(library_name or '').strip()
+    name = str(title or '').strip()
+    return f"{lib}::{name}".lower()
+
+
 def _register_managed_job(library_name, title, source_type, source_id, sort_order='custom', auto_sync=True):
     managed = load_managed_collections()
-    job_id = f"{library_name}_{title}".replace(' ', '_').lower()
+    job_id = _managed_job_id(library_name, title)
+    # Drop legacy colliding ids that match this library+title under the old format.
+    legacy_id = f"{library_name}_{title}".replace(' ', '_').lower()
+    for jid, job in list(managed.items()):
+        if not isinstance(job, dict):
+            continue
+        if jid == job_id:
+            continue
+        if job.get('library') == library_name and job.get('name') == title:
+            del managed[jid]
+        elif jid == legacy_id:
+            del managed[jid]
     managed[job_id] = {
         "name": title,
         "library": library_name,
@@ -2069,8 +2094,16 @@ def clear_logs():
 @app.route('/api/config', methods=['GET', 'POST'])
 @require_auth
 def config_endpoint():
+    global _plex_cache, GALLERY_CACHE, SUMMARY_CACHE
     if request.method == 'POST':
-        if save_config(request.json, merge=True):
+        payload = request.json or {}
+        if save_config(payload, merge=True):
+            # Config changes (especially plex_url/token) must not keep a stale PlexServer.
+            _plex_cache = None
+            GALLERY_CACHE['data'] = None
+            GALLERY_CACHE['timestamp'] = 0
+            SUMMARY_CACHE['data'] = None
+            SUMMARY_CACHE['timestamp'] = 0
             return jsonify({"success": True})
         return jsonify({"error": "Failed to save configuration"}), 500
     
@@ -3876,6 +3909,8 @@ def auth_status():
 @app.route('/api/auth/setup', methods=['POST'])
 def auth_setup():
     """Sets the initial admin password."""
+    if PORTAL_MODE:
+        return jsonify({'error': 'Password setup is disabled in portal mode'}), 403
     config = load_config()
     if config.get('admin_password_hash'):
         return jsonify({'error': 'System already setup'}), 400
@@ -3892,6 +3927,8 @@ def auth_setup():
 @app.route('/api/auth/login', methods=['POST'])
 def auth_login():
     """Verifies password and issues JWT."""
+    if PORTAL_MODE:
+        return jsonify({'error': 'Password login is disabled in portal mode'}), 403
     config = load_config()
     password = request.json.get('password')
     
