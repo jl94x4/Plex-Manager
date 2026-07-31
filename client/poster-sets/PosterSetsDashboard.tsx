@@ -981,6 +981,8 @@ export const PosterSetsDashboard: React.FC = () => {
     const [relatedSets, setRelatedSets] = useState<PosterSetsSearchSet[]>([]);
     const [relatedSetsLoading, setRelatedSetsLoading] = useState(false);
     const relatedSetsAbortRef = useRef<AbortController | null>(null);
+    const relatedSetsGenRef = useRef(0);
+    const browseLoadGenRef = useRef(0);
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
     const [activeJob, setActiveJob] = useState<PosterSetsJob | null>(null);
     const [testResult, setTestResult] = useState<string | null>(null);
@@ -1052,18 +1054,39 @@ export const PosterSetsDashboard: React.FC = () => {
     const loadBrowse = useCallback(async (options?: { refresh?: boolean; silent?: boolean }) => {
         const hasCachedRails = browseRailsRef.current.length > 0;
         const silent = Boolean(options?.silent || (hasCachedRails && !options?.refresh));
+        const requestId = ++browseLoadGenRef.current;
         if (!silent) setBrowseLoading(true);
         try {
             const response: PosterSetsBrowseResponse = await posterSetsApi.browse({ refresh: options?.refresh });
+            if (requestId !== browseLoadGenRef.current) return;
             const nextRails = response.rails || [];
-            setBrowseRails(nextRails);
-            browseRailsCache = nextRails;
+            const prevRails = browseRailsRef.current;
+            // Don't let an empty in-flight snapshot wipe cards we already have.
+            const merged = nextRails.map((rail) => {
+                const prev = prevRails.find((entry) => entry.id === rail.id);
+                if (
+                    prev?.sets?.length
+                    && !(rail.sets?.length)
+                    && (rail.loading || options?.refresh)
+                ) {
+                    return {
+                        ...rail,
+                        sets: prev.sets,
+                        buffered: prev.sets.length,
+                    };
+                }
+                return rail;
+            });
+            const applied = merged.length ? merged : (prevRails.length && !options?.refresh ? prevRails : nextRails);
+            setBrowseRails(applied);
+            browseRailsCache = applied;
         } catch (error) {
+            if (requestId !== browseLoadGenRef.current) return;
             if (!silent) {
                 toast(error instanceof Error ? error.message : 'Failed to load browse rails', 'error');
             }
         } finally {
-            if (!silent) setBrowseLoading(false);
+            if (requestId === browseLoadGenRef.current && !silent) setBrowseLoading(false);
         }
     }, [toast]);
 
@@ -1299,12 +1322,20 @@ export const PosterSetsDashboard: React.FC = () => {
     const saveSettings = async () => {
         setBusy('save');
         try {
+            const prevWhitelist = textToList(listToText(configDraft.creatorWhitelist || []))
+                .map((item) => item.replace(/^@+/, '').toLowerCase())
+                .sort()
+                .join('|');
             const payload = {
                 ...configDraft,
                 tv_library: textToList(tvText),
                 movie_library: textToList(movieText),
                 creatorWhitelist: textToList(whitelistText).map((item) => item.replace(/^@+/, '')),
             };
+            const nextWhitelist = (payload.creatorWhitelist || [])
+                .map((item) => String(item).replace(/^@+/, '').toLowerCase())
+                .sort()
+                .join('|');
             const response = await posterSetsApi.saveConfig(payload);
             setConfigDraft({
                 ...response.config,
@@ -1315,7 +1346,11 @@ export const PosterSetsDashboard: React.FC = () => {
             setWhitelistText(listToText(response.config.creatorWhitelist));
             toast('Poster Sets settings saved.');
             await load();
-            void loadBrowse({ refresh: true, silent: true });
+            // Only hard-refresh Browse when followed creators changed; otherwise keep durable cache.
+            void loadBrowse({
+                refresh: prevWhitelist !== nextWhitelist,
+                silent: true,
+            });
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to save settings', 'error');
         } finally {
@@ -1490,6 +1525,7 @@ export const PosterSetsDashboard: React.FC = () => {
     // After preview, load other packs for the same show/movie (MediUX + ThePosterDB).
     useEffect(() => {
         relatedSetsAbortRef.current?.abort();
+        const generation = ++relatedSetsGenRef.current;
         if (!preview) {
             setRelatedSets([]);
             setRelatedSetsLoading(false);
@@ -1520,7 +1556,7 @@ export const PosterSetsDashboard: React.FC = () => {
         const dupePreference = configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb';
         const controller = new AbortController();
         relatedSetsAbortRef.current = controller;
-        let cancelled = false;
+        const stillCurrent = () => generation === relatedSetsGenRef.current && !controller.signal.aborted;
 
         const pushUnique = (bucket: PosterSetsSearchSet[], incoming: PosterSetsSearchSet[]) => {
             const seen = new Set(bucket.map((set) => relatedSetKey(set)).filter(Boolean));
@@ -1545,7 +1581,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             mediaType,
                             limit: 40,
                         });
-                        if (cancelled) return;
+                        if (!stillCurrent()) return;
                         pushUnique(collected, response.sets || []);
                         if (!collected.length) {
                             response = await posterSetsApi.search({
@@ -1554,10 +1590,10 @@ export const PosterSetsDashboard: React.FC = () => {
                                 mediaType: mediaType === 'show' ? 'movie' : 'show',
                                 limit: 40,
                             });
-                            if (cancelled) return;
+                            if (!stillCurrent()) return;
                             pushUnique(collected, response.sets || []);
                         }
-                        if (!cancelled) setRelatedSets([...collected]);
+                        if (stillCurrent()) setRelatedSets([...collected]);
                     } catch {
                         // Title search below may still find packs.
                     }
@@ -1572,7 +1608,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             limit: 12,
                             dupePreference,
                         });
-                        if (cancelled) return;
+                        if (!stillCurrent()) return;
                         const best = pickBestRelatedTitle(titleSearch.titles || [], title, wantYear);
                         if (best) {
                             const sources = (best.sources?.length
@@ -1605,7 +1641,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                         titleUrl: sources[0].url,
                                         limit: 40,
                                     }));
-                            if (cancelled) return;
+                            if (!stillCurrent()) return;
                             pushUnique(collected, setsResponse.sets || []);
                         }
                     } catch {
@@ -1613,11 +1649,11 @@ export const PosterSetsDashboard: React.FC = () => {
                     }
                 }
 
-                if (!cancelled) {
+                if (stillCurrent()) {
                     setRelatedSets(collected.slice(0, 36));
                 }
             } finally {
-                if (!cancelled) {
+                if (stillCurrent()) {
                     setRelatedSetsLoading(false);
                 }
             }
@@ -1625,7 +1661,7 @@ export const PosterSetsDashboard: React.FC = () => {
 
         void load();
         return () => {
-            cancelled = true;
+            relatedSetsGenRef.current += 1;
             controller.abort();
         };
     }, [
