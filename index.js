@@ -41,6 +41,7 @@ import {
     createPlexTarget,
     collectMountRewrites,
     expandPathRewriteCandidates,
+    remapPathOntoLibraryRoot,
 } from './lib/scanner/index.js';
 import {
     buildStepPlan,
@@ -2109,26 +2110,73 @@ const resolveInviteLibraryIds = (user, config) => {
 };
 
 const parseSectionIdsFromXmlBlock = (xmlBlock) => {
-    if (!xmlBlock) return null;
+    if (!xmlBlock) return { libraryIds: [], allLibraries: false };
+    const openTag = String(xmlBlock).match(/<(?:SharedServer|Server)\b[^>]*>/i)?.[0] || '';
+    const allLibraries = /\ballLibraries="1"/i.test(openTag)
+        || /\ballLibraries="true"/i.test(openTag);
+
     const ids = [];
     const sectionRegex = /<Section\b[^>]*>/gi;
     let match;
     while ((match = sectionRegex.exec(xmlBlock)) !== null) {
         const tag = match[0];
-        const idMatch = tag.match(/\bid="([^"]+)"/i) || tag.match(/\bkey="([^"]+)"/i);
-        if (idMatch?.[1]) ids.push(String(idMatch[1]));
+        const sharedMatch = tag.match(/\bshared="([^"]*)"/i);
+        // plex.tv lists every library section; only shared="1" is granted to this user
+        if (sharedMatch && !['1', 'true'].includes(String(sharedMatch[1]).toLowerCase())) {
+            continue;
+        }
+        // Prefer local section key (matches /library/sections); fall back to id
+        const keyMatch = tag.match(/\bkey="([^"]+)"/i);
+        const idMatch = tag.match(/\bid="([^"]+)"/i);
+        const sectionKey = keyMatch?.[1] || idMatch?.[1];
+        if (sectionKey) ids.push(String(sectionKey));
     }
-    return ids.length > 0 ? [...new Set(ids)] : null;
+
+    const libraryIds = [...new Set(ids)];
+    if (allLibraries && libraryIds.length === 0) {
+        return { libraryIds: null, allLibraries: true };
+    }
+    return {
+        libraryIds,
+        allLibraries: allLibraries || false,
+    };
+};
+
+const plexShareIdentityCandidates = (user) => {
+    const values = [
+        user?.plexId,
+        user?.plexAccountId,
+        user?.id,
+    ]
+        .map((v) => String(v || '').trim())
+        .filter(Boolean);
+    return [...new Set(values)];
 };
 
 /**
  * Find this user's share on the configured server.
  * Prefer plex.tv shared_servers list; fall back to friends XML (same path revoke used).
- * @returns {{ shareId: string, libraryIds: string[] | null } | null}
+ * @returns {{ shareId: string, libraryIds: string[] | null, allLibraries: boolean } | null}
  */
 const findPlexShare = async (user, config) => {
-    const plexUserId = String(user?.plexId || user?.id || '');
-    if (!plexUserId || !config?.serverIdentifier || !config?.plexToken) return null;
+    const identityIds = plexShareIdentityCandidates(user);
+    if (!identityIds.length || !config?.serverIdentifier || !config?.plexToken) return null;
+    const email = String(user?.email || '').trim().toLowerCase();
+    const username = String(user?.username || '').trim().toLowerCase();
+
+    const matchesShareIdentity = (openTag) => {
+        const userIdMatch = openTag.match(/\buserID="([^"]+)"/i) || openTag.match(/\binvitedId="([^"]+)"/i);
+        if (userIdMatch && identityIds.includes(String(userIdMatch[1]))) return true;
+        if (email) {
+            const emailMatch = openTag.match(/\bemail="([^"]+)"/i);
+            if (emailMatch && String(emailMatch[1]).trim().toLowerCase() === email) return true;
+        }
+        if (username) {
+            const usernameMatch = openTag.match(/\busername="([^"]+)"/i);
+            if (usernameMatch && String(usernameMatch[1]).trim().toLowerCase() === username) return true;
+        }
+        return false;
+    };
 
     try {
         const sharedRes = await apiFetch(
@@ -2142,13 +2190,16 @@ const findPlexShare = async (user, config) => {
             while ((match = serverRegex.exec(xmlText)) !== null) {
                 const block = match[0];
                 const openTag = block.match(/<SharedServer\b[^>]*>/i)?.[0] || '';
-                const userIdMatch = openTag.match(/\buserID="([^"]+)"/i) || openTag.match(/\binvitedId="([^"]+)"/i);
-                if (!userIdMatch || String(userIdMatch[1]) !== plexUserId) continue;
+                if (!matchesShareIdentity(openTag)) continue;
                 const shareIdMatch = openTag.match(/\bid="([^"]+)"/i);
                 if (!shareIdMatch?.[1]) continue;
+                const parsed = parseSectionIdsFromXmlBlock(block);
                 return {
                     shareId: shareIdMatch[1],
-                    libraryIds: parseSectionIdsFromXmlBlock(block),
+                    libraryIds: parsed.allLibraries && (!parsed.libraryIds || parsed.libraryIds.length === 0)
+                        ? null
+                        : parsed.libraryIds,
+                    allLibraries: !!parsed.allLibraries,
                 };
             }
         }
@@ -2160,8 +2211,18 @@ const findPlexShare = async (user, config) => {
         const usersListRes = await apiFetch(`${PLEX_API}/users`, config.plexToken);
         if (!usersListRes.ok) return null;
         const xmlText = await usersListRes.text();
-        const userBlockRegex = new RegExp(`<User\\b[^>]*id="${plexUserId}"[^>]*>.*?<\\/User>`, 's');
-        const userBlockMatch = xmlText.match(userBlockRegex);
+
+        let userBlockMatch = null;
+        for (const plexUserId of identityIds) {
+            const userBlockRegex = new RegExp(`<User\\b[^>]*id="${plexUserId}"[^>]*>.*?<\\/User>`, 's');
+            userBlockMatch = xmlText.match(userBlockRegex);
+            if (userBlockMatch) break;
+        }
+        if (!userBlockMatch && email) {
+            const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const byEmail = new RegExp(`<User\\b[^>]*email="${escapedEmail}"[^>]*>.*?<\\/User>`, 'is');
+            userBlockMatch = xmlText.match(byEmail);
+        }
         if (!userBlockMatch) return null;
 
         const serverBlockRegex = new RegExp(
@@ -2173,9 +2234,13 @@ const findPlexShare = async (user, config) => {
 
         const shareIdMatch = serverBlockMatch[0].match(/\bid="([^"]+)"/i);
         if (!shareIdMatch?.[1]) return null;
+        const parsed = parseSectionIdsFromXmlBlock(serverBlockMatch[0]);
         return {
             shareId: shareIdMatch[1],
-            libraryIds: parseSectionIdsFromXmlBlock(serverBlockMatch[0]),
+            libraryIds: parsed.allLibraries && (!parsed.libraryIds || parsed.libraryIds.length === 0)
+                ? null
+                : parsed.libraryIds,
+            allLibraries: !!parsed.allLibraries,
         };
     } catch (error) {
         log(`findPlexShare friends lookup failed for ${user?.username}: ${error.message}`);
@@ -2186,7 +2251,8 @@ const findPlexShare = async (user, config) => {
 const getPlexShareLibraryIds = async (user, config) => {
     const share = await findPlexShare(user, config);
     if (!share) return null;
-    return share.libraryIds;
+    if (share.allLibraries) return null; // null = all libraries
+    return Array.isArray(share.libraryIds) ? share.libraryIds : [];
 };
 
 /**
@@ -9571,20 +9637,36 @@ app.get('/api/users/:id/share-libraries', requireAdmin, async (req, res) => {
         if (!user) return res.status(404).json({ error: 'User not found.' });
 
         const config = await loadFile(CONFIG_PATH, {});
-        if (Array.isArray(user.libraryIds)) {
+        const share = await findPlexShare(user, config);
+
+        // Live Plex share is the source of truth for Edit User checkboxes.
+        if (!share) {
             return res.json({
-                selectedIds: user.libraryIds.length === 0 ? null : normalizeLibraryIds(user.libraryIds),
-                source: user.libraryIds.length === 0 ? 'all' : 'stored',
+                selectedIds: [],
+                source: 'no-share',
+                hasShare: false,
+                allLibraries: false,
+                storedLibraryIds: Array.isArray(user.libraryIds) ? normalizeLibraryIds(user.libraryIds) : null,
             });
         }
 
-        const liveIds = await getPlexShareLibraryIds(user, config);
-        if (liveIds && liveIds.length > 0) {
-            return res.json({ selectedIds: normalizeLibraryIds(liveIds), source: 'plex' });
+        if (share.allLibraries || share.libraryIds == null) {
+            return res.json({
+                selectedIds: null,
+                source: 'plex-all',
+                hasShare: true,
+                allLibraries: true,
+                storedLibraryIds: Array.isArray(user.libraryIds) ? normalizeLibraryIds(user.libraryIds) : null,
+            });
         }
 
-        // null = all libraries / unknown (UI starts with all checked)
-        return res.json({ selectedIds: null, source: liveIds === null ? 'unknown' : 'all' });
+        return res.json({
+            selectedIds: normalizeLibraryIds(share.libraryIds),
+            source: 'plex',
+            hasShare: true,
+            allLibraries: false,
+            storedLibraryIds: Array.isArray(user.libraryIds) ? normalizeLibraryIds(user.libraryIds) : null,
+        });
     } catch (error) {
         log(`GET /api/users/:id/share-libraries failed: ${error.message}`);
         return res.status(500).json({ error: 'Failed to load share libraries.' });
@@ -17072,6 +17154,14 @@ const resolveUpgraderMaHandoff = async (config, item) => {
     }
     const enabledLibraries = libraries.filter((library) => library?.enabled !== false && library?.rootPath);
 
+    // Align Sonarr/Radarr folder names onto each MA library root (e.g. /merge/Anime/Show → /media/Anime/Show).
+    for (const library of enabledLibraries) {
+        for (const candidate of [...candidates]) {
+            const remapped = normalizeUpgraderPath(remapPathOntoLibraryRoot(candidate, library.rootPath));
+            if (remapped && !candidates.includes(remapped)) candidates.push(remapped);
+        }
+    }
+
     const findOwningLibrary = (candidate) => enabledLibraries
         .filter((library) => {
             try {
@@ -17082,28 +17172,45 @@ const resolveUpgraderMaHandoff = async (config, item) => {
         })
         .sort((a, b) => String(b.rootPath || '').length - String(a.rootPath || '').length)[0] || null;
 
+    const pathExists = async (candidate) => {
+        try {
+            await fs.access(candidate);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
     let resolvedPath = null;
     let matchingLibrary = null;
+
+    // Prefer candidates that both sit under an MA library and exist on disk.
     for (const candidate of candidates) {
         const owning = findOwningLibrary(candidate);
-        if (owning) {
+        if (!owning) continue;
+        if (await pathExists(candidate)) {
             resolvedPath = candidate;
             matchingLibrary = owning;
             break;
         }
+        if (!resolvedPath) {
+            resolvedPath = candidate;
+            matchingLibrary = owning;
+        }
     }
-    if (!resolvedPath) {
+
+    // Next: any candidate that exists on disk (even without an owning library yet).
+    if (!resolvedPath || !(await pathExists(resolvedPath))) {
         for (const candidate of candidates) {
-            try {
-                await fs.access(candidate);
+            if (await pathExists(candidate)) {
                 resolvedPath = candidate;
+                matchingLibrary = matchingLibrary || findOwningLibrary(candidate);
                 break;
-            } catch {
-                /* try next rewrite candidate */
             }
         }
     }
-    if (!resolvedPath) resolvedPath = candidates[0] || arrPath;
+
+    if (!resolvedPath) resolvedPath = candidates.find((c) => findOwningLibrary(c)) || candidates[0] || arrPath;
     if (!matchingLibrary) matchingLibrary = findOwningLibrary(resolvedPath);
 
     const titleLabel = `${item?.title || 'Title'}${item?.year ? ` (${item.year})` : ''}`.slice(0, 120);

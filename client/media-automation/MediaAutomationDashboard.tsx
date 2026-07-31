@@ -3402,7 +3402,23 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 </div>
                                                 <p className="mt-2 text-sm text-text">{summarizeLibraryOutcome(library, pipelines)}</p>
                                             </div>
-                                            <div className="flex gap-1">
+                                            <div className="flex flex-col items-end gap-2">
+                                                <label className="flex items-center gap-2 text-xs font-semibold text-text" title="Enable or disable this library">
+                                                    <SettingsSwitch
+                                                        checked={library.enabled !== false}
+                                                        disabled={library.id === undefined || busy !== null}
+                                                        onChange={(enabled) => {
+                                                            if (library.id === undefined) return;
+                                                            runAction(
+                                                                `toggle-library-${library.id}`,
+                                                                () => mediaAutomationApi.updateLibrary(library.id!, { ...library, enabled }),
+                                                                enabled ? 'Library enabled.' : 'Library disabled.',
+                                                            );
+                                                        }}
+                                                    />
+                                                    Enabled
+                                                </label>
+                                                <div className="flex gap-1">
                                                 <button type="button" className={buttonClass} onClick={() => setLibraryDraft({ ...emptyLibrary(), ...library })}>
                                                     <Pencil className="h-4 w-4" />
                                                 </button>
@@ -3423,6 +3439,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 >
                                                     <Trash2 className="h-4 w-4 text-red-300" />
                                                 </button>
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="mt-3 space-y-2 rounded-lg border border-border/70 bg-background/30 p-3 text-xs">

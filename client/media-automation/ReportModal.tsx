@@ -223,7 +223,7 @@ export const ReportModal: React.FC<Props> = ({
                                     onChange={setRootPath}
                                     mode="directory"
                                     placeholder="/media/Season 02"
-                                    hint="Must be under a configured library root."
+                                    hint="Path must live under an enabled Media Automation library (container path, e.g. /media/…). Failed probes are skipped so one bad file won’t abort the whole report."
                                 />
                             </div>
                             <label className="block text-xs font-bold uppercase tracking-wide text-muted">

@@ -319,6 +319,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
     const [libraries, setLibraries] = useState<Array<{ id: string; title: string; type?: string }>>([]);
     const [selectedLibraries, setSelectedLibraries] = useState<string[]>([]);
     const [librariesLoading, setLibrariesLoading] = useState(false);
+    const [libraryShareSource, setLibraryShareSource] = useState<string | null>(null);
     const [overrideMovieQuota, setOverrideMovieQuota] = useState(false);
     const [movieQuotaLimit, setMovieQuotaLimit] = useState(0);
     const [movieQuotaDays, setMovieQuotaDays] = useState(7);
@@ -350,6 +351,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             setExemptFromCleanup(!!user.exemptFromCleanup);
             setOptOutNewsletter(!!user.optOutNewsletter);
             setSelectedLibraries(Array.isArray(user.libraryIds) ? user.libraryIds.map(String) : []);
+            setLibraryShareSource(null);
             const ov = user.requestOverrides || {};
             setOverrideMovieQuota(ov.movieQuotaLimit != null);
             setMovieQuotaLimit(Number(ov.movieQuotaLimit) || 0);
@@ -397,13 +399,22 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                 const mapped = list.map((l: any) => ({ id: String(l.id), title: l.title || `Library ${l.id}`, type: l.type }));
                 const allIds = mapped.map((l) => l.id);
                 setLibraries(mapped);
-                if (Array.isArray(user.libraryIds) && user.libraryIds.length > 0) {
-                    setSelectedLibraries(user.libraryIds.map(String));
-                } else if (share && Array.isArray(share.selectedIds) && share.selectedIds.length > 0) {
-                    setSelectedLibraries(share.selectedIds.map(String));
-                } else {
-                    // Empty / all / unknown → check every library (uncheck to restrict)
+                setLibraryShareSource(share?.source || null);
+
+                // Live Plex share wins. Do not invent "all checked" when there is no share.
+                if (share?.hasShare === false || share?.source === 'no-share') {
+                    setSelectedLibraries([]);
+                } else if (share?.source === 'plex-all' || (share?.hasShare && share?.selectedIds == null)) {
                     setSelectedLibraries(allIds);
+                } else if (share && Array.isArray(share.selectedIds)) {
+                    const liveIds = share.selectedIds.map(String);
+                    // Keep only ids that exist in the local library list
+                    const matched = liveIds.filter((id: string) => allIds.includes(id));
+                    setSelectedLibraries(matched.length ? matched : liveIds);
+                } else if (Array.isArray(user.libraryIds) && user.libraryIds.length > 0) {
+                    setSelectedLibraries(user.libraryIds.map(String));
+                } else {
+                    setSelectedLibraries([]);
                 }
             })
             .finally(() => {
@@ -534,7 +545,18 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
 
                 <div className="mb-4 pt-4 border-t border-border">
                     <h3 className="text-lg font-bold text-text mb-1">Library Access</h3>
-                    <p className="text-xs text-muted mb-3">All libraries start checked — uncheck any you don&apos;t want to share. Save updates Plex access.</p>
+                    <p className="text-xs text-muted mb-3">
+                        Checkboxes reflect this user&apos;s live Plex share. Uncheck libraries to remove access, then Save.
+                    </p>
+                    {libraryShareSource === 'no-share' ? (
+                        <p className="mb-3 text-xs text-amber-300">
+                            No active Plex share found for this user — nothing is checked. Saving will invite/update access with the libraries you select.
+                        </p>
+                    ) : libraryShareSource === 'plex-all' ? (
+                        <p className="mb-3 text-xs text-muted">Plex reports all libraries shared with this user.</p>
+                    ) : libraryShareSource === 'plex' ? (
+                        <p className="mb-3 text-xs text-muted">Loaded from live Plex sharing settings.</p>
+                    ) : null}
                     {librariesLoading ? (
                         <div className="text-sm text-muted py-2">Loading libraries…</div>
                     ) : libraries.length === 0 ? (
