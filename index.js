@@ -12195,6 +12195,21 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
     }
 });
 
+/** Resolve portal user id / username / plexAccountId → Plex accountID for analytics APIs. */
+const resolveAnalyticsPlexAccountId = (rawId, users = [], plexAccounts = []) => {
+    const id = String(rawId || '').trim();
+    if (!id) return '';
+    const list = Array.isArray(users) ? users : [];
+    const accounts = Array.isArray(plexAccounts) ? plexAccounts : [];
+    if (list.some((u) => String(u?.plexAccountId || '') === id)) return id;
+    if (accounts.some((a) => String(a?.id || '') === id)) return id;
+    const byPortal = list.find((u) => String(u?.id || '') === id);
+    if (byPortal?.plexAccountId) return String(byPortal.plexAccountId);
+    const byName = list.find((u) => String(u?.username || '').toLowerCase() === id.toLowerCase());
+    if (byName?.plexAccountId) return String(byName.plexAccountId);
+    return id;
+};
+
 app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, null);
@@ -12203,7 +12218,9 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
         const uri = await getPlexConnectionUri(config);
         if (!uri) return res.status(503).json({ error: 'Cannot connect to Plex' });
 
-        const accountID = req.params.id;
+        const users = await loadFile(USERS_PATH, []);
+        const { list: plexAccounts } = await fetchPlexServerAccounts(uri, config);
+        const accountID = resolveAnalyticsPlexAccountId(req.params.id, users, plexAccounts);
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 15;
         const search = (req.query.search || '').trim().toLowerCase();
@@ -12214,10 +12231,8 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
         let usedTautulli = false;
         if (config.tautulliUrl && config.tautulliApiKey) {
             const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
-            const { list: plexAccounts } = await fetchPlexServerAccounts(uri, config);
             const plexAccountName = plexAccounts.find((a) => String(a.id) === String(accountID))?.name || null;
             
-            const users = await loadFile(USERS_PATH, []);
             const targetUser = users.find(u => String(u.plexAccountId) === String(accountID));
             const tUsers = await fetchTautulliUsers(config);
             const tautulliUserId = resolveTautulliUserId(tUsers, { username: targetUser?.username, email: targetUser?.email, plexAccountName });
@@ -12239,13 +12254,27 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
                 if (tRes && tRes.response && tRes.response.data && tRes.response.data.data) {
                     totalRecords = tRes.response.data.recordsFiltered;
                     historyData = tRes.response.data.data.map(item => ({
-                        title: item.title,
-                        parentTitle: item.grandparent_title || item.parent_title,
+                        id: item.row_id != null ? String(item.row_id) : `${item.rating_key || ''}-${item.started || item.date || ''}`,
+                        title: item.full_title || item.title,
+                        parentTitle: item.grandparent_title || item.parent_title || null,
+                        episodeTitle: item.media_type === 'episode' || item.media_type === 'track' ? item.title : null,
                         type: item.media_type,
                         viewedAt: item.date,
+                        startedAt: item.started != null ? Number(item.started) : null,
+                        stoppedAt: item.stopped != null ? Number(item.stopped) : null,
                         thumbUrl: item.thumb ? plexImageUrl(item.thumb) : null,
-                        duration: item.duration,
-                        percentComplete: item.percent_complete
+                        duration: item.duration != null ? Number(item.duration) : null,
+                        playDuration: item.play_duration != null ? Number(item.play_duration) : null,
+                        percentComplete: item.percent_complete != null ? Number(item.percent_complete) : null,
+                        pausedCount: item.paused_counter != null ? Number(item.paused_counter) : 0,
+                        player: item.player || null,
+                        platform: item.platform || null,
+                        product: item.product || null,
+                        transcodeDecision: item.transcode_decision || null,
+                        ipAddress: item.ip_address || null,
+                        location: item.location || null,
+                        watchedStatus: item.watched_status != null ? Number(item.watched_status) : null,
+                        year: item.year != null ? Number(item.year) : null,
                     }));
                     usedTautulli = true;
                 }
@@ -12256,11 +12285,27 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
             const allHistory = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 10000 });
             
             const mapHistoryToRecent = (item) => ({
+                id: `${item.ratingKey || item.key || ''}-${item.viewedAt || ''}`,
                 title: item.type === 'episode' ? (item.grandparentTitle || item.parentTitle || item.title) : item.type === 'track' ? (item.parentTitle || item.grandparentTitle || item.title) : item.title,
                 episodeTitle: item.type === 'episode' || item.type === 'track' ? item.title : null,
+                parentTitle: item.type === 'episode' ? (item.grandparentTitle || item.parentTitle || null) : null,
                 viewedAt: item.viewedAt,
+                startedAt: null,
+                stoppedAt: null,
                 type: item.type,
-                thumbUrl: item.thumb ? plexImageUrl(item.thumb) : null
+                thumbUrl: item.thumb ? plexImageUrl(item.thumb) : null,
+                duration: null,
+                playDuration: null,
+                percentComplete: null,
+                pausedCount: null,
+                player: null,
+                platform: null,
+                product: null,
+                transcodeDecision: null,
+                ipAddress: null,
+                location: null,
+                watchedStatus: null,
+                year: null,
             });
 
             let filtered = allHistory.map(mapHistoryToRecent);
@@ -12280,7 +12325,8 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
             total: totalRecords,
             page,
             limit,
-            source: usedTautulli ? 'tautulli' : 'plex'
+            source: usedTautulli ? 'tautulli' : 'plex',
+            accountId: accountID,
         });
     } catch (e) {
         log(`Error fetching user history API: ${e.message}`);
@@ -12327,7 +12373,9 @@ app.get('/api/plex/analytics/user/:id', requireAdmin, async (req, res) => {
         const uri = await getPlexConnectionUri(config);
         if (!uri) return res.status(503).json({ error: 'Cannot connect to Plex' });
 
-        const accountID = req.params.id;
+        const users = await loadFile(USERS_PATH, []);
+        const { list: plexAccounts } = await fetchPlexServerAccounts(uri, config);
+        const accountID = resolveAnalyticsPlexAccountId(req.params.id, users, plexAccounts);
         const limit = req.query.days === 'all' ? 999999 : 5000;
 
         const historyRes = await fetch(`${uri}/status/sessions/history/all?accountID=${accountID}&X-Plex-Token=${config.plexToken}&sort=viewedAt:desc&limit=${limit}`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);

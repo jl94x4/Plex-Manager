@@ -5,6 +5,8 @@ export interface User {
     username: string;
     email?: string;
     thumb?: string;
+    /** Plex account id used by analytics/history APIs when present. */
+    plexAccountId?: string | null;
     joiningDate: string;
     expiryDate: string | null;
     plexAccessStatus: 'active' | 'pending' | 'revoked' | 'unknown';

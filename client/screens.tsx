@@ -191,11 +191,12 @@ const UserCard: React.FC<{
     onDelete: () => void;
     onRevoke: () => void;
     onViewAs?: () => void;
+    onViewAnalytics?: () => void;
     isConfigured: boolean;
     isSelected: boolean;
     onSelect: (id: string) => void;
     providerLabel?: string;
-}> = ({ user, onEdit, onDelete, onRevoke, onViewAs, isConfigured, isSelected, onSelect, providerLabel = 'Plex' }) => {
+}> = ({ user, onEdit, onDelete, onRevoke, onViewAs, onViewAnalytics, isConfigured, isSelected, onSelect, providerLabel = 'Plex' }) => {
     const { status, statusText, daysRemainingText, pillClass, borderClass, glowClass } = useMemo(() => {
         const days = getDaysUntilExpiry(user.expiryDate);
         let status: UserStatus = 'active';
@@ -283,6 +284,16 @@ const UserCard: React.FC<{
                 </div>
             </div>
             <div className="flex flex-wrap gap-2 mt-auto pt-4" onClick={e => e.stopPropagation()}>
+                {onViewAnalytics && (
+                    <button
+                        className="px-3 py-1.5 bg-border text-text rounded-md text-xs font-semibold hover:bg-opacity-80 transition-colors flex items-center justify-center gap-1.5"
+                        onClick={onViewAnalytics}
+                        title="Open user analytics"
+                    >
+                        <BarChart3 className="w-3.5 h-3.5" />
+                        Analytics
+                    </button>
+                )}
                 {onViewAs && (
                     <button className="px-3 py-1.5 bg-plex/15 text-plex border border-plex/30 rounded-md text-xs font-semibold hover:bg-plex/25 transition-colors flex items-center justify-center gap-1.5" onClick={onViewAs} title="View portal as this user">
                         <Eye className="w-3.5 h-3.5" />
@@ -550,11 +561,19 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
     const [historyData, setHistoryData] = useState<any[]>([]);
     const [historyTotal, setHistoryTotal] = useState(0);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [historySource, setHistorySource] = useState<'tautulli' | 'plex' | null>(null);
+    const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
         setLoading(true);
         setError(false);
+        setActiveTab('overview');
+        setHistoryPage(1);
+        setHistorySearch('');
+        setHistoryData([]);
+        setHistorySource(null);
+        setExpandedHistoryId(null);
         apiFetch(`/api/plex/analytics/user/${userId}?days=${days}`)
             .then(res => { if (!cancelled) setData(res); })
             .catch(() => { if (!cancelled) setError(true); })
@@ -566,11 +585,13 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
         if (activeTab !== 'history') return;
         let cancelled = false;
         setHistoryLoading(true);
+        setExpandedHistoryId(null);
         apiFetch(`/api/plex/analytics/user/${userId}/history?page=${historyPage}&limit=15&search=${encodeURIComponent(historySearch)}`)
             .then(res => {
                 if (!cancelled && res.data) {
                     setHistoryData(res.data);
                     setHistoryTotal(res.total);
+                    setHistorySource(res.source === 'tautulli' ? 'tautulli' : 'plex');
                 }
             })
             .catch(() => { })
@@ -587,6 +608,31 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
         if (h === 0) return '12 AM';
         if (h === 12) return '12 PM';
         return h > 12 ? `${h - 12} PM` : `${h} AM`;
+    };
+
+    const formatHistoryDuration = (seconds?: number | null) => {
+        const total = Math.max(0, Math.round(Number(seconds) || 0));
+        if (!total) return null;
+        const hrs = Math.floor(total / 3600);
+        const mins = Math.floor((total % 3600) / 60);
+        if (hrs > 0) return `${hrs}h ${mins}m`;
+        if (mins > 0) return `${mins}m`;
+        return `${total}s`;
+    };
+
+    const formatHistoryTimestamp = (value?: number | string | null) => {
+        if (value == null || value === '') return null;
+        const raw = Number(value);
+        if (!Number.isFinite(raw) || raw <= 0) return null;
+        const ms = raw > 9999999999 ? raw : raw * 1000;
+        return new Date(ms).toLocaleString();
+    };
+
+    const historyWatchedLabel = (status?: number | null) => {
+        if (status == null) return null;
+        if (status === 1) return 'Watched';
+        if (status === 0) return 'Partial';
+        return `Status ${status}`;
     };
 
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -690,7 +736,14 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                     ) : activeTab === 'history' ? (
                         <div className="flex flex-col gap-4 h-full min-h-[400px]">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <h3 className="text-lg font-bold text-text uppercase tracking-wider flex items-center gap-2"><Activity className="text-plex w-4 h-4" /> Full Watch History</h3>
+                                <div>
+                                    <h3 className="text-lg font-bold text-text uppercase tracking-wider flex items-center gap-2"><Activity className="text-plex w-4 h-4" /> Full Watch History</h3>
+                                    {historySource === 'plex' ? (
+                                        <p className="mt-1 text-[11px] text-muted">Pause counts need Tautulli configured — showing Plex history only. Click a row for details.</p>
+                                    ) : historySource === 'tautulli' ? (
+                                        <p className="mt-1 text-[11px] text-muted">Click a row for session details (pauses, player, stream). Powered by Tautulli.</p>
+                                    ) : null}
+                                </div>
                                 <div className="relative w-full sm:w-64">
                                     <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted" />
                                     <input
@@ -710,28 +763,105 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                     <div className="flex justify-center items-center h-40 text-muted">No history found.</div>
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                        {historyData.map((h: any, i: number) => (
-                                            <div key={i} className="flex items-center gap-3 bg-white/5 border border-white/5 p-2 rounded-lg hover:bg-white/10 transition-colors">
-                                                <div className={`${h.type === 'track' ? 'w-12 h-12' : 'w-10 h-14'} bg-black/40 rounded overflow-hidden flex-shrink-0`}>
-                                                    {h.thumbUrl && <img src={resolvePortalAssetUrl(h.thumbUrl)} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />}
-                                                    <div className={`w-full h-full p-2 opacity-50 flex items-center justify-center ${h.thumbUrl ? 'hidden' : ''}`}>
-                                                        {h.type === 'track' ? <Music className="w-full h-full" /> : <Film className="w-full h-full" />}
+                                        {historyData.map((h: any, i: number) => {
+                                            const rowId = String(h.id || `${h.title}-${h.viewedAt}-${i}`);
+                                            const expanded = expandedHistoryId === rowId;
+                                            const durationLabel = formatHistoryDuration(h.duration);
+                                            const playDurationLabel = formatHistoryDuration(h.playDuration);
+                                            const paused = Number(h.pausedCount) || 0;
+                                            const playerLabel = [h.player, h.platform].filter(Boolean).join(' · ');
+                                            const startedLabel = formatHistoryTimestamp(h.startedAt ?? h.viewedAt);
+                                            const stoppedLabel = formatHistoryTimestamp(h.stoppedAt);
+                                            const watchedLabel = historyWatchedLabel(h.watchedStatus);
+                                            const detailRows: Array<{ label: string; value: string }> = [
+                                                startedLabel ? { label: 'Started', value: startedLabel } : null,
+                                                stoppedLabel ? { label: 'Stopped', value: stoppedLabel } : null,
+                                                playDurationLabel ? { label: 'Watched for', value: playDurationLabel } : null,
+                                                durationLabel ? { label: 'Media length', value: durationLabel } : null,
+                                                h.percentComplete != null ? { label: 'Progress', value: `${h.percentComplete}%` } : null,
+                                                historySource === 'tautulli' ? { label: 'Pauses', value: paused > 0 ? `${paused} time${paused === 1 ? '' : 's'}` : 'None' } : null,
+                                                watchedLabel ? { label: 'Status', value: watchedLabel } : null,
+                                                h.player ? { label: 'Player', value: String(h.player) } : null,
+                                                h.platform ? { label: 'Platform', value: String(h.platform) } : null,
+                                                h.product ? { label: 'Product', value: String(h.product) } : null,
+                                                h.transcodeDecision ? { label: 'Stream', value: String(h.transcodeDecision) } : null,
+                                                h.ipAddress ? { label: 'IP', value: String(h.ipAddress) } : null,
+                                                h.location ? { label: 'Location', value: String(h.location) } : null,
+                                                h.year ? { label: 'Year', value: String(h.year) } : null,
+                                                h.type ? { label: 'Type', value: String(h.type) } : null,
+                                            ].filter(Boolean) as Array<{ label: string; value: string }>;
+                                            return (
+                                            <div
+                                                key={rowId}
+                                                className={`bg-white/5 border border-white/5 rounded-lg hover:bg-white/10 transition-colors ${expanded ? 'sm:col-span-2 lg:col-span-3 bg-white/[0.07]' : ''}`}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setExpandedHistoryId(expanded ? null : rowId)}
+                                                    className="w-full flex items-center gap-3 p-2 text-left"
+                                                    aria-expanded={expanded}
+                                                >
+                                                    <div className={`${h.type === 'track' ? 'w-12 h-12' : 'w-10 h-14'} bg-black/40 rounded overflow-hidden flex-shrink-0`}>
+                                                        {h.thumbUrl && <img src={resolvePortalAssetUrl(h.thumbUrl)} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />}
+                                                        <div className={`w-full h-full p-2 opacity-50 flex items-center justify-center ${h.thumbUrl ? 'hidden' : ''}`}>
+                                                            {h.type === 'track' ? <Music className="w-full h-full" /> : <Film className="w-full h-full" />}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <div className="flex flex-col overflow-hidden w-full">
-                                                    <span className="font-bold text-sm text-text truncate w-[95%]">{h.title}</span>
-                                                    {h.parentTitle && h.type !== 'movie' && <span className="text-muted text-xs truncate w-[95%]">{h.parentTitle}</span>}
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="text-plex font-mono text-[10px]">
-                                                            {h.viewedAt ? (h.viewedAt > 9999999999 ? new Date(h.viewedAt).toLocaleString() : new Date(h.viewedAt * 1000).toLocaleString()) : 'Unknown Date'}
-                                                        </span>
-                                                        {h.percentComplete != null && h.percentComplete < 100 && (
-                                                            <span className="text-yellow-500 font-mono text-[10px]">{h.percentComplete}%</span>
+                                                    <div className="flex flex-col overflow-hidden w-full min-w-0">
+                                                        <span className="font-bold text-sm text-text truncate w-[95%]">{h.title}</span>
+                                                        {(h.parentTitle || h.episodeTitle) && h.type !== 'movie' && (
+                                                            <span className="text-muted text-xs truncate w-[95%]">
+                                                                {h.parentTitle || h.episodeTitle}
+                                                            </span>
+                                                        )}
+                                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
+                                                            <span className="text-plex font-mono text-[10px]">
+                                                                {h.viewedAt ? (h.viewedAt > 9999999999 ? new Date(h.viewedAt).toLocaleString() : new Date(h.viewedAt * 1000).toLocaleString()) : 'Unknown Date'}
+                                                            </span>
+                                                            {durationLabel ? (
+                                                                <span className="text-muted font-mono text-[10px]">{durationLabel}</span>
+                                                            ) : null}
+                                                            {h.percentComplete != null && h.percentComplete < 100 && (
+                                                                <span className="text-yellow-500 font-mono text-[10px]">{h.percentComplete}%</span>
+                                                            )}
+                                                            {paused > 0 ? (
+                                                                <span className="inline-flex items-center gap-0.5 text-amber-300 font-mono text-[10px]" title="Times paused">
+                                                                    <Pause className="w-3 h-3" /> {paused}
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+                                                        {playerLabel ? (
+                                                            <span className="text-muted text-[10px] truncate mt-0.5" title={playerLabel}>{playerLabel}</span>
+                                                        ) : null}
+                                                    </div>
+                                                    <span className="flex-shrink-0 text-muted" aria-hidden>
+                                                        {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                                    </span>
+                                                </button>
+                                                {expanded ? (
+                                                    <div className="px-3 pb-3 pt-0 border-t border-white/5 mx-2 mb-2">
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 pt-3">
+                                                            {detailRows.map((row) => (
+                                                                <div key={row.label} className="min-w-0">
+                                                                    <div className="text-[10px] uppercase tracking-wider text-muted">{row.label}</div>
+                                                                    <div className="text-xs text-text truncate" title={row.value}>{row.value}</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        {historySource === 'tautulli' ? (
+                                                            <p className="mt-3 text-[10px] text-muted">
+                                                                Tautulli stores how many times they paused, not the exact pause timestamps.
+                                                            </p>
+                                                        ) : (
+                                                            <p className="mt-3 text-[10px] text-muted">
+                                                                Session detail (pauses, player, stream) needs Tautulli.
+                                                            </p>
                                                         )}
                                                     </div>
-                                                </div>
+                                                ) : null}
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -3056,8 +3186,8 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
     const [peakDateLoading, setPeakDateLoading] = useState(false);
     const [selectedUser, setSelectedUser] = useState<{ id: string, username: string, thumb: string | null } | null>(null);
     const [allUsers, setAllUsers] = useState<any[]>([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isSearching, setIsSearching] = useState(false);
+    const [userSearchQuery, setUserSearchQuery] = useState('');
+    const [userSearchOpen, setUserSearchOpen] = useState(false);
     const [contentTab, setContentTab] = useState<'movies' | 'shows' | 'music'>('movies');
     const [viewerPage, setViewerPage] = useState(1);
     const viewersPerPage = 10;
@@ -3090,26 +3220,87 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
 
     useEffect(() => {
         const checkHash = () => {
-            if (allUsers.length === 0) return;
             const hash = typeof window !== 'undefined' ? window.location.hash : '';
-            if (hash.startsWith('#user=')) {
-                const username = decodeURIComponent(hash.replace('#user=', ''));
-                if (username) {
-                    const found = allUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
-                    setSelectedUser({ 
-                        id: found?.id || username, 
-                        username: found?.username || username, 
-                        thumb: found?.thumb || null 
-                    });
-                }
-            }
+            if (!hash.startsWith('#user=')) return;
+            const username = decodeURIComponent(hash.replace('#user=', '')).trim();
+            if (!username) return;
+            const found = allUsers.find((u: any) => String(u.username || '').toLowerCase() === username.toLowerCase());
+            const fromLeaderboard = (analyticsData?.topUsers || []).find(
+                (u: any) => String(u.username || '').toLowerCase() === username.toLowerCase(),
+            );
+            const analyticsId = String(
+                found?.plexAccountId
+                || fromLeaderboard?.id
+                || found?.id
+                || username,
+            );
+            setSelectedUser({
+                id: analyticsId,
+                username: found?.username || fromLeaderboard?.username || username,
+                thumb: found?.thumb || fromLeaderboard?.thumb || null,
+            });
         };
 
         checkHash();
         window.addEventListener('hashchange', checkHash);
         return () => window.removeEventListener('hashchange', checkHash);
-    }, [allUsers]);
+    }, [allUsers, analyticsData?.topUsers]);
 
+    const openUserAnalytics = useCallback((user: { id?: string | null; username?: string | null; thumb?: string | null; plexAccountId?: string | null }) => {
+        const username = String(user?.username || '').trim();
+        if (!username) return;
+        const found = allUsers.find((u: any) => String(u.username || '').toLowerCase() === username.toLowerCase());
+        const fromLeaderboard = (analyticsData?.topUsers || []).find(
+            (u: any) => String(u.username || '').toLowerCase() === username.toLowerCase(),
+        );
+        const analyticsId = String(
+            user?.plexAccountId
+            || found?.plexAccountId
+            || user?.id
+            || fromLeaderboard?.id
+            || found?.id
+            || username,
+        );
+        setSelectedUser({
+            id: analyticsId,
+            username: found?.username || username,
+            thumb: user?.thumb || found?.thumb || fromLeaderboard?.thumb || null,
+        });
+        if (typeof window !== 'undefined') {
+            const nextHash = `#user=${encodeURIComponent(found?.username || username)}`;
+            if (window.location.hash !== nextHash) {
+                window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`);
+            }
+        }
+        setUserSearchQuery('');
+        setUserSearchOpen(false);
+    }, [allUsers, analyticsData?.topUsers]);
+
+    const userSearchMatches = useMemo(() => {
+        const q = userSearchQuery.trim().toLowerCase();
+        if (!q || !isAdmin) return [];
+        const seen = new Set<string>();
+        const out: Array<{ id: string; username: string; thumb: string | null; email?: string; plexAccountId?: string | null }> = [];
+        const push = (entry: { id?: string | null; username?: string | null; thumb?: string | null; email?: string; plexAccountId?: string | null }) => {
+            const name = String(entry.username || '').trim();
+            if (!name) return;
+            const key = name.toLowerCase();
+            if (seen.has(key)) return;
+            const hay = `${name} ${entry.email || ''}`.toLowerCase();
+            if (!hay.includes(q)) return;
+            seen.add(key);
+            out.push({
+                id: String(entry.plexAccountId || entry.id || name),
+                username: name,
+                thumb: entry.thumb || null,
+                email: entry.email,
+                plexAccountId: entry.plexAccountId || null,
+            });
+        };
+        for (const u of allUsers) push(u);
+        for (const u of analyticsData?.topUsers || []) push(u);
+        return out.slice(0, 8);
+    }, [allUsers, analyticsData?.topUsers, isAdmin, userSearchQuery]);
     useEffect(() => {
         if (!peakDate) {
             setPeakDateData(null);
@@ -3515,8 +3706,79 @@ return (
                         </>
                     )}
 
+                    {isAdmin ? (
+                        <div className="w-full glass-card-sm p-4 md:p-5">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                <div>
+                                    <h2 className="text-lg font-bold text-text uppercase tracking-wider flex items-center gap-2">
+                                        <Search className="text-plex w-4 h-4" /> Find user
+                                    </h2>
+                                    <p className="mt-1 text-xs text-muted">
+                                        Search by username or email to open their stats and watch history.
+                                    </p>
+                                </div>
+                                <div className="relative w-full sm:max-w-sm">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                    <input
+                                        type="search"
+                                        value={userSearchQuery}
+                                        onChange={(event) => {
+                                            setUserSearchQuery(event.target.value);
+                                            setUserSearchOpen(true);
+                                        }}
+                                        onFocus={() => setUserSearchOpen(true)}
+                                        onBlur={() => window.setTimeout(() => setUserSearchOpen(false), 150)}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter') {
+                                                event.preventDefault();
+                                                const first = userSearchMatches[0];
+                                                if (first) openUserAnalytics(first);
+                                            }
+                                            if (event.key === 'Escape') {
+                                                setUserSearchOpen(false);
+                                                setUserSearchQuery('');
+                                            }
+                                        }}
+                                        placeholder="e.g. username or email…"
+                                        className="w-full rounded-lg border border-border bg-black/40 py-2.5 pl-10 pr-3 text-sm text-text outline-none transition focus:border-plex"
+                                        autoComplete="off"
+                                    />
+                                    {userSearchOpen && userSearchQuery.trim() ? (
+                                        <div className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-border bg-card/95 shadow-xl backdrop-blur custom-scrollbar">
+                                            {userSearchMatches.length ? userSearchMatches.map((match) => (
+                                                <button
+                                                    key={match.username}
+                                                    type="button"
+                                                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/5"
+                                                    onMouseDown={(event) => event.preventDefault()}
+                                                    onClick={() => openUserAnalytics(match)}
+                                                >
+                                                    <img
+                                                        src={resolveUserAvatar(match.thumb, 40, 40)}
+                                                        alt=""
+                                                        className="h-8 w-8 rounded-full object-cover bg-black/40"
+                                                        onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
+                                                    />
+                                                    <span className="min-w-0 flex-1">
+                                                        <span className="block truncate text-sm font-semibold text-text">{match.username}</span>
+                                                        {match.email ? (
+                                                            <span className="block truncate text-[11px] text-muted">{match.email}</span>
+                                                        ) : null}
+                                                    </span>
+                                                    <BarChart3 className="h-4 w-4 shrink-0 text-plex" />
+                                                </button>
+                                            )) : (
+                                                <p className="px-3 py-3 text-sm text-muted">No users match “{userSearchQuery.trim()}”.</p>
+                                            )}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
+
                     <div className="w-full">
-                        <AnimatedLeaderboard users={topUsers} resolveAvatar={resolveUserAvatar} isAdmin={isAdmin} onUserClick={setSelectedUser as any} />
+                        <AnimatedLeaderboard users={topUsers} resolveAvatar={resolveUserAvatar} isAdmin={isAdmin} onUserClick={(u: any) => openUserAnalytics(u)} />
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -4458,6 +4720,9 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                             onDelete={() => handleDeleteUser(user.id)}
                             onRevoke={() => revokePlexAccess(user.id)}
                             onViewAs={() => handleViewAsUser(user)}
+                            onViewAnalytics={() => {
+                                window.location.assign(portalUrl(`/analytics#user=${encodeURIComponent(user.username)}`));
+                            }}
                             isConfigured={isConfigured}
                             isSelected={selectedUserIds.includes(user.id)}
                             onSelect={handleToggleSelection}
