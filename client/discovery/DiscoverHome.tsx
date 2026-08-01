@@ -29,6 +29,7 @@ import {
     MusicChartRail,
     MusicGenreItem,
     MusicGenreRail,
+    MusicGenreRow,
     useMusicChartNavigation,
 } from './DiscoverMusic';
 
@@ -231,7 +232,8 @@ export const DiscoverHome: React.FC<{
         topArtists: MusicChartItem[];
         topAlbums: MusicChartItem[];
         genres: MusicGenreItem[];
-    }>({ topArtists: [], topAlbums: [], genres: [] });
+        genreRows: MusicGenreRow[];
+    }>({ topArtists: [], topAlbums: [], genres: [], genreRows: [] });
     const { resolvingKey: musicResolvingKey, openChartItem: openMusicChartItem } = useMusicChartNavigation(
         navigate,
         () => navigate('/discovery/music'),
@@ -248,6 +250,7 @@ export const DiscoverHome: React.FC<{
                     topArtists: Array.isArray(res.topArtists) ? res.topArtists : [],
                     topAlbums: Array.isArray(res.topAlbums) ? res.topAlbums : [],
                     genres: Array.isArray(res.genres) ? res.genres : [],
+                    genreRows: Array.isArray(res.genreRows) ? res.genreRows : [],
                 });
             } catch {
                 // Best-effort — home still renders without music rails.
@@ -652,6 +655,16 @@ export const DiscoverHome: React.FC<{
                             resolvingKey={musicResolvingKey}
                             onPick={openMusicChartItem}
                         />
+                        {musicRows.genreRows.slice(0, 4).map((row) => (
+                            <MusicChartRail
+                                key={`home-genre-row-${row.id}`}
+                                title={t('music.genreAlbums', { name: row.name })}
+                                items={row.albums}
+                                kind="album"
+                                resolvingKey={musicResolvingKey}
+                                onPick={openMusicChartItem}
+                            />
+                        ))}
                     </>
                 )}
             </section>

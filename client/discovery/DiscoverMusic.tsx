@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Music, Search } from 'lucide-react';
 import { apiFetch } from '../shared/api';
+import { Carousel } from './Carousel';
 import { discoveryTheme } from './discoveryThemeClasses';
 import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
 import { enrichDiscoveryItems } from './discoverItemUtils';
@@ -100,6 +101,12 @@ export type MusicGenreItem = {
     image?: string | null;
 };
 
+export type MusicGenreRow = {
+    id: number;
+    name: string;
+    albums: MusicChartItem[];
+};
+
 /** Resolve a Deezer chart entry to its MusicBrainz artist and open the artist page. */
 export const useMusicChartNavigation = (
     navigate: (path: string) => void,
@@ -136,9 +143,9 @@ export const MusicGenreRail: React.FC<{
 }> = ({ title, genres, activeGenreId = null, navigate }) => {
     if (!genres.length) return null;
     return (
-        <section className="flex flex-col gap-3">
-            <h3 className={`${discoveryTheme.sectionTitle} px-2`}>{title}</h3>
-            <div className="flex gap-3 overflow-x-auto px-2 pb-2 scrollbar-thin">
+        <section className="flex flex-col gap-2">
+            <h3 className={`${discoveryTheme.sectionTitle} px-2 pr-16`}>{title}</h3>
+            <Carousel>
                 {genres.map((g) => (
                     <button
                         key={g.id}
@@ -157,7 +164,7 @@ export const MusicGenreRail: React.FC<{
                         </span>
                     </button>
                 ))}
-            </div>
+            </Carousel>
         </section>
     );
 };
@@ -171,9 +178,9 @@ export const MusicChartRail: React.FC<{
 }> = ({ title, items, kind, resolvingKey, onPick }) => {
     if (!items.length) return null;
     return (
-        <section className="flex flex-col gap-3">
-            <h3 className={`${discoveryTheme.sectionTitle} px-2`}>{title}</h3>
-            <div className="flex gap-3 overflow-x-auto px-2 pb-2 scrollbar-thin">
+        <section className="flex flex-col gap-2">
+            <h3 className={`${discoveryTheme.sectionTitle} px-2 pr-16`}>{title}</h3>
+            <Carousel>
                 {items.map((item, idx) => {
                     const key = `${kind}-${item.deezerId ?? idx}`;
                     const busy = resolvingKey === key;
@@ -204,7 +211,7 @@ export const MusicChartRail: React.FC<{
                         </button>
                     );
                 })}
-            </div>
+            </Carousel>
         </section>
     );
 };
@@ -221,10 +228,16 @@ export const DiscoverMusic: React.FC<{
     const [loading, setLoading] = useState(false);
     const [requestsLoading, setRequestsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [charts, setCharts] = useState<{ topArtists: MusicChartItem[]; topAlbums: MusicChartItem[]; genres: MusicGenreItem[] }>({
+    const [charts, setCharts] = useState<{
+        topArtists: MusicChartItem[];
+        topAlbums: MusicChartItem[];
+        genres: MusicGenreItem[];
+        genreRows: MusicGenreRow[];
+    }>({
         topArtists: [],
         topAlbums: [],
         genres: [],
+        genreRows: [],
     });
     const [genre, setGenre] = useState<MusicGenreItem | null>(null);
     const [genreCharts, setGenreCharts] = useState<{ topArtists: MusicChartItem[]; topAlbums: MusicChartItem[] } | null>(null);
@@ -294,6 +307,7 @@ export const DiscoverMusic: React.FC<{
                     topArtists: Array.isArray(res.topArtists) ? res.topArtists : [],
                     topAlbums: Array.isArray(res.topAlbums) ? res.topAlbums : [],
                     genres: Array.isArray(res.genres) ? res.genres : [],
+                    genreRows: Array.isArray(res.genreRows) ? res.genreRows : [],
                 });
             } catch {
                 // Charts are optional — search still works without them.
@@ -451,6 +465,17 @@ export const DiscoverMusic: React.FC<{
                         activeGenreId={genre?.id ?? null}
                         navigate={navigate}
                     />
+
+                    {!genre && charts.genreRows.map((row) => (
+                        <MusicChartRail
+                            key={`genre-row-${row.id}`}
+                            title={t('music.genreAlbums', { name: row.name })}
+                            items={row.albums}
+                            kind="album"
+                            resolvingKey={resolvingKey}
+                            onPick={openChartItem}
+                        />
+                    ))}
 
                     {requestsLoading ? (
                         <div className="py-6 flex justify-center text-muted">

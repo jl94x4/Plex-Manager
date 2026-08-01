@@ -7971,6 +7971,21 @@ const mapDeezerAlbum = (entry) => {
         posterPath: entry.cover_big || entry.cover_medium || null,
     };
 };
+/** Deezer charts repeat entries (clean/explicit variants) — collapse them. */
+const dedupeChartItems = (items, keyFn) => {
+    const seen = new Set();
+    const out = [];
+    for (const item of items) {
+        if (!item) continue;
+        const key = keyFn(item);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(item);
+    }
+    return out;
+};
+const artistChartKey = (item) => String(item?.name || '').trim().toLowerCase();
+const albumChartKey = (item) => `${String(item?.artistName || '').trim().toLowerCase()}|${String(item?.title || '').trim().toLowerCase()}`;
 app.get('/api/discovery/music/browse', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
@@ -8004,12 +8019,26 @@ app.get('/api/discovery/music/browse', requireAuth, requireMember, async (req, r
                 image: entry.picture_big || entry.picture_medium || entry.picture || null,
             }));
 
+        // One album rail per genre on the browse view (default charts only).
+        let genreRows = [];
+        if (genreId === 0 && genres.length) {
+            genreRows = (await Promise.all(genres.slice(0, 12).map(async (g) => {
+                const rowRes = await fetchJson(`https://api.deezer.com/chart/${g.id}/albums?limit=18`).catch(() => null);
+                const albums = dedupeChartItems(
+                    (rowRes?.data || []).map(mapDeezerAlbum),
+                    albumChartKey,
+                );
+                return albums.length >= 4 ? { id: g.id, name: g.name, albums } : null;
+            }))).filter(Boolean);
+        }
+
         const payload = {
             genreId: genreId || null,
-            topArtists: (artistsRes?.data || []).map(mapDeezerArtist).filter(Boolean),
-            topAlbums: (albumsRes?.data || []).map(mapDeezerAlbum).filter(Boolean),
+            topArtists: dedupeChartItems((artistsRes?.data || []).map(mapDeezerArtist), artistChartKey),
+            topAlbums: dedupeChartItems((albumsRes?.data || []).map(mapDeezerAlbum), albumChartKey),
             newReleases: [],
             genres,
+            genreRows,
         };
         if (payload.topArtists.length || payload.topAlbums.length) {
             musicBrowseCache.set(genreId, { at: Date.now(), payload });
