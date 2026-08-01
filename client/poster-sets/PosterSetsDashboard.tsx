@@ -10,6 +10,7 @@ import {
     Eye,
     History,
     Image as ImageIcon,
+    Library,
     ListOrdered,
     Loader2,
     Pause,
@@ -25,6 +26,7 @@ import {
     X,
 } from 'lucide-react';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
+import { apiFetch } from '../shared/api';
 import { usePoll } from '../shared/usePoll';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
@@ -68,6 +70,13 @@ import {
     previewAssetEpisodeLabel,
     type PreviewAssetSections,
 } from './previewGroups';
+import {
+    libraryItemPosterSrc,
+    normalizeJellyfinShows,
+    normalizeLibraryMovies,
+    normalizePlexShows,
+    type LibraryRecentItem,
+} from './libraryRecent';
 
 const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
 const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
@@ -93,7 +102,7 @@ const sectionBodyClass = 'mt-1 text-xs text-muted sm:text-sm';
 const posterMediaRadiusClass = 'rounded-md';
 const previewStripClass = 'flex w-full min-w-0 gap-3 overflow-x-auto overscroll-x-contain scroll-smooth pb-1 touch-pan-x [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden';
 
-type TabId = 'apply' | 'browse' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
+type TabId = 'apply' | 'browse' | 'library' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed' | 'audit';
 type SetProvider = 'mediux' | 'posterdb';
 type SearchProvider = 'both' | SetProvider;
@@ -348,6 +357,16 @@ type BulkSetSelection = {
     setKind?: string | null;
 };
 
+const bulkEntryFromSet = (set: PosterSetsSearchSet): BulkSetSelection => ({
+    url: set.url,
+    title: set.title,
+    user: set.user,
+    thumbUrl: set.thumbUrl,
+    provider: set.provider,
+    setId: set.setId,
+    setKind: set.setKind || (isTitleCardSet(set) ? 'title_cards' : null),
+});
+
 const providerLabel = (provider?: string | null) => {
     const value = String(provider || '').toLowerCase();
     if (value === 'mediux') return 'MediUX';
@@ -537,16 +556,37 @@ function BrowseSetCard({
     onOpen,
     onOpenCreator,
     disabled,
+    bulkSelected = false,
+    onToggleBulk,
 }: {
     set: PosterSetsSearchSet;
     onOpen: (set: PosterSetsSearchSet) => void;
     onOpenCreator?: (user: string) => void;
     disabled?: boolean;
+    bulkSelected?: boolean;
+    onToggleBulk?: () => void;
 }) {
     const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
     const landscape = isTitleCardSet(set);
     return (
-        <div className={`group flex w-full min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border border-white/10 bg-black/20 text-center transition hover:border-plex/40`}>
+        <div className={`group relative flex w-full min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border bg-black/20 text-center transition hover:border-plex/40 ${
+            bulkSelected ? 'border-plex/40 ring-1 ring-plex/20' : 'border-white/10'
+        }`}>
+            {onToggleBulk ? (
+                <label
+                    className="absolute left-2 top-2 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-black/60"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-[var(--plex,#e5a00d)]"
+                        checked={bulkSelected}
+                        onChange={onToggleBulk}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label={`Select ${setTitle}`}
+                    />
+                </label>
+            ) : null}
             <button
                 type="button"
                 disabled={disabled}
@@ -571,6 +611,46 @@ function BrowseSetCard({
                 <ProviderPill provider={set.provider} compact />
             </div>
         </div>
+    );
+}
+
+function LibraryMediaCard({
+    item,
+    disabled,
+    onOpen,
+}: {
+    item: LibraryRecentItem;
+    disabled?: boolean;
+    onOpen: (item: LibraryRecentItem) => void;
+}) {
+    const label = item.year ? `${item.title} (${item.year})` : item.title;
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onOpen(item)}
+            className="group flex w-full min-w-0 flex-col overflow-hidden rounded-md border border-white/10 bg-black/20 text-left transition hover:border-plex/40 disabled:opacity-50"
+        >
+            <div className="relative aspect-[2/3] w-full shrink-0 overflow-hidden bg-black">
+                <PosterThumb
+                    src={libraryItemPosterSrc(item)}
+                    alt={item.title}
+                    className="absolute inset-0 h-full w-full"
+                    imgClassName="absolute inset-0 h-full w-full object-cover"
+                />
+                <span className="absolute left-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+                    {item.mediaType === 'movie' ? 'Movie' : 'TV'}
+                </span>
+            </div>
+            <div className="min-w-0 px-2 py-2">
+                <p className="line-clamp-2 text-center text-[11px] font-semibold leading-snug text-text sm:text-xs" title={label}>
+                    {item.title}
+                </p>
+                {item.year ? (
+                    <p className="mt-0.5 text-center text-[10px] text-muted">{item.year}</p>
+                ) : null}
+            </div>
+        </button>
     );
 }
 
@@ -1010,6 +1090,11 @@ export const PosterSetsDashboard: React.FC = () => {
     browseRailsRef.current = browseRails;
     const [browseLoading, setBrowseLoading] = useState(false);
     const [browseSeeAllId, setBrowseSeeAllId] = useState<string | null>(initialLocation.rail);
+    const [libraryShows, setLibraryShows] = useState<LibraryRecentItem[]>([]);
+    const [libraryMovies, setLibraryMovies] = useState<LibraryRecentItem[]>([]);
+    const [libraryLoading, setLibraryLoading] = useState(false);
+    const [libraryError, setLibraryError] = useState<string | null>(null);
+    const libraryLoadGenRef = useRef(0);
     const scrollPreviewAfterLoadRef = useRef(false);
     const syncedSetUrlRef = useRef<string | null>(initialLocation.setUrl);
     const titleCardsOnlyRef = useRef(Boolean(initialLocation.titleCardsOnly));
@@ -1060,6 +1145,37 @@ export const PosterSetsDashboard: React.FC = () => {
             toast(error instanceof Error ? error.message : 'Failed to load watches', 'error');
         }
     }, [toast]);
+
+    const loadLibraryRecent = useCallback(async (options?: { silent?: boolean }) => {
+        const requestId = ++libraryLoadGenRef.current;
+        if (!options?.silent) setLibraryLoading(true);
+        setLibraryError(null);
+        try {
+            const serverType = String(status?.mediaServerType || 'plex').toLowerCase();
+            const isJellyfin = serverType === 'jellyfin' || serverType === 'emby';
+            const endpoint = isJellyfin ? '/api/jellyfin/dashboard' : '/api/plex/dashboard';
+            const response = await apiFetch(`${endpoint}?limit=100`) as {
+                recentShows?: Record<string, unknown>[];
+                recentMovies?: Record<string, unknown>[];
+            };
+            if (requestId !== libraryLoadGenRef.current) return;
+            setLibraryShows(
+                isJellyfin
+                    ? normalizeJellyfinShows(response.recentShows || [])
+                    : normalizePlexShows(response.recentShows || []),
+            );
+            setLibraryMovies(normalizeLibraryMovies(response.recentMovies || []));
+        } catch (error) {
+            if (requestId !== libraryLoadGenRef.current) return;
+            const message = error instanceof Error ? error.message : 'Failed to load recently added library items';
+            setLibraryError(message);
+            if (!options?.silent) toast(message, 'error');
+        } finally {
+            if (requestId === libraryLoadGenRef.current) {
+                setLibraryLoading(false);
+            }
+        }
+    }, [status?.mediaServerType, toast]);
 
     const loadBrowse = useCallback(async (options?: { refresh?: boolean; silent?: boolean }) => {
         const hasCachedRails = browseRailsRef.current.length > 0;
@@ -1151,7 +1267,8 @@ export const PosterSetsDashboard: React.FC = () => {
         if (id === 'queue') void loadQueue();
         if (id === 'watches') void loadWatches();
         if (id === 'browse') void loadBrowse({ silent: browseRailsRef.current.length > 0 });
-    }, [historyFilter, loadAudit, loadBrowse, loadHistory, loadQueue, loadWatches, pushPosterLocation]);
+        if (id === 'library') void loadLibraryRecent({ silent: libraryShows.length > 0 || libraryMovies.length > 0 });
+    }, [historyFilter, loadAudit, loadBrowse, loadHistory, loadLibraryRecent, loadQueue, loadWatches, libraryMovies.length, libraryShows.length, pushPosterLocation]);
 
     const openBrowseRail = useCallback((railId: string | null) => {
         setTab('browse');
@@ -1247,6 +1364,12 @@ export const PosterSetsDashboard: React.FC = () => {
         void loadBrowse({ silent: browseRailsRef.current.length > 0 });
         return undefined;
     }, [tab, loadBrowse]);
+
+    useEffect(() => {
+        if (tab !== 'library' || !status) return undefined;
+        void loadLibraryRecent({ silent: libraryShows.length > 0 || libraryMovies.length > 0 });
+        return undefined;
+    }, [tab, status, libraryMovies.length, libraryShows.length, loadLibraryRecent]);
 
     usePoll(() => { void loadBrowse({ silent: true }); }, (tab === 'browse' && browseRails.some((rail) => rail.loading)) ? 4000 : null, { immediate: false });
 
@@ -2001,6 +2124,18 @@ export const PosterSetsDashboard: React.FC = () => {
 
     const clearBulkSelection = () => setSelectedBulkSets({});
 
+    const selectBrowseSets = (sets: PosterSetsSearchSet[]) => {
+        setSelectedBulkSets((prev) => {
+            const next = { ...prev };
+            for (const set of sets) {
+                const key = String(set.url || '').trim();
+                if (!key) continue;
+                next[key] = bulkEntryFromSet(set);
+            }
+            return next;
+        });
+    };
+
     const queueBulkSelected = async () => {
         const entries = Object.values(selectedBulkSets);
         if (!entries.length) return;
@@ -2263,6 +2398,33 @@ export const PosterSetsDashboard: React.FC = () => {
         void runCatalogSearch({ mode: 'creator', query: handle, provider: 'both' });
     };
     openCreatorCatalogRef.current = openCreatorCatalog;
+
+    const openLibraryItem = (item: LibraryRecentItem) => {
+        setTab('apply');
+        setBrowseSeeAllId(null);
+        setSearchMode('title');
+        setSearchProvider('both');
+        setSearchQuery(item.title);
+        setTitleCardsOnly(false);
+        titleCardsOnlyRef.current = false;
+        syncedSetUrlRef.current = null;
+        setPreview(null);
+        setSelectedSearchSet(null);
+        setSelectedSearchTitle(null);
+        setSelectedAssetIds([]);
+        setUrl('');
+        pushPosterLocation({
+            tab: 'apply',
+            rail: null,
+            setUrl: null,
+            creator: null,
+            titleCardsOnly: false,
+        }, 'push');
+        requestAnimationFrame(() => {
+            searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+        void runCatalogSearch({ mode: 'title', query: item.title, provider: 'both' });
+    };
 
     const openSearchTitle = async (title: PosterSetsSearchTitle) => {
         setBusy('search');
@@ -2640,6 +2802,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 {([
                     ['apply', 'Apply', Sparkles],
                     ['browse', 'Browse', Compass],
+                    ['library', 'Library', Library],
                     ['queue', 'Queue', ListOrdered],
                     ['watches', 'Watching', Eye],
                     ['recent', 'Recent', Clock],
@@ -2718,6 +2881,16 @@ export const PosterSetsDashboard: React.FC = () => {
                                         {browseLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                                         Refresh
                                     </button>
+                                    {browseSeeAllRail.sets.length ? (
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null}
+                                            onClick={() => selectBrowseSets(browseSeeAllRail.sets)}
+                                        >
+                                            Select all
+                                        </button>
+                                    ) : null}
                                 </div>
                             </div>
                             <div className={posterGridClass} style={isTitleCardRail(browseSeeAllRail) ? titleCardGridStyle : posterGridStyle}>
@@ -2726,6 +2899,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                         key={`${set.provider}-${set.setId}`}
                                         set={set}
                                         disabled={busy !== null}
+                                        bulkSelected={Boolean(selectedBulkSets[set.url])}
+                                        onToggleBulk={() => toggleBulkSet(bulkEntryFromSet(set))}
                                         onOpen={(item) => void openSetForApply(item)}
                                         onOpenCreator={openCreatorCatalog}
                                     />
@@ -2745,7 +2920,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     <h2 className={sectionTitleClass}>Browse recently added</h2>
                                     <p className={sectionBodyClass}>
                                         First results appear immediately; more fill in the background (up to 600 per row). Tap a row title to see all.
-                                        Add creators in Settings to get a “Creators you follow” row. Click any @username to open their catalog.
+                                        Check sets to queue many at once without opening each one. Add creators in Settings to get a “Creators you follow” row.
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center justify-center gap-2">
@@ -2788,11 +2963,23 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 See all
                                             </span>
                                         </button>
-                                        <span className="text-[11px] text-muted">
-                                            {rail.buffered || rail.sets.length}
-                                            {rail.cap ? ` / ${rail.cap}` : ''}
-                                            {rail.loading ? ' · loading…' : ''}
-                                        </span>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-[11px] text-muted">
+                                                {rail.buffered || rail.sets.length}
+                                                {rail.cap ? ` / ${rail.cap}` : ''}
+                                                {rail.loading ? ' · loading…' : ''}
+                                            </span>
+                                            {rail.sets.length ? (
+                                                <button
+                                                    type="button"
+                                                    className="text-[11px] font-semibold text-plex hover:underline"
+                                                    disabled={busy !== null}
+                                                    onClick={() => selectBrowseSets(rail.sets.slice(0, 24))}
+                                                >
+                                                    Select row
+                                                </button>
+                                            ) : null}
+                                        </div>
                                     </div>
                                     {rail.error ? (
                                         <p className="text-xs text-amber-200">{rail.error}</p>
@@ -2803,6 +2990,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 key={`${set.provider}-${set.setId}`}
                                                 set={set}
                                                 disabled={busy !== null}
+                                                bulkSelected={Boolean(selectedBulkSets[set.url])}
+                                                onToggleBulk={() => toggleBulkSet(bulkEntryFromSet(set))}
                                                 onOpen={(item) => void openSetForApply(item)}
                                                 onOpenCreator={openCreatorCatalog}
                                             />
@@ -2824,6 +3013,92 @@ export const PosterSetsDashboard: React.FC = () => {
                             ))}
                         </>
                     )}
+                </section>
+            ) : null}
+
+            {tab === 'library' ? (
+                <section className={`${cardClass} space-y-6 p-4 sm:p-5`}>
+                    <div className="flex flex-col items-center gap-3 text-center">
+                        <div className="min-w-0 max-w-3xl">
+                            <h2 className={sectionTitleClass}>Recently added</h2>
+                            <p className={sectionBodyClass}>
+                                TV shows and movies recently added to your {status?.mediaServerLabel || 'media server'}.
+                                Pick one to search MediUX and ThePosterDB for matching poster sets.
+                            </p>
+                            {libraryError ? (
+                                <p className="mt-2 text-xs text-amber-200">{libraryError}</p>
+                            ) : null}
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                            <CustomSelect
+                                value={gridSize === 'list' ? 'medium' : gridSize}
+                                onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
+                                options={POSTER_SETS_GRID_OPTIONS}
+                                className="w-full min-w-[140px] sm:w-auto"
+                                compact
+                            />
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={libraryLoading || busy !== null}
+                                onClick={() => void loadLibraryRecent()}
+                            >
+                                {libraryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    {libraryLoading && !libraryShows.length && !libraryMovies.length ? (
+                        <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading recently added…
+                        </div>
+                    ) : null}
+
+                    {!libraryLoading && !libraryShows.length && !libraryMovies.length && !libraryError ? (
+                        <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
+                            No recently added TV or movies found on your media server.
+                        </p>
+                    ) : null}
+
+                    {libraryShows.length ? (
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+                                <h3 className="text-sm font-bold text-text sm:text-base">TV shows</h3>
+                                <span className="text-[11px] text-muted">{libraryShows.length}</span>
+                            </div>
+                            <div className={posterGridClass} style={posterGridStyle}>
+                                {libraryShows.map((item) => (
+                                    <LibraryMediaCard
+                                        key={`library-show-${item.id}`}
+                                        item={item}
+                                        disabled={busy !== null}
+                                        onOpen={openLibraryItem}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {libraryMovies.length ? (
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+                                <h3 className="text-sm font-bold text-text sm:text-base">Movies</h3>
+                                <span className="text-[11px] text-muted">{libraryMovies.length}</span>
+                            </div>
+                            <div className={posterGridClass} style={posterGridStyle}>
+                                {libraryMovies.map((item) => (
+                                    <LibraryMediaCard
+                                        key={`library-movie-${item.id}`}
+                                        item={item}
+                                        disabled={busy !== null}
+                                        onOpen={openLibraryItem}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
                 </section>
             ) : null}
 

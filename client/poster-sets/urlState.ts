@@ -3,6 +3,7 @@
 export const POSTER_SETS_TABS = [
     'apply',
     'browse',
+    'library',
     'queue',
     'watches',
     'recent',

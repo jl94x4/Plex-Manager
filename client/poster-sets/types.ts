@@ -101,6 +101,8 @@ export type PosterSetsStatus = {
     workerReady?: boolean;
     configured?: boolean;
     appDir?: string;
+    mediaServerType?: string;
+    mediaServerLabel?: string;
     config?: PosterSetsConfig;
     queue?: PosterSetsQueueStats;
     watches?: PosterSetsWatchStats;
