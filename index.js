@@ -979,6 +979,7 @@ import {
     fetchLidarrAlbumAvailabilityByMbid,
     fetchLidarrArtistByMbid,
     listRecentLidarrArtists,
+    mapLidarrArtistToDiscoverItem,
     searchLidarrArtists,
     searchMusicArtists,
 } from './lib/discovery-music-enrich.js';
@@ -8080,32 +8081,56 @@ app.get('/api/discovery/music/resolve', requireAuth, requireMember, async (req, 
     }
 });
 
+// Assembled artist payloads (pre user-overlay) — repeat visits render instantly.
+const musicArtistPayloadCache = new Map(); // mbid → { at, artist }
+const MUSIC_ARTIST_PAYLOAD_CACHE_MS = 3 * 60 * 1000;
+
 app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
         const mbid = String(req.params.mbid || '').trim();
         if (!mbid) return res.status(400).json({ error: 'Artist id is required' });
 
+        const cachedPayload = musicArtistPayloadCache.get(mbid);
+        if (cachedPayload && Date.now() - cachedPayload.at < MUSIC_ARTIST_PAYLOAD_CACHE_MS) {
+            const artist = await attachDiscoveryAvailabilityCacheToPayload(
+                config, req.user, structuredClone(cachedPayload.artist),
+            );
+            return res.json(artist);
+        }
+
         // Lidarr (art + library id), MusicBrainz (discography), and per-album
-        // availability all in parallel — nothing serial on this path.
+        // availability all in parallel — nothing serial on this path. The Lidarr
+        // metadata-server lookup routinely takes seconds, so it gets a hard 4s
+        // budget; a late result still lands in its cache for the next view.
+        const lidarrArtistPromise = fetchLidarrArtistByMbid(config, mbid, { fetchImpl: fetchWithTimeout }).catch(() => null);
         const [lidarrArtist, mbArtist, lidarrAlbums] = await Promise.all([
-            fetchLidarrArtistByMbid(config, mbid, { fetchImpl: fetchWithTimeout }).catch(() => null),
+            Promise.race([
+                lidarrArtistPromise,
+                new Promise((resolve) => setTimeout(() => resolve(null), 4000)),
+            ]),
             fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout }).catch((err) => {
                 log(`MusicBrainz artist lookup failed: ${err.message}`);
                 return null;
             }),
             fetchLidarrAlbumAvailabilityByMbid(config, mbid, { fetchImpl: fetchWithTimeout }).catch(() => null),
         ]);
-        let artist = lidarrArtist || mbArtist;
-        if (lidarrArtist && mbArtist) {
+        // Metadata lookup timed out but the artist is in the library — use the
+        // library entity for the header (name + Lidarr artwork).
+        const libraryItem = (!lidarrArtist && lidarrAlbums?.artist?.id)
+            ? mapLidarrArtistToDiscoverItem(lidarrAlbums.artist, lidarrAlbums.instance)
+            : null;
+        const lidarrHeader = lidarrArtist || libraryItem;
+        let artist = lidarrHeader || mbArtist;
+        if (lidarrHeader && mbArtist) {
             artist = {
                 ...mbArtist,
-                ...lidarrArtist,
-                overview: lidarrArtist.overview || mbArtist.overview,
-                posterUrl: lidarrArtist.posterUrl || lidarrArtist.posterPath || mbArtist.posterUrl || mbArtist.posterPath || null,
-                posterPath: lidarrArtist.posterPath || lidarrArtist.posterUrl || mbArtist.posterPath || mbArtist.posterUrl || null,
-                tags: Array.isArray(lidarrArtist.tags) && lidarrArtist.tags.length ? lidarrArtist.tags : mbArtist.tags,
-                disambiguation: lidarrArtist.disambiguation || mbArtist.disambiguation,
+                ...lidarrHeader,
+                overview: lidarrHeader.overview || mbArtist.overview,
+                posterUrl: lidarrHeader.posterUrl || lidarrHeader.posterPath || mbArtist.posterUrl || mbArtist.posterPath || null,
+                posterPath: lidarrHeader.posterPath || lidarrHeader.posterUrl || mbArtist.posterPath || mbArtist.posterUrl || null,
+                tags: Array.isArray(lidarrHeader.tags) && lidarrHeader.tags.length ? lidarrHeader.tags : mbArtist.tags,
+                disambiguation: lidarrHeader.disambiguation || mbArtist.disambiguation,
             };
         }
 
@@ -8168,6 +8193,8 @@ app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (
         } catch (enrichError) {
             log(`Music artist library enrich skipped: ${enrichError.message}`);
         }
+        if (musicArtistPayloadCache.size > 200) musicArtistPayloadCache.clear();
+        musicArtistPayloadCache.set(mbid, { at: Date.now(), artist: structuredClone(artist) });
         artist = await attachDiscoveryAvailabilityCacheToPayload(config, req.user, artist);
         res.json(artist);
     } catch (e) {
