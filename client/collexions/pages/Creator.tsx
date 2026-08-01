@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { usePoll } from '../../shared/usePoll';
 import { Plus, Search, ListMusic, Globe, Loader2, List, Trash2, Sparkles, Filter, ExternalLink, Compass, Clock, LayoutTemplate, Check } from 'lucide-react';
@@ -164,6 +164,26 @@ const mediaFromItems = (items?: Array<{ type?: string }>): MediaKind | null => {
     return null;
 };
 
+const titleFromSlug = (slug: string) =>
+    slug.replace(/-/g, ' ').split(' ').filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+const titleFromImportUrl = (url: string) => {
+    try {
+        const parsed = new URL(url.trim());
+        const parts = parsed.pathname.split('/').filter(Boolean);
+        const listIndex = parts.indexOf('lists');
+        const slugPart = listIndex !== -1 && parts.length > listIndex + 2
+            ? parts[listIndex + 2]
+            : parts[parts.length - 1];
+        return slugPart ? titleFromSlug(decodeURIComponent(slugPart)) : '';
+    } catch {
+        const parts = url.split('/').filter(Boolean);
+        const slug = (parts[parts.length - 1] || '').replace(/\?.*$/, '');
+        return slug ? titleFromSlug(decodeURIComponent(slug)) : '';
+    }
+};
+
 const Creator: React.FC = () => {
     const [activeSubTab, setActiveSubTab] = useState<CreatorTab>('templates');
     const [config, setConfig] = useState<AppConfig | null>(null);
@@ -229,15 +249,44 @@ const Creator: React.FC = () => {
         return false;
     };
 
+    const managedLibraryNames = useMemo(() => {
+        const configured = config?.library_names || [];
+        if (configured.length) return configured;
+        return plexLibraries.map((l) => l.name).filter(Boolean);
+    }, [config?.library_names, plexLibraries]);
+
     const librarySelectOptions = useMemo(() => {
-        const names = config?.library_names || [];
-        return names.map((name) => {
+        return managedLibraryNames.map((name) => {
             const info = plexLibraries.find((l) => l.name === name);
             const kind = normalizeMediaKind(info?.type);
             const suffix = kind === 'show' ? 'TV' : kind === 'movie' ? 'Movies' : null;
             return { value: name, label: suffix ? `${name} (${suffix})` : name };
         });
-    }, [config?.library_names, plexLibraries]);
+    }, [managedLibraryNames, plexLibraries]);
+
+    const suggestTargetLibrary = useCallback((
+        items?: Array<{ type?: string }>,
+        sourceUrl = '',
+    ): string => {
+        const names = managedLibraryNames;
+        if (!names.length) return '';
+        const expected = mediaFromItems(items)
+            || mediaFromSourceType(
+                sourceUrl.includes('mdblist.com') ? 'mdblist' : 'trakt_list',
+            );
+        if (expected) {
+            const match = plexLibraries.find(
+                (l) => names.includes(l.name) && normalizeMediaKind(l.type) === expected,
+            );
+            if (match) return match.name;
+        }
+        if (names.length === 1) return names[0];
+        const movieLib = plexLibraries.find(
+            (l) => names.includes(l.name) && normalizeMediaKind(l.type) === 'movie',
+        );
+        if (movieLib) return movieLib.name;
+        return names[0];
+    }, [managedLibraryNames, plexLibraries]);
 
     const loadData = async () => {
         setLoading(true);
@@ -258,8 +307,13 @@ const Creator: React.FC = () => {
                     ? libs.map((l: any) => ({ name: String(l.name || ''), type: String(l.type || '') })).filter((l) => l.name)
                     : [],
             );
-            if (cfg?.library_names?.length === 1) {
-                setTargetLibrary(cfg.library_names[0]);
+            const libNames = cfg?.library_names?.length
+                ? cfg.library_names
+                : (Array.isArray(libs)
+                    ? libs.map((l: any) => String(l.name || '')).filter(Boolean)
+                    : []);
+            if (libNames.length >= 1) {
+                setTargetLibrary((prev) => prev || libNames[0]);
             }
         } catch (e) {
             console.error(e);
@@ -655,10 +709,6 @@ const Creator: React.FC = () => {
     };
 
 
-    const titleFromSlug = (slug: string) =>
-        slug.replace(/-/g, ' ').split(' ').filter(Boolean)
-            .map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-
     const loadImportedList = async (url: string, preferredTitle?: string) => {
         let items: any[] = [];
         if (url.includes('mdblist.com')) {
@@ -671,15 +721,18 @@ const Creator: React.FC = () => {
         }
         setImportedItems(items);
         setImportUrl(url);
-        if (preferredTitle) {
-            setCollectionTitle(preferredTitle);
-        } else if (!collectionTitle) {
-            const urlParts = url.split('/').filter(Boolean);
-            const listIndex = urlParts.indexOf('lists');
-            const slugPart = listIndex !== -1 && urlParts.length > listIndex + 2
-                ? urlParts[listIndex + 2]
-                : urlParts[urlParts.length - 1];
-            if (slugPart) setCollectionTitle(titleFromSlug(slugPart));
+        const derivedTitle = preferredTitle || titleFromImportUrl(url);
+        if (derivedTitle) setCollectionTitle(derivedTitle);
+        const suggestedLibrary = suggestTargetLibrary(items, url);
+        if (suggestedLibrary) {
+            setTargetLibrary((prev) => {
+                if (!prev) return suggestedLibrary;
+                const expected = mediaFromItems(items);
+                if (!expected) return prev;
+                const current = plexLibraries.find((l) => l.name === prev);
+                if (normalizeMediaKind(current?.type) === expected) return prev;
+                return suggestedLibrary;
+            });
         }
         return items;
     };
@@ -1143,6 +1196,11 @@ const Creator: React.FC = () => {
                         onChange={setTargetLibrary}
                         placeholder="Select a library..."
                     />
+                    {!librarySelectOptions.length ? (
+                        <p className="text-xs text-amber-200 sm:max-w-xs">
+                            No Plex libraries available. Add libraries under ColleXions Settings, or connect Plex in Media Player settings.
+                        </p>
+                    ) : null}
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3 md:gap-6 w-full xl:w-auto xl:border-l xl:border-border xl:pl-6">
@@ -1945,15 +2003,38 @@ const Creator: React.FC = () => {
                                         />
                                         <p className="text-xs text-muted mt-2">Creates a Plex collection from titles you already own{autoSync ? ', and registers an auto-sync Job.' : '.'}</p>
                                     </div>
+                                    {!targetLibrary && librarySelectOptions.length > 0 ? (
+                                        <div className="max-w-md">
+                                            <CustomSelect
+                                                label="Target Library"
+                                                className="w-full"
+                                                value={targetLibrary}
+                                                options={librarySelectOptions}
+                                                onChange={setTargetLibrary}
+                                                placeholder="Select a library..."
+                                            />
+                                        </div>
+                                    ) : null}
                                     <button
                                         type="button"
                                         onClick={() => void handleCreateFromExternal()}
-                                        disabled={creating || !targetLibrary || !collectionTitle || importedItems.length === 0}
-                                        className="bg-plex hover:bg-plex-hover text-text px-8 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 w-full md:w-auto"
+                                        disabled={creating || !targetLibrary || !collectionTitle.trim() || importedItems.length === 0}
+                                        className="bg-plex hover:bg-plex-hover text-text px-8 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
                                     >
                                         <Sparkles className="w-5 h-5" />
                                         {creating ? 'Creating...' : 'Create Auto-Syncing Collection'}
                                     </button>
+                                    {!creating && (!targetLibrary || !collectionTitle.trim() || importedItems.length === 0) ? (
+                                        <p className="text-xs text-amber-200/90">
+                                            {!librarySelectOptions.length
+                                                ? 'Add a Plex library in ColleXions Settings first.'
+                                                : !targetLibrary
+                                                    ? 'Choose a target library above (or in the creation settings bar).'
+                                                    : !collectionTitle.trim()
+                                                        ? 'Enter a collection title — we auto-fill this from the list URL when you Fetch.'
+                                                        : 'Fetch a list to continue.'}
+                                        </p>
+                                    ) : null}
                                 </div>
                             </>
                         )}
