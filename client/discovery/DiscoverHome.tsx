@@ -148,7 +148,7 @@ const DiscoverGenreSliderRow: React.FC<{
     basePath: '/discovery/movies' | '/discovery/series';
     navigate: (path: string) => void;
 }> = ({ title, apiGenres, fallbackGenres, basePath, navigate }) => {
-    const items = apiGenres.length
+    const items = (apiGenres?.length ?? 0)
         ? apiGenres
         : fallbackGenres.map((g) => ({
             id: g.id,
@@ -256,16 +256,20 @@ export const DiscoverHome: React.FC<{
 
             if (gen !== loadGenRef.current) return;
 
-            setRows({
+            setRows((prev) => ({
+                ...prev,
                 recentlyAdded: [],
                 recentRequests: [],
                 plexWatchlist: [],
+                becauseYouWatched: [],
+                becauseYouWatchedSeed: null,
+                recentMusic: [],
                 trending: filterHiddenAvailableItems(trendingRes, hideAvailable),
                 popularMovies: filterHiddenAvailableItems(popularMovies, hideAvailable),
                 upcomingMovies: filterHiddenAvailableItems(upcomingMovies, hideAvailable),
                 popularSeries: filterHiddenAvailableItems(popularSeries, hideAvailable),
                 upcomingSeries: filterHiddenAvailableItems(upcomingSeries, hideAvailable),
-            });
+            }));
             hasPaintedRef.current = true;
             setLoading(false);
             // Stagger enter only on the first successful paint.
@@ -409,7 +413,7 @@ export const DiscoverHome: React.FC<{
                             )}
                         />
 
-                        {preferences.showWatchlist !== false && rows.plexWatchlist.length > 0 ? (
+                        {preferences.showWatchlist !== false && (rows.plexWatchlist?.length ?? 0) > 0 ? (
                             <WatchlistPanel
                                 items={rows.plexWatchlist}
                                 formatItem={formatItem}
@@ -441,7 +445,7 @@ export const DiscoverHome: React.FC<{
                                 title={t('home.becauseYouWatched', {
                                     title: rows.becauseYouWatchedSeed.title || t('mediaType.tvShow'),
                                 })}
-                                items={rows.becauseYouWatched}
+                                items={rows.becauseYouWatched || []}
                                 posterCardClass={posterCardClass}
                                 viewAllLabel={t('common.viewAll')}
                                 formatItem={formatItem}
@@ -450,7 +454,7 @@ export const DiscoverHome: React.FC<{
                             />
                         )}
 
-                        {rows.recentMusic.length > 0 && (
+                        {(rows.recentMusic?.length ?? 0) > 0 && (
                             <DiscoverHomeRow
                                 title={t('home.recentMusic')}
                                 items={rows.recentMusic}
