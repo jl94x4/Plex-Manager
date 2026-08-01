@@ -85,6 +85,62 @@ const MusicArtistGrid: React.FC<{
     );
 };
 
+type ChartItem = {
+    deezerId?: number;
+    name: string;
+    title: string;
+    artistName?: string;
+    posterUrl?: string | null;
+    posterPath?: string | null;
+};
+
+const ChartRail: React.FC<{
+    title: string;
+    items: ChartItem[];
+    kind: 'artist' | 'album';
+    resolvingKey: string | null;
+    onPick: (item: ChartItem, key: string) => void;
+}> = ({ title, items, kind, resolvingKey, onPick }) => {
+    if (!items.length) return null;
+    return (
+        <section className="flex flex-col gap-3">
+            <h3 className={`${discoveryTheme.sectionTitle} px-2`}>{title}</h3>
+            <div className="flex gap-3 overflow-x-auto px-2 pb-2 scrollbar-thin">
+                {items.map((item, idx) => {
+                    const key = `${kind}-${item.deezerId ?? idx}`;
+                    const busy = resolvingKey === key;
+                    return (
+                        <button
+                            key={key}
+                            type="button"
+                            onClick={() => onPick(item, key)}
+                            disabled={busy}
+                            className="group text-left rounded-xl border border-border/60 bg-white/[0.02] overflow-hidden hover:border-plex/40 transition-colors relative shrink-0 w-[140px] sm:w-[160px] disabled:opacity-60"
+                        >
+                            <div className="aspect-square bg-white/5 relative">
+                                <ArtistArt src={item.posterUrl || item.posterPath} title={item.title} />
+                                {busy && (
+                                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                        <Loader2 className="w-5 h-5 animate-spin text-plex" />
+                                    </div>
+                                )}
+                            </div>
+                            <div className="p-2.5">
+                                <p className="font-bold text-sm leading-tight line-clamp-2 group-hover:text-plex transition-colors">
+                                    {item.title}
+                                </p>
+                                {kind === 'album' && item.artistName && (
+                                    <p className="text-[11px] text-muted mt-1 line-clamp-1">{item.artistName}</p>
+                                )}
+                            </div>
+                        </button>
+                    );
+                })}
+            </div>
+        </section>
+    );
+};
+
 export const DiscoverMusic: React.FC<{
     navigate: (path: string) => void;
     formatItem?: (item: any) => any;
@@ -97,6 +153,12 @@ export const DiscoverMusic: React.FC<{
     const [loading, setLoading] = useState(false);
     const [requestsLoading, setRequestsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [charts, setCharts] = useState<{ topArtists: ChartItem[]; topAlbums: ChartItem[]; newReleases: ChartItem[] }>({
+        topArtists: [],
+        topAlbums: [],
+        newReleases: [],
+    });
+    const [resolvingKey, setResolvingKey] = useState<string | null>(null);
     const seqRef = useRef(0);
     const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -134,6 +196,43 @@ export const DiscoverMusic: React.FC<{
         })();
         return () => { cancelled = true; };
     }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await apiFetch('/api/discovery/music/browse').catch(() => null);
+                if (cancelled || !res) return;
+                setCharts({
+                    topArtists: Array.isArray(res.topArtists) ? res.topArtists : [],
+                    topAlbums: Array.isArray(res.topAlbums) ? res.topAlbums : [],
+                    newReleases: Array.isArray(res.newReleases) ? res.newReleases : [],
+                });
+            } catch {
+                // Charts are optional — search still works without them.
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const openChartItem = useCallback(async (item: ChartItem, key: string) => {
+        const artistName = item.artistName || item.name;
+        if (!artistName) return;
+        setResolvingKey(key);
+        try {
+            const res = await apiFetch(`/api/discovery/music/resolve?name=${encodeURIComponent(artistName)}`);
+            if (res?.mbid) {
+                navigate(`/discovery/music/artist/${encodeURIComponent(String(res.mbid))}`);
+                return;
+            }
+            setQuery(artistName);
+        } catch {
+            // Fall back to a plain search for the artist name.
+            setQuery(artistName);
+        } finally {
+            setResolvingKey(null);
+        }
+    }, [navigate]);
 
     const runSearch = useCallback(async (q: string) => {
         const trimmed = q.trim();
@@ -211,13 +310,37 @@ export const DiscoverMusic: React.FC<{
 
             {!searching && !loading && (
                 <>
-                    <div className={`${discoveryTheme.emptyState} mx-2`}>
-                        <div className="w-10 h-10 rounded-full bg-plex/15 text-plex flex items-center justify-center mx-auto">
-                            <Music className="w-5 h-5" />
+                    {(charts.topArtists.length === 0 && charts.topAlbums.length === 0 && charts.newReleases.length === 0) && (
+                        <div className={`${discoveryTheme.emptyState} mx-2`}>
+                            <div className="w-10 h-10 rounded-full bg-plex/15 text-plex flex items-center justify-center mx-auto">
+                                <Music className="w-5 h-5" />
+                            </div>
+                            <p className={discoveryTheme.emptyTitle}>{t('music.startTitle')}</p>
+                            <p className={discoveryTheme.emptyBody}>{t('music.startBody')}</p>
                         </div>
-                        <p className={discoveryTheme.emptyTitle}>{t('music.startTitle')}</p>
-                        <p className={discoveryTheme.emptyBody}>{t('music.startBody')}</p>
-                    </div>
+                    )}
+
+                    <ChartRail
+                        title={t('music.topArtists')}
+                        items={charts.topArtists}
+                        kind="artist"
+                        resolvingKey={resolvingKey}
+                        onPick={openChartItem}
+                    />
+                    <ChartRail
+                        title={t('music.newReleases')}
+                        items={charts.newReleases}
+                        kind="album"
+                        resolvingKey={resolvingKey}
+                        onPick={openChartItem}
+                    />
+                    <ChartRail
+                        title={t('music.topAlbums')}
+                        items={charts.topAlbums}
+                        kind="album"
+                        resolvingKey={resolvingKey}
+                        onPick={openChartItem}
+                    />
 
                     {requestsLoading ? (
                         <div className="py-6 flex justify-center text-muted">

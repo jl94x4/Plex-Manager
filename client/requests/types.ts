@@ -43,6 +43,8 @@ export type PortalRequestItem = {
     seerrUrl: string;
     tmdbId?: number | null;
     mbid?: string | null;
+    albumMbid?: string | null;
+    albumTitle?: string | null;
     mediaId?: number | null;
     serverId?: number | null;
     profileId?: number | null;

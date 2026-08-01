@@ -6,12 +6,21 @@ import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import { CustomSelect } from '../shared/ui';
 import { formatQuotaHint } from './requestSeasonUtils';
 
+type AlbumTarget = {
+    mbid: string;
+    title: string;
+    coverUrl?: string | null;
+    year?: string | null;
+};
+
 type Props = {
     open: boolean;
     mbid: string;
     title?: string;
     posterUrl?: string | null;
     overview?: string | null;
+    /** When set, the request is scoped to this album instead of the whole artist. */
+    album?: AlbumTarget | null;
     onClose: () => void;
     onSuccess: (message: string) => void;
     onError: (message: string) => void;
@@ -39,6 +48,7 @@ export const MusicRequestModal: React.FC<Props> = ({
     title: fallbackTitle,
     posterUrl: fallbackPosterUrl,
     overview: fallbackOverview,
+    album = null,
     onClose,
     onSuccess,
     onError,
@@ -58,8 +68,9 @@ export const MusicRequestModal: React.FC<Props> = ({
         const gen = ++loadGenRef.current;
         setLoading(true);
         try {
+            const albumParam = album?.mbid ? `&albumMbid=${encodeURIComponent(album.mbid)}` : '';
             const data = await apiFetch(
-                `/api/discovery/request-options?mediaType=music&mediaId=${encodeURIComponent(mbid)}`,
+                `/api/discovery/request-options?mediaType=music&mediaId=${encodeURIComponent(mbid)}${albumParam}`,
             );
             if (gen !== loadGenRef.current) return;
             if (data?.error) throw new Error(data.error);
@@ -74,7 +85,7 @@ export const MusicRequestModal: React.FC<Props> = ({
             setOptions(null);
             setLoading(false);
         }
-    }, [mbid, onError]);
+    }, [mbid, album?.mbid, onError]);
 
     useEffect(() => {
         if (!open) return;
@@ -111,6 +122,10 @@ export const MusicRequestModal: React.FC<Props> = ({
                 mediaType: 'music',
                 mediaId: mbid,
             };
+            if (album?.mbid) {
+                body.albumMbid = album.mbid;
+                body.albumTitle = album.title;
+            }
             if (showAdvanced && options.canRequestAdvanced) {
                 if (serverId != null) body.serverId = serverId;
                 if (profileId != null) body.profileId = profileId;
@@ -131,9 +146,11 @@ export const MusicRequestModal: React.FC<Props> = ({
 
     if (!open) return null;
 
-    const title = options?.title || fallbackTitle || 'Artist';
+    const title = options?.title
+        || (album ? `${fallbackTitle || 'Artist'} — ${album.title}` : fallbackTitle)
+        || 'Artist';
     const overview = options?.overview || fallbackOverview || '';
-    const posterUrl = options?.posterUrl || options?.posterPath || fallbackPosterUrl || null;
+    const posterUrl = album?.coverUrl || options?.posterUrl || options?.posterPath || fallbackPosterUrl || null;
     const quotaHint = options?.quota ? formatQuotaHint(options.quota, false) : '';
 
     return (
@@ -144,7 +161,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                     <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 border-b border-border bg-background/95 backdrop-blur">
                         <div className="flex items-center gap-2 min-w-0">
                             <Music className="w-4 h-4 text-plex shrink-0" />
-                            <h2 className="font-black text-sm truncate">Request artist</h2>
+                            <h2 className="font-black text-sm truncate">{album ? 'Request album' : 'Request artist'}</h2>
                         </div>
                         <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 text-muted">
                             <X className="w-4 h-4" />

@@ -945,6 +945,7 @@ import {
     fetchArrInstance,
     fetchArrInstanceJson,
     fetchRadarrMovieReleaseDates,
+    fetchLidarrAlbumsForArtist,
 } from './lib/arr-service.js';
 import { getSonarrTrashCatalog, getSonarrTrashCustomFormat } from './lib/trash-guides-catalog.js';
 import { createRequestAppService, getRequestAppGate, mapSeerrClientError } from './lib/request-app-service.js';
@@ -972,12 +973,14 @@ import {
     fetchBecauseYouWatchedRecommendations,
     pickBecauseYouWatchedSeed,
 } from './lib/discovery-because-you-watched.js';
-import { fetchMusicBrainzArtist, searchMusicBrainzArtists } from './lib/musicbrainz-client.js';
+import { caaReleaseGroupCoverUrl, fetchMusicBrainzArtist, searchMusicBrainzArtists } from './lib/musicbrainz-client.js';
 import {
     enrichMusicSearchPosters,
+    fetchLidarrAlbumAvailabilityByMbid,
     fetchLidarrArtistByMbid,
     listRecentLidarrArtists,
     searchLidarrArtists,
+    searchMusicArtists,
 } from './lib/discovery-music-enrich.js';
 import { fetchDiscoveryCombinedRatings, fetchImdbRatingsFromRadarr } from './lib/discovery-ratings.js';
 import { enrichTvDetailsWithSonarrLibraryStatus, fetchSonarrLibraryStatusForShow } from './lib/sonarr-library-status.js';
@@ -6644,7 +6647,7 @@ const mergeMusicDiscoverySearchResults = async (config, sessionUser, query, resu
     if (!isMusicDiscoveryEnabled(config)) return base;
 
     const merge = async () => {
-        const musicPayload = await searchLidarrArtists(config, query, {
+        const musicPayload = await searchMusicArtists(config, query, {
             limit: 6,
             fetchImpl: (url, options = {}) => fetchWithTimeout(url, { ...options, timeoutMs: 4000 }, 4000),
         });
@@ -6661,7 +6664,8 @@ const mergeMusicDiscoverySearchResults = async (config, sessionUser, query, resu
     try {
         return await Promise.race([
             merge(),
-            new Promise((resolve) => setTimeout(() => resolve(base), 2500)),
+            // MusicBrainz throttles to ~1 req/s, so give the hybrid search a little headroom.
+            new Promise((resolve) => setTimeout(() => resolve(base), 4500)),
         ]);
     } catch (e) {
         log(`Discovery music search merge skipped: ${e.message}`);
@@ -7105,6 +7109,7 @@ app.get('/api/discovery/request-options', requireAuth, requireMember, async (req
                 const payload = await portalRequests.getMemberRequestOptions(req.user, {
                     mediaType: 'music',
                     mediaId: mbid,
+                    albumMbid: String(req.query.albumMbid || '').trim() || null,
                 });
                 return res.json(payload);
             }
@@ -7903,21 +7908,15 @@ app.get('/api/discovery/music/search', requireAuth, requireMember, async (req, r
         if (query.length < 2) return res.json({ results: [], total: 0 });
         const limit = Number(req.query.limit) || 20;
 
-        // Prefer Lidarr lookup — fast, includes art + in-library ids. MusicBrainz is fallback only.
-        let payload = await searchLidarrArtists(config, query, {
+        // Hybrid: MusicBrainz ranking merged with Lidarr art + library ids.
+        let payload = await searchMusicArtists(config, query, {
             limit,
             fetchImpl: fetchWithTimeout,
         });
-        if (!(payload.results || []).length) {
-            payload = await searchMusicBrainzArtists(query, {
-                limit,
-                fetchImpl: fetchWithTimeout,
-            });
-            payload.results = await enrichMusicSearchPosters(payload.results || [], {
-                config,
-                fetchImpl: fetchWithTimeout,
-            });
-        }
+        payload.results = await enrichMusicSearchPosters(payload.results || [], {
+            config,
+            fetchImpl: fetchWithTimeout,
+        });
         payload = await enrichMusicDiscoveryPayload(config, req.user, payload);
         res.json(payload);
     } catch (e) {
@@ -7942,36 +7941,175 @@ app.get('/api/discovery/music/recent', requireAuth, requireMember, async (req, r
     }
 });
 
+/** Trending charts for the Music tab (Deezer editorial — no API key required). */
+let musicBrowseCache = { at: 0, payload: null };
+app.get('/api/discovery/music/browse', requireAuth, requireMember, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!isMusicDiscoveryEnabled(config)) return res.json({ topArtists: [], topAlbums: [], newReleases: [] });
+
+        if (musicBrowseCache.payload && Date.now() - musicBrowseCache.at < 30 * 60 * 1000) {
+            return res.json(musicBrowseCache.payload);
+        }
+
+        const fetchJson = async (url) => {
+            const response = await fetchWithTimeout(url, { headers: { Accept: 'application/json' }, timeoutMs: 8000 }, 8000);
+            if (!response.ok) return null;
+            return response.json().catch(() => null);
+        };
+        // Deezer's editorial "new releases" feed returns empty payloads, so only charts are used.
+        const [artistsRes, albumsRes] = await Promise.all([
+            fetchJson('https://api.deezer.com/chart/0/artists?limit=24').catch(() => null),
+            fetchJson('https://api.deezer.com/chart/0/albums?limit=24').catch(() => null),
+        ]);
+
+        const mapArtist = (entry) => {
+            const name = String(entry?.name || '').trim();
+            if (!name) return null;
+            return {
+                deezerId: entry.id,
+                mediaType: 'music',
+                type: 'music',
+                name,
+                title: name,
+                posterUrl: entry.picture_big || entry.picture_medium || null,
+                posterPath: entry.picture_big || entry.picture_medium || null,
+            };
+        };
+        const mapAlbum = (entry) => {
+            const title = String(entry?.title || '').trim();
+            const artistName = String(entry?.artist?.name || '').trim();
+            if (!title || !artistName) return null;
+            return {
+                deezerId: entry.id,
+                mediaType: 'music',
+                type: 'music',
+                name: artistName,
+                title,
+                artistName,
+                posterUrl: entry.cover_big || entry.cover_medium || null,
+                posterPath: entry.cover_big || entry.cover_medium || null,
+            };
+        };
+
+        const payload = {
+            topArtists: (artistsRes?.data || []).map(mapArtist).filter(Boolean),
+            topAlbums: (albumsRes?.data || []).map(mapAlbum).filter(Boolean),
+            newReleases: [],
+        };
+        if (payload.topArtists.length || payload.topAlbums.length) {
+            musicBrowseCache = { at: Date.now(), payload };
+        }
+        res.json(payload);
+    } catch (e) {
+        log(`Discovery music browse error: ${e.message}`);
+        res.status(502).json({ error: e.message || 'Failed to load music charts' });
+    }
+});
+
+/** Resolve an artist name (from chart rails) to a MusicBrainz id for the artist page. */
+const musicResolveCache = new Map();
+app.get('/api/discovery/music/resolve', requireAuth, requireMember, async (req, res) => {
+    try {
+        const name = String(req.query.name || '').trim();
+        if (name.length < 2) return res.status(400).json({ error: 'Artist name is required' });
+        const key = name.toLowerCase();
+        if (musicResolveCache.has(key)) return res.json(musicResolveCache.get(key));
+
+        const config = await loadFile(CONFIG_PATH, {});
+        const hybrid = await searchMusicArtists(config, name, { limit: 5, fetchImpl: fetchWithTimeout });
+        const results = Array.isArray(hybrid?.results) ? hybrid.results : [];
+        const exact = results.find((hit) => String(hit?.name || '').toLowerCase() === key) || results[0] || null;
+        if (!exact?.mbid) return res.status(404).json({ error: 'Artist not found' });
+
+        const payload = { mbid: exact.mbid, name: exact.name || name };
+        musicResolveCache.set(key, payload);
+        if (musicResolveCache.size > 500) {
+            musicResolveCache.delete(musicResolveCache.keys().next().value);
+        }
+        res.json(payload);
+    } catch (e) {
+        log(`Discovery music resolve error: ${e.message}`);
+        res.status(502).json({ error: e.message || 'Failed to resolve artist' });
+    }
+});
+
 app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
         const mbid = String(req.params.mbid || '').trim();
         if (!mbid) return res.status(400).json({ error: 'Artist id is required' });
 
-        // Lidarr first (works for recently-added artists even if MusicBrainz is slow/down).
-        let artist = await fetchLidarrArtistByMbid(config, mbid, { fetchImpl: fetchWithTimeout }).catch(() => null);
-        if (!artist) {
-            artist = await fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout }).catch((err) => {
-                log(`MusicBrainz artist fallback failed: ${err.message}`);
+        // Lidarr (fast, has art + library id) and MusicBrainz (discography) in parallel.
+        const [lidarrArtist, mbArtist] = await Promise.all([
+            fetchLidarrArtistByMbid(config, mbid, { fetchImpl: fetchWithTimeout }).catch(() => null),
+            fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout }).catch((err) => {
+                log(`MusicBrainz artist lookup failed: ${err.message}`);
                 return null;
-            });
-        } else if (!artist.overview || !artist.posterUrl) {
-            // Best-effort MusicBrainz metadata merge when Lidarr hit is thin.
-            const mb = await fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout }).catch(() => null);
-            if (mb) {
-                artist = {
-                    ...mb,
-                    ...artist,
-                    overview: artist.overview || mb.overview,
-                    posterUrl: artist.posterUrl || artist.posterPath || mb.posterUrl || mb.posterPath || null,
-                    posterPath: artist.posterPath || artist.posterUrl || mb.posterPath || mb.posterUrl || null,
-                    tags: Array.isArray(artist.tags) && artist.tags.length ? artist.tags : mb.tags,
-                    disambiguation: artist.disambiguation || mb.disambiguation,
-                };
-            }
+            }),
+        ]);
+        let artist = lidarrArtist || mbArtist;
+        if (lidarrArtist && mbArtist) {
+            artist = {
+                ...mbArtist,
+                ...lidarrArtist,
+                overview: lidarrArtist.overview || mbArtist.overview,
+                posterUrl: lidarrArtist.posterUrl || lidarrArtist.posterPath || mbArtist.posterUrl || mbArtist.posterPath || null,
+                posterPath: lidarrArtist.posterPath || lidarrArtist.posterUrl || mbArtist.posterPath || mbArtist.posterUrl || null,
+                tags: Array.isArray(lidarrArtist.tags) && lidarrArtist.tags.length ? lidarrArtist.tags : mbArtist.tags,
+                disambiguation: lidarrArtist.disambiguation || mbArtist.disambiguation,
+            };
         }
 
         if (!artist) return res.status(404).json({ error: 'Artist not found' });
+
+        // Discography with per-album Lidarr availability for the request UI.
+        const albums = Array.isArray(mbArtist?.albums) ? mbArtist.albums : [];
+        const lidarrAlbums = await fetchLidarrAlbumAvailabilityByMbid(config, mbid, {
+            fetchImpl: fetchWithTimeout,
+        }).catch(() => null);
+        if (albums.length) {
+            artist.albums = albums.map((album) => {
+                const status = lidarrAlbums?.albumsByMbid?.get(album.mbid) || null;
+                return {
+                    ...album,
+                    inLidarr: !!status,
+                    monitored: !!status?.monitored,
+                    available: !!status?.available,
+                    partial: !!status?.partial,
+                };
+            });
+        } else if (lidarrAlbums?.albumsByMbid?.size) {
+            // MusicBrainz was down — fall back to whatever Lidarr tracks for the artist.
+            const fallback = [];
+            const lidarrList = await fetchLidarrAlbumsForArtist(
+                lidarrAlbums.instance,
+                lidarrAlbums.artist?.id,
+                { fetchImpl: fetchWithTimeout },
+            ).catch(() => []);
+            for (const album of lidarrList) {
+                const albumMbid = String(album?.foreignAlbumId || '').trim();
+                if (!albumMbid) continue;
+                const status = lidarrAlbums.albumsByMbid.get(albumMbid) || null;
+                fallback.push({
+                    mbid: albumMbid,
+                    id: albumMbid,
+                    title: String(album?.title || 'Unknown album'),
+                    type: String(album?.albumType || 'Album'),
+                    releaseDate: album?.releaseDate || null,
+                    year: album?.releaseDate ? String(album.releaseDate).slice(0, 4) : null,
+                    coverUrl: caaReleaseGroupCoverUrl(albumMbid),
+                    inLidarr: true,
+                    monitored: !!status?.monitored,
+                    available: !!status?.available,
+                    partial: !!status?.partial,
+                });
+            }
+            fallback.sort((a, b) => String(b.releaseDate || '').localeCompare(String(a.releaseDate || '')));
+            artist.albums = fallback;
+        } else {
+            artist.albums = [];
+        }
 
         try {
             const library = createDiscoveryLibraryAvailability(config);
@@ -8137,6 +8275,8 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
                 mediaType: type,
                 mediaId: type === 'music' ? mbid : tmdbId,
                 mbid,
+                albumMbid: type === 'music' ? (String(req.body?.albumMbid || '').trim() || null) : null,
+                albumTitle: type === 'music' ? (String(req.body?.albumTitle || '').trim() || null) : null,
                 is4k: type === 'music' ? false : !!is4k,
                 seasons,
                 serverId,

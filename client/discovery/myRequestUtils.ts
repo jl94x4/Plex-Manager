@@ -123,7 +123,8 @@ export type MergedMemberRequest = {
 const requestGroupKey = (item: PortalRequestItem) => {
     if (item.type === 'music') {
         const mbid = String(item.mbid || '').trim();
-        if (mbid) return `music:${mbid}`;
+        const albumMbid = String(item.albumMbid || '').trim();
+        if (mbid) return `music:${mbid}:${albumMbid || 'artist'}`;
     }
     if (item.tmdbId != null && Number.isFinite(Number(item.tmdbId)) && Number(item.tmdbId) > 0) {
         return `${item.type || 'movie'}:${Number(item.tmdbId)}`;
