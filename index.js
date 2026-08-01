@@ -912,6 +912,7 @@ import {
     getCollexionsEmbeddedStatus,
     isCollexionsBundledAvailable,
     syncCollexionsEmbeddedWorker,
+    COLLEXIONS_LONG_PROXY_MS,
 } from './lib/collexions-embedded.js';
 import {
     normalizeArrConfig,
@@ -956,6 +957,7 @@ import {
     isPortalRequestNavReady,
     isAllowedDiscoveryProxyPath,
     normalizeDiscoveryProxyPath,
+    discoverySeerrProxyTimeoutMs,
     normalizeDiscoverySource,
     normalizeDiscoverLanguage,
     normalizeDiscoverRegion,
@@ -8378,8 +8380,7 @@ app.get('/api/discovery/proxy/*', requireAuth, requireMember, async (req, res) =
             const qs = params.toString();
             const fullPath = qs ? `${path}?${qs}` : path;
             data = await requestAppService.rawFetch(config, '/api/v1' + fullPath, {
-                // Genre slider fans out many TMDB calls inside Seerr — needs a longer budget.
-                timeoutMs: /^\/discover\/genreslider\//i.test(path) ? 90000 : 15000,
+                timeoutMs: discoverySeerrProxyTimeoutMs(path),
                 // Seerr uses Accept-Language / req.locale for TMDB metadata on discover browse
                 // (query.language there is the original-language filter, not title translation).
                 headers: { 'Accept-Language': metadataLanguage },
@@ -18964,7 +18965,7 @@ app.all('/api/collexions/*', requireAdmin, requireCollexions, async (req, res) =
             || suffix === 'trending'
             || suffix === 'trakt/list'
             || suffix.startsWith('trakt/list?');
-        const timeoutMs = longSuffix ? 180000 : 20000;
+        const timeoutMs = longSuffix ? COLLEXIONS_LONG_PROXY_MS : 20000;
         const upstream = await fetchWithTimeout(targetUrl.toString(), init, timeoutMs);
         const contentType = upstream.headers.get('content-type') || '';
         res.status(upstream.status);

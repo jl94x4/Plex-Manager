@@ -8,8 +8,8 @@ const base = (path: string) => {
     return `/api/collexions${clean}`;
 };
 
-/** Match portal Collexions BFF long-op proxy budget (3 min). */
-const COLLEXIONS_LONG_MS = 180_000;
+/** Match portal Collexions BFF long-op proxy budget (10 min). */
+const COLLEXIONS_LONG_MS = 600_000;
 
 type CollexionsFetchInit = Omit<RequestInit, 'signal'>;
 
@@ -216,7 +216,7 @@ class CollexionsApiService {
         const qs = params.toString();
         const data = await withTimeout(
             cx(`/collections${qs ? `?${qs}` : ''}`),
-            90000,
+            COLLEXIONS_LONG_MS,
             'Scanning Plex libraries',
         );
         if (data && typeof data === 'object' && !Array.isArray(data)) return data.collections || [];
@@ -232,7 +232,7 @@ class CollexionsApiService {
                 method: 'POST',
                 body: JSON.stringify({ items }),
             }),
-            120000,
+            COLLEXIONS_LONG_MS,
             'Resolving pin status',
         );
         return (data && data.pins) || {};
@@ -248,7 +248,7 @@ class CollexionsApiService {
                 method: 'POST',
                 body: JSON.stringify({ action, items }),
             }),
-            120000,
+            COLLEXIONS_LONG_MS,
             label,
         );
     }
@@ -358,7 +358,7 @@ class CollexionsApiService {
     }): Promise<{ success: boolean; matched?: number; total?: number; job_id?: string; title?: string; error?: string }> {
         return withTimeout(
             cx('/templates/create', { method: 'POST', body: JSON.stringify(payload) }),
-            120000,
+            COLLEXIONS_LONG_MS,
             'Creating collection',
         );
     }
@@ -430,7 +430,7 @@ class CollexionsApiService {
                 method: 'POST',
                 body: JSON.stringify({ library, title, force }),
             }),
-            180000,
+            COLLEXIONS_LONG_MS,
             'Fixing collection art',
         );
     }
@@ -455,7 +455,7 @@ class CollexionsApiService {
     }> {
         return withTimeout(
             cx(`/hubs?library=${encodeURIComponent(library)}`),
-            60000,
+            COLLEXIONS_LONG_MS,
             'Loading hubs',
         );
     }
@@ -470,7 +470,7 @@ class CollexionsApiService {
                 method: 'POST',
                 body: JSON.stringify({ library, identifier, after }),
             }),
-            60000,
+            COLLEXIONS_LONG_MS,
             'Reordering hub',
         );
     }
@@ -485,7 +485,7 @@ class CollexionsApiService {
                 method: 'POST',
                 body: JSON.stringify({ library, identifier, ...visibility }),
             }),
-            60000,
+            COLLEXIONS_LONG_MS,
             'Updating hub visibility',
         );
     }
