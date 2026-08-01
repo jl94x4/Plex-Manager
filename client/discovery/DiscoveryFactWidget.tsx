@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Lightbulb, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../shared/api';
+import { usePoll } from '../shared/usePoll';
 
 type FactResponse = {
     facts?: string[];
@@ -63,25 +64,13 @@ export const DiscoveryFactWidget: React.FC<{
     const [facts, setFacts] = useState<string[]>([]);
     const [index, setIndex] = useState(0);
     const [loading, setLoading] = useState(true);
-    const cycleTimerRef = useRef<number | null>(null);
-
-    const clearCycleTimer = useCallback(() => {
-        if (cycleTimerRef.current != null) {
-            window.clearInterval(cycleTimerRef.current);
-            cycleTimerRef.current = null;
-        }
-    }, []);
 
     const advanceFact = useCallback(() => {
         if (facts.length <= 1) return;
         setIndex((prev) => (prev + 1) % facts.length);
     }, [facts.length]);
 
-    const startCycleTimer = useCallback(() => {
-        clearCycleTimer();
-        if (facts.length <= 1) return;
-        cycleTimerRef.current = window.setInterval(advanceFact, 10_000);
-    }, [advanceFact, clearCycleTimer, facts.length]);
+    usePoll(advanceFact, facts.length > 1 ? 10_000 : null, { immediate: false });
 
     useEffect(() => {
         let cancelled = false;
@@ -107,11 +96,6 @@ export const DiscoveryFactWidget: React.FC<{
         return () => { cancelled = true; };
     }, [mediaType, mediaId]);
 
-    useEffect(() => {
-        startCycleTimer();
-        return clearCycleTimer;
-    }, [startCycleTimer, clearCycleTimer]);
-
     const showAnother = useCallback(() => {
         if (facts.length <= 1) return;
         setIndex((prev) => {
@@ -122,8 +106,7 @@ export const DiscoveryFactWidget: React.FC<{
             }
             return next;
         });
-        startCycleTimer();
-    }, [facts.length, startCycleTimer]);
+    }, [facts.length]);
 
     if (loading) {
         return (

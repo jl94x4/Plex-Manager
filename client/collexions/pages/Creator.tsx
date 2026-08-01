@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/ui/Card';
+import { usePoll } from '../../shared/usePoll';
 import { Plus, Search, ListMusic, Globe, Loader2, List, Trash2, Sparkles, Filter, ExternalLink, Compass, Clock, LayoutTemplate, Check } from 'lucide-react';
 import { api, collexionsImageUrl } from '../api';
 import { CustomSelect } from '../components/ui/Inputs';
@@ -209,14 +210,9 @@ const Creator: React.FC = () => {
         setBusyStep(0);
     };
 
-    useEffect(() => {
-        if (!busyOverlay) return;
-        if (busyOverlay.steps.length <= 1) return;
-        const id = window.setInterval(() => {
-            setBusyStep((s) => Math.min(s + 1, busyOverlay.steps.length - 1));
-        }, 4000);
-        return () => window.clearInterval(id);
-    }, [busyOverlay]);
+    usePoll(() => {
+        setBusyStep((s) => Math.min(s + 1, (busyOverlay?.steps.length ?? 1) - 1));
+    }, busyOverlay && busyOverlay.steps.length > 1 ? 4000 : null, { immediate: false });
 
     const ensureLibraryMatchesMedia = (media?: string | null): boolean => {
         const expected = normalizeMediaKind(media);

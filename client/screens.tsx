@@ -5164,7 +5164,6 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
     const [jellyfinPassword, setJellyfinPassword] = useState('');
     const [showJellyfinPassword, setShowJellyfinPassword] = useState(false);
     const [quickConnect, setQuickConnect] = useState<{ sessionId: string, code: string, jellyfinUrl: string } | null>(null);
-    const quickConnectPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const [publicInfo, setPublicInfo] = useState<{ thumb: string | null, serverName: string, isConfigured: boolean | null, mediaServerType?: string }>({ thumb: null, serverName: 'Server Portal', isConfigured: null, mediaServerType: 'plex' });
     const [publicInfoLoading, setPublicInfoLoading] = useState(true);
     const [publicInfoLoadFailed, setPublicInfoLoadFailed] = useState(false);
@@ -5200,9 +5199,25 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
         }
     }, [initialError]);
 
-    useEffect(() => () => {
-        if (quickConnectPollRef.current) clearInterval(quickConnectPollRef.current);
-    }, []);
+    const pollJellyfinQuickConnect = useCallback(async () => {
+        if (!quickConnect?.sessionId) return;
+        try {
+            const data = await apiFetch('/api/auth/jellyfin/quick-connect/poll', {
+                method: 'POST',
+                body: JSON.stringify({ sessionId: quickConnect.sessionId }),
+            });
+            if (data?.success) {
+                setQuickConnect(null);
+                onLoginSuccess();
+            }
+        } catch (e: any) {
+            setQuickConnect(null);
+            setIsLoading(false);
+            setError(e.message || 'Jellyfin Quick Connect failed');
+        }
+    }, [quickConnect?.sessionId, onLoginSuccess]);
+
+    usePoll(() => { void pollJellyfinQuickConnect(); }, quickConnect?.sessionId ? 5000 : null);
 
     useEffect(() => {
         fetchPublicInfo();
@@ -5268,33 +5283,6 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
         }
     };
 
-    const stopQuickConnectPolling = () => {
-        if (quickConnectPollRef.current) {
-            clearInterval(quickConnectPollRef.current);
-            quickConnectPollRef.current = null;
-        }
-    };
-
-    const pollJellyfinQuickConnect = (sessionId: string) => {
-        stopQuickConnectPolling();
-        quickConnectPollRef.current = setInterval(async () => {
-            try {
-                const data = await apiFetch('/api/auth/jellyfin/quick-connect/poll', {
-                    method: 'POST',
-                    body: JSON.stringify({ sessionId }),
-                });
-                if (data?.success) {
-                    stopQuickConnectPolling();
-                    onLoginSuccess();
-                }
-            } catch (e: any) {
-                stopQuickConnectPolling();
-                setIsLoading(false);
-                setError(e.message || 'Jellyfin Quick Connect failed');
-            }
-        }, 5000);
-    };
-
     const handleJellyfinQuickConnect = async () => {
         setIsLoading(true);
         setError('');
@@ -5306,7 +5294,6 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
                 jellyfinUrl: data.jellyfinUrl || '',
             });
             setIsLoading(false);
-            pollJellyfinQuickConnect(data.sessionId);
         } catch (e: any) {
             setIsLoading(false);
             setError(e.message || 'Failed to start Jellyfin Quick Connect');

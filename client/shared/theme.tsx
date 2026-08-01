@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { usePoll } from './usePoll';
 import {
     formatBackgroundPosition,
     prefetchImageFocalPoints,
@@ -32,13 +33,9 @@ export const SlideshowBackground: React.FC<{
         return [...backgrounds].sort(() => 0.5 - Math.random());
     }, [backgrounds]);
 
-    useEffect(() => {
-        if (shuffledBackgrounds.length <= 1) return;
-        const timer = setInterval(() => {
-            setCurrentIndex((prev) => (prev + 1) % shuffledBackgrounds.length);
-        }, Math.max(10, intervalSeconds) * 1000);
-        return () => clearInterval(timer);
-    }, [shuffledBackgrounds, intervalSeconds]);
+    usePoll(() => {
+        setCurrentIndex((prev) => (prev + 1) % shuffledBackgrounds.length);
+    }, shuffledBackgrounds.length > 1 ? Math.max(10, intervalSeconds) * 1000 : null, { immediate: false });
 
     useEffect(() => {
         if (!onActiveImage || shuffledBackgrounds.length === 0) return;
