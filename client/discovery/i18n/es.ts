@@ -303,6 +303,10 @@ export const es: DeepPartial<EnCatalog> = {
         topAlbums: 'Álbumes en tendencia',
         newReleases: 'Novedades',
         chartsEyebrow: 'Listas',
+        genres: 'Géneros musicales',
+        allGenres: 'Todos los géneros',
+        genreArtists: 'Top artistas de {name}',
+        genreAlbums: 'Top álbumes de {name}',
     },
     person: {
         back: 'Volver a Discover',

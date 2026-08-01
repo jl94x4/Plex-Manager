@@ -85,7 +85,7 @@ const MusicArtistGrid: React.FC<{
     );
 };
 
-type ChartItem = {
+export type MusicChartItem = {
     deezerId?: number;
     name: string;
     title: string;
@@ -94,12 +94,80 @@ type ChartItem = {
     posterPath?: string | null;
 };
 
-const ChartRail: React.FC<{
+export type MusicGenreItem = {
+    id: number;
+    name: string;
+    image?: string | null;
+};
+
+/** Resolve a Deezer chart entry to its MusicBrainz artist and open the artist page. */
+export const useMusicChartNavigation = (
+    navigate: (path: string) => void,
+    onResolveFail?: (artistName: string) => void,
+) => {
+    const [resolvingKey, setResolvingKey] = useState<string | null>(null);
+
+    const openChartItem = useCallback(async (item: MusicChartItem, key: string) => {
+        const artistName = item.artistName || item.name;
+        if (!artistName) return;
+        setResolvingKey(key);
+        try {
+            const res = await apiFetch(`/api/discovery/music/resolve?name=${encodeURIComponent(artistName)}`);
+            if (res?.mbid) {
+                navigate(`/discovery/music/artist/${encodeURIComponent(String(res.mbid))}`);
+                return;
+            }
+            onResolveFail?.(artistName);
+        } catch {
+            onResolveFail?.(artistName);
+        } finally {
+            setResolvingKey(null);
+        }
+    }, [navigate, onResolveFail]);
+
+    return { resolvingKey, openChartItem };
+};
+
+export const MusicGenreRail: React.FC<{
     title: string;
-    items: ChartItem[];
+    genres: MusicGenreItem[];
+    activeGenreId?: number | null;
+    navigate: (path: string) => void;
+}> = ({ title, genres, activeGenreId = null, navigate }) => {
+    if (!genres.length) return null;
+    return (
+        <section className="flex flex-col gap-3">
+            <h3 className={`${discoveryTheme.sectionTitle} px-2`}>{title}</h3>
+            <div className="flex gap-3 overflow-x-auto px-2 pb-2 scrollbar-thin">
+                {genres.map((g) => (
+                    <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => navigate(`/discovery/music?genre=${g.id}&genreName=${encodeURIComponent(g.name)}`)}
+                        className={`relative shrink-0 w-[150px] h-[84px] rounded-xl overflow-hidden border transition-colors group ${
+                            activeGenreId === g.id ? 'border-plex' : 'border-border/60 hover:border-plex/40'
+                        }`}
+                    >
+                        {g.image && (
+                            <img src={g.image} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:opacity-70 transition-opacity" />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-black/20" />
+                        <span className="absolute bottom-2 left-2.5 right-2 text-sm font-black text-white text-left leading-tight">
+                            {g.name}
+                        </span>
+                    </button>
+                ))}
+            </div>
+        </section>
+    );
+};
+
+export const MusicChartRail: React.FC<{
+    title: string;
+    items: MusicChartItem[];
     kind: 'artist' | 'album';
     resolvingKey: string | null;
-    onPick: (item: ChartItem, key: string) => void;
+    onPick: (item: MusicChartItem, key: string) => void;
 }> = ({ title, items, kind, resolvingKey, onPick }) => {
     if (!items.length) return null;
     return (
@@ -153,14 +221,33 @@ export const DiscoverMusic: React.FC<{
     const [loading, setLoading] = useState(false);
     const [requestsLoading, setRequestsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [charts, setCharts] = useState<{ topArtists: ChartItem[]; topAlbums: ChartItem[]; newReleases: ChartItem[] }>({
+    const [charts, setCharts] = useState<{ topArtists: MusicChartItem[]; topAlbums: MusicChartItem[]; genres: MusicGenreItem[] }>({
         topArtists: [],
         topAlbums: [],
-        newReleases: [],
+        genres: [],
     });
-    const [resolvingKey, setResolvingKey] = useState<string | null>(null);
+    const [genre, setGenre] = useState<MusicGenreItem | null>(null);
+    const [genreCharts, setGenreCharts] = useState<{ topArtists: MusicChartItem[]; topAlbums: MusicChartItem[] } | null>(null);
+    const { resolvingKey, openChartItem } = useMusicChartNavigation(navigate, setQuery);
     const seqRef = useRef(0);
     const inputRef = useRef<HTMLInputElement | null>(null);
+
+    const readGenreFromUrl = useCallback(() => {
+        const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+        const id = Number(params.get('genre'));
+        const name = String(params.get('genreName') || '').trim();
+        setGenre(Number.isFinite(id) && id > 0 ? { id, name: name || `#${id}` } : null);
+    }, []);
+
+    useEffect(() => {
+        readGenreFromUrl();
+        window.addEventListener('popstate', readGenreFromUrl);
+        window.addEventListener('portal-discovery-navigate', readGenreFromUrl);
+        return () => {
+            window.removeEventListener('popstate', readGenreFromUrl);
+            window.removeEventListener('portal-discovery-navigate', readGenreFromUrl);
+        };
+    }, [readGenreFromUrl]);
 
     const openArtist = useCallback((item: any) => {
         const mbid = item?.mbid || item?.id;
@@ -206,7 +293,7 @@ export const DiscoverMusic: React.FC<{
                 setCharts({
                     topArtists: Array.isArray(res.topArtists) ? res.topArtists : [],
                     topAlbums: Array.isArray(res.topAlbums) ? res.topAlbums : [],
-                    newReleases: Array.isArray(res.newReleases) ? res.newReleases : [],
+                    genres: Array.isArray(res.genres) ? res.genres : [],
                 });
             } catch {
                 // Charts are optional — search still works without them.
@@ -215,24 +302,26 @@ export const DiscoverMusic: React.FC<{
         return () => { cancelled = true; };
     }, []);
 
-    const openChartItem = useCallback(async (item: ChartItem, key: string) => {
-        const artistName = item.artistName || item.name;
-        if (!artistName) return;
-        setResolvingKey(key);
-        try {
-            const res = await apiFetch(`/api/discovery/music/resolve?name=${encodeURIComponent(artistName)}`);
-            if (res?.mbid) {
-                navigate(`/discovery/music/artist/${encodeURIComponent(String(res.mbid))}`);
-                return;
-            }
-            setQuery(artistName);
-        } catch {
-            // Fall back to a plain search for the artist name.
-            setQuery(artistName);
-        } finally {
-            setResolvingKey(null);
+    useEffect(() => {
+        if (!genre?.id) {
+            setGenreCharts(null);
+            return undefined;
         }
-    }, [navigate]);
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await apiFetch(`/api/discovery/music/browse?genreId=${genre.id}`).catch(() => null);
+                if (cancelled || !res) return;
+                setGenreCharts({
+                    topArtists: Array.isArray(res.topArtists) ? res.topArtists : [],
+                    topAlbums: Array.isArray(res.topAlbums) ? res.topAlbums : [],
+                });
+            } catch {
+                if (!cancelled) setGenreCharts(null);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [genre?.id]);
 
     const runSearch = useCallback(async (q: string) => {
         const trimmed = q.trim();
@@ -310,7 +399,7 @@ export const DiscoverMusic: React.FC<{
 
             {!searching && !loading && (
                 <>
-                    {(charts.topArtists.length === 0 && charts.topAlbums.length === 0 && charts.newReleases.length === 0) && (
+                    {(charts.topArtists.length === 0 && charts.topAlbums.length === 0 && !genre) && (
                         <div className={`${discoveryTheme.emptyState} mx-2`}>
                             <div className="w-10 h-10 rounded-full bg-plex/15 text-plex flex items-center justify-center mx-auto">
                                 <Music className="w-5 h-5" />
@@ -320,26 +409,47 @@ export const DiscoverMusic: React.FC<{
                         </div>
                     )}
 
-                    <ChartRail
-                        title={t('music.topArtists')}
-                        items={charts.topArtists}
+                    {genre && (
+                        <div className="px-2 flex items-center gap-2 flex-wrap">
+                            <span className="px-3 py-1.5 rounded-full bg-plex/15 border border-plex/30 text-plex text-xs font-black">
+                                {genre.name}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => navigate('/discovery/music')}
+                                className="text-xs font-bold text-muted hover:text-text underline"
+                            >
+                                {t('music.allGenres')}
+                            </button>
+                        </div>
+                    )}
+
+                    <MusicChartRail
+                        title={genre ? t('music.genreArtists', { name: genre.name }) : t('music.topArtists')}
+                        items={genre ? (genreCharts?.topArtists || []) : charts.topArtists}
                         kind="artist"
                         resolvingKey={resolvingKey}
                         onPick={openChartItem}
                     />
-                    <ChartRail
-                        title={t('music.newReleases')}
-                        items={charts.newReleases}
+                    <MusicChartRail
+                        title={genre ? t('music.genreAlbums', { name: genre.name }) : t('music.topAlbums')}
+                        items={genre ? (genreCharts?.topAlbums || []) : charts.topAlbums}
                         kind="album"
                         resolvingKey={resolvingKey}
                         onPick={openChartItem}
                     />
-                    <ChartRail
-                        title={t('music.topAlbums')}
-                        items={charts.topAlbums}
-                        kind="album"
-                        resolvingKey={resolvingKey}
-                        onPick={openChartItem}
+
+                    {genre && !genreCharts && (
+                        <div className="py-8 flex justify-center text-muted">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        </div>
+                    )}
+
+                    <MusicGenreRail
+                        title={t('music.genres')}
+                        genres={charts.genres}
+                        activeGenreId={genre?.id ?? null}
+                        navigate={navigate}
                     />
 
                     {requestsLoading ? (

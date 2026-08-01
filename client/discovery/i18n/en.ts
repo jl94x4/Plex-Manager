@@ -301,6 +301,10 @@ export const en = {
         topAlbums: 'Trending albums',
         newReleases: 'New releases',
         chartsEyebrow: 'Charts',
+        genres: 'Music genres',
+        allGenres: 'All genres',
+        genreArtists: 'Top {name} artists',
+        genreAlbums: 'Top {name} albums',
     },
     person: {
         back: 'Back to Discovery',

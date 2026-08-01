@@ -7941,15 +7941,47 @@ app.get('/api/discovery/music/recent', requireAuth, requireMember, async (req, r
     }
 });
 
-/** Trending charts for the Music tab (Deezer editorial — no API key required). */
-let musicBrowseCache = { at: 0, payload: null };
+/** Trending charts + genres for Discover music (Deezer — no API key required). */
+const musicBrowseCache = new Map(); // key: genreId → { at, payload }
+const mapDeezerArtist = (entry) => {
+    const name = String(entry?.name || '').trim();
+    if (!name) return null;
+    return {
+        deezerId: entry.id,
+        mediaType: 'music',
+        type: 'music',
+        name,
+        title: name,
+        posterUrl: entry.picture_big || entry.picture_medium || null,
+        posterPath: entry.picture_big || entry.picture_medium || null,
+    };
+};
+const mapDeezerAlbum = (entry) => {
+    const title = String(entry?.title || '').trim();
+    const artistName = String(entry?.artist?.name || '').trim();
+    if (!title || !artistName) return null;
+    return {
+        deezerId: entry.id,
+        mediaType: 'music',
+        type: 'music',
+        name: artistName,
+        title,
+        artistName,
+        posterUrl: entry.cover_big || entry.cover_medium || null,
+        posterPath: entry.cover_big || entry.cover_medium || null,
+    };
+};
 app.get('/api/discovery/music/browse', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
-        if (!isMusicDiscoveryEnabled(config)) return res.json({ topArtists: [], topAlbums: [], newReleases: [] });
+        if (!isMusicDiscoveryEnabled(config)) {
+            return res.json({ topArtists: [], topAlbums: [], newReleases: [], genres: [] });
+        }
 
-        if (musicBrowseCache.payload && Date.now() - musicBrowseCache.at < 30 * 60 * 1000) {
-            return res.json(musicBrowseCache.payload);
+        const genreId = Number(req.query.genreId) > 0 ? Number(req.query.genreId) : 0;
+        const cached = musicBrowseCache.get(genreId);
+        if (cached && Date.now() - cached.at < 30 * 60 * 1000) {
+            return res.json(cached.payload);
         }
 
         const fetchJson = async (url) => {
@@ -7958,47 +7990,32 @@ app.get('/api/discovery/music/browse', requireAuth, requireMember, async (req, r
             return response.json().catch(() => null);
         };
         // Deezer's editorial "new releases" feed returns empty payloads, so only charts are used.
-        const [artistsRes, albumsRes] = await Promise.all([
-            fetchJson('https://api.deezer.com/chart/0/artists?limit=24').catch(() => null),
-            fetchJson('https://api.deezer.com/chart/0/albums?limit=24').catch(() => null),
+        const [artistsRes, albumsRes, genresRes] = await Promise.all([
+            fetchJson(`https://api.deezer.com/chart/${genreId}/artists?limit=24`).catch(() => null),
+            fetchJson(`https://api.deezer.com/chart/${genreId}/albums?limit=24`).catch(() => null),
+            genreId === 0 ? fetchJson('https://api.deezer.com/genre').catch(() => null) : Promise.resolve(null),
         ]);
 
-        const mapArtist = (entry) => {
-            const name = String(entry?.name || '').trim();
-            if (!name) return null;
-            return {
-                deezerId: entry.id,
-                mediaType: 'music',
-                type: 'music',
-                name,
-                title: name,
-                posterUrl: entry.picture_big || entry.picture_medium || null,
-                posterPath: entry.picture_big || entry.picture_medium || null,
-            };
-        };
-        const mapAlbum = (entry) => {
-            const title = String(entry?.title || '').trim();
-            const artistName = String(entry?.artist?.name || '').trim();
-            if (!title || !artistName) return null;
-            return {
-                deezerId: entry.id,
-                mediaType: 'music',
-                type: 'music',
-                name: artistName,
-                title,
-                artistName,
-                posterUrl: entry.cover_big || entry.cover_medium || null,
-                posterPath: entry.cover_big || entry.cover_medium || null,
-            };
-        };
+        const genres = (genresRes?.data || [])
+            .filter((entry) => Number(entry?.id) > 0 && String(entry?.name || '').trim())
+            .map((entry) => ({
+                id: Number(entry.id),
+                name: String(entry.name).trim(),
+                image: entry.picture_big || entry.picture_medium || entry.picture || null,
+            }));
 
         const payload = {
-            topArtists: (artistsRes?.data || []).map(mapArtist).filter(Boolean),
-            topAlbums: (albumsRes?.data || []).map(mapAlbum).filter(Boolean),
+            genreId: genreId || null,
+            topArtists: (artistsRes?.data || []).map(mapDeezerArtist).filter(Boolean),
+            topAlbums: (albumsRes?.data || []).map(mapDeezerAlbum).filter(Boolean),
             newReleases: [],
+            genres,
         };
         if (payload.topArtists.length || payload.topAlbums.length) {
-            musicBrowseCache = { at: Date.now(), payload };
+            musicBrowseCache.set(genreId, { at: Date.now(), payload });
+            if (musicBrowseCache.size > 40) {
+                musicBrowseCache.delete(musicBrowseCache.keys().next().value);
+            }
         }
         res.json(payload);
     } catch (e) {

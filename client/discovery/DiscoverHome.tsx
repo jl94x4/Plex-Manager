@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronDown, ChevronUp, ClipboardList, Film, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, ClipboardList, Film, Music, Sparkles } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { DiscoverPosterCard } from '../screens';
 import { Carousel } from './Carousel';
@@ -24,6 +24,13 @@ import { DiscoverGridSizeSelect } from './DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './useDiscoverGridSize';
 import { discoverRowCardWidthClass } from '../shared/portalLayout';
 import { useDiscoverI18n } from './i18n';
+import {
+    MusicChartItem,
+    MusicChartRail,
+    MusicGenreItem,
+    MusicGenreRail,
+    useMusicChartNavigation,
+} from './DiscoverMusic';
 
 type GenreSliderItem = { id: number; name: string; image?: string; backdrops?: string[] };
 
@@ -220,6 +227,34 @@ export const DiscoverHome: React.FC<{
     const loadGenRef = useRef(0);
     const hasPaintedRef = useRef(false);
     const [enterAnim, setEnterAnim] = useState(true);
+    const [musicRows, setMusicRows] = useState<{
+        topArtists: MusicChartItem[];
+        topAlbums: MusicChartItem[];
+        genres: MusicGenreItem[];
+    }>({ topArtists: [], topAlbums: [], genres: [] });
+    const { resolvingKey: musicResolvingKey, openChartItem: openMusicChartItem } = useMusicChartNavigation(
+        navigate,
+        () => navigate('/discovery/music'),
+    );
+
+    // Music rails are independent of the movie/TV pipeline — empty when Lidarr is not configured.
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await apiFetch('/api/discovery/music/browse').catch(() => null);
+                if (cancelled || !res) return;
+                setMusicRows({
+                    topArtists: Array.isArray(res.topArtists) ? res.topArtists : [],
+                    topAlbums: Array.isArray(res.topAlbums) ? res.topAlbums : [],
+                    genres: Array.isArray(res.genres) ? res.genres : [],
+                });
+            } catch {
+                // Best-effort — home still renders without music rails.
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     const loadData = useCallback(async () => {
         if (!loaded) return;
@@ -582,6 +617,43 @@ export const DiscoverHome: React.FC<{
                         ))}
                     </Carousel>
                 </div>
+
+                {(musicRows.topArtists.length > 0 || musicRows.topAlbums.length > 0) && (
+                    <>
+                        <div className="px-3 flex items-end justify-between gap-3 flex-wrap mt-2">
+                            <div>
+                                <p className={discoveryTheme.personalEyebrow}>{t('home.browse')}</p>
+                                <h2 className="text-lg sm:text-xl font-black text-text mt-1">{t('home.musicSection')}</h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => navigate('/discovery/music')}
+                                className="text-xs font-bold text-plex hover:underline inline-flex items-center gap-1"
+                            >
+                                <Music className="w-3.5 h-3.5" /> {t('home.allMusic')}
+                            </button>
+                        </div>
+                        <MusicChartRail
+                            title={t('music.topArtists')}
+                            items={musicRows.topArtists}
+                            kind="artist"
+                            resolvingKey={musicResolvingKey}
+                            onPick={openMusicChartItem}
+                        />
+                        <MusicGenreRail
+                            title={t('music.genres')}
+                            genres={musicRows.genres}
+                            navigate={navigate}
+                        />
+                        <MusicChartRail
+                            title={t('music.topAlbums')}
+                            items={musicRows.topAlbums}
+                            kind="album"
+                            resolvingKey={musicResolvingKey}
+                            onPick={openMusicChartItem}
+                        />
+                    </>
+                )}
             </section>
         </div>
     );
