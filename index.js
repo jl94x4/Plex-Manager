@@ -18909,7 +18909,7 @@ app.all('/api/collexions/*', requireAdmin, requireCollexions, async (req, res) =
             }
         }
 
-        // Gallery / hubs / pin resolve / create / templates / Trakt lists can take a while.
+        // Gallery / hubs / jobs / config / pin resolve / create / templates / Trakt lists can take a while.
         const longSuffix =
             suffix === 'collections'
             || suffix.startsWith('collections?')
@@ -18924,6 +18924,13 @@ app.all('/api/collexions/*', requireAdmin, requireCollexions, async (req, res) =
             || suffix === 'hubs/move'
             || suffix === 'hubs/visibility'
             || suffix.startsWith('hubs/')
+            || suffix === 'jobs'
+            || suffix.startsWith('jobs/')
+            || suffix === 'config'
+            || suffix === 'config/validate'
+            || suffix === 'run'
+            || suffix.startsWith('search/external')
+            || suffix.startsWith('search/discover')
             || suffix === 'templates/create'
             || suffix.startsWith('templates/franchise-search')
             || suffix === 'trending'
@@ -18937,9 +18944,23 @@ app.all('/api/collexions/*', requireAdmin, requireCollexions, async (req, res) =
         const cacheControl = upstream.headers.get('cache-control');
         if (cacheControl) res.setHeader('Cache-Control', cacheControl);
 
-        if (contentType.includes('application/json')) {
-            const data = await upstream.json().catch(() => null);
-            return res.send(data == null ? '' : data);
+        if (contentType.includes('application/json') || /\+json/i.test(contentType)) {
+            const raw = await upstream.text();
+            if (!raw.trim()) {
+                return res.end();
+            }
+            try {
+                return res.json(JSON.parse(raw));
+            } catch (parseErr) {
+                log(`Collexions proxy JSON parse error (HTTP ${upstream.status}): ${parseErr.message}`);
+                const status = upstream.ok ? 502 : upstream.status;
+                return res.status(status).json({
+                    error: upstream.ok
+                        ? 'Invalid JSON from Collexions worker'
+                        : 'Collexions worker returned a non-JSON error',
+                    detail: raw.length > 500 ? `${raw.slice(0, 500)}…` : raw,
+                });
+            }
         }
         const buf = Buffer.from(await upstream.arrayBuffer());
         return res.send(buf);

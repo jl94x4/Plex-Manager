@@ -8,6 +8,9 @@ const base = (path: string) => {
     return `/api/collexions${clean}`;
 };
 
+/** Match portal Collexions BFF long-op proxy budget (3 min). */
+const COLLEXIONS_LONG_MS = 180_000;
+
 const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -100,7 +103,11 @@ class CollexionsApiService {
     }
 
     async saveConfig(config: AppConfig): Promise<void> {
-        await apiFetch(base('/config'), { method: 'POST', body: JSON.stringify(config) });
+        await withTimeout(
+            apiFetch(base('/config'), { method: 'POST', body: JSON.stringify(config) }),
+            COLLEXIONS_LONG_MS,
+            'Saving config',
+        );
     }
 
     /** Validate draft config against the worker (Plex reachability + library names). Does not save. */
@@ -112,7 +119,7 @@ class CollexionsApiService {
     }> {
         return withTimeout(
             apiFetch(base('/config/validate'), { method: 'POST', body: JSON.stringify(config) }),
-            20000,
+            COLLEXIONS_LONG_MS,
             'Validating config',
         );
     }
@@ -180,7 +187,7 @@ class CollexionsApiService {
     }
 
     async runNow(): Promise<void> {
-        await withTimeout(apiFetch(base('/run'), { method: 'POST', body: '{}' }), 15000, 'Start service');
+        await withTimeout(apiFetch(base('/run'), { method: 'POST', body: '{}' }), 60000, 'Start service');
     }
 
     async stopScript(): Promise<void> {
@@ -251,7 +258,11 @@ class CollexionsApiService {
     }
 
     async searchExternal(query: string, type: 'movie' | 'tv'): Promise<any[]> {
-        return apiFetch(base(`/search/external?query=${encodeURIComponent(query)}&type=${type}`));
+        return withTimeout(
+            apiFetch(base(`/search/external?query=${encodeURIComponent(query)}&type=${type}`)),
+            90000,
+            'External search',
+        );
     }
 
     async getTmdbGenres(type: 'movie' | 'tv'): Promise<any[]> {
@@ -346,7 +357,11 @@ class CollexionsApiService {
     }
 
     async runJobNow(id: string): Promise<any> {
-        return apiFetch(base('/jobs/run'), { method: 'POST', body: JSON.stringify({ id }) });
+        return withTimeout(
+            apiFetch(base('/jobs/run'), { method: 'POST', body: JSON.stringify({ id }) }),
+            COLLEXIONS_LONG_MS,
+            'Running sync job',
+        );
     }
 
     async deleteJob(id: string): Promise<any> {
