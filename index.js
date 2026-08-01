@@ -996,6 +996,7 @@ import {
     pickPortalRequestDefaultsForSave,
     portalRequestDefaultsForClient,
     getPortalRequestDefaults,
+    clearPortalArrServiceOptionsCache,
 } from './lib/portal-request/index.js';
 const PLEX_API = 'https://plex.tv/api';
 
@@ -4296,6 +4297,16 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     mediaAutomationCapabilitiesCache = null;
     mediaAutomationCapabilitiesAt = 0;
     await refreshMediaAutomationAuthCache();
+    invalidateDiscoveryAvailabilityCacheMemo();
+    clearPortalArrServiceOptionsCache();
+    arrRescanListCache.clear();
+    const libraryStackChanged = discoveryLibraryStackFingerprint(existingConfig)
+        !== discoveryLibraryStackFingerprint(collexionsConfig);
+    if (libraryStackChanged) {
+        void runDiscoveryAvailabilityCacheRebuild('settings-save').catch((error) => {
+            log(`[DiscoveryAvailabilityCache] settings-save rebuild failed: ${error.message}`);
+        });
+    }
     try {
         // Keep the service running whenever the feature is enabled so scans/enqueue work.
         // Encode claiming is gated by persisted workerPaused (Start/Pause), not settings save.
@@ -6419,6 +6430,21 @@ const invalidateDiscoveryAvailabilityCacheMemo = () => {
     discoveryAvailabilityCacheMemo = null;
     discoveryAvailabilityCacheMemoAt = 0;
 };
+
+/** Fingerprint Plex/*arr* settings that affect Discover availability badges. */
+const discoveryLibraryStackFingerprint = (cfg) => JSON.stringify({
+    plexToken: cfg?.plexToken || '',
+    plexServerUrl: cfg?.plexServerUrl || '',
+    serverIdentifier: cfg?.serverIdentifier || '',
+    sonarrUrl: cfg?.sonarrUrl || '',
+    sonarrApiKey: cfg?.sonarrApiKey || '',
+    radarrUrl: cfg?.radarrUrl || '',
+    radarrApiKey: cfg?.radarrApiKey || '',
+    arrInstances: cfg?.arrInstances ?? null,
+    discoverySource: cfg?.discoverySource || '',
+    requestEngine: cfg?.requestEngine || '',
+    mediaServerType: cfg?.mediaServerType || '',
+});
 
 /** Overlay the current member's active portal requests onto discover items (Requested badges). */
 const memberActiveRequestsOverlayCache = new Map(); // userKey → { at, byKey: Map }
