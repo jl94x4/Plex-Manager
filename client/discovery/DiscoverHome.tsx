@@ -195,6 +195,7 @@ export const DiscoverHome: React.FC<{
         plexWatchlist: [] as any[],
         becauseYouWatched: [] as any[],
         becauseYouWatchedSeed: null as { mediaType: string; tmdbId: number; title?: string | null } | null,
+        recentMusic: [] as any[],
         trending: [] as any[],
         popularMovies: [] as any[],
         upcomingMovies: [] as any[],
@@ -274,7 +275,7 @@ export const DiscoverHome: React.FC<{
             void (async () => {
                 try {
                     if (gen !== loadGenRef.current) return;
-                    const [addedRes, reqRes, watchlistRes, becauseRes] = await Promise.all([
+                    const [addedRes, reqRes, watchlistRes, becauseRes, musicRes] = await Promise.all([
                         (hideAvailable || preferences.showRecentlyAdded === false)
                             ? Promise.resolve(null)
                             : apiFetch('/api/discovery/proxy/media?filter=allavailable&take=40&sort=mediaAdded').catch(() => null),
@@ -283,6 +284,7 @@ export const DiscoverHome: React.FC<{
                             ? Promise.resolve(null)
                             : apiFetch('/api/discovery/watchlist').catch(() => null),
                         apiFetch('/api/discovery/because-you-watched').catch(() => null),
+                        apiFetch('/api/discovery/music/recent?limit=24').catch(() => null),
                     ]);
 
                     if (gen !== loadGenRef.current) return;
@@ -297,6 +299,7 @@ export const DiscoverHome: React.FC<{
                     const watchlistPosters = await enrichDiscoveryItems(watchlistRes?.results || []);
                     const plexWatchlist = await enrichDiscoverItemsWithAvailability(watchlistPosters);
                     const becauseItems = await enrichDiscoverItemsWithAvailability(becauseRes?.results || []);
+                    const recentMusic = await enrichDiscoverItemsWithAvailability(musicRes?.results || []);
 
                     if (gen !== loadGenRef.current) return;
                     setRows((prev) => ({
@@ -306,6 +309,7 @@ export const DiscoverHome: React.FC<{
                         plexWatchlist,
                         becauseYouWatched: filterHiddenAvailableItems(becauseItems, hideAvailable),
                         becauseYouWatchedSeed: becauseRes?.seed || null,
+                        recentMusic: filterHiddenAvailableItems(recentMusic, hideAvailable),
                     }));
                 } catch {
                     // Side rails are best-effort.
@@ -443,6 +447,19 @@ export const DiscoverHome: React.FC<{
                                 formatItem={formatItem}
                                 onSelect={onSelect}
                                 animateEnter={enterAnim}
+                            />
+                        )}
+
+                        {rows.recentMusic.length > 0 && (
+                            <DiscoverHomeRow
+                                title={t('home.recentMusic')}
+                                items={rows.recentMusic}
+                                posterCardClass={posterCardClass}
+                                viewAllLabel={t('common.viewAll')}
+                                formatItem={formatItem}
+                                onSelect={onSelect}
+                                animateEnter={enterAnim}
+                                onViewAll={() => navigate('/discovery/music')}
                             />
                         )}
                     </div>

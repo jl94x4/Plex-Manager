@@ -158,7 +158,7 @@ const DiscoveryDashboardInner: React.FC<{
         const mediaType = isPerson ? 'person' : (isMusic ? 'music' : (isMovie ? 'movie' : 'tv'));
 
         const availability = resolveMediaAvailabilityState(item);
-        const overlay = !isPerson && !isMusic && availability.kind !== 'none'
+        const overlay = !isPerson && availability.kind !== 'none'
             ? <DiscoverStatusOverlay state={availability} />
             : null;
 
@@ -429,7 +429,11 @@ const DiscoveryDashboardInner: React.FC<{
                             />
                         )}
                         {subRoute === 'music' && (
-                            <DiscoverMusic navigate={navigate} />
+                            <DiscoverMusic
+                                navigate={navigate}
+                                formatItem={formatItem}
+                                onSelect={openMedia}
+                            />
                         )}
                         {subRoute === 'requests' && (
                             <MyRequestsPage

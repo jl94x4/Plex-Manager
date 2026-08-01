@@ -102,6 +102,7 @@ export const de: DeepPartial<EnCatalog> = {
         watchlistEmptyBody: 'Synchronisiere aus {provider} in Seerr oder starte bei den Trends.',
         seeTrending: 'Trends ansehen',
         becauseYouWatched: 'Weil du {title} gesehen hast',
+        recentMusic: 'Kürzlich hinzugefügte Musik',
         browse: 'Durchsuchen',
         whatsPopular: 'Was gerade populär ist',
         allMovies: 'Alle Filme',

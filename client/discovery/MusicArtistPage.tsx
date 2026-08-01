@@ -5,6 +5,8 @@ import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import { MusicRequestModal } from './MusicRequestModal';
 import { discoveryTheme } from './discoveryThemeClasses';
 import { useDiscoverI18n } from './i18n';
+import { resolveMediaAvailabilityState } from './discoverAvailability';
+import { DiscoverStatusOverlay } from './DiscoverStatusOverlay';
 
 export const MusicArtistPage: React.FC<{
     mbid: string;
@@ -57,6 +59,8 @@ export const MusicArtistPage: React.FC<{
     }
 
     const posterUrl = artist.posterUrl || artist.posterPath || null;
+    const availability = resolveMediaAvailabilityState(artist);
+    const canRequest = availability.kind !== 'available' && availability.kind !== 'processing' && availability.kind !== 'requested' && availability.kind !== 'pending';
 
     return (
         <div className="px-2 sm:px-4 pb-10 flex flex-col gap-5">
@@ -93,12 +97,18 @@ export const MusicArtistPage: React.FC<{
                                 ))}
                             </div>
                         )}
+                        {availability.kind !== 'none' && (
+                            <div className="mt-4 inline-flex">
+                                <DiscoverStatusOverlay state={availability} />
+                            </div>
+                        )}
                         <button
                             type="button"
                             onClick={() => setRequestOpen(true)}
-                            className="mt-5 px-5 py-2.5 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors"
+                            disabled={!canRequest && availability.kind === 'available'}
+                            className="mt-5 px-5 py-2.5 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {t('music.requestArtist')}
+                            {availability.kind === 'available' ? t('music.inLibrary') : t('music.requestArtist')}
                         </button>
                     </div>
                 </div>

@@ -17,6 +17,10 @@ const RESOLVED_MEDIA_STATUSES = new Set<number>([
 
 const itemKey = (item: any) => {
     const normalized = normalizeRawDiscoveryItem(item) || item;
+    if (normalized?.mediaType === 'music' || normalized?.type === 'music') {
+        const mbid = String(normalized?.mbid ?? normalized?.id ?? '').trim();
+        return mbid ? `music:${mbid}` : null;
+    }
     const mediaType = normalized?.mediaType === 'tv' || normalized?.mediaType === 2 || normalized?.mediaType === '2'
         ? 'tv'
         : (normalized?.mediaType === 'movie' || normalized?.mediaType === 1 || normalized?.mediaType === '1'
@@ -41,6 +45,8 @@ export const mergeAvailabilityOntoItems = <T,>(items: T[], availabilityByKey: Re
             },
             ...(patch.sonarrLibraryStatus ? { sonarrLibraryStatus: patch.sonarrLibraryStatus } : {}),
             ...(patch.radarrLibraryStatus ? { radarrLibraryStatus: patch.radarrLibraryStatus } : {}),
+            ...(patch.lidarrLibraryStatus ? { lidarrLibraryStatus: patch.lidarrLibraryStatus } : {}),
+            ...(patch.posterPath ? { posterPath: patch.posterPath, posterUrl: patch.posterPath } : {}),
         };
     });
 };
@@ -60,6 +66,16 @@ export async function enrichDiscoverItemsWithAvailability<T>(items: T[]): Promis
                 && (item as any).mediaInfo.requests.length > 0;
             if (RESOLVED_MEDIA_STATUSES.has(status) || hasRequests) return null;
             const normalized = normalizeRawDiscoveryItem(item) || item;
+            if (key.startsWith('music:')) {
+                const mbid = key.slice('music:'.length);
+                return {
+                    mediaType: 'music',
+                    mbid,
+                    id: mbid,
+                    title: String((normalized as any)?.title || (normalized as any)?.name || '').trim(),
+                    name: String((normalized as any)?.name || (normalized as any)?.title || '').trim(),
+                };
+            }
             const [mediaType, tmdbId] = key.split(':');
             const yearRaw = String(
                 (normalized as any)?.firstAirDate
@@ -92,7 +108,9 @@ export async function enrichDiscoverItemsWithAvailability<T>(items: T[]): Promis
     // Dedupe keys for a smaller request.
     const seen = new Set<string>();
     const unique = payloadItems.filter((entry: any) => {
-        const key = `${entry.mediaType}:${entry.tmdbId}`;
+        const key = entry.mediaType === 'music'
+            ? `music:${entry.mbid}`
+            : `${entry.mediaType}:${entry.tmdbId}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -105,6 +123,11 @@ export async function enrichDiscoverItemsWithAvailability<T>(items: T[]): Promis
         });
         const availabilityByKey: Record<string, any> = {};
         for (const entry of Array.isArray(data?.results) ? data.results : []) {
+            if (entry?.mediaType === 'music') {
+                const mbid = String(entry?.mbid || entry?.key?.replace(/^music:/, '') || '').trim();
+                if (mbid) availabilityByKey[`music:${mbid}`] = entry;
+                continue;
+            }
             const mediaType = entry?.mediaType === 'tv' ? 'tv' : 'movie';
             const tmdbId = Number(entry?.tmdbId);
             if (!Number.isFinite(tmdbId) || tmdbId <= 0) continue;

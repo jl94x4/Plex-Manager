@@ -36,9 +36,10 @@ export type MediaAvailabilityState = {
     userRequestStatus?: number | null;
 };
 
-const resolveMediaType = (item: any): 'movie' | 'tv' | null => {
+const resolveMediaType = (item: any): 'movie' | 'tv' | 'music' | null => {
     const normalized = normalizeRawDiscoveryItem(item);
     const raw = normalized?.mediaType ?? item?.mediaType ?? item?.type;
+    if (raw === 'music') return 'music';
     if (raw === 'movie' || raw === 1 || raw === '1') return 'movie';
     if (raw === 'tv' || raw === 2 || raw === '2') return 'tv';
     if (normalized?.firstAirDate && !normalized?.releaseDate) return 'tv';
@@ -345,6 +346,49 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
                 kind: 'partial',
                 label: 'Partially available',
                 detail: 'Part of this title may already be in your library.',
+            };
+        }
+    }
+
+    if (mediaType === 'music') {
+        if (mediaStatus === MEDIA_STATUS.AVAILABLE) {
+            return {
+                ...base,
+                kind: 'available',
+                label: 'Available in library',
+                detail: 'This artist is already in your music library.',
+            };
+        }
+        if (inProgressDisplay || item?.lidarrLibraryStatus?.hasActiveDownloads) {
+            return {
+                ...base,
+                kind: 'processing',
+                label: 'Processing',
+                detail: inProgressDisplay?.detail || 'Albums are downloading or importing.',
+            };
+        }
+        if (mediaStatus === MEDIA_STATUS.PARTIAL) {
+            return {
+                ...base,
+                kind: 'partial',
+                label: 'Partially available',
+                detail: 'Some albums from this artist are already in your library.',
+            };
+        }
+        if (mediaStatus === MEDIA_STATUS.PENDING || userRequestStatus === REQUEST_STATUS.PENDING) {
+            return {
+                ...base,
+                kind: 'pending',
+                label: 'Pending approval',
+                detail: 'Waiting for an admin to approve your request.',
+            };
+        }
+        if (mediaStatus === MEDIA_STATUS.PROCESSING || userRequestStatus === REQUEST_STATUS.APPROVED) {
+            return {
+                ...base,
+                kind: 'requested',
+                label: 'Requested',
+                detail: 'Your artist request was sent to Lidarr.',
             };
         }
     }

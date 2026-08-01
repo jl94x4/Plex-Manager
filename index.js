@@ -973,6 +973,7 @@ import {
     pickBecauseYouWatchedSeed,
 } from './lib/discovery-because-you-watched.js';
 import { fetchMusicBrainzArtist, searchMusicBrainzArtists } from './lib/musicbrainz-client.js';
+import { enrichMusicSearchPosters, listRecentLidarrArtists } from './lib/discovery-music-enrich.js';
 import { fetchDiscoveryCombinedRatings, fetchImdbRatingsFromRadarr } from './lib/discovery-ratings.js';
 import { enrichTvDetailsWithSonarrLibraryStatus, fetchSonarrLibraryStatusForShow } from './lib/sonarr-library-status.js';
 import { enrichSessionsWithGeo } from './lib/geoip-lookup.js';
@@ -6490,10 +6491,19 @@ const overlayPortalPendingRequestsOntoItems = async (config, sessionUser, items 
                 const status = Number(row?.status);
                 // Skip terminal states; library cache still owns Available/Partial.
                 if (status === 3 || status === 4) continue; // declined / failed
-                const mediaType = row?.type === 'tv' ? 'tv' : 'movie';
-                const tmdbId = Number(row?.tmdbId);
-                if (!Number.isFinite(tmdbId) || tmdbId <= 0) continue;
-                const key = `${mediaType}:${tmdbId}`;
+                const mediaType = row?.type === 'tv'
+                    ? 'tv'
+                    : (row?.type === 'music' ? 'music' : 'movie');
+                let key = null;
+                if (mediaType === 'music') {
+                    const mbid = String(row?.mbid || '').trim();
+                    if (!mbid) continue;
+                    key = `music:${mbid}`;
+                } else {
+                    const tmdbId = Number(row?.tmdbId);
+                    if (!Number.isFinite(tmdbId) || tmdbId <= 0) continue;
+                    key = `${mediaType}:${tmdbId}`;
+                }
                 const existing = activeByKey.get(key);
                 // Prefer pending over approved when both exist (HD + later update).
                 if (!existing || (status === 1 && Number(existing.status) !== 1)) {
@@ -6506,11 +6516,19 @@ const overlayPortalPendingRequestsOntoItems = async (config, sessionUser, items 
         }
         if (!activeByKey.size) return items;
         return items.map((item) => {
+            const isMusic = item?.mediaType === 'music' || item?.type === 'music';
             const mediaType = item?.mediaType === 'tv' || item?.mediaType === 2 || item?.mediaType === '2'
                 ? 'tv'
-                : 'movie';
-            const tmdbId = Number(item?.tmdbId ?? item?.id);
-            const active = activeByKey.get(`${mediaType}:${tmdbId}`);
+                : (isMusic ? 'music' : 'movie');
+            let key = null;
+            if (mediaType === 'music') {
+                const mbid = String(item?.mbid ?? item?.id ?? '').trim();
+                if (mbid) key = `music:${mbid}`;
+            } else {
+                const tmdbId = Number(item?.tmdbId ?? item?.id);
+                if (Number.isFinite(tmdbId) && tmdbId > 0) key = `${mediaType}:${tmdbId}`;
+            }
+            const active = key ? activeByKey.get(key) : null;
             if (!active) return item;
             const mediaInfo = { ...(item?.mediaInfo || {}) };
             const requestStatus = Number(active.status) || 1;
@@ -6569,7 +6587,7 @@ const attachDiscoveryAvailabilityCacheToPayload = async (config, sessionUser, da
         return next;
     }
     // Detail pages: disk cache + pending overlay only.
-    if (!Array.isArray(next) && (next?.mediaType === 'movie' || next?.mediaType === 'tv' || next?.id)) {
+    if (!Array.isArray(next) && (next?.mediaType === 'movie' || next?.mediaType === 'tv' || next?.mediaType === 'music' || next?.id)) {
         const overlaid = await Promise.race([
             overlayPortalPendingRequestsOntoItems(config, sessionUser, [next]),
             new Promise((resolve) => setTimeout(() => resolve([next]), 400)),
@@ -6660,7 +6678,19 @@ app.post('/api/discovery/availability-batch', requireAuth, requireMember, async 
         const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
         const items = incoming
             .map((entry) => {
-                const mediaType = entry?.mediaType === 'tv' ? 'tv' : (entry?.mediaType === 'movie' ? 'movie' : null);
+                const rawType = String(entry?.mediaType || '').toLowerCase();
+                if (rawType === 'music') {
+                    const mbid = String(entry?.mbid ?? entry?.id ?? '').trim();
+                    if (!mbid) return null;
+                    return {
+                        mediaType: 'music',
+                        mbid,
+                        id: mbid,
+                        title: String(entry?.title || entry?.name || '').trim(),
+                        name: String(entry?.name || entry?.title || '').trim(),
+                    };
+                }
+                const mediaType = rawType === 'tv' ? 'tv' : (rawType === 'movie' ? 'movie' : null);
                 const tmdbId = Number(entry?.tmdbId ?? entry?.id);
                 if (!mediaType || !Number.isFinite(tmdbId) || tmdbId <= 0) return null;
                 const year = Number(entry?.year);
@@ -6713,6 +6743,11 @@ app.post('/api/discovery/availability-batch', requireAuth, requireMember, async 
 
         const enrichedByKey = new Map();
         for (const item of [...cachedHits, ...(Array.isArray(liveEnriched) ? liveEnriched : [])]) {
+            if (item?.mediaType === 'music') {
+                const mbid = String(item?.mbid ?? item?.id ?? '').trim();
+                if (mbid) enrichedByKey.set(`music:${mbid}`, item);
+                continue;
+            }
             const mediaType = item?.mediaType === 'tv' ? 'tv' : 'movie';
             const tmdbId = Number(item?.tmdbId ?? item?.id);
             if (!Number.isFinite(tmdbId) || tmdbId <= 0) continue;
@@ -6722,10 +6757,26 @@ app.post('/api/discovery/availability-batch', requireAuth, requireMember, async 
         const withPending = await overlayPortalPendingRequestsOntoItems(
             config,
             req.user,
-            items.map((item) => enrichedByKey.get(`${item.mediaType}:${item.tmdbId}`) || item),
+            items.map((item) => {
+                const key = item.mediaType === 'music'
+                    ? `music:${item.mbid}`
+                    : `${item.mediaType}:${item.tmdbId}`;
+                return enrichedByKey.get(key) || item;
+            }),
         );
 
         const results = withPending.map((item) => {
+            if (item?.mediaType === 'music') {
+                const mbid = String(item?.mbid ?? item?.id ?? '').trim();
+                return {
+                    key: mbid ? `music:${mbid}` : null,
+                    mediaType: 'music',
+                    mbid,
+                    mediaInfo: item?.mediaInfo || null,
+                    lidarrLibraryStatus: item?.lidarrLibraryStatus || null,
+                    posterPath: item?.posterPath || item?.posterUrl || null,
+                };
+            }
             const mediaType = item?.mediaType === 'tv' ? 'tv' : 'movie';
             const tmdbId = Number(item?.tmdbId ?? item?.id);
             const mediaInfo = item?.mediaInfo && typeof item.mediaInfo === 'object' ? item.mediaInfo : null;
@@ -7771,12 +7822,19 @@ app.get('/api/discovery/because-you-watched', requireAuth, requireMember, async 
 
 app.get('/api/discovery/music/search', requireAuth, requireMember, async (req, res) => {
     try {
+        const config = await loadFile(CONFIG_PATH, {});
         const query = String(req.query.q || req.query.query || '').trim();
         if (query.length < 2) return res.json({ results: [], total: 0 });
-        const payload = await searchMusicBrainzArtists(query, {
+        let payload = await searchMusicBrainzArtists(query, {
             limit: Number(req.query.limit) || 20,
             fetchImpl: fetchWithTimeout,
         });
+        payload.results = await enrichMusicSearchPosters(payload.results || [], {
+            config,
+            fetchImpl: fetchWithTimeout,
+            maxCoverLookups: 10,
+        });
+        payload = await attachDiscoveryAvailabilityCacheToPayload(config, req.user, payload);
         res.json(payload);
     } catch (e) {
         log(`Discovery music search error: ${e.message}`);
@@ -7784,12 +7842,32 @@ app.get('/api/discovery/music/search', requireAuth, requireMember, async (req, r
     }
 });
 
+app.get('/api/discovery/music/recent', requireAuth, requireMember, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const limit = Math.min(40, Math.max(1, Number(req.query.limit) || 24));
+        let results = await listRecentLidarrArtists(config, {
+            limit,
+            fetchImpl: fetchWithTimeout,
+        });
+        const payload = await attachDiscoveryAvailabilityCacheToPayload(config, req.user, { results });
+        res.json(payload);
+    } catch (e) {
+        log(`Discovery music recent error: ${e.message}`);
+        res.status(502).json({ error: e.message || 'Failed to load recent music' });
+    }
+});
+
 app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (req, res) => {
     try {
+        const config = await loadFile(CONFIG_PATH, {});
         const mbid = String(req.params.mbid || '').trim();
         if (!mbid) return res.status(400).json({ error: 'Artist id is required' });
-        const artist = await fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout });
+        let artist = await fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout });
         if (!artist) return res.status(404).json({ error: 'Artist not found' });
+        const library = createDiscoveryLibraryAvailability(config);
+        artist = await library.enrichDetails(artist);
+        artist = await attachDiscoveryAvailabilityCacheToPayload(config, req.user, artist);
         res.json(artist);
     } catch (e) {
         log(`Discovery music artist error: ${e.message}`);

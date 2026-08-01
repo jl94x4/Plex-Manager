@@ -4,10 +4,12 @@ import type { PortalRequestItem } from '../requests/types';
 export const portalRequestToDiscoveryRowItem = (item: PortalRequestItem) => ({
     type: item.type,
     status: item.status,
-    id: item.id,
+    id: item.type === 'music' ? (item.mbid || item.id) : item.id,
+    mbid: item.mbid || null,
     isDownloading: !!item.isDownloading,
     media: {
         tmdbId: item.tmdbId,
+        mbid: item.mbid || null,
         title: item.title,
         name: item.title,
         posterPath: item.posterPath || null,
@@ -90,7 +92,7 @@ export const memberRequestDisplayStatus = (item: PortalRequestItem) => {
     // Downloads in flight always win over Seerr's optimistic Available/Partial.
     if (status === 2 && item.isDownloading) return 'Processing';
     if (status === 2 && mediaStatus === 5) return 'Available';
-    if (status === 2 && mediaStatus === 4) return item.type === 'tv' ? 'Requested' : 'Available';
+    if (status === 2 && mediaStatus === 4) return item.type === 'tv' || item.type === 'music' ? 'Requested' : 'Available';
     if (status === 2 && mediaStatus === 3) return 'Requested';
     if (status === 2) return 'Approved';
     return item.statusLabel || 'Unknown';
@@ -119,7 +121,11 @@ export type MergedMemberRequest = {
 };
 
 const requestGroupKey = (item: PortalRequestItem) => {
-    if (item.tmdbId != null && Number.isFinite(Number(item.tmdbId))) {
+    if (item.type === 'music') {
+        const mbid = String(item.mbid || '').trim();
+        if (mbid) return `music:${mbid}`;
+    }
+    if (item.tmdbId != null && Number.isFinite(Number(item.tmdbId)) && Number(item.tmdbId) > 0) {
         return `${item.type || 'movie'}:${Number(item.tmdbId)}`;
     }
     return `id:${item.id}`;

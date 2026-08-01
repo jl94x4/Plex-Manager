@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, Music, Search } from 'lucide-react';
 import { apiFetch } from '../shared/api';
-import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import { discoveryTheme } from './discoveryThemeClasses';
+import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
 import { useDiscoverI18n } from './i18n';
 
 type ArtistHit = {
@@ -17,7 +17,9 @@ type ArtistHit = {
 
 export const DiscoverMusic: React.FC<{
     navigate: (path: string) => void;
-}> = ({ navigate }) => {
+    formatItem?: (item: any) => any;
+    onSelect?: (item: any) => void;
+}> = ({ navigate, formatItem, onSelect }) => {
     const { t } = useDiscoverI18n();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<ArtistHit[]>([]);
@@ -39,7 +41,10 @@ export const DiscoverMusic: React.FC<{
         try {
             const res = await apiFetch(`/api/discovery/music/search?q=${encodeURIComponent(trimmed)}`);
             if (seq !== seqRef.current) return;
-            setResults(Array.isArray(res?.results) ? res.results : []);
+            const raw = Array.isArray(res?.results) ? res.results : [];
+            const enriched = await enrichDiscoverItemsWithAvailability(raw);
+            if (seq !== seqRef.current) return;
+            setResults(enriched);
         } catch (e: any) {
             if (seq !== seqRef.current) return;
             setResults([]);
@@ -91,17 +96,23 @@ export const DiscoverMusic: React.FC<{
 
             {!loading && results.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 px-2">
-                    {results.map((artist) => (
+                    {results.map((artist) => {
+                        const formatted = formatItem ? formatItem(artist) : artist;
+                        const poster = formatted.thumbUrl || formatted.posterPath || formatted.posterUrl;
+                        return (
                         <button
                             key={artist.mbid || artist.id}
                             type="button"
-                            onClick={() => navigate(`/discovery/music/artist/${encodeURIComponent(artist.mbid || artist.id)}`)}
-                            className="group text-left rounded-xl border border-border/60 bg-white/[0.02] overflow-hidden hover:border-plex/40 transition-colors"
+                            onClick={() => (onSelect ? onSelect(formatted) : navigate(`/discovery/music/artist/${encodeURIComponent(artist.mbid || artist.id)}`))}
+                            className="group text-left rounded-xl border border-border/60 bg-white/[0.02] overflow-hidden hover:border-plex/40 transition-colors relative"
                         >
+                            {formatted.overlay && (
+                                <div className="absolute top-2 left-2 z-10">{formatted.overlay}</div>
+                            )}
                             <div className="aspect-square bg-white/5 relative">
-                                {artist.posterPath ? (
+                                {poster ? (
                                     <img
-                                        src={artist.posterPath}
+                                        src={poster}
                                         alt=""
                                         className="w-full h-full object-cover"
                                         loading="lazy"
@@ -114,14 +125,15 @@ export const DiscoverMusic: React.FC<{
                             </div>
                             <div className="p-2.5">
                                 <p className="font-bold text-sm leading-tight line-clamp-2 group-hover:text-plex transition-colors">
-                                    {artist.name || artist.title}
+                                    {formatted.name || formatted.title}
                                 </p>
                                 {artist.disambiguation && (
                                     <p className="text-[11px] text-muted mt-1 line-clamp-2">{artist.disambiguation}</p>
                                 )}
                             </div>
                         </button>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 

@@ -29,7 +29,7 @@ const RequestTypeBadge: React.FC<{ type: string; showHd: boolean; show4k: boolea
 }) => (
     <span className="inline-flex items-center gap-1.5">
         <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
-            {type === 'tv' ? 'TV' : 'Movie'}
+            {type === 'tv' ? 'TV' : (type === 'music' ? 'Music' : 'Movie')}
         </span>
         {showHd && (
             <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
@@ -168,6 +168,11 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
     };
 
     const openMedia = (item: PortalRequestItem) => {
+        if (item.type === 'music') {
+            const mbid = String(item.mbid || '').trim();
+            if (mbid) navigate(`/discovery/music/artist/${encodeURIComponent(mbid)}`);
+            return;
+        }
         if (!item.tmdbId) return;
         navigate(`/discovery/${item.type}/${item.tmdbId}`);
     };

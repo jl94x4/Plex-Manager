@@ -40,7 +40,14 @@ export const getDiscoverItemKey = (item: any): string | null => {
         ? 'movie'
         : rawType === 2 || rawType === '2'
             ? 'tv'
-            : rawType;
+            : rawType === 'music'
+                ? 'music'
+                : rawType;
+    if (mediaType === 'music') {
+        const mbid = String(normalized.mbid ?? normalized.id ?? '').trim();
+        if (!mbid) return null;
+        return `music:${mbid}`;
+    }
     const tmdbId = Number(normalized.tmdbId ?? normalized.id);
     if (!mediaType || !Number.isFinite(tmdbId) || tmdbId <= 0) return null;
     return `${mediaType}:${tmdbId}`;
@@ -68,12 +75,14 @@ export const mergeDiscoverResults = <T,>(existing: T[], incoming: T[]): T[] => (
     dedupeDiscoverResults([...existing, ...incoming])
 );
 
-const resolveEnrichMediaType = (item: any): 'movie' | 'tv' | null => {
+const resolveEnrichMediaType = (item: any): 'movie' | 'tv' | 'music' | null => {
     const raw = item?.mediaType ?? item?.type;
+    if (raw === 'music') return 'music';
     if (raw === 2 || raw === '2' || raw === 'tv' || raw === 'show') return 'tv';
     if (raw === 1 || raw === '1' || raw === 'movie') return 'movie';
     if (item?.firstAirDate) return 'tv';
     if (item?.releaseDate) return 'movie';
+    if (item?.mbid) return 'music';
     return null;
 };
 
