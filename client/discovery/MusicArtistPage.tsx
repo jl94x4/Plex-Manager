@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Check, Clock, Disc3, Loader2, Music } from 'lucide-react';
 import { apiFetch } from '../shared/api';
+import { resolvePortalAssetUrl } from '../shared/basePath';
 import { MusicRequestModal } from './MusicRequestModal';
 import { discoveryTheme } from './discoveryThemeClasses';
-import { useDiscoverI18n } from './i18n';
+import { translateDiscoverStatus, useDiscoverI18n } from './i18n';
 import { resolveMediaAvailabilityState } from './discoverAvailability';
-import { DiscoverStatusOverlay } from './DiscoverStatusOverlay';
+import { mediaStatusPanelClass } from './DiscoverStatusOverlay';
 
 type ArtistAlbum = {
     mbid: string;
@@ -36,6 +37,31 @@ const AlbumCover: React.FC<{ src?: string | null; alt: string }> = ({ src, alt }
             loading="lazy"
             className="w-full h-full object-cover"
             onError={() => setFailed(true)}
+        />
+    );
+};
+
+/** Artist header art — walks a list of candidate URLs, falling back on load errors. */
+const ArtistHeaderArt: React.FC<{ sources: (string | null | undefined)[]; alt: string }> = ({ sources, alt }) => {
+    const urls = sources
+        .map((src) => (src ? resolvePortalAssetUrl(src) : ''))
+        .filter(Boolean);
+    const [index, setIndex] = useState(0);
+    useEffect(() => { setIndex(0); }, [urls.join('|')]);
+    const src = urls[index] || null;
+    if (!src) {
+        return (
+            <div className="w-full h-full flex items-center justify-center text-muted">
+                <Music className="w-12 h-12 opacity-40" />
+            </div>
+        );
+    }
+    return (
+        <img
+            src={src}
+            alt={alt}
+            className="w-full h-full object-cover"
+            onError={() => setIndex((i) => i + 1)}
         />
     );
 };
@@ -180,13 +206,10 @@ export const MusicArtistPage: React.FC<{
             <div className="rounded-2xl border border-border/60 bg-white/[0.02] overflow-hidden">
                 <div className="flex flex-col sm:flex-row gap-4 p-4 sm:p-6">
                     <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl overflow-hidden bg-white/5 shrink-0 mx-auto sm:mx-0">
-                        {posterUrl ? (
-                            <img src={posterUrl} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-muted">
-                                <Music className="w-12 h-12 opacity-40" />
-                            </div>
-                        )}
+                        <ArtistHeaderArt
+                            sources={[posterUrl, ...albums.slice(0, 3).map((album) => album.coverUrl)]}
+                            alt={artist.name || artist.title || ''}
+                        />
                     </div>
                     <div className="min-w-0 flex-1 text-center sm:text-left">
                         <p className={discoveryTheme.personalEyebrow}>{t('music.artist')}</p>
@@ -207,8 +230,13 @@ export const MusicArtistPage: React.FC<{
                             </div>
                         )}
                         {availability.kind !== 'none' && (
-                            <div className="mt-4 inline-flex">
-                                <DiscoverStatusOverlay state={availability} />
+                            <div className="mt-4 flex justify-center sm:justify-start">
+                                <span
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-black uppercase tracking-wide ${mediaStatusPanelClass(availability.kind)}`}
+                                    title={availability.detail || availability.label}
+                                >
+                                    {translateDiscoverStatus(t, availability.label) || availability.label}
+                                </span>
                             </div>
                         )}
                         <button

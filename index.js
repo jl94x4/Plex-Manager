@@ -8057,13 +8057,15 @@ app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (
         const mbid = String(req.params.mbid || '').trim();
         if (!mbid) return res.status(400).json({ error: 'Artist id is required' });
 
-        // Lidarr (fast, has art + library id) and MusicBrainz (discography) in parallel.
-        const [lidarrArtist, mbArtist] = await Promise.all([
+        // Lidarr (art + library id), MusicBrainz (discography), and per-album
+        // availability all in parallel — nothing serial on this path.
+        const [lidarrArtist, mbArtist, lidarrAlbums] = await Promise.all([
             fetchLidarrArtistByMbid(config, mbid, { fetchImpl: fetchWithTimeout }).catch(() => null),
             fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout }).catch((err) => {
                 log(`MusicBrainz artist lookup failed: ${err.message}`);
                 return null;
             }),
+            fetchLidarrAlbumAvailabilityByMbid(config, mbid, { fetchImpl: fetchWithTimeout }).catch(() => null),
         ]);
         let artist = lidarrArtist || mbArtist;
         if (lidarrArtist && mbArtist) {
@@ -8082,9 +8084,6 @@ app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (
 
         // Discography with per-album Lidarr availability for the request UI.
         const albums = Array.isArray(mbArtist?.albums) ? mbArtist.albums : [];
-        const lidarrAlbums = await fetchLidarrAlbumAvailabilityByMbid(config, mbid, {
-            fetchImpl: fetchWithTimeout,
-        }).catch(() => null);
         if (albums.length) {
             artist.albums = albums.map((album) => {
                 const status = lidarrAlbums?.albumsByMbid?.get(album.mbid) || null;
@@ -8126,6 +8125,12 @@ app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (
             artist.albums = fallback;
         } else {
             artist.albums = [];
+        }
+
+        // Header art fallback: newest album cover when no artist image resolved.
+        if (!artist.posterUrl && artist.albums.length) {
+            artist.posterUrl = artist.albums[0].coverUrl || null;
+            artist.posterPath = artist.posterPath || artist.posterUrl;
         }
 
         try {
