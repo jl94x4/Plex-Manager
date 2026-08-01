@@ -983,6 +983,8 @@ export const PosterSetsDashboard: React.FC = () => {
     const relatedSetsAbortRef = useRef<AbortController | null>(null);
     const relatedSetsGenRef = useRef(0);
     const browseLoadGenRef = useRef(0);
+    const queueLoadGenRef = useRef(0);
+    const watchesLoadGenRef = useRef(0);
     const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
     const [activeJob, setActiveJob] = useState<PosterSetsJob | null>(null);
     const [testResult, setTestResult] = useState<string | null>(null);
@@ -1031,22 +1033,28 @@ export const PosterSetsDashboard: React.FC = () => {
     }, [toast]);
 
     const loadQueue = useCallback(async () => {
+        const gen = ++queueLoadGenRef.current;
         try {
             const response = await posterSetsApi.queue();
+            if (gen !== queueLoadGenRef.current) return;
             setQueueJobs(response.jobs || []);
             setQueuePaused(Boolean(response.paused));
             setQueueStats(response.stats || {});
         } catch (error) {
+            if (gen !== queueLoadGenRef.current) return;
             toast(error instanceof Error ? error.message : 'Failed to load queue', 'error');
         }
     }, [toast]);
 
     const loadWatches = useCallback(async () => {
+        const gen = ++watchesLoadGenRef.current;
         try {
             const response = await posterSetsApi.watches();
+            if (gen !== watchesLoadGenRef.current) return;
             setWatches(response.watches || []);
             setWatchStatsState(response.stats || {});
         } catch (error) {
+            if (gen !== watchesLoadGenRef.current) return;
             toast(error instanceof Error ? error.message : 'Failed to load watches', 'error');
         }
     }, [toast]);
