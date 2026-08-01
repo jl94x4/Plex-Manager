@@ -6635,29 +6635,37 @@ const enrichMusicDiscoveryPayload = async (config, sessionUser, payload, { block
     });
 };
 
+/**
+ * Optionally append Lidarr artist hits to global Discover search.
+ * Never blocks movie/TV results — hard-capped and Lidarr-only (no MusicBrainz/CAA).
+ */
 const mergeMusicDiscoverySearchResults = async (config, sessionUser, query, results) => {
-    if (!isMusicDiscoveryEnabled(config)) return results;
-    try {
-        let musicPayload = await searchLidarrArtists(config, query, {
-            limit: 8,
-            fetchImpl: fetchWithTimeout,
+    const base = Array.isArray(results) ? results : [];
+    if (!isMusicDiscoveryEnabled(config)) return base;
+
+    const merge = async () => {
+        const musicPayload = await searchLidarrArtists(config, query, {
+            limit: 6,
+            fetchImpl: (url, options = {}) => fetchWithTimeout(url, { ...options, timeoutMs: 4000 }, 4000),
         });
-        if (!(musicPayload.results || []).length) {
-            musicPayload = await searchMusicBrainzArtists(query, {
-                limit: 8,
-                fetchImpl: fetchWithTimeout,
-            });
-            musicPayload.results = await enrichMusicSearchPosters(musicPayload.results || [], {
-                config,
-                fetchImpl: fetchWithTimeout,
-            });
-        }
-        const enriched = await enrichMusicDiscoveryPayload(config, sessionUser, musicPayload);
-        const musicResults = Array.isArray(enriched?.results) ? enriched.results : (musicPayload.results || []);
-        return [...(Array.isArray(results) ? results : []), ...musicResults].slice(0, 24);
+        const musicResults = Array.isArray(musicPayload?.results) ? musicPayload.results : [];
+        if (!musicResults.length) return base;
+        // Cache overlay only — do not wait on catalog warm.
+        const overlaid = await attachDiscoveryAvailabilityCacheToPayload(config, sessionUser, {
+            results: musicResults,
+        });
+        const artists = Array.isArray(overlaid?.results) ? overlaid.results : musicResults;
+        return [...base, ...artists].slice(0, 24);
+    };
+
+    try {
+        return await Promise.race([
+            merge(),
+            new Promise((resolve) => setTimeout(() => resolve(base), 2500)),
+        ]);
     } catch (e) {
         log(`Discovery music search merge skipped: ${e.message}`);
-        return results;
+        return base;
     }
 };
 
@@ -6906,7 +6914,8 @@ app.get('/api/discovery/search', requireAuth, requireMember, async (req, res) =>
             let results = Array.isArray(data.results) ? data.results : [];
             try {
                 const library = createDiscoveryLibraryAvailability(config);
-                results = await library.enrichItems(results);
+                // Never block hero search on cold *arr catalogs.
+                results = await library.enrichItems(results, { blockForCatalog: false });
             } catch (enrichError) {
                 log(`Discovery TMDB search library enrich skipped: ${enrichError.message}`);
             }

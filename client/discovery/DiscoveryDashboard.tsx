@@ -112,6 +112,12 @@ const DiscoveryDashboardInner: React.FC<{
             const controller = new AbortController();
             searchAbortRef.current = controller;
             const seq = ++searchSeqRef.current;
+            let timedOut = false;
+            // Hard cap so a hung API never leaves the hero stuck on "Searching…"
+            const timeoutId = window.setTimeout(() => {
+                timedOut = true;
+                controller.abort();
+            }, 12000);
 
             setSearchLoading(true);
             setSearchError(null);
@@ -126,14 +132,16 @@ const DiscoveryDashboardInner: React.FC<{
                 setSearchResults(Array.isArray(res?.results) ? res.results : []);
                 setSearchError(null);
             } catch (e: any) {
-                if (controller.signal.aborted || e?.name === 'AbortError' || /aborted/i.test(String(e?.message || ''))) {
-                    return;
-                }
                 if (seq !== searchSeqRef.current) return;
+                const aborted = controller.signal.aborted
+                    || e?.name === 'AbortError'
+                    || /aborted/i.test(String(e?.message || ''));
+                if (aborted && !timedOut) return; // superseded by a newer query
                 console.error(e);
                 setSearchResults([]);
-                setSearchError(e?.message || 'Search failed');
+                setSearchError(e?.message || t('common.searchFailed'));
             } finally {
+                window.clearTimeout(timeoutId);
                 if (seq === searchSeqRef.current) setSearchLoading(false);
             }
         }, 300);
@@ -141,7 +149,7 @@ const DiscoveryDashboardInner: React.FC<{
         return () => {
             window.clearTimeout(timer);
         };
-    }, [query, locale, searchRetryToken]);
+    }, [query, locale, searchRetryToken, t]);
 
     const formatItem = (rawItem: any) => {
         const item = normalizeRawDiscoveryItem(rawItem);
