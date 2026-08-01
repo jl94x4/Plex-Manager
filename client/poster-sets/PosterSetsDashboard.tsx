@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     CheckCircle2,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
+    ChevronUp,
     Clock,
     Compass,
     Download,
@@ -82,6 +84,7 @@ import {
     normalizeLibraryItems,
     type LibraryRecentItem,
 } from './libraryRecent';
+import { SetInspector, SetInspectorThumbStrip } from './SetInspector';
 
 const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
 const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
@@ -562,6 +565,7 @@ function BrowseSetCard({
     onOpenCreator,
     disabled,
     bulkSelected = false,
+    expanded = false,
     onToggleBulk,
 }: {
     set: PosterSetsSearchSet;
@@ -569,13 +573,18 @@ function BrowseSetCard({
     onOpenCreator?: (user: string) => void;
     disabled?: boolean;
     bulkSelected?: boolean;
+    expanded?: boolean;
     onToggleBulk?: () => void;
 }) {
     const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
     const landscape = isTitleCardSet(set);
     return (
         <div className={`group relative flex w-full min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border bg-black/20 text-center transition hover:border-plex/40 ${
-            bulkSelected ? 'border-plex/40 ring-1 ring-plex/20' : 'border-white/10'
+            expanded
+                ? 'border-plex/60 ring-1 ring-plex/30'
+                : bulkSelected
+                    ? 'border-plex/40 ring-1 ring-plex/20'
+                    : 'border-white/10'
         }`}>
             {onToggleBulk ? (
                 <label
@@ -1055,7 +1064,8 @@ export const PosterSetsDashboard: React.FC = () => {
     const creatorSearchAbortRef = useRef<AbortController | null>(null);
     const [selectedSearchTitle, setSelectedSearchTitle] = useState<PosterSetsSearchTitle | null>(null);
     const [selectedSearchSet, setSelectedSearchSet] = useState<PosterSetsSearchSet | null>(null);
-    const [manualUrlOpen, setManualUrlOpen] = useState(false);
+    const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [showInspectorAssets, setShowInspectorAssets] = useState(false);
     const previewPanelRef = useRef<HTMLDivElement | null>(null);
     const searchSetsSectionRef = useRef<HTMLDivElement | null>(null);
     const [recentTick, setRecentTick] = useState(0);
@@ -1265,24 +1275,31 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     }, [toast]);
 
-    const dismissPreviewToSearch = useCallback(() => {
+    /** Collapse the inline set inspector without wiping search/browse results. */
+    const collapseSetInspector = useCallback((options?: { scrollToSets?: boolean }) => {
         setPreview(null);
         setSelectedSearchSet(null);
         setSelectedAssetIds([]);
+        setShowInspectorAssets(false);
         setTitleCardsOnly(false);
+        titleCardsOnlyRef.current = false;
         syncedSetUrlRef.current = null;
         const creator = searchMode === 'creator' ? String(searchQuery || '').trim().replace(/^@+/, '') || null : null;
         writePosterSetsUrl({
-            tab: 'apply',
-            rail: null,
+            tab: tab === 'browse' ? 'browse' : 'apply',
+            rail: tab === 'browse' ? browseSeeAllId : null,
             setUrl: null,
-            creator,
+            creator: tab === 'apply' ? creator : null,
             titleCardsOnly: false,
         }, 'replace');
-        requestAnimationFrame(() => {
-            searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-    }, [searchMode, searchQuery]);
+        if (options?.scrollToSets !== false) {
+            requestAnimationFrame(() => {
+                searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        }
+    }, [browseSeeAllId, searchMode, searchQuery, tab]);
+
+    const dismissPreviewToSearch = collapseSetInspector;
 
     const pushPosterLocation = useCallback((next: PosterSetsUrlState, mode: 'push' | 'replace' = 'push') => {
         syncedSetUrlRef.current = next.tab === 'apply' ? next.setUrl : null;
@@ -1681,33 +1698,39 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     };
 
-    /** Open Apply with this set selected and kick off preview (Browse / Recent). */
-    const openSetForApply = async (set: PosterSetsSearchSet, options?: { skipUrl?: boolean }) => {
+    /** Expand a set inline and load preview without wiping search/browse results. */
+    const expandSetInline = async (
+        set: PosterSetsSearchSet,
+        options?: { skipUrl?: boolean; stayOnTab?: boolean; toggle?: boolean },
+    ) => {
         const target = String(set.url || '').trim();
         if (!target) {
             toast('This set is missing a URL.', 'error');
             return;
         }
+        const sameKey = selectedSearchSet
+            && relatedSetKey(selectedSearchSet) === relatedSetKey(set)
+            && (Boolean(preview) || busy === 'preview');
+        if (options?.toggle !== false && sameKey) {
+            collapseSetInspector({ scrollToSets: false });
+            return;
+        }
+
         const restrictTitleCards = isTitleCardSet(set);
-        setBrowseSeeAllId(null);
-        creatorSearchAbortRef.current?.abort();
-        creatorSearchAbortRef.current = null;
-        setSearchQuery('');
-        setSearchTitles([]);
-        setSearchSets([]);
-        setSearchSetsPage(1);
-        setSearchLoadingMore(false);
-        setSearchContext('');
-        setSelectedSearchTitle(null);
+        const stayOnTab = Boolean(options?.stayOnTab);
+        setShowInspectorAssets(false);
         setSelectedSearchSet(set);
         setUrl(target);
         setTitleCardsOnly(restrictTitleCards);
         titleCardsOnlyRef.current = restrictTitleCards;
-        setPreview(null);
-        setSelectedAssetIds([]);
         scrollPreviewAfterLoadRef.current = true;
-        setTab('apply');
-        if (!options?.skipUrl) {
+
+        if (!stayOnTab) {
+            setBrowseSeeAllId(null);
+            setTab('apply');
+        }
+
+        if (!options?.skipUrl && !stayOnTab) {
             pushPosterLocation({
                 tab: 'apply',
                 rail: null,
@@ -1715,15 +1738,32 @@ export const PosterSetsDashboard: React.FC = () => {
                 creator: null,
                 titleCardsOnly: restrictTitleCards,
             }, 'push');
-        } else {
+        } else if (!stayOnTab) {
             syncedSetUrlRef.current = target;
+        } else if (tab === 'apply' && !options?.skipUrl) {
+            pushPosterLocation({
+                tab: 'apply',
+                rail: null,
+                setUrl: target,
+                creator: null,
+                titleCardsOnly: restrictTitleCards,
+            }, 'push');
         }
-        await runPreview(target, { scroll: false, keepSearch: false, titleCardsOnly: restrictTitleCards });
-        // Scroll after React paints the preview panel at the top of Apply.
+
+        await runPreview(target, {
+            scroll: false,
+            keepSearch: true,
+            titleCardsOnly: restrictTitleCards,
+        });
         window.setTimeout(() => {
-            previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            previewPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             scrollPreviewAfterLoadRef.current = false;
-        }, 250);
+        }, 200);
+    };
+
+    /** Deep links / Recent / Queue reopen — Apply with set expanded (keeps any existing search). */
+    const openSetForApply = async (set: PosterSetsSearchSet, options?: { skipUrl?: boolean }) => {
+        await expandSetInline(set, { skipUrl: options?.skipUrl, stayOnTab: false, toggle: false });
     };
     const openSetForApplyRef = useRef(openSetForApply);
     openSetForApplyRef.current = openSetForApply;
@@ -2019,15 +2059,6 @@ export const PosterSetsDashboard: React.FC = () => {
             return;
         }
         setSelectedAssetIds(ids);
-        const label = matchedIds.length
-            ? `Queue ${matchedIds.length} matched poster${matchedIds.length === 1 ? '' : 's'} for apply?`
-            : `Queue ${ids.length} poster${ids.length === 1 ? '' : 's'} for apply?`;
-        const ok = await askConfirm(label, {
-            title: 'Add to apply queue?',
-            confirmLabel: 'Add to queue',
-            cancelLabel: 'Cancel',
-        });
-        if (!ok) return;
         setBusy('apply');
         try {
             const target = url.trim();
@@ -2043,7 +2074,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 mediuxFilters: filtersForSelectedIds(ids),
             });
             await loadQueue();
-            dismissPreviewToSearch();
+            collapseSetInspector({ scrollToSets: tab === 'apply' && searchSets.length > 0 });
             toast(queuePaused
                 ? `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'} (queue paused).`
                 : `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'}.`);
@@ -2293,8 +2324,9 @@ export const PosterSetsDashboard: React.FC = () => {
         });
         setUrl(built);
         if (andPreview) {
+            setShowInspectorAssets(false);
             pushPosterLocation({ tab: 'apply', rail: null, setUrl: built, creator: null, titleCardsOnly: false }, 'push');
-            await runPreview(built, { titleCardsOnly: false });
+            await runPreview(built, { titleCardsOnly: false, keepSearch: true });
         } else toast('Set URL filled — preview or apply when ready.');
     };
 
@@ -2541,7 +2573,7 @@ export const PosterSetsDashboard: React.FC = () => {
             // Focus on sets: titles list becomes a back action only.
             setSearchTitles([]);
             const dupes = Number(response.dupesCollapsed || 0);
-            toast(`Choose a set for ${title.title}${dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} collapsed` : ''}.`);
+            toast(`Sets for ${title.title}${dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} collapsed` : ''}. Expand one to queue.`);
             if (response.partialErrors?.length) toast(response.partialErrors[0], 'error');
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
@@ -2620,17 +2652,7 @@ export const PosterSetsDashboard: React.FC = () => {
     };
 
     const pickSearchSet = async (set: PosterSetsSearchSet) => {
-        const restrictTitleCards = isTitleCardSet(set);
-        setSelectedSearchSet(set);
-        setUrl(set.url);
-        pushPosterLocation({
-            tab: 'apply',
-            rail: null,
-            setUrl: String(set.url || '').trim() || null,
-            creator: null,
-            titleCardsOnly: restrictTitleCards,
-        }, 'push');
-        await runPreview(set.url, { titleCardsOnly: restrictTitleCards });
+        await expandSetInline(set, { stayOnTab: true, toggle: true });
     };
 
     const backToTitles = () => {
@@ -2653,6 +2675,7 @@ export const PosterSetsDashboard: React.FC = () => {
         setSelectedSearchTitle(null);
         setSelectedSearchSet(null);
         setPreview(null);
+        setShowInspectorAssets(false);
         setSelectedAssetIds([]);
         setUrl('');
         setTitleCardsOnly(false);
@@ -2729,8 +2752,29 @@ export const PosterSetsDashboard: React.FC = () => {
     }, [watchesPageCount]);
 
     const readyToApply = Boolean(preview);
-    const directPreviewMode = !searchSets.length && !searchTitles.length
-        && (Boolean(preview) || (busy === 'preview' && Boolean(String(url || '').trim())));
+    const inspectorOpen = Boolean(
+        selectedSearchSet
+        || preview
+        || (busy === 'preview' && Boolean(String(url || '').trim())),
+    );
+    const matchedThumbStrip = useMemo(() => {
+        const assets = (preview?.assets || []).filter((asset) => asset.matched === true);
+        return assets.map((asset) => ({
+            id: asset.id,
+            title: asset.title,
+            thumbUrl: asset.thumbUrl ? posterSetsApi.imageUrl(asset.thumbUrl) : '',
+        }));
+    }, [preview]);
+
+    const queueEntireWithConfirm = async () => {
+        const ok = await askConfirm('Queue the entire set, including posters not matched in your libraries?', {
+            title: 'Queue full set?',
+            confirmLabel: 'Add to queue',
+            cancelLabel: 'Cancel',
+        });
+        if (!ok) return;
+        void runApply(false);
+    };
 
     useEffect(() => {
         if (tab !== 'apply' || !preview || !scrollPreviewAfterLoadRef.current) return undefined;
@@ -2892,7 +2936,7 @@ export const PosterSetsDashboard: React.FC = () => {
     });
 
     return (
-        <div className={`flex w-full min-w-0 animate-fade-in flex-col gap-4 sm:gap-6 ${selectedBulkCount > 0 || (tab === 'apply' && readyToApply) ? 'pb-28' : 'pb-10'}`}>
+        <div className={`flex w-full min-w-0 animate-fade-in flex-col gap-4 sm:gap-6 ${selectedBulkCount > 0 || inspectorOpen ? 'pb-28' : 'pb-10'}`}>
             <ToastContainer toasts={toasts} setToasts={setToasts} />
 
             <header className={`${cardClass} overflow-hidden p-4 text-center sm:p-6`}>
@@ -3042,11 +3086,58 @@ export const PosterSetsDashboard: React.FC = () => {
                                         disabled={busy !== null}
                                         bulkSelected={Boolean(selectedBulkSets[set.url])}
                                         onToggleBulk={() => toggleBulkSet(bulkEntryFromSet(set))}
-                                        onOpen={(item) => void openSetForApply(item)}
+                                        expanded={Boolean(selectedSearchSet && relatedSetKey(selectedSearchSet) === relatedSetKey(set))}
+                                        onOpen={(item) => void expandSetInline(item, { stayOnTab: true, toggle: true, skipUrl: true })}
                                         onOpenCreator={openCreatorCatalog}
                                     />
                                 ))}
                             </div>
+                            {inspectorOpen && tab === 'browse' ? (
+                                <div className="mt-4">
+                                    <SetInspector
+                                        panelRef={previewPanelRef}
+                                        set={selectedSearchSet}
+                                        headerLabel={previewHeaderLabel}
+                                        loading={busy === 'preview'}
+                                        ready={readyToApply}
+                                        matchedCount={matchedAssetCount}
+                                        unmatchedCount={preview?.unmatched ?? 0}
+                                        totalCount={preview?.total || 0}
+                                        selectedCount={selectedAssetIds.length}
+                                        titleCardsOnly={titleCardsOnly}
+                                        showAssets={showInspectorAssets}
+                                        busy={busy}
+                                        onToggleShowAssets={() => setShowInspectorAssets((value) => !value)}
+                                        onQueueMatched={() => void applyMatched()}
+                                        onQueueSelected={() => void runApply(true)}
+                                        onQueueEntire={() => void queueEntireWithConfirm()}
+                                        onQueueUnmatched={() => void applyUnmatched()}
+                                        onQueueNewSinceWatch={() => void applyNewSinceWatch()}
+                                        onSelectMatched={() => selectPreviewAssets('matched')}
+                                        onSelectAll={() => selectPreviewAssets('all')}
+                                        onClearSelection={() => selectPreviewAssets('none')}
+                                        onClose={() => collapseSetInspector({ scrollToSets: false })}
+                                        thumbStrip={<SetInspectorThumbStrip thumbs={matchedThumbStrip} />}
+                                        gallery={(
+                                            <PreviewAssetGallery
+                                                sections={previewSections}
+                                                selectedAssetIds={selectedAssetIds}
+                                                onToggle={toggleAsset}
+                                            />
+                                        )}
+                                        relatedRail={(
+                                            <RelatedSetsRail
+                                                sets={relatedSets}
+                                                loading={relatedSetsLoading}
+                                                mediaLabel={inferPreviewMediaType(preview) === 'show' ? 'show' : 'movie'}
+                                                disabled={busy !== null}
+                                                onOpen={(item) => void expandSetInline(item, { stayOnTab: true, toggle: false, skipUrl: true })}
+                                                onOpenCreator={openCreatorCatalog}
+                                            />
+                                        )}
+                                    />
+                                </div>
+                            ) : null}
                             {!browseSeeAllRail.sets.length && browseLoading ? (
                                 <div className="flex items-center gap-2 text-sm text-muted">
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -3132,8 +3223,9 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 set={set}
                                                 disabled={busy !== null}
                                                 bulkSelected={Boolean(selectedBulkSets[set.url])}
+                                                expanded={Boolean(selectedSearchSet && relatedSetKey(selectedSearchSet) === relatedSetKey(set))}
                                                 onToggleBulk={() => toggleBulkSet(bulkEntryFromSet(set))}
-                                                onOpen={(item) => void openSetForApply(item)}
+                                                onOpen={(item) => void expandSetInline(item, { stayOnTab: true, toggle: true, skipUrl: true })}
                                                 onOpenCreator={openCreatorCatalog}
                                             />
                                         ))}
@@ -3152,6 +3244,52 @@ export const PosterSetsDashboard: React.FC = () => {
                                     ) : null}
                                 </div>
                             ))}
+                            {inspectorOpen && tab === 'browse' && !browseSeeAllRail ? (
+                                <div className="mt-4">
+                                    <SetInspector
+                                        panelRef={previewPanelRef}
+                                        set={selectedSearchSet}
+                                        headerLabel={previewHeaderLabel}
+                                        loading={busy === 'preview'}
+                                        ready={readyToApply}
+                                        matchedCount={matchedAssetCount}
+                                        unmatchedCount={preview?.unmatched ?? 0}
+                                        totalCount={preview?.total || 0}
+                                        selectedCount={selectedAssetIds.length}
+                                        titleCardsOnly={titleCardsOnly}
+                                        showAssets={showInspectorAssets}
+                                        busy={busy}
+                                        onToggleShowAssets={() => setShowInspectorAssets((value) => !value)}
+                                        onQueueMatched={() => void applyMatched()}
+                                        onQueueSelected={() => void runApply(true)}
+                                        onQueueEntire={() => void queueEntireWithConfirm()}
+                                        onQueueUnmatched={() => void applyUnmatched()}
+                                        onQueueNewSinceWatch={() => void applyNewSinceWatch()}
+                                        onSelectMatched={() => selectPreviewAssets('matched')}
+                                        onSelectAll={() => selectPreviewAssets('all')}
+                                        onClearSelection={() => selectPreviewAssets('none')}
+                                        onClose={() => collapseSetInspector({ scrollToSets: false })}
+                                        thumbStrip={<SetInspectorThumbStrip thumbs={matchedThumbStrip} />}
+                                        gallery={(
+                                            <PreviewAssetGallery
+                                                sections={previewSections}
+                                                selectedAssetIds={selectedAssetIds}
+                                                onToggle={toggleAsset}
+                                            />
+                                        )}
+                                        relatedRail={(
+                                            <RelatedSetsRail
+                                                sets={relatedSets}
+                                                loading={relatedSetsLoading}
+                                                mediaLabel={inferPreviewMediaType(preview) === 'show' ? 'show' : 'movie'}
+                                                disabled={busy !== null}
+                                                onOpen={(item) => void expandSetInline(item, { stayOnTab: true, toggle: false, skipUrl: true })}
+                                                onOpenCreator={openCreatorCatalog}
+                                            />
+                                        )}
+                                    />
+                                </div>
+                            ) : null}
                         </>
                     )}
                 </section>
@@ -4111,165 +4249,10 @@ export const PosterSetsDashboard: React.FC = () => {
             {tab === 'apply' ? (
                 <div className="min-w-0 space-y-4">
                     <section className={`${cardClass} min-w-0 space-y-4 overflow-hidden p-5`}>
-                        {directPreviewMode ? (
-                            <>
-                                <div>
-                                    <p className="text-xs font-bold uppercase tracking-wide text-plex">Preview & queue</p>
-                                    <p className="mt-1 text-sm text-muted">
-                                        Review this set, then queue matched or selected art to Plex.
-                                    </p>
-                                </div>
-                                {busy === 'preview' && !preview ? (
-                                    <div
-                                        ref={previewPanelRef}
-                                        className="flex items-center gap-3"
-                                    >
-                                        <Loader2 className="h-5 w-5 shrink-0 animate-spin text-plex" />
-                                        <div className="min-w-0">
-                                            <p className="text-sm font-semibold text-text">Loading set preview…</p>
-                                            <p className="truncate text-xs text-muted" title={formatSetLabel(selectedSearchSet) || url}>
-                                                {formatSetLabel(selectedSearchSet) || url}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ) : null}
-                                {readyToApply ? (
-                                    <div ref={previewPanelRef} className="min-w-0 space-y-4">
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                            <div className="min-w-0">
-                                                <h3 className="truncate text-lg font-bold text-text" title={previewHeaderLabel}>
-                                                    {previewHeaderLabel}
-                                                </h3>
-                                                <p className="mt-1 text-sm text-muted">
-                                                    <span className="text-emerald-300">{matchedAssetCount} matched</span>
-                                                    {' · '}
-                                                    <span className="text-amber-200">{preview?.unmatched ?? 0} missing</span>
-                                                    {' · '}
-                                                    {preview?.total || 0} in set
-                                                    {' · '}
-                                                    {selectedAssetIds.length} selected
-                                                </p>
-                                                <p className="mt-1 text-xs text-muted">
-                                                    {titleCardsOnly
-                                                        ? 'Title-card pack — only episode title cards from this set. Tap to select.'
-                                                        : 'Covers are tall posters; title cards show as landscape galleries by season. Tap to select.'}
-                                                </p>
-                                                <div className="mt-2 flex flex-wrap gap-3">
-                                                    <button
-                                                        type="button"
-                                                        className="text-xs font-semibold text-plex hover:underline"
-                                                        onClick={clearSearch}
-                                                    >
-                                                        Search for another set
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="text-xs font-semibold text-muted hover:text-text"
-                                                        onClick={() => goToTab('browse')}
-                                                    >
-                                                        Back to Browse
-                                                    </button>
-                                                </div>
-                                            </div>
-                                            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-                                                <button
-                                                    type="button"
-                                                    className={`${primaryButtonClass} sm:min-w-[220px]`}
-                                                    disabled={busy !== null || (matchedAssetCount < 1 && !selectedAssetIds.length)}
-                                                    onClick={() => void applyMatched()}
-                                                >
-                                                    {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                                    Queue matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={buttonClass}
-                                                    disabled={busy !== null}
-                                                    onClick={async () => {
-                                                        const ok = await askConfirm('Queue the entire set, including posters not matched in your libraries?', {
-                                                            title: 'Queue full set?',
-                                                            confirmLabel: 'Add to queue',
-                                                            cancelLabel: 'Cancel',
-                                                        });
-                                                        if (!ok) return;
-                                                        void runApply(false);
-                                                    }}
-                                                >
-                                                    Queue entire set
-                                                </button>
-                                            </div>
-                                        </div>
-                                        {(preview?.assets || []).length ? (
-                                            <div className="space-y-3 border-t border-white/10 pt-4">
-                                                <div className="flex flex-wrap gap-2">
-                                                    <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('matched')}>Matched only</button>
-                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void applyUnmatched()}>Queue unmatched</button>
-                                                    <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void applyNewSinceWatch()}>Queue new since watch</button>
-                                                    <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('all')}>Select all</button>
-                                                    <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('none')}>Clear selection</button>
-                                                    <button type="button" className={buttonClass} disabled={busy !== null || !selectedAssetIds.length} onClick={() => void runApply(true)}>
-                                                        Queue selected ({selectedAssetIds.length})
-                                                    </button>
-                                                </div>
-                                                <PreviewAssetGallery
-                                                    sections={previewSections}
-                                                    selectedAssetIds={selectedAssetIds}
-                                                    onToggle={toggleAsset}
-                                                />
-                                                <RelatedSetsRail
-                                                    sets={relatedSets}
-                                                    loading={relatedSetsLoading}
-                                                    mediaLabel={inferPreviewMediaType(preview) === 'show' ? 'show' : 'movie'}
-                                                    disabled={busy !== null}
-                                                    onOpen={(item) => void openSetForApply(item)}
-                                                    onOpenCreator={openCreatorCatalog}
-                                                />
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <p className="border-t border-white/10 pt-4 text-sm text-amber-200">
-                                                    This set previewed with no assets. Check MediUX filters in Settings, or try another set.
-                                                </p>
-                                                <RelatedSetsRail
-                                                    sets={relatedSets}
-                                                    loading={relatedSetsLoading}
-                                                    mediaLabel={inferPreviewMediaType(preview) === 'show' ? 'show' : 'movie'}
-                                                    disabled={busy !== null}
-                                                    onOpen={(item) => void openSetForApply(item)}
-                                                    onOpenCreator={openCreatorCatalog}
-                                                />
-                                            </>
-                                        )}
-                                        <div className="flex flex-wrap gap-2">
-                                            <button
-                                                type="button"
-                                                className={`${primaryButtonClass} flex-1 sm:flex-none sm:min-w-[220px]`}
-                                                disabled={busy !== null || (matchedAssetCount < 1 && !selectedAssetIds.length)}
-                                                onClick={() => void applyMatched()}
-                                            >
-                                                {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                                Queue matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={buttonClass}
-                                                disabled={busy !== null || !selectedAssetIds.length}
-                                                onClick={() => void runApply(true)}
-                                            >
-                                                Queue selected ({selectedAssetIds.length})
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : null}
-                            </>
-                        ) : null}
-
-                        {!directPreviewMode ? (
-                        <>
                         <div>
-                            <label className="text-xs font-bold uppercase tracking-wide text-muted">Search → choose set → preview → apply</label>
+                            <label className="text-xs font-bold uppercase tracking-wide text-muted">Find poster sets</label>
                             <p className="mt-1 text-sm text-muted">
-                                Find a title, pick a poster set, review the art, then apply matched posters to Plex.
+                                Search → expand inline → queue matched
                             </p>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 {([
@@ -4292,6 +4275,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                             setSearchContext('');
                                             setSelectedSearchTitle(null);
                                             setSelectedSearchSet(null);
+                                            setPreview(null);
+                                            setShowInspectorAssets(false);
                                         }}
                                     >
                                         {label}
@@ -4315,6 +4300,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                             setSearchContext('');
                                             setSelectedSearchTitle(null);
                                             setSelectedSearchSet(null);
+                                            setPreview(null);
+                                            setShowInspectorAssets(false);
                                         }}
                                     >
                                         <Icon className="h-4 w-4" />
@@ -4417,7 +4404,7 @@ export const PosterSetsDashboard: React.FC = () => {
 
                             {searchTitles.length ? (
                                 <div className="mt-4 space-y-2">
-                                    <p className="text-xs font-bold uppercase tracking-wide text-muted">1. Choose a title</p>
+                                    <p className="text-xs font-bold uppercase tracking-wide text-muted">Choose a title</p>
                                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                         {searchTitles.map((title) => (
                                             <button
@@ -4461,17 +4448,15 @@ export const PosterSetsDashboard: React.FC = () => {
                                 </div>
                             ) : null}
 
-                            <div className="flex flex-col">
                             {searchSets.length ? (
-                                <div ref={searchSetsSectionRef} className="order-2 mt-4 space-y-2">
+                                <div ref={searchSetsSectionRef} className="mt-4 space-y-2">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                                            2. Choose a poster set{searchContext ? ` · ${searchContext}` : ''}
+                                            Poster sets{searchContext ? ` · ${searchContext}` : ''}
                                             {searchSets.length > SEARCH_SETS_PAGE_SIZE
                                                 ? ` · ${searchSets.length} sets`
                                                 : ''}
                                             {searchLoadingMore ? ' · loading more…' : ''}
-                                            {readyToApply ? ' · pick another set anytime' : ''}
                                         </p>
                                         {searchSetsPageCount > 1 ? (
                                             <div className="flex items-center gap-2">
@@ -4506,12 +4491,12 @@ export const PosterSetsDashboard: React.FC = () => {
                                             const bulkSelected = Boolean(selectedBulkSets[set.url]);
                                             const watching = isSetWatched(set);
                                             const landscape = isTitleCardSet(set);
+                                            const expanded = Boolean(selectedSearchSet && relatedSetKey(selectedSearchSet) === relatedSetKey(set));
                                             return (
                                             <div
                                                 key={`${set.provider || findProvider}-${set.setId}`}
                                                 className={`relative overflow-hidden ${posterMediaRadiusClass} border text-left transition ${
-                                                    selectedSearchSet?.setId === set.setId
-                                                    && (selectedSearchSet?.provider || '') === (set.provider || '')
+                                                    expanded
                                                         ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/30'
                                                         : bulkSelected
                                                             ? 'border-plex/40 bg-black/20 ring-1 ring-plex/20'
@@ -4565,7 +4550,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             <ImageIcon className="h-8 w-8 opacity-40" />
                                                         </div>
                                                     )}
-                                                    {busy === 'preview' && selectedSearchSet?.setId === set.setId ? (
+                                                    {busy === 'preview' && expanded ? (
                                                         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                                                             <Loader2 className="h-6 w-6 animate-spin text-plex" />
                                                         </div>
@@ -4620,208 +4605,124 @@ export const PosterSetsDashboard: React.FC = () => {
                                 </div>
                             ) : null}
 
-                            {readyToApply ? (
-                                <div ref={previewPanelRef} className="order-1 mt-4 min-w-0 space-y-4 border-t border-white/10 pt-4">
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                        <div className="min-w-0">
-                                            <p className="text-xs font-bold uppercase tracking-wide text-plex">3. Preview</p>
-                                            <h3 className="mt-1 truncate text-lg font-bold text-text" title={previewHeaderLabel}>
-                                                {previewHeaderLabel}
-                                            </h3>
-                                            <p className="mt-1 text-sm text-muted">
-                                                <span className="text-emerald-300">{matchedAssetCount} matched</span>
-                                                {' · '}
-                                                <span className="text-amber-200">{preview?.unmatched ?? 0} missing</span>
-                                                {' · '}
-                                                {preview?.total || 0} in set
-                                                {' · '}
-                                                {selectedAssetIds.length} selected
-                                            </p>
-                                            <p className="mt-1 text-xs text-muted">
-                                                {titleCardsOnly
-                                                    ? 'Title-card pack — only episode title cards from this set. Tap to select.'
-                                                    : 'Covers are tall posters; title cards show as landscape galleries by season. Tap to select.'}
-                                            </p>
-                                            <div className="mt-2 flex flex-wrap gap-3">
-                                                {searchSets.length ? (
-                                                    <button
-                                                        type="button"
-                                                        className="text-xs font-semibold text-plex hover:underline"
-                                                        onClick={() => {
-                                                            setPreview(null);
-                                                            setSelectedSearchSet(null);
-                                                            setSelectedAssetIds([]);
-                                                            setUrl('');
-                                                            requestAnimationFrame(() => {
-                                                                searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                                            });
-                                                        }}
-                                                    >
-                                                        Back to search results
-                                                    </button>
-                                                ) : null}
-                                                <button
-                                                    type="button"
-                                                    className="text-xs font-semibold text-muted hover:text-text"
-                                                    onClick={clearSearch}
-                                                >
-                                                    Clear search
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-                                            <button
-                                                type="button"
-                                                className={`${primaryButtonClass} sm:min-w-[220px]`}
-                                                disabled={busy !== null || (matchedAssetCount < 1 && !selectedAssetIds.length)}
-                                                onClick={() => void applyMatched()}
-                                            >
-                                                {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                                Queue matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={buttonClass}
+                            {inspectorOpen ? (
+                                <div className="mt-4">
+                                    <SetInspector
+                                        panelRef={previewPanelRef}
+                                        set={selectedSearchSet}
+                                        headerLabel={previewHeaderLabel}
+                                        loading={busy === 'preview'}
+                                        ready={readyToApply}
+                                        matchedCount={matchedAssetCount}
+                                        unmatchedCount={preview?.unmatched ?? 0}
+                                        totalCount={preview?.total || 0}
+                                        selectedCount={selectedAssetIds.length}
+                                        titleCardsOnly={titleCardsOnly}
+                                        showAssets={showInspectorAssets}
+                                        busy={busy}
+                                        onToggleShowAssets={() => setShowInspectorAssets((value) => !value)}
+                                        onQueueMatched={() => void applyMatched()}
+                                        onQueueSelected={() => void runApply(true)}
+                                        onQueueEntire={() => void queueEntireWithConfirm()}
+                                        onQueueUnmatched={() => void applyUnmatched()}
+                                        onQueueNewSinceWatch={() => void applyNewSinceWatch()}
+                                        onSelectMatched={() => selectPreviewAssets('matched')}
+                                        onSelectAll={() => selectPreviewAssets('all')}
+                                        onClearSelection={() => selectPreviewAssets('none')}
+                                        onClose={() => collapseSetInspector({ scrollToSets: false })}
+                                        thumbStrip={<SetInspectorThumbStrip thumbs={matchedThumbStrip} />}
+                                        gallery={(
+                                            <PreviewAssetGallery
+                                                sections={previewSections}
+                                                selectedAssetIds={selectedAssetIds}
+                                                onToggle={toggleAsset}
+                                            />
+                                        )}
+                                        relatedRail={(
+                                            <RelatedSetsRail
+                                                sets={relatedSets}
+                                                loading={relatedSetsLoading}
+                                                mediaLabel={inferPreviewMediaType(preview) === 'show' ? 'show' : 'movie'}
                                                 disabled={busy !== null}
-                                                onClick={async () => {
-                                                    const ok = await askConfirm('Queue the entire set, including posters not matched in your libraries?', {
-                                                        title: 'Queue full set?',
-                                                        confirmLabel: 'Add to queue',
-                                                        cancelLabel: 'Cancel',
-                                                    });
-                                                    if (!ok) return;
-                                                    void runApply(false);
-                                                }}
-                                            >
-                                                Queue entire set
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-3 border-t border-white/10 pt-4">
-                                        <div className="flex flex-wrap gap-2">
-                                            <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('matched')}>Matched only</button>
-                                            <button
-                                                type="button"
-                                                className={buttonClass}
-                                                disabled={busy !== null}
-                                                onClick={() => void applyUnmatched()}
-                                            >
-                                                Queue unmatched
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={buttonClass}
-                                                disabled={busy !== null}
-                                                onClick={() => void applyNewSinceWatch()}
-                                            >
-                                                Queue new since watch
-                                            </button>
-                                            <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('all')}>Select all</button>
-                                            <button type="button" className={buttonClass} onClick={() => selectPreviewAssets('none')}>Clear selection</button>
-                                            <button
-                                                type="button"
-                                                className={buttonClass}
-                                                disabled={busy !== null || !selectedAssetIds.length}
-                                                onClick={() => void runApply(true)}
-                                            >
-                                                Queue selected ({selectedAssetIds.length})
-                                            </button>
-                                        </div>
-                                        <PreviewAssetGallery
-                                            sections={previewSections}
-                                            selectedAssetIds={selectedAssetIds}
-                                            onToggle={toggleAsset}
-                                        />
-                                        <RelatedSetsRail
-                                            sets={relatedSets}
-                                            loading={relatedSetsLoading}
-                                            mediaLabel={inferPreviewMediaType(preview) === 'show' ? 'show' : 'movie'}
-                                            disabled={busy !== null}
-                                            onOpen={(item) => void openSetForApply(item)}
-                                            onOpenCreator={openCreatorCatalog}
-                                        />
-                                    </div>
-
-                                    <div className="flex flex-wrap gap-2">
-                                        <button
-                                            type="button"
-                                            className={`${primaryButtonClass} flex-1 sm:flex-none sm:min-w-[220px]`}
-                                            disabled={busy !== null || (matchedAssetCount < 1 && !selectedAssetIds.length)}
-                                            onClick={() => void applyMatched()}
-                                        >
-                                            {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                            Queue matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={buttonClass}
-                                            disabled={busy !== null || !selectedAssetIds.length}
-                                            onClick={() => void runApply(true)}
-                                        >
-                                            Queue selected ({selectedAssetIds.length})
-                                        </button>
-                                    </div>
+                                                onOpen={(item) => void expandSetInline(item, { stayOnTab: true, toggle: false })}
+                                                onOpenCreator={openCreatorCatalog}
+                                            />
+                                        )}
+                                    />
                                 </div>
                             ) : null}
-                            </div>
 
                             <div className="mt-5 border-t border-white/10 pt-4">
                                 <button
                                     type="button"
-                                    className="text-xs font-bold uppercase tracking-wide text-muted hover:text-text"
-                                    onClick={() => setManualUrlOpen((value) => !value)}
+                                    className="flex w-full items-center justify-between gap-3 text-left"
+                                    onClick={() => setAdvancedOpen((value) => !value)}
                                 >
-                                    {manualUrlOpen ? 'Hide manual URL / set ID' : 'Manual URL / set ID'}
+                                    <div>
+                                        <h2 className="text-sm font-bold text-text">Advanced</h2>
+                                        <p className="mt-1 text-xs text-muted">Manual URL / set ID and bulk import.</p>
+                                    </div>
+                                    {advancedOpen ? <ChevronUp className="h-4 w-4 text-muted" /> : <ChevronDown className="h-4 w-4 text-muted" />}
                                 </button>
-                                {manualUrlOpen ? (
-                                    <div className="mt-3 space-y-3">
-                                        <div className="flex flex-wrap gap-2">
-                                            {([
-                                                ['mediux', 'MediUX'],
-                                                ['posterdb', 'ThePosterDB'],
-                                            ] as const).map(([id, label]) => (
-                                                <button
-                                                    key={id}
-                                                    type="button"
-                                                    className={`${buttonClass} !py-1.5 text-xs ${findProvider === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
-                                                    onClick={() => setFindProvider(id)}
-                                                >
-                                                    {label}
+                                {advancedOpen ? (
+                                    <div className="mt-4 space-y-5">
+                                        <div className="space-y-3">
+                                            <p className="text-xs font-bold uppercase tracking-wide text-muted">Manual URL / set ID</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {([
+                                                    ['mediux', 'MediUX'],
+                                                    ['posterdb', 'ThePosterDB'],
+                                                ] as const).map(([id, label]) => (
+                                                    <button
+                                                        key={id}
+                                                        type="button"
+                                                        className={`${buttonClass} !py-1.5 text-xs ${findProvider === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
+                                                        onClick={() => setFindProvider(id)}
+                                                    >
+                                                        {label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <div className="flex flex-col gap-2 sm:flex-row">
+                                                <input
+                                                    className={fieldClass}
+                                                    value={findId}
+                                                    onChange={(event) => setFindId(event.target.value)}
+                                                    onKeyDown={(event) => {
+                                                        if (event.key === 'Enter') {
+                                                            event.preventDefault();
+                                                            void useFindId(true);
+                                                        }
+                                                    }}
+                                                    placeholder={findProvider === 'mediux' ? 'Set ID e.g. 24522' : 'Set ID e.g. 11318 or username'}
+                                                />
+                                                <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void useFindId(true)}>
+                                                    Load set
                                                 </button>
-                                            ))}
-                                        </div>
-                                        <div className="flex flex-col gap-2 sm:flex-row">
+                                            </div>
                                             <input
                                                 className={fieldClass}
-                                                value={findId}
-                                                onChange={(event) => setFindId(event.target.value)}
-                                                onKeyDown={(event) => {
-                                                    if (event.key === 'Enter') {
-                                                        event.preventDefault();
-                                                        void useFindId(true);
-                                                    }
-                                                }}
-                                                placeholder={findProvider === 'mediux' ? 'Set ID e.g. 24522' : 'Set ID e.g. 11318 or username'}
+                                                placeholder="https://mediux.pro/sets/… or https://theposterdb.com/set/…"
+                                                value={url}
+                                                onChange={(event) => setUrl(event.target.value)}
                                             />
-                                            <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void useFindId(true)}>
-                                                Preview set
-                                            </button>
-                                        </div>
-                                        <input
-                                            className={fieldClass}
-                                            placeholder="https://mediux.pro/sets/… or https://theposterdb.com/set/…"
-                                            value={url}
-                                            onChange={(event) => setUrl(event.target.value)}
-                                        />
-                                        <div className="flex flex-wrap gap-2">
-                                            <button
-                                                type="button"
-                                                className={buttonClass}
-                                                disabled={busy !== null}
-                                                onClick={() => {
-                                                    const target = String(url).trim();
-                                                    if (target) {
+                                            <div className="flex flex-wrap gap-2">
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    disabled={busy !== null}
+                                                    onClick={() => {
+                                                        const target = String(url).trim();
+                                                        if (!target) {
+                                                            toast('Paste a set URL first.', 'error');
+                                                            return;
+                                                        }
+                                                        setSelectedSearchSet({
+                                                            setId: '',
+                                                            title: target,
+                                                            url: target,
+                                                        });
+                                                        setShowInspectorAssets(false);
                                                         pushPosterLocation({
                                                             tab: 'apply',
                                                             rail: null,
@@ -4829,29 +4730,41 @@ export const PosterSetsDashboard: React.FC = () => {
                                                             creator: null,
                                                             titleCardsOnly: false,
                                                         }, 'push');
-                                                    }
-                                                    void runPreview(undefined, { titleCardsOnly: false });
-                                                }}
-                                            >
-                                                {busy === 'preview' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                                                Preview
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={primaryButtonClass}
-                                                disabled={busy !== null || !url.trim()}
-                                                onClick={() => void (readyToApply ? applyMatched() : runApply(false))}
-                                            >
-                                                {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                                {readyToApply ? `Queue matched (${matchedAssetCount || selectedAssetIds.length})` : 'Queue apply'}
-                                            </button>
+                                                        void runPreview(target, { titleCardsOnly: false, keepSearch: true });
+                                                    }}
+                                                >
+                                                    {busy === 'preview' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                                                    Load URL
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-3 border-t border-white/10 pt-4">
+                                            <div>
+                                                <h3 className="text-sm font-bold text-text">Bulk import</h3>
+                                                <p className="mt-1 text-sm text-muted">One URL per line. Lines starting with # or // are ignored.</p>
+                                            </div>
+                                            <textarea
+                                                className={`${fieldClass} min-h-36 font-mono text-xs`}
+                                                value={bulkText}
+                                                onChange={(event) => setBulkText(event.target.value)}
+                                                placeholder={'https://mediux.pro/sets/123\nhttps://theposterdb.com/set/456'}
+                                            />
+                                            <div className="flex flex-wrap gap-2">
+                                                <button type="button" className={primaryButtonClass} disabled={busy !== null || !bulkText.trim()} onClick={() => void runBulk(false)}>
+                                                    {busy === 'bulk' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                                                    Apply bulk list
+                                                </button>
+                                                <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runBulk(true)}>
+                                                    {busy === 'bulk-file' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                                                    Apply from {configDraft.bulk_txt || 'bulk_import.txt'}
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 ) : null}
                             </div>
                         </div>
-                        </>
-                        ) : null}
                     </section>
 
                     {activeJob ? (
@@ -4875,29 +4788,6 @@ export const PosterSetsDashboard: React.FC = () => {
                             </div>
                         </section>
                     ) : null}
-
-                    <section className={`${cardClass} space-y-4 p-5`}>
-                        <div>
-                            <h2 className="text-lg font-bold text-text">Bulk import</h2>
-                            <p className="mt-1 text-sm text-muted">One URL per line. Lines starting with # or // are ignored.</p>
-                        </div>
-                        <textarea
-                            className={`${fieldClass} min-h-36 font-mono text-xs`}
-                            value={bulkText}
-                            onChange={(event) => setBulkText(event.target.value)}
-                            placeholder={'https://mediux.pro/sets/123\nhttps://theposterdb.com/set/456'}
-                        />
-                        <div className="flex flex-wrap gap-2">
-                            <button type="button" className={primaryButtonClass} disabled={busy !== null || !bulkText.trim()} onClick={() => void runBulk(false)}>
-                                {busy === 'bulk' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                                Apply bulk list
-                            </button>
-                            <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runBulk(true)}>
-                                {busy === 'bulk-file' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                Apply from {configDraft.bulk_txt || 'bulk_import.txt'}
-                            </button>
-                        </div>
-                    </section>
                 </div>
             ) : null}
 
@@ -5358,6 +5248,32 @@ export const PosterSetsDashboard: React.FC = () => {
                             onClick={clearBulkSelection}
                         >
                             Clear
+                        </button>
+                    </div>
+                </div>
+            ) : inspectorOpen && readyToApply ? (
+                <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] z-50 flex justify-center px-4 md:bottom-6">
+                    <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-xl border border-plex/40 bg-card/95 p-3 shadow-lg backdrop-blur">
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-text" title={previewHeaderLabel}>
+                            {previewHeaderLabel}
+                        </span>
+                        <button
+                            type="button"
+                            className={primaryButtonClass}
+                            disabled={busy !== null || (matchedAssetCount < 1 && !selectedAssetIds.length)}
+                            onClick={() => void applyMatched()}
+                        >
+                            {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                            Queue matched{matchedAssetCount ? ` (${matchedAssetCount})` : selectedAssetIds.length ? ` (${selectedAssetIds.length})` : ''}
+                        </button>
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={busy !== null}
+                            onClick={() => collapseSetInspector({ scrollToSets: tab === 'apply' && searchSets.length > 0 })}
+                        >
+                            <X className="h-4 w-4" />
+                            Close
                         </button>
                     </div>
                 </div>
