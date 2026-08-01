@@ -6,7 +6,7 @@ import { DiscoverSeries } from './DiscoverSeries';
 import { DiscoverCategoryPage } from './DiscoverCategoryPage';
 import { MediaDetailsPage } from './MediaDetailsPage';
 import { PersonDetailsPage } from './PersonDetailsPage';
-import { Film, Tv, Compass, ClipboardList, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Film, Tv, Compass, ClipboardList, AlertTriangle, ChevronDown, Music } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl, stripBasePath } from '../shared/basePath';
 import { normalizeRawDiscoveryItem } from './discoverItemUtils';
@@ -18,6 +18,8 @@ import { useMyRequestCount } from './useMyRequestCount';
 import { useMyIssueCount } from './useMyIssueCount';
 import { useDiscoveryMe } from './useDiscoveryMe';
 import { WatchlistPage } from './WatchlistPage';
+import { DiscoverMusic } from './DiscoverMusic';
+import { MusicArtistPage } from './MusicArtistPage';
 import { scrollPortalToTop, stashDiscoverDetailSeed } from './discoverNavigationUtils';
 import { resolveTmdbImageUrl } from './tmdbImageUrl';
 import { useDiscoverI18n } from './i18n';
@@ -144,29 +146,32 @@ const DiscoveryDashboardInner: React.FC<{
     const formatItem = (rawItem: any) => {
         const item = normalizeRawDiscoveryItem(rawItem);
         const isPerson = item.mediaType === 'person';
+        const isMusic = item.mediaType === 'music';
         const isMovie = item.mediaType === 'movie';
         const title = isPerson ? item.name : (isMovie ? (item.title || item.name) : (item.name || item.title));
         const year = (item.releaseDate || item.firstAirDate || '').substring(0, 4);
-        const posterUrl = resolveTmdbImageUrl(item.posterPath, 'w342');
+        const posterUrl = isMusic
+            ? (item.posterPath || item.posterUrl || null)
+            : resolveTmdbImageUrl(item.posterPath, 'w342');
         const profileUrl = resolveTmdbImageUrl(item.profilePath, 'w185');
         const overview = item.overview;
-        const mediaType = isPerson ? 'person' : (isMovie ? 'movie' : 'tv');
+        const mediaType = isPerson ? 'person' : (isMusic ? 'music' : (isMovie ? 'movie' : 'tv'));
 
         const availability = resolveMediaAvailabilityState(item);
-        const overlay = !isPerson && availability.kind !== 'none'
+        const overlay = !isPerson && !isMusic && availability.kind !== 'none'
             ? <DiscoverStatusOverlay state={availability} />
             : null;
 
         return {
             ...item,
-            id: item.tmdbId || item.id,
+            id: item.tmdbId || item.mbid || item.id,
             mediaType,
             title,
             year,
-            thumbUrl: isPerson ? profileUrl : posterUrl,
+            thumbUrl: isPerson ? profileUrl : (posterUrl || null),
             overview,
             type: mediaType,
-            tags: [isPerson ? t('mediaType.person') : (isMovie ? t('mediaType.movie') : t('mediaType.tvShow'))],
+            tags: [isPerson ? t('mediaType.person') : (isMusic ? t('mediaType.music') : (isMovie ? t('mediaType.movie') : t('mediaType.tvShow')))],
             status: item.mediaInfo?.status,
             availability,
             isAvailable: availability.kind === 'available',
@@ -207,6 +212,11 @@ const DiscoveryDashboardInner: React.FC<{
     };
 
     const openMedia = useCallback((item: any) => {
+        if (item.type === 'music' || item.mediaType === 'music') {
+            const mbid = item.mbid || item.id;
+            navigate(`/discovery/music/artist/${encodeURIComponent(String(mbid))}`);
+            return;
+        }
         stashDiscoverDetailSeed(item);
         navigate(`/discovery/${item.type}/${item.id}`);
     }, [navigate]);
@@ -256,6 +266,20 @@ const DiscoveryDashboardInner: React.FC<{
         );
     }
 
+    if (routeParts.length >= 4 && routeParts[1] === 'music' && routeParts[2] === 'artist') {
+        const mbid = decodeURIComponent(routeParts[3] || '');
+        return (
+            <div className="discovery-theme w-full flex flex-col gap-4 pb-8">
+                <DiscoverHeroHeader {...heroProps} />
+                <MusicArtistPage
+                    mbid={mbid}
+                    onBack={() => navigate('/discovery/music')}
+                    pushToast={pushToast}
+                />
+            </div>
+        );
+    }
+
     if (routeParts.length >= 3 && (routeParts[1] === 'movie' || routeParts[1] === 'tv')) {
         const type = routeParts[1] as 'movie' | 'tv';
         const id = parseInt(routeParts[2], 10);
@@ -272,7 +296,7 @@ const DiscoveryDashboardInner: React.FC<{
         );
     }
 
-    const showTabs = ['home', 'movies', 'series', 'requests', 'issues'].includes(subRoute);
+    const showTabs = ['home', 'movies', 'series', 'music', 'requests', 'issues'].includes(subRoute);
 
     if (subRoute === 'watchlist') {
         return (
@@ -297,6 +321,7 @@ const DiscoveryDashboardInner: React.FC<{
         { id: 'home', path: '/discovery', label: t('nav.discover'), icon: Compass, count: 0, countColor: '' },
         { id: 'movies', path: '/discovery/movies', label: t('nav.movies'), icon: Film, count: 0, countColor: '' },
         { id: 'series', path: '/discovery/series', label: t('nav.series'), icon: Tv, count: 0, countColor: '' },
+        { id: 'music', path: '/discovery/music', label: t('nav.music'), icon: Music, count: 0, countColor: '' },
         { id: 'requests', path: '/discovery/requests', label: t('nav.myRequests'), icon: ClipboardList, count: myPendingCount, countColor: 'bg-plex/25 text-plex' },
         ...(canSeeIssuesTab
             ? [{ id: 'issues', path: '/discovery/issues', label: t('nav.myIssues'), icon: AlertTriangle, count: myOpenIssueCount, countColor: 'bg-amber-500/25 text-amber-300' }]
@@ -402,6 +427,9 @@ const DiscoveryDashboardInner: React.FC<{
                                 formatItem={formatItem}
                                 navigate={navigate}
                             />
+                        )}
+                        {subRoute === 'music' && (
+                            <DiscoverMusic navigate={navigate} />
                         )}
                         {subRoute === 'requests' && (
                             <MyRequestsPage

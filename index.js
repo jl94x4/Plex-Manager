@@ -968,6 +968,11 @@ import {
 } from './lib/discovery-settings.js';
 import { buildDiscoveryFacts } from './lib/discovery-facts.js';
 import { fetchDiscoveryHeroBackdrops } from './lib/discovery-hero.js';
+import {
+    fetchBecauseYouWatchedRecommendations,
+    pickBecauseYouWatchedSeed,
+} from './lib/discovery-because-you-watched.js';
+import { fetchMusicBrainzArtist, searchMusicBrainzArtists } from './lib/musicbrainz-client.js';
 import { fetchDiscoveryCombinedRatings, fetchImdbRatingsFromRadarr } from './lib/discovery-ratings.js';
 import { enrichTvDetailsWithSonarrLibraryStatus, fetchSonarrLibraryStatusForShow } from './lib/sonarr-library-status.js';
 import { enrichSessionsWithGeo } from './lib/geoip-lookup.js';
@@ -6965,8 +6970,22 @@ app.get('/api/discovery/request-options', requireAuth, requireMember, async (req
     try {
         const config = await loadFile(CONFIG_PATH, {});
         const mediaType = String(req.query.mediaType || '').toLowerCase();
-        const mediaId = Number(req.query.mediaId);
-        if ((mediaType !== 'movie' && mediaType !== 'tv') || !Number.isFinite(mediaId)) {
+        const mediaId = req.query.mediaId;
+        if (mediaType === 'music') {
+            const mbid = String(mediaId || '').trim();
+            if (!mbid) return res.status(400).json({ error: 'Invalid mediaType or mediaId' });
+            if (getRequestEngine(config) === 'portal') {
+                const portalRequests = getPortalRequestService(config);
+                const payload = await portalRequests.getMemberRequestOptions(req.user, {
+                    mediaType: 'music',
+                    mediaId: mbid,
+                });
+                return res.json(payload);
+            }
+            return res.status(400).json({ error: 'Music requests require the portal request engine.' });
+        }
+        const numericId = Number(mediaId);
+        if ((mediaType !== 'movie' && mediaType !== 'tv') || !Number.isFinite(numericId)) {
             return res.status(400).json({ error: 'Invalid mediaType or mediaId' });
         }
 
@@ -6974,7 +6993,7 @@ app.get('/api/discovery/request-options', requireAuth, requireMember, async (req
             const portalRequests = getPortalRequestService(config);
             const payload = await portalRequests.getMemberRequestOptions(req.user, {
                 mediaType,
-                mediaId,
+                mediaId: numericId,
             });
             return res.json(payload);
         }
@@ -6984,7 +7003,7 @@ app.get('/api/discovery/request-options', requireAuth, requireMember, async (req
 
         const payload = await requestAppService.getMemberRequestOptions(config, req.user, {
             mediaType,
-            mediaId,
+            mediaId: numericId,
         });
         res.json(payload);
     } catch (e) {
@@ -7011,9 +7030,10 @@ app.get('/api/discovery/me', requireAuth, requireMember, async (req, res) => {
                 engine: 'portal',
                 userMapped: true,
                 permissions: {
-                    request: policy.allowRequestMovies || policy.allowRequestTv,
+                    request: policy.allowRequestMovies || policy.allowRequestTv || policy.allowRequestMusic,
                     requestMovie: policy.allowRequestMovies,
                     requestTv: policy.allowRequestTv,
+                    requestMusic: policy.allowRequestMusic,
                     request4k: policy.allowRequest4kMovies || policy.allowRequest4kTv,
                     request4kMovie: policy.allowRequest4kMovies,
                     request4kTv: policy.allowRequest4kTv,
@@ -7057,13 +7077,15 @@ app.get('/api/discovery/request-services/:type/:serverId', requireAuth, requireM
         const config = await loadFile(CONFIG_PATH, {});
         const type = String(req.params.type || '').toLowerCase();
         const serverId = String(req.params.serverId || '').trim();
-        if ((type !== 'radarr' && type !== 'sonarr') || !serverId) {
+        if ((type !== 'radarr' && type !== 'sonarr' && type !== 'music' && type !== 'lidarr') || !serverId) {
             return res.status(400).json({ error: 'Invalid service type or server id' });
         }
 
+        const arrType = type === 'music' || type === 'lidarr' ? 'music' : type;
+
         if (getRequestEngine(config) === 'portal') {
             const portalRequests = getPortalRequestService(config);
-            const data = await portalRequests.getPortalArrServiceOptions(type, serverId);
+            const data = await portalRequests.getPortalArrServiceOptions(arrType, serverId);
             return res.json(data);
         }
 
@@ -7709,6 +7731,72 @@ app.delete('/api/blocklist/:tmdbId', requireAdmin, async (req, res) => {
     }
 });
 
+app.get('/api/discovery/because-you-watched', requireAuth, requireMember, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const metadataLanguage = resolveDiscoverMetadataLanguage(req);
+        if (!isPlexConfigured(config)) {
+            return res.json({ seed: null, results: [], page: 1, totalPages: 1, totalResults: 0 });
+        }
+
+        const uri = await getPlexConnectionUri(config);
+        if (!uri) {
+            return res.json({ seed: null, results: [], page: 1, totalPages: 1, totalResults: 0 });
+        }
+
+        req.user.isAdmin = await resolveCurrentAdmin(req.user, config);
+        const accountID = await resolveLocalPlexAccountId(config, uri, req.user);
+        if (!accountID) {
+            return res.json({ seed: null, results: [], page: 1, totalPages: 1, totalResults: 0 });
+        }
+
+        const historyItems = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 500 });
+        const seed = pickBecauseYouWatchedSeed(historyItems);
+        if (!seed) {
+            return res.json({ seed: null, results: [], page: 1, totalPages: 1, totalResults: 0 });
+        }
+
+        let payload = await fetchBecauseYouWatchedRecommendations(config, seed, {
+            language: metadataLanguage,
+            page: Number(req.query.page) || 1,
+            fetchImpl: fetchWithTimeout,
+        });
+        payload = await attachDiscoveryAvailabilityCacheToPayload(config, req.user, payload);
+        res.json(payload);
+    } catch (e) {
+        log(`Discovery because-you-watched error: ${e.message}`);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/discovery/music/search', requireAuth, requireMember, async (req, res) => {
+    try {
+        const query = String(req.query.q || req.query.query || '').trim();
+        if (query.length < 2) return res.json({ results: [], total: 0 });
+        const payload = await searchMusicBrainzArtists(query, {
+            limit: Number(req.query.limit) || 20,
+            fetchImpl: fetchWithTimeout,
+        });
+        res.json(payload);
+    } catch (e) {
+        log(`Discovery music search error: ${e.message}`);
+        res.status(e.status === 503 ? 503 : 502).json({ error: e.message || 'Music search failed' });
+    }
+});
+
+app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (req, res) => {
+    try {
+        const mbid = String(req.params.mbid || '').trim();
+        if (!mbid) return res.status(400).json({ error: 'Artist id is required' });
+        const artist = await fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout });
+        if (!artist) return res.status(404).json({ error: 'Artist not found' });
+        res.json(artist);
+    } catch (e) {
+        log(`Discovery music artist error: ${e.message}`);
+        res.status(502).json({ error: e.message || 'Failed to load artist' });
+    }
+});
+
 app.get('/api/discovery/watchlist', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
@@ -7772,8 +7860,10 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
         } = req.body || {};
         if (!mediaType || !mediaId) return res.status(400).json({ error: 'Missing media details' });
 
-        const type = mediaType === 'tv' ? 'tv' : 'movie';
-        const tmdbId = Number(mediaId);
+        const rawType = String(mediaType || '').toLowerCase();
+        const type = rawType === 'tv' ? 'tv' : (rawType === 'music' ? 'music' : 'movie');
+        const tmdbId = type === 'music' ? null : Number(mediaId);
+        const mbid = type === 'music' ? String(mediaId || '').trim() : null;
 
         // Phase 5–8: portal engine — JSON store + portal quotas + optional auto-approve.
         if (getRequestEngine(config) === 'portal') {
@@ -7788,9 +7878,9 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
                 return res.status(403).json({ error: perm.reason || 'You cannot request this title.' });
             }
             const quotaEval = evaluatePortalMemberQuota(config, records, {
-                is4k: !!is4k,
+                is4k: type === 'music' ? false : !!is4k,
                 policy,
-                mediaType: type,
+                mediaType: type === 'music' ? 'movie' : type,
             });
             if (quotaEval.blocked) {
                 const bucket = is4k ? quotaEval.quota.fourK : quotaEval.quota.standard;
@@ -7803,8 +7893,9 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
 
             const created = await portalRequests.createMemberRequest(req.user, {
                 mediaType: type,
-                mediaId: tmdbId,
-                is4k: !!is4k,
+                mediaId: type === 'music' ? mbid : tmdbId,
+                mbid,
+                is4k: type === 'music' ? false : !!is4k,
                 seasons,
                 serverId,
                 profileId,
@@ -7813,7 +7904,7 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
                 tags,
             });
 
-            if (shouldPortalAutoApprove(config, type, { is4k: !!is4k })) {
+            if (shouldPortalAutoApprove(config, type === 'music' ? 'movie' : type, { is4k: type === 'music' ? false : !!is4k })) {
                 try {
                     const approved = await portalRequests.approveAdminRequest(created.id, null, req.user);
                     return res.status(201).json(approved);
@@ -12082,7 +12173,7 @@ const fetchPlexAccountHistory = async (uri, config, accountID, { maxItems = 2500
 
     while (start < maxItems) {
         const pageRes = await fetch(
-            `${uri}/status/sessions/history/all?accountID=${accountID}&X-Plex-Token=${config.plexToken}&sort=viewedAt:desc&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`,
+            `${uri}/status/sessions/history/all?accountID=${accountID}&X-Plex-Token=${config.plexToken}&sort=viewedAt:desc&includeGuids=1&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`,
             { headers: plexClientHeaders(config.plexToken) },
         ).then((r) => r.json()).catch(() => null);
 
