@@ -973,7 +973,12 @@ import {
     pickBecauseYouWatchedSeed,
 } from './lib/discovery-because-you-watched.js';
 import { fetchMusicBrainzArtist, searchMusicBrainzArtists } from './lib/musicbrainz-client.js';
-import { enrichMusicSearchPosters, listRecentLidarrArtists } from './lib/discovery-music-enrich.js';
+import {
+    enrichMusicSearchPosters,
+    fetchLidarrArtistByMbid,
+    listRecentLidarrArtists,
+    searchLidarrArtists,
+} from './lib/discovery-music-enrich.js';
 import { fetchDiscoveryCombinedRatings, fetchImdbRatingsFromRadarr } from './lib/discovery-ratings.js';
 import { enrichTvDetailsWithSonarrLibraryStatus, fetchSonarrLibraryStatusForShow } from './lib/sonarr-library-status.js';
 import { enrichSessionsWithGeo } from './lib/geoip-lookup.js';
@@ -6605,11 +6610,22 @@ const isMusicDiscoveryEnabled = (config) => {
 };
 
 /** Live Lidarr catalog + cache overlay for music discover lists. */
-const enrichMusicDiscoveryPayload = async (config, sessionUser, payload) => {
+const enrichMusicDiscoveryPayload = async (config, sessionUser, payload, { blockForCatalog = false } = {}) => {
     const library = createDiscoveryLibraryAvailability(config);
     let results = Array.isArray(payload?.results) ? payload.results : [];
     try {
-        results = await library.enrichItems(results, { blockForCatalog: true });
+        if (blockForCatalog) {
+            const blocked = library.enrichItems(results, { blockForCatalog: true });
+            const timedOut = await Promise.race([
+                blocked.then(() => false),
+                new Promise((resolve) => setTimeout(() => resolve(true), 2500)),
+            ]);
+            results = timedOut
+                ? await library.enrichItems(results, { blockForCatalog: false })
+                : await blocked;
+        } else {
+            results = await library.enrichItems(results, { blockForCatalog: false });
+        }
     } catch (enrichError) {
         log(`Music discovery library enrich skipped: ${enrichError.message}`);
     }
@@ -6622,18 +6638,22 @@ const enrichMusicDiscoveryPayload = async (config, sessionUser, payload) => {
 const mergeMusicDiscoverySearchResults = async (config, sessionUser, query, results) => {
     if (!isMusicDiscoveryEnabled(config)) return results;
     try {
-        const musicPayload = await searchMusicBrainzArtists(query, {
+        let musicPayload = await searchLidarrArtists(config, query, {
             limit: 8,
             fetchImpl: fetchWithTimeout,
         });
-        let musicResults = Array.isArray(musicPayload?.results) ? musicPayload.results : [];
-        musicResults = await enrichMusicSearchPosters(musicResults, {
-            config,
-            fetchImpl: fetchWithTimeout,
-            maxCoverLookups: 8,
-        });
-        const enriched = await enrichMusicDiscoveryPayload(config, sessionUser, { results: musicResults });
-        musicResults = Array.isArray(enriched?.results) ? enriched.results : musicResults;
+        if (!(musicPayload.results || []).length) {
+            musicPayload = await searchMusicBrainzArtists(query, {
+                limit: 8,
+                fetchImpl: fetchWithTimeout,
+            });
+            musicPayload.results = await enrichMusicSearchPosters(musicPayload.results || [], {
+                config,
+                fetchImpl: fetchWithTimeout,
+            });
+        }
+        const enriched = await enrichMusicDiscoveryPayload(config, sessionUser, musicPayload);
+        const musicResults = Array.isArray(enriched?.results) ? enriched.results : (musicPayload.results || []);
         return [...(Array.isArray(results) ? results : []), ...musicResults].slice(0, 24);
     } catch (e) {
         log(`Discovery music search merge skipped: ${e.message}`);
@@ -7872,15 +7892,23 @@ app.get('/api/discovery/music/search', requireAuth, requireMember, async (req, r
         const config = await loadFile(CONFIG_PATH, {});
         const query = String(req.query.q || req.query.query || '').trim();
         if (query.length < 2) return res.json({ results: [], total: 0 });
-        let payload = await searchMusicBrainzArtists(query, {
-            limit: Number(req.query.limit) || 20,
+        const limit = Number(req.query.limit) || 20;
+
+        // Prefer Lidarr lookup — fast, includes art + in-library ids. MusicBrainz is fallback only.
+        let payload = await searchLidarrArtists(config, query, {
+            limit,
             fetchImpl: fetchWithTimeout,
         });
-        payload.results = await enrichMusicSearchPosters(payload.results || [], {
-            config,
-            fetchImpl: fetchWithTimeout,
-            maxCoverLookups: 20,
-        });
+        if (!(payload.results || []).length) {
+            payload = await searchMusicBrainzArtists(query, {
+                limit,
+                fetchImpl: fetchWithTimeout,
+            });
+            payload.results = await enrichMusicSearchPosters(payload.results || [], {
+                config,
+                fetchImpl: fetchWithTimeout,
+            });
+        }
         payload = await enrichMusicDiscoveryPayload(config, req.user, payload);
         res.json(payload);
     } catch (e) {
@@ -7897,7 +7925,7 @@ app.get('/api/discovery/music/recent', requireAuth, requireMember, async (req, r
             limit,
             fetchImpl: fetchWithTimeout,
         });
-        const payload = await enrichMusicDiscoveryPayload(config, req.user, { results });
+        const payload = await enrichMusicDiscoveryPayload(config, req.user, { results }, { blockForCatalog: true });
         res.json(payload);
     } catch (e) {
         log(`Discovery music recent error: ${e.message}`);
@@ -7910,10 +7938,38 @@ app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (
         const config = await loadFile(CONFIG_PATH, {});
         const mbid = String(req.params.mbid || '').trim();
         if (!mbid) return res.status(400).json({ error: 'Artist id is required' });
-        let artist = await fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout });
+
+        // Lidarr first (works for recently-added artists even if MusicBrainz is slow/down).
+        let artist = await fetchLidarrArtistByMbid(config, mbid, { fetchImpl: fetchWithTimeout }).catch(() => null);
+        if (!artist) {
+            artist = await fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout }).catch((err) => {
+                log(`MusicBrainz artist fallback failed: ${err.message}`);
+                return null;
+            });
+        } else if (!artist.overview || !artist.posterUrl) {
+            // Best-effort MusicBrainz metadata merge when Lidarr hit is thin.
+            const mb = await fetchMusicBrainzArtist(mbid, { fetchImpl: fetchWithTimeout }).catch(() => null);
+            if (mb) {
+                artist = {
+                    ...mb,
+                    ...artist,
+                    overview: artist.overview || mb.overview,
+                    posterUrl: artist.posterUrl || artist.posterPath || mb.posterUrl || mb.posterPath || null,
+                    posterPath: artist.posterPath || artist.posterUrl || mb.posterPath || mb.posterUrl || null,
+                    tags: Array.isArray(artist.tags) && artist.tags.length ? artist.tags : mb.tags,
+                    disambiguation: artist.disambiguation || mb.disambiguation,
+                };
+            }
+        }
+
         if (!artist) return res.status(404).json({ error: 'Artist not found' });
-        const library = createDiscoveryLibraryAvailability(config);
-        artist = await library.enrichDetails(artist);
+
+        try {
+            const library = createDiscoveryLibraryAvailability(config);
+            artist = await library.enrichDetails(artist);
+        } catch (enrichError) {
+            log(`Music artist library enrich skipped: ${enrichError.message}`);
+        }
         artist = await attachDiscoveryAvailabilityCacheToPayload(config, req.user, artist);
         res.json(artist);
     } catch (e) {
