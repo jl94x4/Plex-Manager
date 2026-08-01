@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Layers, Pin, RefreshCw, Clock, CalendarClock } from 'lucide-react';
 import { api } from './api';
 
@@ -44,18 +44,22 @@ export const CollexionsHomeWidget: React.FC<Props> = ({ onOpen }) => {
     const [summary, setSummary] = useState<CollexionsSummary | null>(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
+    const loadGenRef = useRef(0);
 
     const load = useCallback(async () => {
+        const gen = ++loadGenRef.current;
         setLoading(true);
         setError('');
         try {
             const data = await api.getSummary();
+            if (gen !== loadGenRef.current) return;
             setSummary(data || null);
         } catch (e: any) {
+            if (gen !== loadGenRef.current) return;
             setError(e?.message || 'Unavailable');
             setSummary(null);
         } finally {
-            setLoading(false);
+            if (gen === loadGenRef.current) setLoading(false);
         }
     }, []);
 

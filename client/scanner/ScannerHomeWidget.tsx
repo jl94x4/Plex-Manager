@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Clock3, FolderInput, ListTodo, Radar, RefreshCw, Target } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { formatScannerWhen, scannerActionStyles, shortenScannerPath } from './eventMeta';
@@ -31,18 +31,22 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
     const [status, setStatus] = useState<ScannerStatus | null>(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
+    const loadGenRef = useRef(0);
 
     const load = useCallback(async () => {
+        const gen = ++loadGenRef.current;
         setLoading(true);
         setError('');
         try {
             const data = await apiFetch('/api/scanner/status');
+            if (gen !== loadGenRef.current) return;
             setStatus(data || null);
         } catch (e: any) {
+            if (gen !== loadGenRef.current) return;
             setError(e?.message || 'Unavailable');
             setStatus(null);
         } finally {
-            setLoading(false);
+            if (gen === loadGenRef.current) setLoading(false);
         }
     }, []);
 

@@ -2087,16 +2087,20 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
     const [torrentUrl, setTorrentUrl] = useState('');
     const [torrentFile, setTorrentFile] = useState<File | null>(null);
     const [uploadBusy, setUploadBusy] = useState(false);
+    const loadGenRef = useRef(0);
 
     const load = useCallback(async () => {
+        const gen = ++loadGenRef.current;
         try {
             const res = await apiFetch('/api/downloads/status');
+            if (gen !== loadGenRef.current) return;
             setData(res);
             setError('');
         } catch (e: any) {
+            if (gen !== loadGenRef.current) return;
             setError(e.message || 'Failed to load downloads');
         } finally {
-            setLoading(false);
+            if (gen === loadGenRef.current) setLoading(false);
         }
     }, []);
 
