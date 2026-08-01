@@ -107,6 +107,7 @@ const Gallery: React.FC = () => {
     const [selectMode, setSelectMode] = useState(false);
     const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
     const [bulkBusy, setBulkBusy] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState<{ total: number; label: string } | null>(null);
     const resolveGenRef = useRef(0);
 
     useEffect(() => {
@@ -355,6 +356,7 @@ const Gallery: React.FC = () => {
             if (!ok) return;
         }
         setBulkBusy(true);
+        setBulkProgress({ total: items.length, label: action });
         try {
             const result = await api.bulkPinCollections(action, items);
             const okKeys = new Set(
@@ -383,6 +385,7 @@ const Gallery: React.FC = () => {
             void appAlert('Bulk action failed. Check Plex connection.');
         } finally {
             setBulkBusy(false);
+            setBulkProgress(null);
         }
     };
 
@@ -466,6 +469,16 @@ const Gallery: React.FC = () => {
                     <span className="text-sm text-muted mr-1">
                         {selectedKeys.size} selected
                     </span>
+                    {bulkProgress ? (
+                        <div className="w-full sm:w-auto sm:min-w-[220px] flex flex-col gap-1">
+                            <span className="text-[11px] text-muted capitalize">
+                                {bulkProgress.label}ing {bulkProgress.total} collection{bulkProgress.total === 1 ? '' : 's'}…
+                            </span>
+                            <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                <div className="h-full w-full bg-plex animate-pulse rounded-full" />
+                            </div>
+                        </div>
+                    ) : null}
                     <button
                         type="button"
                         onClick={selectAllVisible}

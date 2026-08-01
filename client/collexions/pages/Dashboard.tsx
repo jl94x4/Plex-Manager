@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { usePoll } from '../../shared/usePoll';
 import { Card } from '../components/ui/Card';
 import {
     Play,
@@ -365,21 +366,17 @@ const Dashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (autoRefresh) {
-            const interval = setInterval(() => {
-                fetchStatusOnly();
-                fetchHealth();
-            }, 5000);
-            return () => clearInterval(interval);
-        }
+        if (!autoRefresh) return undefined;
+        fetchStatusOnly();
+        fetchHealth();
     }, [autoRefresh, fetchStatusOnly, fetchHealth]);
 
-    useEffect(() => {
-        if (liveLogs) {
-            const interval = setInterval(fetchLogsOnly, 5000);
-            return () => clearInterval(interval);
-        }
-    }, [liveLogs, fetchLogsOnly]);
+    usePoll(() => {
+        fetchStatusOnly();
+        fetchHealth();
+    }, autoRefresh ? 5000 : null, { immediate: false });
+
+    usePoll(fetchLogsOnly, liveLogs ? 5000 : null, { immediate: false });
 
     useEffect(() => {
         if (logContainerRef.current && liveLogs) {

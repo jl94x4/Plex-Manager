@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Copy, Download, Eye, EyeOff, FileUp, Loader2
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 import { apiFetch } from '../shared/api';
+import { usePoll } from '../shared/usePoll';
 import { scannerActionStyles, sourceAppLabel } from '../scanner/eventMeta';
 import { ScannerSourceBadge } from '../scanner/ScannerSourceBadge';
 
@@ -194,6 +195,8 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
     const [yamlText, setYamlText] = useState('');
     const [importing, setImporting] = useState(false);
     const [importSummary, setImportSummary] = useState<string | null>(null);
+    const [yamlPreview, setYamlPreview] = useState<ScannerSettings | null>(null);
+    const [yamlPreviewSummary, setYamlPreviewSummary] = useState<string | null>(null);
     const [showAuthPassword, setShowAuthPassword] = useState(false);
     const [testingTrigger, setTestingTrigger] = useState<string | null>(null);
     const [triggerTestResults, setTriggerTestResults] = useState<Record<string, { ok: boolean; message: string }>>({});
@@ -287,10 +290,12 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
         };
         onChange(next);
         setImportSummary(summarizeImport(next));
+        setYamlPreview(null);
+        setYamlPreviewSummary(null);
         addToast?.('Autoscan config imported — review below, then Save Settings', 'success');
     };
 
-    const importYaml = async (raw?: string) => {
+    const previewYaml = async (raw?: string) => {
         const yaml = String(raw ?? yamlText ?? '').trim();
         if (!yaml) {
             addToast?.('Paste or upload an Autoscan config.yml first', 'error');
@@ -304,14 +309,24 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                 body: JSON.stringify({ yaml }),
             });
             if (res?.imported) {
-                applyImported(res.imported);
+                setYamlPreview(res.imported);
+                setYamlPreviewSummary(summarizeImport(res.imported));
                 if (raw && raw !== yamlText) setYamlText(raw);
+                addToast?.('YAML parsed — review the preview, then Apply import', 'success');
             }
         } catch (e: any) {
-            addToast?.(e?.message || 'Import failed', 'error');
+            addToast?.(e?.message || 'Preview failed', 'error');
         } finally {
             setImporting(false);
         }
+    };
+
+    const applyYamlPreview = () => {
+        if (!yamlPreview) {
+            addToast?.('Preview YAML first', 'error');
+            return;
+        }
+        applyImported(yamlPreview);
     };
 
     const onPickFile = async (file: File | null) => {
@@ -319,7 +334,9 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
         try {
             const text = await file.text();
             setYamlText(text);
-            await importYaml(text);
+            setYamlPreview(null);
+            setYamlPreviewSummary(null);
+            await previewYaml(text);
         } catch {
             addToast?.('Could not read that file', 'error');
         }
@@ -362,22 +379,40 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                         <button
                             type="button"
                             disabled={!yamlText.trim() || importing}
-                            onClick={() => void importYaml()}
+                            onClick={() => void previewYaml()}
                             className="btn-secondary inline-flex items-center gap-2 px-4 py-2.5 text-sm disabled:opacity-50"
                         >
                             <FileUp className="w-4 h-4" />
-                            Import pasted YAML
+                            Preview pasted YAML
+                        </button>
+                        <button
+                            type="button"
+                            disabled={!yamlPreview || importing}
+                            onClick={() => applyYamlPreview()}
+                            className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 text-sm disabled:opacity-50"
+                        >
+                            Apply import
                         </button>
                     </div>
                     <textarea
                         className={`${FIELD} min-h-[130px] font-mono text-xs`}
                         value={yamlText}
-                        onChange={(e) => setYamlText(e.target.value)}
+                        onChange={(e) => {
+                            setYamlText(e.target.value);
+                            setYamlPreview(null);
+                            setYamlPreviewSummary(null);
+                        }}
                         placeholder={'# Paste Autoscan config.yml here\nminimum-age: 1m\nauthentication:\n  username: admin\n  ...'}
                     />
+                    {yamlPreviewSummary ? (
+                        <div className="rounded-lg border border-sky-400/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
+                            <p className="font-semibold text-sky-200">Preview (not applied yet)</p>
+                            <p className="mt-1">{yamlPreviewSummary}</p>
+                        </div>
+                    ) : null}
                     {importSummary ? (
                         <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 font-semibold">
-                            Imported: {importSummary}
+                            Applied: {importSummary}
                         </div>
                     ) : null}
                 </SectionCard>
@@ -776,11 +811,7 @@ const ScannerLiveLogs: React.FC<{
         void refresh();
     }, [refresh]);
 
-    useEffect(() => {
-        if (paused) return undefined;
-        const id = window.setInterval(() => { void refresh(); }, 3000);
-        return () => window.clearInterval(id);
-    }, [paused, refresh]);
+    usePoll(() => { void refresh(); }, paused ? null : 3000, { immediate: false });
 
     const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE) || 1);
     const safePage = Math.min(page, totalPages - 1);

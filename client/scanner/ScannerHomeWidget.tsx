@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Clock3, FolderInput, ListTodo, Radar, RefreshCw, Target } from 'lucide-react';
 import { apiFetch } from '../shared/api';
+import { usePoll } from '../shared/usePoll';
 import { formatScannerWhen, scannerActionStyles, shortenScannerPath } from './eventMeta';
 import { ScannerSourceBadge } from './ScannerSourceBadge';
 
@@ -52,9 +53,9 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
 
     useEffect(() => {
         void load();
-        const id = window.setInterval(() => { void load(); }, 15000);
-        return () => window.clearInterval(id);
     }, [load]);
+
+    usePoll(() => { void load(); }, 15_000);
 
     const remaining = status?.remaining ?? 0;
     const processed = status?.processed ?? 0;

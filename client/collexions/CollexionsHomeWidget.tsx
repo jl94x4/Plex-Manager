@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Layers, Pin, RefreshCw, Clock, CalendarClock } from 'lucide-react';
 import { api } from './api';
+import { usePoll } from '../shared/usePoll';
 
 export type CollexionsSummary = {
     status?: string;
@@ -65,9 +66,9 @@ export const CollexionsHomeWidget: React.FC<Props> = ({ onOpen }) => {
 
     useEffect(() => {
         void load();
-        const id = window.setInterval(() => { void load(); }, 60000);
-        return () => window.clearInterval(id);
     }, [load]);
+
+    usePoll(() => { void load(); }, 60_000);
 
     const status = summary?.status || 'Unknown';
     const statusLower = status.toLowerCase();

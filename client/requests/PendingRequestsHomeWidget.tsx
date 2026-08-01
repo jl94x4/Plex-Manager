@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronRight, Film, Loader2, Pencil, RefreshCw, Tv } from 'lucide-react';
 import { apiFetch } from '../shared/api';
+import { usePoll } from '../shared/usePoll';
 import { RequestApprovalModal } from './RequestApprovalModal';
 import { RequestCardActions, RequestCardShell, requestCardActionBtnClass } from './RequestCardShell';
 import { RequestMetaChips } from './RequestMetaChips';
@@ -39,12 +40,16 @@ export const PendingRequestsHomeWidget: React.FC<{
     const [actionId, setActionId] = useState<number | null>(null);
     const [reviewTarget, setReviewTarget] = useState<PortalRequestItem | null>(null);
 
+    const loadGenRef = useRef(0);
+
     const load = useCallback(async (opts?: { silent?: boolean }) => {
+        const gen = ++loadGenRef.current;
         if (!opts?.silent) setLoading(true);
         else setRefreshing(true);
         setError(null);
         try {
             const data = await apiFetch(`/api/requests/pending?take=${isWide ? 6 : 5}`);
+            if (gen !== loadGenRef.current) return;
             if (!data?.configured) {
                 setConfigured(false);
                 setRequests([]);
@@ -63,19 +68,22 @@ export const PendingRequestsHomeWidget: React.FC<{
             setPendingTotal(Math.max(pending, results.length));
             setRequests(results);
         } catch (e: any) {
+            if (gen !== loadGenRef.current) return;
             setError(e?.message || 'Could not reach your request app');
             setRequests([]);
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            if (gen === loadGenRef.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
     }, [isWide]);
 
     useEffect(() => {
-        load();
-        const timer = window.setInterval(() => load({ silent: true }), 90_000);
-        return () => window.clearInterval(timer);
+        void load();
     }, [load]);
+
+    usePoll(() => { void load({ silent: true }); }, 90_000);
 
     const handleApprove = async (item: PortalRequestItem) => {
         setActionId(item.id);

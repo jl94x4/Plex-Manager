@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePoll } from '../shared/usePoll';
 import {
     Activity,
     AlertTriangle,
@@ -1230,15 +1231,16 @@ export const MediaAutomationDashboard: React.FC = () => {
         void openEditor();
         return () => { cancelled = true; };
     }, [libraries, loading]);
-    useEffect(() => {
+    const pollIntervalMs = useMemo(() => {
         const hasActive = jobs.some((job) => {
             const state = jobStateValue(job);
             return ['running', 'processing', 'active', 'probing', 'planning', 'planned', 'verifying', 'committing'].includes(state)
                 || ['running', 'processing', 'active'].includes(String(job.phase || '').toLowerCase());
         });
-        const timer = window.setInterval(() => { load(true); }, hasActive ? 2000 : 15000);
-        return () => window.clearInterval(timer);
-    }, [load, jobs]);
+        return hasActive ? 2000 : 15000;
+    }, [jobs]);
+
+    usePoll(() => { load(true); }, pollIntervalMs, { immediate: false });
     useEffect(() => {
         if (selectedJobId == null) return;
         const latest = jobs.find((job) => String(job.id) === String(selectedJobId));

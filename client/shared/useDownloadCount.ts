@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from './api';
+import { usePoll } from './usePoll';
 
 export const useDownloadCount = (enabled: boolean, pollSeconds = 15) => {
     const [downloadCount, setDownloadCount] = useState(0);
@@ -19,11 +20,10 @@ export const useDownloadCount = (enabled: boolean, pollSeconds = 15) => {
     }, [enabled]);
 
     useEffect(() => {
-        refresh();
-        if (!enabled) return undefined;
-        const timer = window.setInterval(refresh, intervalMs);
-        return () => window.clearInterval(timer);
-    }, [enabled, intervalMs, refresh]);
+        void refresh();
+    }, [refresh]);
+
+    usePoll(refresh, enabled ? intervalMs : null);
 
     return { downloadCount, refresh };
 };

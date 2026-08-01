@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { api } from '../api';
+import { usePoll } from '../../shared/usePoll';
 import { Card } from '../components/ui/Card';
 import { RefreshCw, Download, ScrollText, Terminal, ToggleLeft, ToggleRight, ArrowDownCircle, AlertTriangle, Ban } from 'lucide-react';
 
@@ -44,12 +45,7 @@ const LogsPage: React.FC = () => {
         fetchLogs(); // Always fetch once on mount
     }, [fetchLogs]);
 
-    useEffect(() => {
-        if (isLive) {
-            const interval = setInterval(fetchLogs, 10000); // 10s interval
-            return () => clearInterval(interval);
-        }
-    }, [isLive, fetchLogs]);
+    usePoll(fetchLogs, isLive ? 10_000 : null, { immediate: false });
 
     useEffect(() => {
         if (autoScroll && logEndRef.current) {

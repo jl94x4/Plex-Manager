@@ -1,6 +1,7 @@
 import { askConfirm } from '../../shared/confirm';
 import React, { useEffect, useState } from 'react';
 import { api } from '../api';
+import { usePoll } from '../../shared/usePoll';
 import {
     Play,
     Trash2,
@@ -33,6 +34,7 @@ const JobsPage: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, ManagedJob>>({});
     const [loading, setLoading] = useState(true);
     const [runningJob, setRunningJob] = useState<string | null>(null);
+    const [runFeedback, setRunFeedback] = useState('');
 
     // Search & Filter State
     const [searchQuery, setSearchQuery] = useState('');
@@ -57,14 +59,33 @@ const JobsPage: React.FC = () => {
 
     const handleRunNow = async (id: string) => {
         setRunningJob(id);
+        setRunFeedback('Starting sync…');
         try {
             await api.runJobNow(id);
+            setRunFeedback('Sync started — waiting for worker…');
             await fetchJobs();
         } catch (e) {
             console.error("Failed to run job", e);
+            setRunFeedback('Failed to start sync. Check logs for details.');
+            setRunningJob(null);
         }
-        setRunningJob(null);
     };
+
+    usePoll(async () => {
+        if (!runningJob) return;
+        try {
+            const status = await api.getStatus();
+            const message = status?.status || 'Running…';
+            setRunFeedback(String(message));
+            await fetchJobs();
+            const lower = String(message).toLowerCase();
+            if (!/running|processing|pinning|waiting|starting/.test(lower)) {
+                setRunningJob(null);
+            }
+        } catch {
+            // keep polling until terminal state or user leaves
+        }
+    }, runningJob ? 3000 : null, { immediate: true });
 
     const handleDelete = async (id: string) => {
         const ok = await askConfirm(`Are you sure you want to stop auto-syncing "${jobs[id].name}"?`, {
@@ -132,6 +153,13 @@ const JobsPage: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {runningJob && runFeedback ? (
+                <div className="rounded-xl border border-plex/30 bg-plex/10 px-4 py-3 text-sm text-text flex items-center gap-2">
+                    <RefreshCcw className="w-4 h-4 text-plex animate-spin shrink-0" />
+                    <span>{runFeedback}</span>
+                </div>
+            ) : null}
 
             {/* Filters Bar */}
             <div className="bg-card/50 border border-border p-4 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between">

@@ -284,6 +284,8 @@ export const SettingsDashboard: React.FC = () => {
             window.dispatchEvent(new CustomEvent('portal-public-config-updated'));
             if (result?.seerrDiscoverySync && !result.seerrDiscoverySync.ok && !result.seerrDiscoverySync.skipped) {
                 addToast(`Settings saved, but request app sync failed: ${result.seerrDiscoverySync.error}`, 'error');
+            } else if (result?.discoveryAvailabilityRebuild?.triggered) {
+                addToast('Settings saved — rebuilding Discover availability cache in the background.', 'success');
             } else {
                 addToast('Settings Saved!');
             }
@@ -544,6 +546,8 @@ export const SettingsDashboard: React.FC = () => {
     const [backupFiles, setBackupFiles] = useState<any[]>([]);
     const [auditLogEntries, setAuditLogEntries] = useState<any[]>([]);
     const [isLoadingAuditLog, setIsLoadingAuditLog] = useState(false);
+    const [isExportingAuditLog, setIsExportingAuditLog] = useState(false);
+    const [refreshingDiscoveryCache, setRefreshingDiscoveryCache] = useState(false);
     const [auditLogPage, setAuditLogPage] = useState(1);
     const [deletedUsersLog, setDeletedUsersLog] = useState<any[]>([]);
     const [emailLogPage, setEmailLogPage] = useState(1);
@@ -647,6 +651,40 @@ export const SettingsDashboard: React.FC = () => {
             addToast('Failed to load audit log', 'error');
         } finally {
             setIsLoadingAuditLog(false);
+        }
+    };
+
+    const exportAuditLog = async () => {
+        setIsExportingAuditLog(true);
+        try {
+            const data = await apiFetch('/api/audit-log/export');
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `portal-audit-export-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(url);
+            addToast('Audit log exported (portal + Poster Sets + Upgrader).', 'success');
+        } catch (e) {
+            addToast(e instanceof Error ? e.message : 'Failed to export audit log', 'error');
+        } finally {
+            setIsExportingAuditLog(false);
+        }
+    };
+
+    const refreshDiscoveryAvailabilityCache = async () => {
+        setRefreshingDiscoveryCache(true);
+        try {
+            const res = await apiFetch('/api/tasks/run/discoveryAvailabilityCache', { method: 'POST' });
+            addToast(res.message || 'Discovery availability rebuild started.', 'success');
+            await fetchTasks();
+        } catch (e) {
+            addToast(e instanceof Error ? e.message : 'Failed to refresh availability cache', 'error');
+        } finally {
+            setRefreshingDiscoveryCache(false);
         }
     };
 
@@ -2896,6 +2934,23 @@ export const SettingsDashboard: React.FC = () => {
                                     Experimental
                                 </span>
                             </div>
+
+                            <div className="rounded-xl border border-border/60 bg-background/40 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div>
+                                    <p className="font-semibold text-text text-sm">Discover availability cache</p>
+                                    <p className="text-xs text-muted mt-1">
+                                        Sonarr/Radarr library badges on Discover are served from a background snapshot. Rebuild after *arr or library changes.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="btn-secondary px-4 py-2 text-sm font-bold whitespace-nowrap disabled:opacity-50"
+                                    disabled={refreshingDiscoveryCache || loading}
+                                    onClick={() => void refreshDiscoveryAvailabilityCache()}
+                                >
+                                    {refreshingDiscoveryCache ? 'Refreshing…' : 'Refresh availability'}
+                                </button>
+                            </div>
                         </div>
                     )}
 
@@ -3973,9 +4028,18 @@ export const SettingsDashboard: React.FC = () => {
                             <section className="space-y-4 mb-8">
                                 <div className="flex items-center justify-between">
                                     <h4 className="font-bold text-text">Audit Log Viewer</h4>
-                                    <button className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80" onClick={fetchAuditLog}>
-                                        {isLoadingAuditLog ? 'Refreshing...' : 'Refresh'}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80 disabled:opacity-50"
+                                            disabled={isExportingAuditLog}
+                                            onClick={() => void exportAuditLog()}
+                                        >
+                                            {isExportingAuditLog ? 'Exporting…' : 'Export all'}
+                                        </button>
+                                        <button className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80" onClick={fetchAuditLog}>
+                                            {isLoadingAuditLog ? 'Refreshing...' : 'Refresh'}
+                                        </button>
+                                    </div>
                                 </div>
                                 {pagedAuditEntries.length === 0 ? (
                                     <p className="text-sm text-muted">No audit events found.</p>

@@ -5000,23 +5000,43 @@ const PublicUptimeBanner: React.FC = () => {
     const [config, setConfig] = useState<any>({});
     const [statusError, setStatusError] = useState<string | null>(null);
     const [hasLoaded, setHasLoaded] = useState(false);
+    const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+    const [staleHint, setStaleHint] = useState(false);
 
     useEffect(() => {
+        let cancelled = false;
+
         const fetchStatus = async () => {
             try {
                 const res = await apiFetch('/api/status');
+                if (cancelled) return;
                 setConfig(res.config);
                 setHealthData(res.healthData);
                 setStatusError(null);
                 setHasLoaded(true);
+                setLastUpdatedAt(Date.now());
+                setStaleHint(false);
             } catch (e) {
+                if (cancelled) return;
                 setStatusError(e instanceof Error ? e.message : 'Status unavailable');
+                if (hasLoaded) setStaleHint(true);
             }
         };
-        fetchStatus();
-        const interval = setInterval(fetchStatus, 15000);
-        return () => clearInterval(interval);
-    }, []);
+
+        void fetchStatus();
+        const interval = setInterval(() => { void fetchStatus(); }, 15000);
+
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') void fetchStatus();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [hasLoaded]);
 
     if (statusError && !hasLoaded) {
         return (
@@ -5039,6 +5059,11 @@ const PublicUptimeBanner: React.FC = () => {
                         View Full Status Page &rarr;
                     </a>
                     <h3 className="text-text font-bold uppercase tracking-[0.14em] text-xs">Live System Status</h3>
+                    {staleHint ? (
+                        <p className="mt-1 text-[11px] text-amber-300/90">
+                            Showing last update{lastUpdatedAt ? ` (${new Date(lastUpdatedAt).toLocaleTimeString()})` : ''} — refresh failed
+                        </p>
+                    ) : null}
                 </div>
                 <div className="flex flex-wrap justify-center gap-2 sm:gap-3 w-full">
                     {visibleServices.map((service: any) => {

@@ -25,6 +25,7 @@ import {
     X,
 } from 'lucide-react';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
+import { usePoll } from '../shared/usePoll';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
 import {
@@ -992,6 +993,7 @@ export const PosterSetsDashboard: React.FC = () => {
     const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
     const [historySearch, setHistorySearch] = useState('');
     const [selectedHistoryJob, setSelectedHistoryJob] = useState<PosterSetsJob | null>(null);
+    const [selectedQueueJob, setSelectedQueueJob] = useState<PosterSetsJob | null>(null);
     const [auditEntries, setAuditEntries] = useState<PosterSetsAuditEntry[]>([]);
     const [queueJobs, setQueueJobs] = useState<PosterSetsJob[]>([]);
     const [queuePaused, setQueuePaused] = useState(false);
@@ -1236,17 +1238,9 @@ export const PosterSetsDashboard: React.FC = () => {
     useEffect(() => { void loadQueue(); }, [loadQueue]);
     useEffect(() => { void loadWatches(); }, [loadWatches]);
 
-    useEffect(() => {
-        if (tab !== 'queue' && !queueStats.pending) return undefined;
-        const timer = window.setInterval(() => { void loadQueue(); }, 2000);
-        return () => window.clearInterval(timer);
-    }, [tab, queueStats.pending, loadQueue]);
+    usePoll(() => { void loadQueue(); }, (tab === 'queue' || queueStats.pending) ? 2000 : null, { immediate: false });
 
-    useEffect(() => {
-        if (tab !== 'watches') return undefined;
-        const timer = window.setInterval(() => { void loadWatches(); }, 8000);
-        return () => window.clearInterval(timer);
-    }, [tab, loadWatches]);
+    usePoll(() => { void loadWatches(); }, tab === 'watches' ? 8000 : null, { immediate: false });
 
     useEffect(() => {
         if (tab !== 'browse') return undefined;
@@ -1254,74 +1248,83 @@ export const PosterSetsDashboard: React.FC = () => {
         return undefined;
     }, [tab, loadBrowse]);
 
-    useEffect(() => {
-        if (tab !== 'browse') return undefined;
-        const stillLoading = browseRails.some((rail) => rail.loading);
-        if (!stillLoading) return undefined;
-        const timer = window.setInterval(() => {
-            void loadBrowse({ silent: true });
-        }, 4000);
-        return () => window.clearInterval(timer);
-    }, [tab, browseRails, loadBrowse]);
+    usePoll(() => { void loadBrowse({ silent: true }); }, (tab === 'browse' && browseRails.some((rail) => rail.loading)) ? 4000 : null, { immediate: false });
 
-    useEffect(() => {
-        if (!activeJob?.id || !['running', 'queued'].includes(String(activeJob.state || ''))) return undefined;
-        const timer = window.setInterval(async () => {
-            try {
-                const response = await posterSetsApi.job(activeJob.id);
-                setActiveJob(response.job);
-                const state = String(response.job.state || '').toLowerCase();
-                if (state && state !== 'running' && state !== 'queued') {
-                    const meta = jobSetMeta(response.job);
-                    if (meta?.thumbUrl || meta?.title) {
-                        rememberRecentFromContext(meta, response.job.input?.url, {
-                            mediuxFilters: response.job.input?.mediuxFilters,
-                        });
-                    }
-                    await load();
-                    await loadHistory();
-                    await loadQueue();
-                    await loadWatches();
-                    if (state === 'succeeded' || state === 'completed' || state === 'success') {
-                        if (
-                            configDraft.autoWatchOnApply !== false
-                            && response.job.input?.url
-                            && !response.job.input?.watchId
-                        ) {
-                            toast('Watching for new posters on this set.');
-                        }
+    usePoll(async () => {
+        if (!activeJob?.id || !['running', 'queued'].includes(String(activeJob.state || ''))) return;
+        try {
+            const response = await posterSetsApi.job(activeJob.id);
+            setActiveJob(response.job);
+            const state = String(response.job.state || '').toLowerCase();
+            if (state && state !== 'running' && state !== 'queued') {
+                const meta = jobSetMeta(response.job);
+                if (meta?.thumbUrl || meta?.title) {
+                    rememberRecentFromContext(meta, response.job.input?.url, {
+                        mediuxFilters: response.job.input?.mediuxFilters,
+                    });
+                }
+                await load();
+                await loadHistory();
+                await loadQueue();
+                await loadWatches();
+                if (state === 'succeeded' || state === 'completed' || state === 'success') {
+                    if (
+                        configDraft.autoWatchOnApply !== false
+                        && response.job.input?.url
+                        && !response.job.input?.watchId
+                    ) {
+                        toast('Watching for new posters on this set.');
                     }
                 }
-            } catch {
-                // keep polling until terminal or user leaves
             }
-        }, 1500);
-        return () => window.clearInterval(timer);
-    }, [activeJob?.id, activeJob?.state, configDraft.autoWatchOnApply, load, loadHistory, loadQueue, loadWatches, rememberRecentFromContext, toast]);
+        } catch {
+            // keep polling until terminal or user leaves
+        }
+    }, (activeJob?.id && ['running', 'queued'].includes(String(activeJob.state || ''))) ? 1500 : null, { immediate: false });
 
-    useEffect(() => {
-        if (tab !== 'history') return undefined;
+    usePoll(async () => {
+        if (tab !== 'history') return;
         const hasRunning = historyJobs.some((job) => ['running', 'queued'].includes(String(job.state || '')))
             || ['running', 'queued'].includes(String(selectedHistoryJob?.state || ''));
-        if (!hasRunning) return undefined;
-        const timer = window.setInterval(async () => {
-            try {
-                await loadHistory();
-                if (selectedHistoryJob?.id) {
-                    const response = await posterSetsApi.job(selectedHistoryJob.id);
-                    setSelectedHistoryJob(response.job);
-                }
-            } catch {
-                // ignore transient poll errors
+        if (!hasRunning) return;
+        try {
+            await loadHistory();
+            if (selectedHistoryJob?.id) {
+                const response = await posterSetsApi.job(selectedHistoryJob.id);
+                setSelectedHistoryJob(response.job);
             }
-        }, 2000);
-        return () => window.clearInterval(timer);
-    }, [tab, historyJobs, selectedHistoryJob?.id, selectedHistoryJob?.state, loadHistory]);
+        } catch {
+            // ignore transient poll errors
+        }
+    }, (tab === 'history' && (historyJobs.some((job) => ['running', 'queued'].includes(String(job.state || '')))
+        || ['running', 'queued'].includes(String(selectedHistoryJob?.state || '')))) ? 2000 : null, { immediate: false });
+
+    usePoll(async () => {
+        if (!selectedQueueJob?.id) return;
+        const state = String(selectedQueueJob.state || '').toLowerCase();
+        if (!['running', 'queued'].includes(state)) return;
+        try {
+            const response = await posterSetsApi.job(selectedQueueJob.id);
+            setSelectedQueueJob(response.job);
+            await loadQueue();
+        } catch {
+            // ignore transient poll errors
+        }
+    }, (selectedQueueJob?.id && ['running', 'queued'].includes(String(selectedQueueJob.state || ''))) ? 2000 : null, { immediate: false });
 
     const openHistoryJob = async (jobId: string) => {
         try {
             const response = await posterSetsApi.job(jobId);
             setSelectedHistoryJob(response.job);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to open job', 'error');
+        }
+    };
+
+    const openQueueJob = async (jobId: string) => {
+        try {
+            const response = await posterSetsApi.job(jobId);
+            setSelectedQueueJob(response.job);
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to open job', 'error');
         }
@@ -2489,6 +2492,7 @@ export const PosterSetsDashboard: React.FC = () => {
 
     const jobLogs = jobLogLines(activeJob);
     const selectedLogs = jobLogLines(selectedHistoryJob);
+    const selectedQueueLogs = jobLogLines(selectedQueueJob);
 
     const recentSets = useMemo(() => {
         void recentTick;
@@ -2909,7 +2913,16 @@ export const PosterSetsDashboard: React.FC = () => {
                                 return (
                                     <div
                                         key={job.id}
-                                        className={`min-w-0 overflow-hidden rounded-xl border border-white/10 px-3 py-3 sm:px-4 ${jobCardTone(job)}`}
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => { void openQueueJob(job.id); }}
+                                        onKeyDown={(event) => {
+                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                void openQueueJob(job.id);
+                                            }
+                                        }}
+                                        className={`min-w-0 overflow-hidden rounded-xl border px-3 py-3 sm:px-4 cursor-pointer transition-colors ${selectedQueueJob?.id === job.id ? 'border-plex/50 ring-1 ring-plex/30' : 'border-white/10'} ${jobCardTone(job)}`}
                                     >
                                         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div className="min-w-0 flex-1 space-y-1.5 overflow-hidden">
@@ -2950,7 +2963,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         type="button"
                                                         className={buttonClass}
                                                         disabled={busy !== null}
-                                                        onClick={async () => {
+                                                        onClick={async (event) => {
+                                                            event.stopPropagation();
                                                             setBusy('queue');
                                                             try {
                                                                 await posterSetsApi.cancelQueueJob(job.id);
@@ -2971,7 +2985,8 @@ export const PosterSetsDashboard: React.FC = () => {
                                                         type="button"
                                                         className={buttonClass}
                                                         disabled={busy !== null}
-                                                        onClick={() => {
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
                                                             const target = String(job.input?.url || meta?.url || '').trim();
                                                             if (!target) return;
                                                             void openSetForApply({
@@ -2994,6 +3009,42 @@ export const PosterSetsDashboard: React.FC = () => {
                             })}
                         </div>
                     )}
+
+                    {selectedQueueJob ? (
+                        <section className={`${cardClass} space-y-3 p-5`}>
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <h3 className="text-lg font-bold text-text">Queue job detail</h3>
+                                    <p className="mt-1 truncate text-sm text-muted" title={jobTitle(selectedQueueJob)}>
+                                        {jobTitle(selectedQueueJob)}
+                                    </p>
+                                </div>
+                                <StatusPill value={selectedQueueJob.state} />
+                            </div>
+                            <div className="flex flex-wrap gap-3 text-xs text-muted">
+                                <span>Queued {formatTime(selectedQueueJob.createdAt)}</span>
+                                {selectedQueueJob.finishedAt ? <span>Finished {formatTime(selectedQueueJob.finishedAt)}</span> : null}
+                                {typeof selectedQueueJob.result?.uploaded === 'number' ? (
+                                    <span className="text-emerald-300">
+                                        Uploaded {String(selectedQueueJob.result.uploaded)}
+                                        {typeof selectedQueueJob.result.attempted === 'number'
+                                            ? ` / ${String(selectedQueueJob.result.attempted)}`
+                                            : ''}
+                                    </span>
+                                ) : null}
+                            </div>
+                            {selectedQueueJob.error ? (
+                                <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                                    {selectedQueueJob.error}
+                                </p>
+                            ) : null}
+                            {selectedQueueLogs.length ? (
+                                <pre className="max-h-48 overflow-auto rounded-xl border border-white/10 bg-black/30 p-3 text-[11px] text-muted font-mono">
+                                    {selectedQueueLogs.join('\n')}
+                                </pre>
+                            ) : null}
+                        </section>
+                    ) : null}
                 </section>
             ) : null}
 
@@ -4746,7 +4797,7 @@ export const PosterSetsDashboard: React.FC = () => {
                         />
                         <SettingsToggleRow
                             title="Gotify digest when watchers queue new art"
-                            description="Send a digest notification when set watchers enqueue new posters."
+                            description="Send a Gotify digest when set watchers enqueue new posters. Requires Gotify enabled under Settings → Notifications."
                             checked={configDraft.notifyOnWatcherDigest !== false}
                             onChange={(next) => setConfigDraft((prev) => ({ ...prev, notifyOnWatcherDigest: next }))}
                         />

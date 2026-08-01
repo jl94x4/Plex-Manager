@@ -13,6 +13,7 @@ export type UpgraderStatus = {
     plexConfigured: boolean;
     arrConfigured: boolean;
     automationEnabled: boolean;
+    mediaAutomationEnabled?: boolean;
     profileMapConfigured: boolean;
     maxActionsPerHour: number;
     recentUpgradeCount: number;

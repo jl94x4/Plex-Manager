@@ -3,6 +3,7 @@ import { ArrowUpCircle, RefreshCw, Search, Settings as SettingsIcon, ArrowUpFrom
 import { apiFetch } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { askConfirm } from '../shared/confirm';
+import { usePoll } from '../shared/usePoll';
 import { CustomSelect, OverlayCheckbox } from '../shared/ui';
 import { Loader, ToastContainer, pushToast } from '../shared/toast';
 import { normalizeUpgraderGridSize, UPGRADER_GRID_SIZE_OPTIONS, UPGRADER_GRID_SIZE_STORAGE_KEY, upgraderPosterGridClass, upgraderPosterGridStyle, type UpgraderGridSize } from '../shared/portalLayout';
@@ -380,13 +381,9 @@ export const UpgraderDashboard: React.FC = () => {
         }
     }, [status?.rebuildInProgress]);
 
-    useEffect(() => {
-        if (!rebuilding && !status?.rebuildInProgress) return undefined;
-        const poll = window.setInterval(() => {
-            loadData(true);
-        }, 2500);
-        return () => window.clearInterval(poll);
-    }, [rebuilding, status?.rebuildInProgress, loadData]);
+    usePoll(() => { loadData(true); }, (rebuilding || status?.rebuildInProgress) ? 2500 : null, { immediate: false });
+
+    const maEnabled = status?.mediaAutomationEnabled !== false;
 
     const handleRebuild = async () => {
         try {
@@ -483,6 +480,10 @@ export const UpgraderDashboard: React.FC = () => {
     }, []);
 
     const openTitleSavingsReport = useCallback(async (item: UpgraderItem) => {
+        if (!maEnabled) {
+            addToast('Enable Media Automation in Settings for savings reports.', 'error');
+            return;
+        }
         const busyKey = `report:${item.ratingKey}`;
         setMaHandoffBusyKey(busyKey);
         try {
@@ -529,7 +530,7 @@ export const UpgraderDashboard: React.FC = () => {
         } finally {
             setMaHandoffBusyKey(null);
         }
-    }, [addToast, ensureMaCatalog, fetchMaHandoff]);
+    }, [addToast, ensureMaCatalog, fetchMaHandoff, maEnabled]);
 
     const closeTitleSavingsReport = useCallback(async () => {
         const ephemeral = reportEphemeralLibrary;
@@ -568,6 +569,10 @@ export const UpgraderDashboard: React.FC = () => {
     }, []);
 
     const createMaLibraryForTitle = useCallback(async (item: UpgraderItem) => {
+        if (!maEnabled) {
+            addToast('Enable Media Automation in Settings to create libraries from Upgrader.', 'error');
+            return;
+        }
         const busyKey = `library:${item.ratingKey}`;
         setMaHandoffBusyKey(busyKey);
         try {
@@ -610,7 +615,7 @@ export const UpgraderDashboard: React.FC = () => {
         } finally {
             setMaHandoffBusyKey(null);
         }
-    }, [addToast, ensureMaCatalog, fetchMaHandoff, goToMaLibraryEditor]);
+    }, [addToast, ensureMaCatalog, fetchMaHandoff, goToMaLibraryEditor, maEnabled]);
 
     const summaryChips = useMemo(() => {
         if (!summary) return [];
@@ -720,10 +725,19 @@ export const UpgraderDashboard: React.FC = () => {
                                         Manual Upgrades only
                                     </span>
                                 )}
+                                {!maEnabled && (
+                                    <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-200">
+                                        Media Automation off — savings reports disabled
+                                    </span>
+                                )}
                                 <a
                                     href={savingsReportHref}
                                     onClick={openSavingsReport}
-                                    className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-plex/15 border border-plex/40 text-plex no-underline hover:bg-plex/25 transition-colors"
+                                    className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border no-underline transition-colors ${
+                                        maEnabled
+                                            ? 'bg-plex/15 border-plex/40 text-plex hover:bg-plex/25'
+                                            : 'bg-white/5 border-white/10 text-muted pointer-events-none opacity-60'
+                                    }`}
                                     title={selectedLibraryTitle
                                         ? `Open Media Automation savings report for ${selectedLibraryTitle}`
                                         : 'Open Media Automation savings report'}
@@ -1186,7 +1200,7 @@ export const UpgraderDashboard: React.FC = () => {
                                                             <button
                                                                 type="button"
                                                                 className="inline-flex items-center gap-1 text-xs font-bold text-gray-300 hover:text-white transition-colors disabled:opacity-40"
-                                                                disabled={maHandoffBusyKey === `report:${item.ratingKey}`}
+                                                                disabled={!maEnabled || maHandoffBusyKey === `report:${item.ratingKey}`}
                                                                 onClick={() => void openTitleSavingsReport(item)}
                                                                 title="Estimate encode savings for this title folder"
                                                             >
@@ -1196,7 +1210,7 @@ export const UpgraderDashboard: React.FC = () => {
                                                             <button
                                                                 type="button"
                                                                 className="inline-flex items-center gap-1 text-xs font-bold text-gray-300 hover:text-white transition-colors disabled:opacity-40"
-                                                                disabled={maHandoffBusyKey === `library:${item.ratingKey}`}
+                                                                disabled={!maEnabled || maHandoffBusyKey === `library:${item.ratingKey}`}
                                                                 onClick={() => void createMaLibraryForTitle(item)}
                                                                 title="Create a Media Automation library for this title folder"
                                                             >
@@ -1301,7 +1315,7 @@ export const UpgraderDashboard: React.FC = () => {
                                                                 <button
                                                                     type="button"
                                                                     className="inline-flex items-center gap-1 text-[10px] font-bold text-muted hover:text-text disabled:opacity-40"
-                                                                    disabled={maHandoffBusyKey === `report:${item.ratingKey}`}
+                                                                    disabled={!maEnabled || maHandoffBusyKey === `report:${item.ratingKey}`}
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         void openTitleSavingsReport(item);
@@ -1314,7 +1328,7 @@ export const UpgraderDashboard: React.FC = () => {
                                                                 <button
                                                                     type="button"
                                                                     className="inline-flex items-center gap-1 text-[10px] font-bold text-muted hover:text-text disabled:opacity-40"
-                                                                    disabled={maHandoffBusyKey === `library:${item.ratingKey}`}
+                                                                    disabled={!maEnabled || maHandoffBusyKey === `library:${item.ratingKey}`}
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         void createMaLibraryForTitle(item);

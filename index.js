@@ -61,6 +61,7 @@ import {
     spawnCommand,
 } from './lib/media-automation/index.js';
 import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook } from './lib/poster-sets/index.js';
+import { loadPosterSetsAudit } from './lib/poster-sets/audit.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
 const resolveAppVersion = () => {
@@ -958,6 +959,7 @@ import {
     isAllowedDiscoveryProxyPath,
     normalizeDiscoveryProxyPath,
     discoverySeerrProxyTimeoutMs,
+    discoveryTmdbProxyTimeoutMs,
     normalizeDiscoverySource,
     normalizeDiscoverLanguage,
     normalizeDiscoverRegion,
@@ -4358,7 +4360,14 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             }
         }, 1000);
     }
-    res.json({ message: 'Configuration saved.', seerrDiscoverySync });
+    res.json({
+        message: 'Configuration saved.',
+        seerrDiscoverySync,
+        discoveryAvailabilityRebuild: {
+            triggered: libraryStackChanged,
+            running: !!systemJobs.discoveryAvailabilityCache.running,
+        },
+    });
 });
 
 let tmdbCache = { data: null, lastFetch: 0 };
@@ -8368,6 +8377,7 @@ app.get('/api/discovery/proxy/*', requireAuth, requireMember, async (req, res) =
                 language: metadataLanguage,
                 region: prefs.discoverRegion,
                 originalLanguage: discoverLanguage,
+                timeoutMsForPath: discoveryTmdbProxyTimeoutMs,
             });
             data = await router.fetchPath(path, params);
             // Detail *arr enrich is deferred — cache + client library-status/availability-batch
@@ -9567,6 +9577,24 @@ app.delete('/api/deleted-users/:blockId', requireAdmin, async (req, res) => {
 app.get('/api/audit-log', requireAdmin, async (req, res) => {
     const auditLog = await loadFile(AUDIT_LOG_PATH, []);
     res.json(auditLog.slice(0, 200));
+});
+
+app.get('/api/audit-log/export', requireAdmin, async (req, res) => {
+    try {
+        const [portal, posterSetsAudit, upgrader] = await Promise.all([
+            loadFile(AUDIT_LOG_PATH, []),
+            loadPosterSetsAudit().catch(() => ({ entries: [] })),
+            loadFile(UPGRADER_AUDIT_PATH, []).catch(() => []),
+        ]);
+        res.json({
+            exportedAt: new Date().toISOString(),
+            portal: Array.isArray(portal) ? portal : [],
+            posterSets: Array.isArray(posterSetsAudit?.entries) ? posterSetsAudit.entries : [],
+            upgrader: Array.isArray(upgrader) ? upgrader : [],
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to export audit logs' });
+    }
 });
 
 app.put('/api/users/:id', requireAdmin, async (req, res) => {
@@ -20977,6 +21005,7 @@ app.get('/api/upgrader/status', requireAdmin, async (req, res) => {
             plexConfigured: !!(config.plexToken && config.serverIdentifier),
             arrConfigured: arrReady,
             automationEnabled: !!config.upgraderAutomationEnabled,
+            mediaAutomationEnabled: !!config.mediaAutomationEnabled,
             profileMapConfigured: Object.keys(normalizeUpgraderProfileMap(config.upgraderProfileMap)).length > 0,
             maxActionsPerHour: Math.max(1, Number(config.upgraderMaxActionsPerHour) || 25),
             recentUpgradeCount: await countRecentUpgraderActions(1),
