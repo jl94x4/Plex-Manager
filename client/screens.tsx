@@ -13,6 +13,7 @@ import { CustomSelect, ConfirmModal, StyledCheckbox, ScrollReveal } from './shar
 import { PeriodDropdown } from './shared/PeriodDropdown';
 import { ActivityHeatmap } from './shared/ActivityHeatmap';
 import { Loader, Toast, ToastContainer, pushToast } from './shared/toast';
+import { usePoll } from './shared/usePoll';
 import { NoPosterPlaceholder } from './shared/NoPosterPlaceholder';
 import {
     ActivityGridSkeleton,
@@ -1460,10 +1461,10 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
     }, [monthOffset]);
 
     useEffect(() => {
-        fetchData();
-        const interval = setInterval(fetchData, 30000);
-        return () => clearInterval(interval);
+        void fetchData();
     }, [fetchData]);
+
+    usePoll(() => { void fetchData(); }, 30_000);
 
     const formatRelativeAirDate = (date: Date) => {
         const now = new Date();
@@ -2105,10 +2106,10 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
     }, []);
 
     useEffect(() => {
-        load();
-        const interval = setInterval(load, 15000);
-        return () => clearInterval(interval);
+        void load();
     }, [load]);
+
+    usePoll(() => { void load(); }, 15_000);
 
     const downloads = useMemo(() => {
         const all = Array.isArray(data?.downloads) ? data.downloads : [];
@@ -5002,41 +5003,29 @@ const PublicUptimeBanner: React.FC = () => {
     const [hasLoaded, setHasLoaded] = useState(false);
     const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
     const [staleHint, setStaleHint] = useState(false);
+    const hasLoadedRef = useRef(false);
+    hasLoadedRef.current = hasLoaded;
+
+    const fetchStatus = useCallback(async () => {
+        try {
+            const res = await apiFetch('/api/status');
+            setConfig(res.config);
+            setHealthData(res.healthData);
+            setStatusError(null);
+            setHasLoaded(true);
+            setLastUpdatedAt(Date.now());
+            setStaleHint(false);
+        } catch (e) {
+            setStatusError(e instanceof Error ? e.message : 'Status unavailable');
+            if (hasLoadedRef.current) setStaleHint(true);
+        }
+    }, []);
 
     useEffect(() => {
-        let cancelled = false;
-
-        const fetchStatus = async () => {
-            try {
-                const res = await apiFetch('/api/status');
-                if (cancelled) return;
-                setConfig(res.config);
-                setHealthData(res.healthData);
-                setStatusError(null);
-                setHasLoaded(true);
-                setLastUpdatedAt(Date.now());
-                setStaleHint(false);
-            } catch (e) {
-                if (cancelled) return;
-                setStatusError(e instanceof Error ? e.message : 'Status unavailable');
-                if (hasLoaded) setStaleHint(true);
-            }
-        };
-
         void fetchStatus();
-        const interval = setInterval(() => { void fetchStatus(); }, 15000);
+    }, [fetchStatus]);
 
-        const onVisibility = () => {
-            if (document.visibilityState === 'visible') void fetchStatus();
-        };
-        document.addEventListener('visibilitychange', onVisibility);
-
-        return () => {
-            cancelled = true;
-            clearInterval(interval);
-            document.removeEventListener('visibilitychange', onVisibility);
-        };
-    }, [hasLoaded]);
+    usePoll(() => { void fetchStatus(); }, 15_000);
 
     if (statusError && !hasLoaded) {
         return (
@@ -5089,29 +5078,29 @@ const PublicUptimeBanner: React.FC = () => {
 const LivePlexStats: React.FC = () => {
     const [stats, setStats] = useState<{ movies: number, shows: number, music: number, fourKPercent?: number } | null>(null);
 
-    useEffect(() => {
-        const fetchStats = async () => {
-            const endpoints = [portalUrl('/api/public/plex/stats'), portalUrl('/api/plex/stats')];
+    const fetchStats = useCallback(async () => {
+        const endpoints = [portalUrl('/api/public/plex/stats'), portalUrl('/api/plex/stats')];
 
-            for (const endpoint of endpoints) {
-                try {
-                    const response = await fetch(endpoint, { headers: { 'Accept': 'application/json' } });
-                    if (!response.ok) continue;
-                    const res = await response.json();
-                    if (res && typeof res.movies === 'number' && typeof res.shows === 'number' && typeof res.music === 'number') {
-                        setStats(res);
-                        return;
-                    }
-                } catch (e) {
-                    // Try next endpoint
+        for (const endpoint of endpoints) {
+            try {
+                const response = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+                if (!response.ok) continue;
+                const res = await response.json();
+                if (res && typeof res.movies === 'number' && typeof res.shows === 'number' && typeof res.music === 'number') {
+                    setStats(res);
+                    return;
                 }
+            } catch {
+                // Try next endpoint
             }
-        };
-
-        fetchStats();
-        const interval = setInterval(fetchStats, 30000);
-        return () => clearInterval(interval);
+        }
     }, []);
+
+    useEffect(() => {
+        void fetchStats();
+    }, [fetchStats]);
+
+    usePoll(() => { void fetchStats(); }, 30_000);
 
     if (!stats) return (
         <div className="w-full grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -5532,42 +5521,34 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
 const RebuildLibraryCacheButton: React.FC = () => {
     const [status, setStatus] = useState<'idle' | 'starting' | 'building' | 'done' | 'error'>('idle');
     const [lastBuilt, setLastBuilt] = useState<number | null>(null);
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const pollBuildStatus = useCallback(async () => {
+        try {
+            const s: any = await apiFetch('/api/plex/stats/status');
+            if (s.lastGeneratedAt) setLastBuilt(s.lastGeneratedAt);
+            if (!s.isBuilding) {
+                setStatus('done');
+                window.setTimeout(() => setStatus('idle'), 4000);
+            }
+        } catch {
+            setStatus('error');
+        }
+    }, []);
 
     useEffect(() => {
         apiFetch('/api/plex/stats/status').then((s: any) => {
             if (s.lastGeneratedAt) setLastBuilt(s.lastGeneratedAt);
-            if (s.isBuilding) startPolling();
+            if (s.isBuilding) setStatus('building');
         }).catch(() => { });
-        return () => { if (pollRef.current) clearInterval(pollRef.current); };
     }, []);
 
-    const startPolling = () => {
-        setStatus('building');
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = setInterval(async () => {
-            try {
-                const s: any = await apiFetch('/api/plex/stats/status');
-                if (s.lastGeneratedAt) setLastBuilt(s.lastGeneratedAt);
-                if (!s.isBuilding) {
-                    if (pollRef.current) clearInterval(pollRef.current);
-                    pollRef.current = null;
-                    setStatus('done');
-                    setTimeout(() => setStatus('idle'), 4000);
-                }
-            } catch {
-                if (pollRef.current) clearInterval(pollRef.current);
-                pollRef.current = null;
-                setStatus('error');
-            }
-        }, 3000);
-    };
+    usePoll(() => { void pollBuildStatus(); }, status === 'building' ? 3000 : null, { immediate: true });
 
     const handleRebuild = async () => {
         setStatus('starting');
         try {
             await apiFetch('/api/plex/stats/rebuild', { method: 'POST' });
-            startPolling();
+            setStatus('building');
         } catch {
             setStatus('error');
             setTimeout(() => setStatus('idle'), 3000);
@@ -6856,59 +6837,59 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const analyticsFetchGenRef = useRef(0);
+
+    const fetchAnalytics = useCallback(async ({ silent = false } = {}) => {
+        if (!sessionInfo?.session?.isAdmin && !user) {
+            if (!silent) setAnalyticsLoading(false);
+            return;
+        }
+        const gen = ++analyticsFetchGenRef.current;
+        try {
+            if (!silent) {
+                setAnalyticsLoading(true);
+                setAnalyticsError(null);
+            }
+            const res = isJellyfinPortal
+                ? buildJellyfinHomeAnalytics(await apiFetch(`/api/jellystat/analytics?days=${analyticsDays}`))
+                : await apiFetch(`/api/plex/analytics/me?days=${analyticsDays}`);
+            if (gen !== analyticsFetchGenRef.current) return;
+            setAnalytics(res);
+            if (!silent) {
+                setTopContentPage(0);
+                setRecentHistoryPage(0);
+            }
+        } catch (e: any) {
+            if (gen !== analyticsFetchGenRef.current) return;
+            if (!silent) {
+                const message = e?.message || 'Failed to load your analytics';
+                setAnalyticsError(message);
+                setAnalytics(null);
+                setToast({ id: Date.now(), message, type: 'error' });
+            }
+        } finally {
+            if (gen === analyticsFetchGenRef.current && !silent) setAnalyticsLoading(false);
+        }
+    }, [user, sessionInfo?.session?.isAdmin, analyticsDays, isJellyfinPortal]);
+
     useEffect(() => {
-        let cancelled = false;
-        let refreshTimer: ReturnType<typeof setInterval> | null = null;
-        const ANALYTICS_REFRESH_MS = 5 * 60 * 1000;
+        void fetchAnalytics();
+    }, [fetchAnalytics]);
 
-        const fetchAnalytics = async ({ silent = false } = {}) => {
-            if (!sessionInfo?.session?.isAdmin && !user) {
-                if (!silent) setAnalyticsLoading(false);
-                return;
-            }
-            try {
-                if (!silent) {
-                    setAnalyticsLoading(true);
-                    setAnalyticsError(null);
-                }
-                const res = isJellyfinPortal
-                    ? buildJellyfinHomeAnalytics(await apiFetch(`/api/jellystat/analytics?days=${analyticsDays}`))
-                    : await apiFetch(`/api/plex/analytics/me?days=${analyticsDays}`);
-                if (cancelled) return;
-                setAnalytics(res);
-                if (!silent) {
-                    setTopContentPage(0);
-                    setRecentHistoryPage(0);
-                }
-            } catch (e: any) {
-                if (!cancelled && !silent) {
-                    const message = e?.message || 'Failed to load your analytics';
-                    setAnalyticsError(message);
-                    setAnalytics(null);
-                    setToast({ id: Date.now(), message, type: 'error' });
-                }
-            } finally {
-                if (!cancelled && !silent) setAnalyticsLoading(false);
-            }
-        };
+    usePoll(() => { void fetchAnalytics({ silent: true }); }, 5 * 60 * 1000, { immediate: false });
 
-        fetchAnalytics();
-        refreshTimer = setInterval(() => fetchAnalytics({ silent: true }), ANALYTICS_REFRESH_MS);
-
-        const onFocus = () => fetchAnalytics({ silent: true });
+    useEffect(() => {
+        const onRefresh = () => { void fetchAnalytics({ silent: true }); };
+        window.addEventListener('focus', onRefresh);
         const onVisibility = () => {
-            if (document.visibilityState === 'visible') onFocus();
+            if (document.visibilityState === 'visible') onRefresh();
         };
-        window.addEventListener('focus', onFocus);
         document.addEventListener('visibilitychange', onVisibility);
-
         return () => {
-            cancelled = true;
-            if (refreshTimer) clearInterval(refreshTimer);
-            window.removeEventListener('focus', onFocus);
+            window.removeEventListener('focus', onRefresh);
             document.removeEventListener('visibilitychange', onVisibility);
         };
-    }, [user, sessionInfo.session.isAdmin, analyticsDays, isJellyfinPortal]);
+    }, [fetchAnalytics]);
 
     useEffect(() => {
         const mq = window.matchMedia('(min-width: 1024px)');
@@ -6929,58 +6910,45 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         setRecentHistoryPage((p) => Math.min(p, maxPage));
     }, [recentHistoryPageSize, analytics?.recentHistory?.length]);
 
-    useEffect(() => {
-        let pollTimer: ReturnType<typeof setTimeout> | null = null;
-        let dashboardTimer: ReturnType<typeof setInterval> | null = null;
-        let isMounted = true;
-        const DASHBOARD_REFRESH_MS = 5 * 60 * 1000;
+    const fetchHomeDashboard = useCallback(async () => {
+        try {
+            const [dashboardRes, bazarrRes] = await Promise.all([
+                apiFetch(`${isJellyfinPortal ? '/api/jellyfin/dashboard' : '/api/plex/dashboard'}?limit=${RECENTLY_ADDED_ITEM_LIMIT}`),
+                sessionInfo?.session?.isAdmin
+                    ? apiFetch('/api/bazarr/widgets').catch(() => null)
+                    : Promise.resolve(null),
+            ]);
+            setDashboardData(dashboardRes);
+            if (bazarrRes) setBazarrWidgets(bazarrRes);
+        } catch (e) {
+            console.error('Failed to refresh dashboard data', e);
+        }
+    }, [isJellyfinPortal, sessionInfo?.session?.isAdmin]);
 
-        const fetchDashboard = async () => {
-            if (!isMounted) return;
-            try {
-                const [dashboardRes, bazarrRes] = await Promise.all([
-                    apiFetch(`${isJellyfinPortal ? '/api/jellyfin/dashboard' : '/api/plex/dashboard'}?limit=${RECENTLY_ADDED_ITEM_LIMIT}`),
-                    sessionInfo?.session?.isAdmin
-                        ? apiFetch('/api/bazarr/widgets').catch(() => null)
-                        : Promise.resolve(null),
-                ]);
-                if (isMounted) {
-                    setDashboardData(dashboardRes);
-                    if (bazarrRes) setBazarrWidgets(bazarrRes);
-                }
-            } catch (e) {
-                console.error('Failed to refresh dashboard data', e);
-            }
-        };
-
-        const fetchServerData = async () => {
-            if (!isMounted) return;
-            try {
-                const p1 = isJellyfinPortal
-                    ? Promise.resolve({ provider: 'jellyfin' }).then(res => { if (isMounted) setServerStats(res); })
-                    : apiFetch('/api/plex/stats').then(res => {
-                        if (isMounted) {
-                            setServerStats(res);
-                            if (res?.isBuilding) {
-                                pollTimer = setTimeout(fetchServerData, 5000);
-                            }
-                        }
-                    }).catch(e => console.error("Failed to fetch server stats", e));
-
-                const p2 = fetchDashboard();
-                await Promise.all([p1, p2]);
-            } finally {
-                if (isMounted) setServerDataLoading(false);
-            }
-        };
-        fetchServerData();
-        dashboardTimer = setInterval(fetchDashboard, DASHBOARD_REFRESH_MS);
-        return () => {
-            isMounted = false;
-            if (pollTimer) clearTimeout(pollTimer);
-            if (dashboardTimer) clearInterval(dashboardTimer);
-        };
+    const fetchServerStats = useCallback(async () => {
+        if (isJellyfinPortal) {
+            setServerStats({ provider: 'jellyfin' });
+            setServerDataLoading(false);
+            return;
+        }
+        try {
+            const res = await apiFetch('/api/plex/stats');
+            setServerStats(res);
+        } catch (e) {
+            console.error('Failed to fetch server stats', e);
+        } finally {
+            setServerDataLoading(false);
+        }
     }, [isJellyfinPortal]);
+
+    useEffect(() => {
+        void fetchServerStats();
+        void fetchHomeDashboard();
+    }, [fetchServerStats, fetchHomeDashboard]);
+
+    usePoll(() => { void fetchHomeDashboard(); }, 5 * 60 * 1000, { immediate: false });
+
+    usePoll(() => { void fetchServerStats(); }, serverStats?.isBuilding ? 5000 : null, { immediate: false });
 
     useEffect(() => {
         if (!isJellyfinPortal || !analytics?.libraryHealth) return;
@@ -7597,10 +7565,10 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
     }, []);
 
     useEffect(() => {
-        fetchStatus();
-        const interval = setInterval(fetchStatus, 15000);
-        return () => clearInterval(interval);
+        void fetchStatus();
     }, [fetchStatus]);
+
+    usePoll(() => { void fetchStatus(); }, 15_000);
 
     useEffect(() => {
         if (statusData && !selectedServiceId) {
@@ -8584,10 +8552,10 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
     }, [recentLimit, isJellyfinPortal]);
 
     useEffect(() => {
-        fetchData();
-        const liveInterval = setInterval(fetchDashboardOnly, 10000);
-        return () => clearInterval(liveInterval);
-    }, [fetchDashboardOnly, fetchData]);
+        void fetchData();
+    }, [fetchData]);
+
+    usePoll(() => { void fetchDashboardOnly(); }, 10_000);
 
     if (dashboardLoading && !dashboardData) {
         return <DiscoverPageSkeleton recentLimit={recentLimit} gridSize={gridSize} />;

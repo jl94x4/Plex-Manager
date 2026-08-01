@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePoll } from '../shared/usePoll';
 import {
     ArrowUpCircle,
     ChevronDown,
@@ -171,9 +172,9 @@ export const ScannerDashboard: React.FC = () => {
 
     useEffect(() => {
         void refresh();
-        const id = window.setInterval(() => { void refresh(); }, 8000);
-        return () => window.clearInterval(id);
     }, [refresh]);
+
+    usePoll(() => { void refresh(); }, 8000);
 
     const configuredSources = useMemo(() => {
         const configured = status?.configuredSources || [];

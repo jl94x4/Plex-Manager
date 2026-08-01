@@ -31,6 +31,7 @@ import {
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { appConfirm } from '../shared/confirm';
+import { usePoll } from '../shared/usePoll';
 import { CustomSelect, SettingsSwitch, SettingsToggleRow } from '../shared/ui';
 import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { SettingHint, SettingFieldLabel } from './SettingHint';
@@ -822,7 +823,7 @@ export const SettingsDashboard: React.FC = () => {
     };
 
     useEffect(() => {
-        if (activeTab === 'tasks' || activeTab === 'system') {
+        if (activeTab === 'tasks' || activeTab === 'system' || activeTab === 'request') {
             fetchTasks();
         }
         if (activeTab === 'system') {
@@ -836,17 +837,17 @@ export const SettingsDashboard: React.FC = () => {
         }
     }, [activeTab]);
 
-    // Keep Tasks UI live while any background job is running (refreshing Settings does not
-    // stop server jobs — the list was just not polling).
-    useEffect(() => {
-        if (activeTab !== 'tasks' && activeTab !== 'system') return undefined;
-        const anyRunning = Array.isArray(tasks) && tasks.some((task) => !!task?.running);
-        if (!anyRunning) return undefined;
-        const timer = window.setInterval(() => {
-            fetchTasks();
-        }, 2000);
-        return () => window.clearInterval(timer);
+    const discoveryAvailabilityTask = useMemo(
+        () => (Array.isArray(tasks) ? tasks.find((task) => task.id === 'discoveryAvailabilityCache') : null),
+        [tasks],
+    );
+
+    const tasksNeedLivePoll = useMemo(() => {
+        if (!['tasks', 'system', 'request'].includes(activeTab)) return false;
+        return Array.isArray(tasks) && tasks.some((task) => !!task?.running);
     }, [activeTab, tasks]);
+
+    usePoll(() => { void fetchTasks(); }, tasksNeedLivePoll ? 2000 : null, { immediate: false });
 
     const handleUnblockDeletedUser = async (deletedUser: any) => {
         const label = deletedUser.username || deletedUser.email || 'this user';
@@ -2941,14 +2942,44 @@ export const SettingsDashboard: React.FC = () => {
                                     <p className="text-xs text-muted mt-1">
                                         Sonarr/Radarr library badges on Discover are served from a background snapshot. Rebuild after *arr or library changes.
                                     </p>
+                                    {discoveryAvailabilityTask ? (
+                                        <p className="text-xs mt-2">
+                                            {discoveryAvailabilityTask.running ? (
+                                                <span className="text-blue-300 font-semibold">Rebuild running…</span>
+                                            ) : discoveryAvailabilityTask.lastError ? (
+                                                <span className="text-red-300">Last error: {discoveryAvailabilityTask.lastError}</span>
+                                            ) : (
+                                                <span className="text-muted">
+                                                    Last rebuild:{' '}
+                                                    {discoveryAvailabilityTask.lastRun
+                                                        ? new Date(discoveryAvailabilityTask.lastRun).toLocaleString()
+                                                        : 'Never'}
+                                                    {discoveryAvailabilityTask.nextRun ? (
+                                                        <>
+                                                            {' '}
+                                                            · Next: {new Date(discoveryAvailabilityTask.nextRun).toLocaleString()}
+                                                        </>
+                                                    ) : null}
+                                                    {typeof discoveryAvailabilityTask.lastDurationMs === 'number' ? (
+                                                        <>
+                                                            {' '}
+                                                            · Duration: {Math.round(discoveryAvailabilityTask.lastDurationMs / 1000)}s
+                                                        </>
+                                                    ) : null}
+                                                </span>
+                                            )}
+                                        </p>
+                                    ) : null}
                                 </div>
                                 <button
                                     type="button"
                                     className="btn-secondary px-4 py-2 text-sm font-bold whitespace-nowrap disabled:opacity-50"
-                                    disabled={refreshingDiscoveryCache || loading}
+                                    disabled={refreshingDiscoveryCache || loading || discoveryAvailabilityTask?.running}
                                     onClick={() => void refreshDiscoveryAvailabilityCache()}
                                 >
-                                    {refreshingDiscoveryCache ? 'Refreshing…' : 'Refresh availability'}
+                                    {refreshingDiscoveryCache || discoveryAvailabilityTask?.running
+                                        ? 'Refreshing…'
+                                        : 'Refresh availability'}
                                 </button>
                             </div>
                         </div>
