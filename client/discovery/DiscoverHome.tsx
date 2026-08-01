@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronDown, ChevronUp, ClipboardList, Film, Music, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, ClipboardList, Film, Sparkles } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { DiscoverPosterCard } from '../screens';
 import { Carousel } from './Carousel';
@@ -14,7 +14,6 @@ import {
 import { enrichDiscoveryItems, normalizeRawDiscoveryItem } from './discoverItemUtils';
 import { portalRequestsToDiscoveryRowItems } from './myRequestUtils';
 import { filterHiddenAvailableItems, useDiscoveryPreferences } from './useDiscoveryPreferences';
-import { useDiscoveryMe } from './useDiscoveryMe';
 import { fetchDiscoverHomeRowResults } from './discoverFetchUtils';
 import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
 import { WatchlistPanel } from './WatchlistPanel';
@@ -23,7 +22,7 @@ import { discoveryTheme } from './discoveryThemeClasses';
 import { useLibraryQueueToggle } from './useLibraryQueueToggle';
 import { DiscoverGridSizeSelect } from './DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './useDiscoverGridSize';
-import { discoverMusicRowCardWidthClass, discoverRowCardWidthClass } from '../shared/portalLayout';
+import { discoverRowCardWidthClass } from '../shared/portalLayout';
 import { useDiscoverI18n } from './i18n';
 
 type GenreSliderItem = { id: number; name: string; image?: string; backdrops?: string[] };
@@ -196,19 +195,15 @@ export const DiscoverHome: React.FC<{
 }> = ({ onSelect, formatItem, navigate, pushToast, providerLabel = 'Plex' }) => {
     const { t, locale } = useDiscoverI18n();
     const { preferences, loaded } = useDiscoveryPreferences();
-    const { profile: discoveryMe } = useDiscoveryMe(loaded);
-    const musicEnabled = discoveryMe.musicConfigured !== false && discoveryMe.permissions?.requestMusic !== false;
     const { showLibraryQueue, toggleLibraryQueue } = useLibraryQueueToggle();
     const [gridSize, setGridSize] = useDiscoverGridSize();
     const posterCardClass = discoverRowCardWidthClass(gridSize);
-    const musicCardClass = discoverMusicRowCardWidthClass(gridSize);
     const [rows, setRows] = useState({
         recentlyAdded: [] as any[],
         recentRequests: [] as any[],
         plexWatchlist: [] as any[],
         becauseYouWatched: [] as any[],
         becauseYouWatchedSeed: null as { mediaType: string; tmdbId: number; title?: string | null } | null,
-        recentMusic: [] as any[],
         trending: [] as any[],
         popularMovies: [] as any[],
         upcomingMovies: [] as any[],
@@ -276,7 +271,6 @@ export const DiscoverHome: React.FC<{
                 plexWatchlist: [],
                 becauseYouWatched: [],
                 becauseYouWatchedSeed: null,
-                recentMusic: [],
                 trending: filterHiddenAvailableItems(trendingRes, hideAvailable),
                 popularMovies: filterHiddenAvailableItems(popularMovies, hideAvailable),
                 upcomingMovies: filterHiddenAvailableItems(upcomingMovies, hideAvailable),
@@ -292,7 +286,7 @@ export const DiscoverHome: React.FC<{
             void (async () => {
                 try {
                     if (gen !== loadGenRef.current) return;
-                    const [addedRes, reqRes, watchlistRes, becauseRes, musicRes] = await Promise.all([
+                    const [addedRes, reqRes, watchlistRes, becauseRes] = await Promise.all([
                         (hideAvailable || preferences.showRecentlyAdded === false)
                             ? Promise.resolve(null)
                             : apiFetch('/api/discovery/proxy/media?filter=allavailable&take=40&sort=mediaAdded').catch(() => null),
@@ -301,9 +295,6 @@ export const DiscoverHome: React.FC<{
                             ? Promise.resolve(null)
                             : apiFetch('/api/discovery/watchlist').catch(() => null),
                         apiFetch('/api/discovery/because-you-watched').catch(() => null),
-                        musicEnabled
-                            ? apiFetch('/api/discovery/music/recent?limit=24').catch(() => null)
-                            : Promise.resolve(null),
                     ]);
 
                     if (gen !== loadGenRef.current) return;
@@ -318,7 +309,6 @@ export const DiscoverHome: React.FC<{
                     const watchlistPosters = await enrichDiscoveryItems(watchlistRes?.results || []);
                     const plexWatchlist = await enrichDiscoverItemsWithAvailability(watchlistPosters);
                     const becauseItems = await enrichDiscoverItemsWithAvailability(becauseRes?.results || []);
-                    const recentMusic = await enrichDiscoverItemsWithAvailability(musicRes?.results || []);
 
                     if (gen !== loadGenRef.current) return;
                     setRows((prev) => ({
@@ -328,7 +318,6 @@ export const DiscoverHome: React.FC<{
                         plexWatchlist,
                         becauseYouWatched: filterHiddenAvailableItems(becauseItems, hideAvailable),
                         becauseYouWatchedSeed: becauseRes?.seed || null,
-                        recentMusic: recentMusic,
                     }));
                 } catch {
                     // Side rails are best-effort.
@@ -365,7 +354,7 @@ export const DiscoverHome: React.FC<{
             window.clearTimeout(paintTimer);
             if (gen === loadGenRef.current) setLoading(false);
         }
-    }, [loaded, musicEnabled, preferences.hideAvailableMedia, preferences.discoverRegion, preferences.discoverLanguage, preferences.showRecentlyAdded, preferences.showWatchlist, locale]);
+    }, [loaded, preferences.hideAvailableMedia, preferences.discoverRegion, preferences.discoverLanguage, preferences.showRecentlyAdded, preferences.showWatchlist, locale]);
 
     useEffect(() => {
         loadData();
@@ -593,44 +582,6 @@ export const DiscoverHome: React.FC<{
                         ))}
                     </Carousel>
                 </div>
-
-                {musicEnabled && (
-                    <section className="flex flex-col gap-3 relative mt-4">
-                        <div className="px-3 flex items-end justify-between gap-3 flex-wrap">
-                            <div>
-                                <p className={discoveryTheme.personalEyebrow}>{t('home.musicSection')}</p>
-                                <h2 className="text-lg sm:text-xl font-black text-text mt-1">{t('home.recentMusic')}</h2>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => navigate('/discovery/music')}
-                                className="text-xs font-bold text-plex hover:underline inline-flex items-center gap-1"
-                            >
-                                <Music className="w-3.5 h-3.5" /> {t('home.allMusic')}
-                            </button>
-                        </div>
-                        <DiscoverHomeRow
-                            hideTitle
-                            aspect="square"
-                            items={rows.recentMusic || []}
-                            posterCardClass={musicCardClass}
-                            viewAllLabel={t('common.viewAll')}
-                            formatItem={formatItem}
-                            onSelect={onSelect}
-                            animateEnter={enterAnim}
-                            onViewAll={() => navigate('/discovery/music')}
-                            empty={(
-                                <EmptyRail
-                                    title={t('home.recentMusicEmptyTitle')}
-                                    body={t('home.recentMusicEmptyBody')}
-                                    actionLabel={t('home.browseMusic')}
-                                    onAction={() => navigate('/discovery/music')}
-                                    icon={<Music className="w-5 h-5" />}
-                                />
-                            )}
-                        />
-                    </section>
-                )}
             </section>
         </div>
     );

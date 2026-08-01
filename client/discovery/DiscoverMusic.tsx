@@ -7,6 +7,7 @@ import { enrichDiscoveryItems } from './discoverItemUtils';
 import { portalRequestsToDiscoveryRowItems } from './myRequestUtils';
 import { DiscoverStatusOverlay } from './DiscoverStatusOverlay';
 import { resolveMediaAvailabilityState } from './discoverAvailability';
+import { resolvePortalAssetUrl } from '../shared/basePath';
 import { useDiscoverI18n } from './i18n';
 
 type ArtistHit = {
@@ -17,6 +18,31 @@ type ArtistHit = {
     disambiguation?: string | null;
     posterPath?: string | null;
     overview?: string;
+};
+
+const ArtistArt: React.FC<{ src?: string | null; title?: string }> = ({ src, title }) => {
+    const [failed, setFailed] = useState(false);
+    const resolved = src ? resolvePortalAssetUrl(src) : '';
+    useEffect(() => {
+        setFailed(false);
+    }, [resolved]);
+
+    if (!resolved || failed) {
+        return (
+            <div className="w-full h-full flex items-center justify-center text-muted">
+                <Music className="w-10 h-10 opacity-40" />
+            </div>
+        );
+    }
+    return (
+        <img
+            src={resolved}
+            alt={title || ''}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={() => setFailed(true)}
+        />
+    );
 };
 
 const MusicArtistGrid: React.FC<{
@@ -42,18 +68,7 @@ const MusicArtistGrid: React.FC<{
                             <div className="absolute top-2 left-2 z-10">{formatted.overlay}</div>
                         )}
                         <div className="aspect-square bg-white/5 relative">
-                            {poster ? (
-                                <img
-                                    src={poster}
-                                    alt=""
-                                    className="w-full h-full object-cover"
-                                    loading="lazy"
-                                />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center text-muted">
-                                    <Music className="w-10 h-10 opacity-40" />
-                                </div>
-                            )}
+                            <ArtistArt src={poster} title={formatted.name || formatted.title} />
                         </div>
                         <div className="p-2.5">
                             <p className="font-bold text-sm leading-tight line-clamp-2 group-hover:text-plex transition-colors">
@@ -78,12 +93,12 @@ export const DiscoverMusic: React.FC<{
     const { t } = useDiscoverI18n();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<ArtistHit[]>([]);
-    const [recentArtists, setRecentArtists] = useState<ArtistHit[]>([]);
     const [requestArtists, setRequestArtists] = useState<ArtistHit[]>([]);
     const [loading, setLoading] = useState(false);
-    const [browseLoading, setBrowseLoading] = useState(true);
+    const [requestsLoading, setRequestsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const seqRef = useRef(0);
+    const inputRef = useRef<HTMLInputElement | null>(null);
 
     const openArtist = useCallback((item: any) => {
         const mbid = item?.mbid || item?.id;
@@ -94,34 +109,31 @@ export const DiscoverMusic: React.FC<{
         navigate(`/discovery/music/artist/${encodeURIComponent(String(mbid))}`);
     }, [navigate, onSelect]);
 
-    const loadBrowseRails = useCallback(async () => {
-        setBrowseLoading(true);
-        try {
-            const [recentRes, reqRes] = await Promise.all([
-                apiFetch('/api/discovery/music/recent?limit=24').catch(() => null),
-                apiFetch('/api/discovery/my-requests?filter=all&take=40').catch(() => null),
-            ]);
-            const recentRaw = Array.isArray(recentRes?.results) ? recentRes.results : [];
-            const recentEnriched = await enrichDiscoverItemsWithAvailability(recentRaw);
-            setRecentArtists(recentEnriched);
-
-            const musicRequests = portalRequestsToDiscoveryRowItems(reqRes?.results || [])
-                .filter((item) => item?.type === 'music' || item?.media?.mediaType === 'music');
-            const requestEnriched = await enrichDiscoverItemsWithAvailability(
-                await enrichDiscoveryItems(musicRequests),
-            );
-            setRequestArtists(requestEnriched);
-        } catch {
-            setRecentArtists([]);
-            setRequestArtists([]);
-        } finally {
-            setBrowseLoading(false);
-        }
+    useEffect(() => {
+        inputRef.current?.focus();
     }, []);
 
     useEffect(() => {
-        void loadBrowseRails();
-    }, [loadBrowseRails]);
+        let cancelled = false;
+        (async () => {
+            setRequestsLoading(true);
+            try {
+                const reqRes = await apiFetch('/api/discovery/my-requests?filter=all&take=40').catch(() => null);
+                if (cancelled) return;
+                const musicRequests = portalRequestsToDiscoveryRowItems(reqRes?.results || [])
+                    .filter((item) => item?.type === 'music' || item?.media?.mediaType === 'music');
+                const requestEnriched = await enrichDiscoverItemsWithAvailability(
+                    await enrichDiscoveryItems(musicRequests),
+                );
+                if (!cancelled) setRequestArtists(requestEnriched);
+            } catch {
+                if (!cancelled) setRequestArtists([]);
+            } finally {
+                if (!cancelled) setRequestsLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     const runSearch = useCallback(async (q: string) => {
         const trimmed = q.trim();
@@ -170,6 +182,7 @@ export const DiscoverMusic: React.FC<{
             <div className="relative px-2">
                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
                 <input
+                    ref={inputRef}
                     type="search"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -198,76 +211,52 @@ export const DiscoverMusic: React.FC<{
 
             {!searching && !loading && (
                 <>
-                    {browseLoading ? (
-                        <div className="py-12 flex justify-center text-muted">
-                            <Loader2 className="w-6 h-6 animate-spin" />
+                    <div className={`${discoveryTheme.emptyState} mx-2`}>
+                        <div className="w-10 h-10 rounded-full bg-plex/15 text-plex flex items-center justify-center mx-auto">
+                            <Music className="w-5 h-5" />
                         </div>
-                    ) : (
-                        <>
-                            <section className="flex flex-col gap-3">
-                                <h3 className={`${discoveryTheme.sectionTitle} px-2`}>{t('music.recentTitle')}</h3>
-                                {recentArtists.length > 0 ? (
-                                    <MusicArtistGrid items={recentArtists} formatItem={formatItem} onSelect={openArtist} />
-                                ) : (
-                                    <div className={`${discoveryTheme.emptyState} mx-2`}>
-                                        <p className={discoveryTheme.emptyTitle}>{t('music.recentEmptyTitle')}</p>
-                                        <p className={discoveryTheme.emptyBody}>{t('music.recentEmptyBody')}</p>
-                                    </div>
-                                )}
-                            </section>
+                        <p className={discoveryTheme.emptyTitle}>{t('music.startTitle')}</p>
+                        <p className={discoveryTheme.emptyBody}>{t('music.startBody')}</p>
+                    </div>
 
-                            {requestArtists.length > 0 && (
-                                <section className="flex flex-col gap-3">
-                                    <h3 className={`${discoveryTheme.sectionTitle} px-2`}>{t('music.yourRequests')}</h3>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 px-2">
-                                        {requestArtists.map((artist) => {
-                                            const formatted = formatItem ? formatItem(artist) : artist;
-                                            const poster = formatted.thumbUrl || formatted.posterPath || formatted.posterUrl;
-                                            const availability = resolveMediaAvailabilityState(artist);
-                                            return (
-                                                <button
-                                                    key={`req-${artist.mbid || artist.id}`}
-                                                    type="button"
-                                                    onClick={() => openArtist(formatted)}
-                                                    className="group text-left rounded-xl border border-border/60 bg-white/[0.02] overflow-hidden hover:border-plex/40 transition-colors relative"
-                                                >
-                                                    {availability.kind !== 'none' && (
-                                                        <div className="absolute top-2 left-2 z-10">
-                                                            <DiscoverStatusOverlay state={availability} />
-                                                        </div>
-                                                    )}
-                                                    <div className="aspect-square bg-white/5 relative">
-                                                        {poster ? (
-                                                            <img src={poster} alt="" className="w-full h-full object-cover" loading="lazy" />
-                                                        ) : (
-                                                            <div className="w-full h-full flex items-center justify-center text-muted">
-                                                                <Music className="w-10 h-10 opacity-40" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div className="p-2.5">
-                                                        <p className="font-bold text-sm leading-tight line-clamp-2 group-hover:text-plex transition-colors">
-                                                            {formatted.name || formatted.title}
-                                                        </p>
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </section>
-                            )}
-
-                            {!browseLoading && recentArtists.length === 0 && requestArtists.length === 0 && (
-                                <div className={`${discoveryTheme.emptyState} mx-2`}>
-                                    <div className="w-10 h-10 rounded-full bg-plex/15 text-plex flex items-center justify-center mx-auto">
-                                        <Music className="w-5 h-5" />
-                                    </div>
-                                    <p className={discoveryTheme.emptyTitle}>{t('music.startTitle')}</p>
-                                    <p className={discoveryTheme.emptyBody}>{t('music.startBody')}</p>
-                                </div>
-                            )}
-                        </>
-                    )}
+                    {requestsLoading ? (
+                        <div className="py-6 flex justify-center text-muted">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        </div>
+                    ) : requestArtists.length > 0 ? (
+                        <section className="flex flex-col gap-3">
+                            <h3 className={`${discoveryTheme.sectionTitle} px-2`}>{t('music.yourRequests')}</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 px-2">
+                                {requestArtists.map((artist) => {
+                                    const formatted = formatItem ? formatItem(artist) : artist;
+                                    const poster = formatted.thumbUrl || formatted.posterPath || formatted.posterUrl;
+                                    const availability = resolveMediaAvailabilityState(artist);
+                                    return (
+                                        <button
+                                            key={`req-${artist.mbid || artist.id}`}
+                                            type="button"
+                                            onClick={() => openArtist(formatted)}
+                                            className="group text-left rounded-xl border border-border/60 bg-white/[0.02] overflow-hidden hover:border-plex/40 transition-colors relative"
+                                        >
+                                            {availability.kind !== 'none' && (
+                                                <div className="absolute top-2 left-2 z-10">
+                                                    <DiscoverStatusOverlay state={availability} />
+                                                </div>
+                                            )}
+                                            <div className="aspect-square bg-white/5 relative">
+                                                <ArtistArt src={poster} title={formatted.name || formatted.title} />
+                                            </div>
+                                            <div className="p-2.5">
+                                                <p className="font-bold text-sm leading-tight line-clamp-2 group-hover:text-plex transition-colors">
+                                                    {formatted.name || formatted.title}
+                                                </p>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </section>
+                    ) : null}
                 </>
             )}
         </div>
