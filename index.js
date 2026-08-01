@@ -7922,6 +7922,58 @@ app.get('/api/discovery/music/artist/:mbid', requireAuth, requireMember, async (
     }
 });
 
+/** Proxy Lidarr MediaCover / remote artist art for Discover cards (member-accessible). */
+app.get('/api/discovery/music/cover', requireAuth, requireMember, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const instanceId = String(req.query.instanceId || '').trim();
+        const artistId = Number(req.query.artistId || 0);
+        if (!instanceId || !Number.isFinite(artistId) || artistId <= 0) {
+            return res.status(400).send('Missing instanceId or artistId');
+        }
+        const instance = getArrInstance(config, instanceId);
+        if (!instance || instance.type !== 'lidarr' || !isArrInstanceReady(instance)) {
+            return res.status(404).send('Lidarr instance not ready');
+        }
+        const resolveUrl = resolveIntegrationUrlForFetch;
+        const base = String(resolveUrl(instance.url) || '').replace(/\/+$/, '');
+        const headers = { 'X-Api-Key': instance.apiKey };
+        const coverPaths = [
+            `/MediaCover/${artistId}/poster.jpg`,
+            `/MediaCover/${artistId}/cover.jpg`,
+            `/MediaCover/${artistId}/poster-500.jpg`,
+        ];
+        let imageRes = null;
+        for (const coverPath of coverPaths) {
+            imageRes = await fetch(`${base}${coverPath}`, { headers }).catch(() => null);
+            if (imageRes?.ok) break;
+        }
+        if (!imageRes?.ok) {
+            const artist = await fetchArrInstanceJson(instance, `/api/v1/artist/${artistId}`, {
+                resolveUrl,
+                fetchImpl: fetch,
+            }).catch(() => null);
+            const posterImage = (artist?.images || []).find((img) => String(img?.coverType || '').toLowerCase() === 'poster')
+                || (artist?.images || []).find((img) => String(img?.coverType || '').toLowerCase() === 'cover')
+                || (artist?.images || [])[0]
+                || null;
+            const remoteUrl = posterImage?.remoteUrl || posterImage?.url || null;
+            if (remoteUrl) {
+                const safeRemote = await resolveSafeArrRemoteImageUrl(remoteUrl, base).catch(() => null);
+                if (safeRemote) imageRes = await fetch(safeRemote).catch(() => null);
+            }
+        }
+        if (!imageRes?.ok) return res.status(imageRes?.status || 404).send('Cover not found');
+        const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.send(Buffer.from(await imageRes.arrayBuffer()));
+    } catch (e) {
+        log(`Discovery music cover error: ${e.message}`);
+        res.status(500).send('Failed to load cover art');
+    }
+});
+
 app.get('/api/discovery/watchlist', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});

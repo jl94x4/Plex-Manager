@@ -83,6 +83,19 @@ export const DISCOVER_ROW_CARD_WIDTH_CLASS: Record<UpgraderGridSize, string> = {
 
 export const discoverRowCardWidthClass = (size: UpgraderGridSize) => DISCOVER_ROW_CARD_WIDTH_CLASS[size] || DISCOVER_ROW_CARD_WIDTH_CLASS.medium;
 
+/** Square album/artist card widths for Discover music rails. */
+export const DISCOVER_MUSIC_ROW_CARD_WIDTH_CLASS: Record<UpgraderGridSize, string> = {
+    small: 'w-[112px] sm:w-[128px]',
+    medium: 'w-[140px] sm:w-[160px]',
+    large: 'w-[168px] sm:w-[188px]',
+    xlarge: 'w-[196px] sm:w-[220px]',
+    list: 'w-[140px] sm:w-[160px]',
+};
+
+export const discoverMusicRowCardWidthClass = (size: UpgraderGridSize) => (
+    DISCOVER_MUSIC_ROW_CARD_WIDTH_CLASS[size] || DISCOVER_MUSIC_ROW_CARD_WIDTH_CLASS.medium
+);
+
 export const UPGRADER_GRID_SIZE_STORAGE_KEY = 'upgraderGridSize';
 
 export const normalizeUpgraderGridSize = (value: unknown): UpgraderGridSize => {

@@ -23,7 +23,7 @@ import { discoveryTheme } from './discoveryThemeClasses';
 import { useLibraryQueueToggle } from './useLibraryQueueToggle';
 import { DiscoverGridSizeSelect } from './DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './useDiscoverGridSize';
-import { discoverRowCardWidthClass } from '../shared/portalLayout';
+import { discoverMusicRowCardWidthClass, discoverRowCardWidthClass } from '../shared/portalLayout';
 import { useDiscoverI18n } from './i18n';
 
 type GenreSliderItem = { id: number; name: string; image?: string; backdrops?: string[] };
@@ -72,7 +72,7 @@ const EmptyRail: React.FC<{
 
 /** Stable row component — must live outside DiscoverHome or every setState remounts posters. */
 const DiscoverHomeRow: React.FC<{
-    title: string;
+    title?: string;
     items: any[];
     posterCardClass: string;
     viewAllLabel: string;
@@ -81,8 +81,10 @@ const DiscoverHomeRow: React.FC<{
     onViewAll?: () => void;
     empty?: React.ReactNode;
     animateEnter?: boolean;
+    aspect?: '2/3' | 'square';
+    hideTitle?: boolean;
 }> = ({
-    title,
+    title = '',
     items,
     posterCardClass,
     viewAllLabel,
@@ -91,11 +93,30 @@ const DiscoverHomeRow: React.FC<{
     onViewAll,
     empty,
     animateEnter = false,
+    aspect = '2/3',
+    hideTitle = false,
 }) => {
     if (!items?.length) {
         if (!empty) return null;
         return (
             <div className="flex flex-col gap-2 relative">
+                {!hideTitle && (
+                    <div className="flex items-center gap-3 min-w-0 px-2 pr-16">
+                        <h2 className={`${discoveryTheme.sectionTitle} truncate`}>{title}</h2>
+                        {onViewAll && (
+                            <button type="button" onClick={onViewAll} className="shrink-0 text-xs font-bold text-plex hover:underline">
+                                {viewAllLabel}
+                            </button>
+                        )}
+                    </div>
+                )}
+                {empty}
+            </div>
+        );
+    }
+    return (
+        <div className="flex flex-col gap-2 relative">
+            {!hideTitle && (
                 <div className="flex items-center gap-3 min-w-0 px-2 pr-16">
                     <h2 className={`${discoveryTheme.sectionTitle} truncate`}>{title}</h2>
                     {onViewAll && (
@@ -104,32 +125,20 @@ const DiscoverHomeRow: React.FC<{
                         </button>
                     )}
                 </div>
-                {empty}
-            </div>
-        );
-    }
-    return (
-        <div className="flex flex-col gap-2 relative">
-            <div className="flex items-center gap-3 min-w-0 px-2 pr-16">
-                <h2 className={`${discoveryTheme.sectionTitle} truncate`}>{title}</h2>
-                {onViewAll && (
-                    <button type="button" onClick={onViewAll} className="shrink-0 text-xs font-bold text-plex hover:underline">
-                        {viewAllLabel}
-                    </button>
-                )}
-            </div>
+            )}
             <Carousel>
                 {items.map((rawItem, idx) => {
                     if (!rawItem) return null;
                     const formatted = formatItem(rawItem);
                     return (
                         <div
-                            key={`${title}-${formatted.id || idx}`}
+                            key={`${title || 'row'}-${formatted.id || idx}`}
                             className={`${posterCardClass} flex-shrink-0 relative group${animateEnter ? ' discover-poster-enter' : ''}`}
                             style={animateEnter ? { animationDelay: `${Math.min(idx, 12) * 30}ms` } : undefined}
                         >
                             <DiscoverPosterCard
                                 item={formatted}
+                                aspect={aspect}
                                 overlay={formatted.overlay}
                                 showQualityBadges={false}
                                 onPosterClick={() => onSelect(formatted)}
@@ -192,6 +201,7 @@ export const DiscoverHome: React.FC<{
     const { showLibraryQueue, toggleLibraryQueue } = useLibraryQueueToggle();
     const [gridSize, setGridSize] = useDiscoverGridSize();
     const posterCardClass = discoverRowCardWidthClass(gridSize);
+    const musicCardClass = discoverMusicRowCardWidthClass(gridSize);
     const [rows, setRows] = useState({
         recentlyAdded: [] as any[],
         recentRequests: [] as any[],
@@ -458,40 +468,6 @@ export const DiscoverHome: React.FC<{
                                 animateEnter={enterAnim}
                             />
                         )}
-
-                        {(rows.recentMusic?.length ?? 0) > 0 && musicEnabled && (
-                            <DiscoverHomeRow
-                                title={t('home.recentMusic')}
-                                items={rows.recentMusic}
-                                posterCardClass={posterCardClass}
-                                viewAllLabel={t('common.viewAll')}
-                                formatItem={formatItem}
-                                onSelect={onSelect}
-                                animateEnter={enterAnim}
-                                onViewAll={() => navigate('/discovery/music')}
-                            />
-                        )}
-                        {(rows.recentMusic?.length ?? 0) === 0 && musicEnabled && (
-                            <DiscoverHomeRow
-                                title={t('home.recentMusic')}
-                                items={[]}
-                                posterCardClass={posterCardClass}
-                                viewAllLabel={t('common.viewAll')}
-                                formatItem={formatItem}
-                                onSelect={onSelect}
-                                animateEnter={enterAnim}
-                                onViewAll={() => navigate('/discovery/music')}
-                                empty={(
-                                    <EmptyRail
-                                        title={t('home.recentMusicEmptyTitle')}
-                                        body={t('home.recentMusicEmptyBody')}
-                                        actionLabel={t('home.browseMusic')}
-                                        onAction={() => navigate('/discovery/music')}
-                                        icon={<Music className="w-5 h-5" />}
-                                    />
-                                )}
-                            />
-                        )}
                     </div>
                 )}
             </section>
@@ -619,40 +595,41 @@ export const DiscoverHome: React.FC<{
                 </div>
 
                 {musicEnabled && (
-                <div className="flex flex-col gap-2 relative mt-2">
-                    <div className="px-3 flex items-end justify-between gap-3 flex-wrap">
-                        <div>
-                            <p className={discoveryTheme.personalEyebrow}>{t('home.musicSection')}</p>
-                            <h2 className="text-lg sm:text-xl font-black text-text mt-1">{t('home.recentMusic')}</h2>
+                    <section className="flex flex-col gap-3 relative mt-4">
+                        <div className="px-3 flex items-end justify-between gap-3 flex-wrap">
+                            <div>
+                                <p className={discoveryTheme.personalEyebrow}>{t('home.musicSection')}</p>
+                                <h2 className="text-lg sm:text-xl font-black text-text mt-1">{t('home.recentMusic')}</h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => navigate('/discovery/music')}
+                                className="text-xs font-bold text-plex hover:underline inline-flex items-center gap-1"
+                            >
+                                <Music className="w-3.5 h-3.5" /> {t('home.allMusic')}
+                            </button>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => navigate('/discovery/music')}
-                            className="text-xs font-bold text-plex hover:underline inline-flex items-center gap-1"
-                        >
-                            <Music className="w-3.5 h-3.5" /> {t('home.allMusic')}
-                        </button>
-                    </div>
-                    <DiscoverHomeRow
-                        title={t('home.recentMusic')}
-                        items={rows.recentMusic || []}
-                        posterCardClass={posterCardClass}
-                        viewAllLabel={t('common.viewAll')}
-                        formatItem={formatItem}
-                        onSelect={onSelect}
-                        animateEnter={enterAnim}
-                        onViewAll={() => navigate('/discovery/music')}
-                        empty={(
-                            <EmptyRail
-                                title={t('home.recentMusicEmptyTitle')}
-                                body={t('home.recentMusicEmptyBody')}
-                                actionLabel={t('home.browseMusic')}
-                                onAction={() => navigate('/discovery/music')}
-                                icon={<Music className="w-5 h-5" />}
-                            />
-                        )}
-                    />
-                </div>
+                        <DiscoverHomeRow
+                            hideTitle
+                            aspect="square"
+                            items={rows.recentMusic || []}
+                            posterCardClass={musicCardClass}
+                            viewAllLabel={t('common.viewAll')}
+                            formatItem={formatItem}
+                            onSelect={onSelect}
+                            animateEnter={enterAnim}
+                            onViewAll={() => navigate('/discovery/music')}
+                            empty={(
+                                <EmptyRail
+                                    title={t('home.recentMusicEmptyTitle')}
+                                    body={t('home.recentMusicEmptyBody')}
+                                    actionLabel={t('home.browseMusic')}
+                                    onAction={() => navigate('/discovery/music')}
+                                    icon={<Music className="w-5 h-5" />}
+                                />
+                            )}
+                        />
+                    </section>
                 )}
             </section>
         </div>
