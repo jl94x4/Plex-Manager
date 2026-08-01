@@ -4994,6 +4994,8 @@ const loginSecondaryBtnClass = `${themeClasses.btnSecondary} w-full px-8 py-4 te
 const PublicUptimeBanner: React.FC = () => {
     const [healthData, setHealthData] = useState<Record<string, any>>({});
     const [config, setConfig] = useState<any>({});
+    const [statusError, setStatusError] = useState<string | null>(null);
+    const [hasLoaded, setHasLoaded] = useState(false);
 
     useEffect(() => {
         const fetchStatus = async () => {
@@ -5001,12 +5003,24 @@ const PublicUptimeBanner: React.FC = () => {
                 const res = await apiFetch('/api/status');
                 setConfig(res.config);
                 setHealthData(res.healthData);
-            } catch (e) { }
+                setStatusError(null);
+                setHasLoaded(true);
+            } catch (e) {
+                setStatusError(e instanceof Error ? e.message : 'Status unavailable');
+            }
         };
         fetchStatus();
         const interval = setInterval(fetchStatus, 15000);
         return () => clearInterval(interval);
     }, []);
+
+    if (statusError && !hasLoaded) {
+        return (
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 backdrop-blur-xl px-4 py-4 sm:px-6 w-full">
+                <p className="text-sm text-amber-200 text-center">Live status temporarily unavailable.</p>
+            </div>
+        );
+    }
 
     if (!config.services?.length) return null;
 
@@ -5125,7 +5139,7 @@ const LivePlexStats: React.FC = () => {
     );
 };
 
-export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, initialError?: string }> = ({ onLoginSuccess, publicConfig, initialError }) => {
+export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, publicConfigWarning?: string | null, initialError?: string }> = ({ onLoginSuccess, publicConfig, publicConfigWarning, initialError }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(initialError || '');
     const [jellyfinUsername, setJellyfinUsername] = useState('');
@@ -5345,6 +5359,11 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
                     )}
 
                     <div className={`flex flex-col justify-center items-center text-center p-6 sm:p-8 lg:p-10 xl:p-12 min-w-0 ${showTrialAccess ? 'flex-1 order-first lg:order-none' : 'w-full py-10 sm:py-12'}`}>
+                        {publicConfigWarning && (
+                            <div className="w-full mb-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 text-center">
+                                {publicConfigWarning}
+                            </div>
+                        )}
                         <div className="relative mb-8">
                             {!logoSrc && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-36 bg-plex/20 rounded-full blur-[60px] pointer-events-none" />}
                             {logoSrc ? (

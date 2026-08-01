@@ -131,6 +131,7 @@ export const MainApp: React.FC = () => {
     const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading'>('loading');
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     const [publicConfig, setPublicConfig] = useState<any>({});
+    const [publicConfigWarning, setPublicConfigWarning] = useState<string | null>(null);
     const [releaseNotes, setReleaseNotes] = useState<ReleaseNotes | null>(null);
     const [showWhatsNew, setShowWhatsNew] = useState(false);
     const whatsNewCheckedRef = useRef(false);
@@ -143,11 +144,15 @@ export const MainApp: React.FC = () => {
                 window.__BASE_PATH__ = data.basePath;
             }
             setPublicConfig(data);
+            setPublicConfigWarning(null);
 
             if (data.customLogoUrl) {
                 updateFavicon(data.customLogoUrl);
             }
-        } catch (e) { }
+        } catch (e) {
+            console.error('[portal] Failed to load public config:', e);
+            setPublicConfigWarning('Portal branding settings could not be loaded. Defaults are being used.');
+        }
     }, []);
 
     const lastBrandingTheme = useRef<string | null>(null);
@@ -486,7 +491,7 @@ export const MainApp: React.FC = () => {
         const initialLoginError = typeof window !== 'undefined'
             ? new URLSearchParams(window.location.search).get('loginError')
             : null;
-        return <Login onLoginSuccess={checkSession} publicConfig={publicConfig} initialError={initialLoginError || undefined} />;
+        return <Login onLoginSuccess={checkSession} publicConfig={publicConfig} publicConfigWarning={publicConfigWarning} initialError={initialLoginError || undefined} />;
     }
 
     const isAdmin = !!sessionInfo?.session?.isAdmin;

@@ -242,8 +242,10 @@ export const SettingsDashboard: React.FC = () => {
         try {
             const sConf = await apiFetch('/api/status/config');
             setStatusConfig(sConf);
-        } catch (e) { }
-    }, []);
+        } catch (e) {
+            addToast(e instanceof Error ? e.message : 'Failed to load status monitor config', 'error');
+        }
+    }, [addToast]);
 
     useEffect(() => {
         const fetchConfig = async () => {

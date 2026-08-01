@@ -22401,7 +22401,9 @@ async function monitorConcurrentSessions() {
                 await saveFile(PLEX_STATS_CACHE_PATH, stats);
             }
         }
-    } catch (e) { }
+    } catch (e) {
+        log(`[PlexStats] Session monitor failed: ${e.message}`);
+    }
 }
 
 app.listen(PORT, BIND_HOST, async () => {
