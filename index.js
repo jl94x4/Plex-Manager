@@ -983,6 +983,12 @@ import {
     searchLidarrArtists,
     searchMusicArtists,
 } from './lib/discovery-music-enrich.js';
+import {
+    fetchJellyfinLibraryRecent,
+    fetchPlexLibraryRecent,
+    searchJellyfinLibraryMedia,
+    searchPlexLibraryMedia,
+} from './lib/media-server-library.js';
 import { fetchDiscoveryCombinedRatings, fetchImdbRatingsFromRadarr } from './lib/discovery-ratings.js';
 import { enrichTvDetailsWithSonarrLibraryStatus, fetchSonarrLibraryStatusForShow } from './lib/sonarr-library-status.js';
 import { enrichSessionsWithGeo } from './lib/geoip-lookup.js';
@@ -11349,6 +11355,76 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
     } catch (e) {
         log(`Error fetching Plex dashboard: ${e.message}`);
         res.status(500).json({ error: 'Failed to fetch dashboard data' });
+    }
+});
+
+/** Poster Sets Library tab — recently added from every movie/TV section with fair per-library quotas. */
+app.get('/api/media-server/library/recent', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 120, 1), 250);
+        const serverType = String(config.mediaServerType || 'plex').toLowerCase();
+        const deps = {
+            getPlexConnectionUri,
+            plexClientHeaders,
+            fetchImpl: fetchWithTimeout,
+            fetchJellyfinItems,
+            withBasePath,
+            resolveIntegrationUrlForFetch,
+            jellyfinHeaders,
+            fetchWithTimeout,
+        };
+        if (isEmbyLikeMediaServer(config)) {
+            if (!isJellyfinConfigured(config)) {
+                return res.status(503).json({ error: 'Jellyfin not configured' });
+            }
+            const payload = await fetchJellyfinLibraryRecent(config, deps, { limit });
+            return res.json({ serverType, ...payload });
+        }
+        if (!config.plexToken || !config.serverIdentifier) {
+            return res.status(503).json({ error: 'Plex not configured' });
+        }
+        const payload = await fetchPlexLibraryRecent(config, deps, { limit });
+        return res.json({ serverType: 'plex', ...payload });
+    } catch (e) {
+        log(`Media server library recent error: ${e.message}`);
+        res.status(502).json({ error: e.message || 'Failed to load recently added media' });
+    }
+});
+
+/** Poster Sets Library tab — search movies and shows across the configured media server. */
+app.get('/api/media-server/library/search', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const query = String(req.query.q || req.query.query || '').trim();
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 40, 1), 80);
+        if (!query) return res.json({ serverType: config.mediaServerType || 'plex', results: [] });
+
+        const serverType = String(config.mediaServerType || 'plex').toLowerCase();
+        const deps = {
+            getPlexConnectionUri,
+            plexClientHeaders,
+            fetchImpl: fetchWithTimeout,
+            resolveIntegrationUrlForFetch,
+            jellyfinHeaders,
+            fetchWithTimeout,
+            withBasePath,
+        };
+        if (isEmbyLikeMediaServer(config)) {
+            if (!isJellyfinConfigured(config)) {
+                return res.status(503).json({ error: 'Jellyfin not configured' });
+            }
+            const results = await searchJellyfinLibraryMedia(config, deps, { query, limit });
+            return res.json({ serverType, results });
+        }
+        if (!config.plexToken || !config.serverIdentifier) {
+            return res.status(503).json({ error: 'Plex not configured' });
+        }
+        const results = await searchPlexLibraryMedia(config, deps, { query, limit });
+        return res.json({ serverType: 'plex', results });
+    } catch (e) {
+        log(`Media server library search error: ${e.message}`);
+        res.status(502).json({ error: e.message || 'Failed to search media server' });
     }
 });
 

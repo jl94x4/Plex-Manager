@@ -69,6 +69,23 @@ export const normalizeJellyfinShows = (episodes: Record<string, unknown>[] = [])
 export const normalizeLibraryMovies = (movies: Record<string, unknown>[] = []): LibraryRecentItem[] =>
     movies.map(mapMovie).filter(Boolean) as LibraryRecentItem[];
 
+export const normalizeLibraryItems = (items: Record<string, unknown>[] = []): LibraryRecentItem[] =>
+    items.map((item) => {
+        const mediaType = String(item.mediaType || '').toLowerCase() === 'show' ? 'show' : 'movie';
+        const title = String(item.title || '').trim();
+        if (!title) return null;
+        return {
+            id: String(item.id || item.ratingKey || title),
+            title,
+            year: Number(item.year) || null,
+            mediaType,
+            thumb: item.thumb ? String(item.thumb) : null,
+            thumbUrl: item.thumbUrl ? String(item.thumbUrl) : null,
+            posterFallbackUrl: item.posterFallbackUrl ? String(item.posterFallbackUrl) : null,
+            addedAt: Number(item.addedAt) || 0,
+        };
+    }).filter(Boolean) as LibraryRecentItem[];
+
 export const libraryItemPosterSrc = (item: LibraryRecentItem): string => {
     if (item.thumbUrl) {
         const raw = String(item.thumbUrl).trim();

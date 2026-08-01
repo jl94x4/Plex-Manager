@@ -26,7 +26,6 @@ import {
     X,
 } from 'lucide-react';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
-import { apiFetch } from '../shared/api';
 import { usePoll } from '../shared/usePoll';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
@@ -70,11 +69,10 @@ import {
     previewAssetEpisodeLabel,
     type PreviewAssetSections,
 } from './previewGroups';
+import { pickAutoMatchedTitle } from './autoMatchTitle';
 import {
     libraryItemPosterSrc,
-    normalizeJellyfinShows,
-    normalizeLibraryMovies,
-    normalizePlexShows,
+    normalizeLibraryItems,
     type LibraryRecentItem,
 } from './libraryRecent';
 
@@ -1094,6 +1092,10 @@ export const PosterSetsDashboard: React.FC = () => {
     const [libraryMovies, setLibraryMovies] = useState<LibraryRecentItem[]>([]);
     const [libraryLoading, setLibraryLoading] = useState(false);
     const [libraryError, setLibraryError] = useState<string | null>(null);
+    const [librarySearchQuery, setLibrarySearchQuery] = useState('');
+    const [librarySearchResults, setLibrarySearchResults] = useState<LibraryRecentItem[]>([]);
+    const [librarySearching, setLibrarySearching] = useState(false);
+    const librarySearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const libraryLoadGenRef = useRef(0);
     const scrollPreviewAfterLoadRef = useRef(false);
     const syncedSetUrlRef = useRef<string | null>(initialLocation.setUrl);
@@ -1151,20 +1153,13 @@ export const PosterSetsDashboard: React.FC = () => {
         if (!options?.silent) setLibraryLoading(true);
         setLibraryError(null);
         try {
-            const serverType = String(status?.mediaServerType || 'plex').toLowerCase();
-            const isJellyfin = serverType === 'jellyfin' || serverType === 'emby';
-            const endpoint = isJellyfin ? '/api/jellyfin/dashboard' : '/api/plex/dashboard';
-            const response = await apiFetch(`${endpoint}?limit=100`) as {
-                recentShows?: Record<string, unknown>[];
-                recentMovies?: Record<string, unknown>[];
-            };
+            const response = await posterSetsApi.libraryRecent(120);
             if (requestId !== libraryLoadGenRef.current) return;
-            setLibraryShows(
-                isJellyfin
-                    ? normalizeJellyfinShows(response.recentShows || [])
-                    : normalizePlexShows(response.recentShows || []),
-            );
-            setLibraryMovies(normalizeLibraryMovies(response.recentMovies || []));
+            const movies = normalizeLibraryItems(response.movies || []);
+            const shows = normalizeLibraryItems(response.shows || []);
+            const merged = normalizeLibraryItems(response.items || []);
+            setLibraryMovies(movies.length ? movies : merged.filter((item) => item.mediaType === 'movie'));
+            setLibraryShows(shows.length ? shows : merged.filter((item) => item.mediaType === 'show'));
         } catch (error) {
             if (requestId !== libraryLoadGenRef.current) return;
             const message = error instanceof Error ? error.message : 'Failed to load recently added library items';
@@ -1175,7 +1170,29 @@ export const PosterSetsDashboard: React.FC = () => {
                 setLibraryLoading(false);
             }
         }
-    }, [status?.mediaServerType, toast]);
+    }, [toast]);
+
+    const runLibrarySearch = useCallback(async (query: string) => {
+        const q = String(query || '').trim();
+        if (!q) {
+            setLibrarySearchResults([]);
+            setLibrarySearching(false);
+            return;
+        }
+        setLibrarySearching(true);
+        setLibraryError(null);
+        try {
+            const response = await posterSetsApi.librarySearch(q, 48);
+            setLibrarySearchResults(normalizeLibraryItems(response.results || []));
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Library search failed';
+            setLibraryError(message);
+            toast(message, 'error');
+            setLibrarySearchResults([]);
+        } finally {
+            setLibrarySearching(false);
+        }
+    }, [toast]);
 
     const loadBrowse = useCallback(async (options?: { refresh?: boolean; silent?: boolean }) => {
         const hasCachedRails = browseRailsRef.current.length > 0;
@@ -1370,6 +1387,29 @@ export const PosterSetsDashboard: React.FC = () => {
         void loadLibraryRecent({ silent: libraryShows.length > 0 || libraryMovies.length > 0 });
         return undefined;
     }, [tab, status, libraryMovies.length, libraryShows.length, loadLibraryRecent]);
+
+    useEffect(() => {
+        if (tab !== 'library') return undefined;
+        if (librarySearchDebounceRef.current) {
+            clearTimeout(librarySearchDebounceRef.current);
+            librarySearchDebounceRef.current = null;
+        }
+        const q = librarySearchQuery.trim();
+        if (q.length < 2) {
+            setLibrarySearchResults([]);
+            setLibrarySearching(false);
+            return undefined;
+        }
+        librarySearchDebounceRef.current = setTimeout(() => {
+            void runLibrarySearch(q);
+        }, 350);
+        return () => {
+            if (librarySearchDebounceRef.current) {
+                clearTimeout(librarySearchDebounceRef.current);
+                librarySearchDebounceRef.current = null;
+            }
+        };
+    }, [librarySearchQuery, runLibrarySearch, tab]);
 
     usePoll(() => { void loadBrowse({ silent: true }); }, (tab === 'browse' && browseRails.some((rail) => rail.loading)) ? 4000 : null, { immediate: false });
 
@@ -2423,7 +2463,7 @@ export const PosterSetsDashboard: React.FC = () => {
         requestAnimationFrame(() => {
             searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
-        void runCatalogSearch({ mode: 'title', query: item.title, provider: 'both' });
+        void runLibraryItemSearch(item);
     };
 
     const openSearchTitle = async (title: PosterSetsSearchTitle) => {
@@ -2475,6 +2515,75 @@ export const PosterSetsDashboard: React.FC = () => {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
         } finally {
             setBusy(null);
+        }
+    };
+
+    const runLibraryItemSearch = async (item: LibraryRecentItem) => {
+        setBusy('search');
+        setSearchTitles([]);
+        setSearchSets([]);
+        setSearchSetsPage(1);
+        setSearchLoadingMore(false);
+        setSearchContext('');
+        setSelectedSearchTitle(null);
+        setSelectedSearchSet(null);
+        setPreview(null);
+
+        const dupePreference = configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb';
+        const queries = item.year != null
+            ? [`${item.title} ${item.year}`, item.title]
+            : [item.title];
+
+        try {
+            let response: Awaited<ReturnType<typeof posterSetsApi.search>> | null = null;
+            let titles: PosterSetsSearchTitle[] = [];
+            let autoMatch: PosterSetsSearchTitle | null = null;
+
+            for (const query of queries) {
+                response = await posterSetsApi.search({
+                    provider: 'both',
+                    query,
+                    mode: 'title',
+                    dupePreference,
+                    limit: 24,
+                });
+                titles = response.titles || [];
+                autoMatch = pickAutoMatchedTitle(item, titles);
+                if (autoMatch) break;
+            }
+
+            if (autoMatch) {
+                const yearLabel = autoMatch.year ? ` (${autoMatch.year})` : '';
+                toast(`Auto-matched ${autoMatch.title}${yearLabel} — loading sets…`);
+                await openSearchTitle(autoMatch);
+                return;
+            }
+
+            setSearchTitles(titles);
+            setSearchSets(response?.sets || []);
+            setSearchSetsPage(1);
+            setSearchContext(response?.title || item.title);
+            const titleCount = titles.length;
+            const setCount = response?.sets?.length || 0;
+            const dupes = Number(response?.dupesCollapsed || 0);
+            const dupeNote = dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} collapsed` : '';
+            if (!titleCount && !setCount) {
+                toast(`No poster sets found for ${item.title}.`, 'error');
+            } else if (titleCount) {
+                const yearHint = item.year ? ` (${item.year})` : '';
+                toast(
+                    `Could not auto-match ${item.title}${yearHint} — ${titleCount} possible title${titleCount === 1 ? '' : 's'}${dupeNote}. Pick one.`,
+                );
+            } else {
+                toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}${dupeNote}. Choose one to preview.`);
+            }
+            if (response?.partialErrors?.length) {
+                toast(response.partialErrors[0], 'error');
+            }
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Search failed', 'error');
+        } finally {
+            setBusy((current) => (current === 'search' ? null : current));
         }
     };
 
@@ -3020,14 +3129,38 @@ export const PosterSetsDashboard: React.FC = () => {
                 <section className={`${cardClass} space-y-6 p-4 sm:p-5`}>
                     <div className="flex flex-col items-center gap-3 text-center">
                         <div className="min-w-0 max-w-3xl">
-                            <h2 className={sectionTitleClass}>Recently added</h2>
+                            <h2 className={sectionTitleClass}>Library</h2>
                             <p className={sectionBodyClass}>
-                                TV shows and movies recently added to your {status?.mediaServerLabel || 'media server'}.
-                                Pick one to search MediUX and ThePosterDB for matching poster sets.
+                                Recently added movies and TV from every {status?.mediaServerLabel || 'media server'} library,
+                                or search your server to find a title and browse poster sets for it.
                             </p>
                             {libraryError ? (
                                 <p className="mt-2 text-xs text-amber-200">{libraryError}</p>
                             ) : null}
+                        </div>
+                        <div className="flex w-full max-w-2xl gap-2">
+                            <div className="relative min-w-0 flex-1">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                <input
+                                    type="search"
+                                    value={librarySearchQuery}
+                                    onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') void runLibrarySearch(librarySearchQuery);
+                                    }}
+                                    placeholder={`Search ${status?.mediaServerLabel || 'media server'} for a movie or show…`}
+                                    className={`${fieldClass} pl-10`}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={librarySearching || librarySearchQuery.trim().length < 2}
+                                onClick={() => void runLibrarySearch(librarySearchQuery)}
+                            >
+                                {librarySearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                Search
+                            </button>
                         </div>
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <CustomSelect
@@ -3046,42 +3179,73 @@ export const PosterSetsDashboard: React.FC = () => {
                                 {libraryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                                 Refresh
                             </button>
+                            {librarySearchQuery.trim() ? (
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    onClick={() => {
+                                        setLibrarySearchQuery('');
+                                        setLibrarySearchResults([]);
+                                    }}
+                                >
+                                    <X className="h-4 w-4" />
+                                    Clear search
+                                </button>
+                            ) : null}
                         </div>
                     </div>
 
-                    {libraryLoading && !libraryShows.length && !libraryMovies.length ? (
+                    {librarySearchQuery.trim().length >= 2 ? (
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+                                <h3 className="text-sm font-bold text-text sm:text-base">
+                                    Search results
+                                    {librarySearchQuery.trim() ? ` · “${librarySearchQuery.trim()}”` : ''}
+                                </h3>
+                                <span className="text-[11px] text-muted">
+                                    {librarySearching ? 'Searching…' : `${librarySearchResults.length} found`}
+                                </span>
+                            </div>
+                            {librarySearching && !librarySearchResults.length ? (
+                                <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Searching your library…
+                                </div>
+                            ) : null}
+                            {!librarySearching && !librarySearchResults.length ? (
+                                <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
+                                    No movies or TV shows matched that search on your media server.
+                                </p>
+                            ) : null}
+                            {librarySearchResults.length ? (
+                                <div className={posterGridClass} style={posterGridStyle}>
+                                    {librarySearchResults.map((item) => (
+                                        <LibraryMediaCard
+                                            key={`library-search-${item.mediaType}-${item.id}`}
+                                            item={item}
+                                            disabled={busy !== null}
+                                            onOpen={openLibraryItem}
+                                        />
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
+
+                    {!librarySearchQuery.trim() && libraryLoading && !libraryShows.length && !libraryMovies.length ? (
                         <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
                             <Loader2 className="h-4 w-4 animate-spin" />
                             Loading recently added…
                         </div>
                     ) : null}
 
-                    {!libraryLoading && !libraryShows.length && !libraryMovies.length && !libraryError ? (
+                    {!librarySearchQuery.trim() && !libraryLoading && !libraryShows.length && !libraryMovies.length && !libraryError ? (
                         <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
-                            No recently added TV or movies found on your media server.
+                            No recently added movies or TV found on your media server.
                         </p>
                     ) : null}
 
-                    {libraryShows.length ? (
-                        <div className="space-y-3">
-                            <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
-                                <h3 className="text-sm font-bold text-text sm:text-base">TV shows</h3>
-                                <span className="text-[11px] text-muted">{libraryShows.length}</span>
-                            </div>
-                            <div className={posterGridClass} style={posterGridStyle}>
-                                {libraryShows.map((item) => (
-                                    <LibraryMediaCard
-                                        key={`library-show-${item.id}`}
-                                        item={item}
-                                        disabled={busy !== null}
-                                        onOpen={openLibraryItem}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    ) : null}
-
-                    {libraryMovies.length ? (
+                    {!librarySearchQuery.trim() && libraryMovies.length ? (
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
                                 <h3 className="text-sm font-bold text-text sm:text-base">Movies</h3>
@@ -3091,6 +3255,25 @@ export const PosterSetsDashboard: React.FC = () => {
                                 {libraryMovies.map((item) => (
                                     <LibraryMediaCard
                                         key={`library-movie-${item.id}`}
+                                        item={item}
+                                        disabled={busy !== null}
+                                        onOpen={openLibraryItem}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {!librarySearchQuery.trim() && libraryShows.length ? (
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+                                <h3 className="text-sm font-bold text-text sm:text-base">TV shows</h3>
+                                <span className="text-[11px] text-muted">{libraryShows.length}</span>
+                            </div>
+                            <div className={posterGridClass} style={posterGridStyle}>
+                                {libraryShows.map((item) => (
+                                    <LibraryMediaCard
+                                        key={`library-show-${item.id}`}
                                         item={item}
                                         disabled={busy !== null}
                                         onOpen={openLibraryItem}
