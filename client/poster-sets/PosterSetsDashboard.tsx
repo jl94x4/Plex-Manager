@@ -71,6 +71,13 @@ import {
 } from './previewGroups';
 import { pickAutoMatchedTitle } from './autoMatchTitle';
 import {
+    clearLibraryRecentCache,
+    readLibraryRecentCache,
+    readLibrarySearchCache,
+    writeLibraryRecentCache,
+    writeLibrarySearchCache,
+} from './libraryCache';
+import {
     libraryItemPosterSrc,
     normalizeLibraryItems,
     type LibraryRecentItem,
@@ -1148,23 +1155,39 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     }, [toast]);
 
-    const loadLibraryRecent = useCallback(async (options?: { silent?: boolean }) => {
+    const loadLibraryRecent = useCallback(async (options?: { silent?: boolean; refresh?: boolean }) => {
         const requestId = ++libraryLoadGenRef.current;
-        if (!options?.silent) setLibraryLoading(true);
         setLibraryError(null);
+
+        if (options?.refresh) {
+            clearLibraryRecentCache();
+        }
+
+        const cached = !options?.refresh ? readLibraryRecentCache() : null;
+        if (cached) {
+            setLibraryMovies(cached.movies);
+            setLibraryShows(cached.shows);
+        }
+
+        const silent = options?.silent || !!cached;
+        if (!silent) setLibraryLoading(true);
+
         try {
-            const response = await posterSetsApi.libraryRecent(120);
+            const response = await posterSetsApi.libraryRecent(120, { refresh: options?.refresh });
             if (requestId !== libraryLoadGenRef.current) return;
             const movies = normalizeLibraryItems(response.movies || []);
             const shows = normalizeLibraryItems(response.shows || []);
             const merged = normalizeLibraryItems(response.items || []);
-            setLibraryMovies(movies.length ? movies : merged.filter((item) => item.mediaType === 'movie'));
-            setLibraryShows(shows.length ? shows : merged.filter((item) => item.mediaType === 'show'));
+            const movieList = movies.length ? movies : merged.filter((item) => item.mediaType === 'movie');
+            const showList = shows.length ? shows : merged.filter((item) => item.mediaType === 'show');
+            setLibraryMovies(movieList);
+            setLibraryShows(showList);
+            writeLibraryRecentCache({ movies: movieList, shows: showList });
         } catch (error) {
             if (requestId !== libraryLoadGenRef.current) return;
             const message = error instanceof Error ? error.message : 'Failed to load recently added library items';
             setLibraryError(message);
-            if (!options?.silent) toast(message, 'error');
+            if (!silent) toast(message, 'error');
         } finally {
             if (requestId === libraryLoadGenRef.current) {
                 setLibraryLoading(false);
@@ -1172,23 +1195,32 @@ export const PosterSetsDashboard: React.FC = () => {
         }
     }, [toast]);
 
-    const runLibrarySearch = useCallback(async (query: string) => {
+    const runLibrarySearch = useCallback(async (query: string, options?: { refresh?: boolean }) => {
         const q = String(query || '').trim();
         if (!q) {
             setLibrarySearchResults([]);
             setLibrarySearching(false);
             return;
         }
-        setLibrarySearching(true);
+
+        const cached = !options?.refresh ? readLibrarySearchCache(q) : null;
+        if (cached?.length) {
+            setLibrarySearchResults(cached);
+        }
+
+        const silent = !!cached?.length;
+        if (!silent) setLibrarySearching(true);
         setLibraryError(null);
         try {
-            const response = await posterSetsApi.librarySearch(q, 48);
-            setLibrarySearchResults(normalizeLibraryItems(response.results || []));
+            const response = await posterSetsApi.librarySearch(q, 48, { refresh: options?.refresh });
+            const results = normalizeLibraryItems(response.results || []);
+            setLibrarySearchResults(results);
+            writeLibrarySearchCache(q, results);
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Library search failed';
             setLibraryError(message);
-            toast(message, 'error');
-            setLibrarySearchResults([]);
+            if (!silent) toast(message, 'error');
+            if (!cached?.length) setLibrarySearchResults([]);
         } finally {
             setLibrarySearching(false);
         }
@@ -3174,7 +3206,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                 type="button"
                                 className={buttonClass}
                                 disabled={libraryLoading || busy !== null}
-                                onClick={() => void loadLibraryRecent()}
+                                onClick={() => void loadLibraryRecent({ refresh: true })}
                             >
                                 {libraryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                                 Refresh

@@ -264,16 +264,16 @@ export const posterSetsApi = {
         ok?: boolean;
         entries: PosterSetsAuditEntry[];
     }>,
-    libraryRecent: (limit = 120) => apiFetch(
-        `/api/media-server/library/recent?limit=${encodeURIComponent(String(limit))}`,
+    libraryRecent: (limit = 120, options?: { refresh?: boolean }) => apiFetch(
+        `/api/media-server/library/recent?limit=${encodeURIComponent(String(limit))}${options?.refresh ? '&refresh=1' : ''}`,
     ) as Promise<{
         serverType?: string;
         movies?: Array<Record<string, unknown>>;
         shows?: Array<Record<string, unknown>>;
         items?: Array<Record<string, unknown>>;
     }>,
-    librarySearch: (query: string, limit = 40) => apiFetch(
-        `/api/media-server/library/search?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`,
+    librarySearch: (query: string, limit = 40, options?: { refresh?: boolean }) => apiFetch(
+        `/api/media-server/library/search?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}${options?.refresh ? '&refresh=1' : ''}`,
     ) as Promise<{
         serverType?: string;
         results?: Array<Record<string, unknown>>;
