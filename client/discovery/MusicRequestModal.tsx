@@ -154,7 +154,7 @@ export const MusicRequestModal: React.FC<Props> = ({
     const quotaHint = options?.quota ? formatQuotaHint(options.quota, false) : '';
 
     return (
-        <ModalPortal>
+        <ModalPortal open={open}>
             <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4">
                 <button type="button" className="absolute inset-0 bg-black/70" onClick={onClose} aria-label="Close" />
                 <div className="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-border bg-background shadow-2xl">
