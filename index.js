@@ -13721,7 +13721,9 @@ async function loadStatusState() {
 async function saveHealthData() {
     try {
         await saveFile(HEALTH_PATH, healthData);
-    } catch (e) { }
+    } catch (e) {
+        log(`Failed to save status health data: ${e.message}`);
+    }
 }
 
 async function performDownloadClientProbe(service) {
@@ -19957,7 +19959,7 @@ app.get('/api/scanner/status', requireAdmin, requireScanner, async (req, res) =>
     }
 });
 
-app.get('/api/scanner/queue', requireAdmin, async (req, res) => {
+app.get('/api/scanner/queue', requireAdmin, requireScanner, async (req, res) => {
     try {
         const stats = await getQueueStats();
         res.json(stats);
@@ -19966,7 +19968,7 @@ app.get('/api/scanner/queue', requireAdmin, async (req, res) => {
     }
 });
 
-app.get('/api/scanner/log', requireAdmin, async (req, res) => {
+app.get('/api/scanner/log', requireAdmin, requireScanner, async (req, res) => {
     try {
         const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
         const config = await loadFile(CONFIG_PATH, {});
@@ -20117,7 +20119,7 @@ app.post('/api/scanner/test-trigger', requireAdmin, requireScanner, async (req, 
     }
 });
 
-app.post('/api/scanner/import-yaml', requireAdmin, async (req, res) => {
+app.post('/api/scanner/import-yaml', requireAdmin, requireScanner, async (req, res) => {
     try {
         const yaml = String(req.body?.yaml || '');
         if (!yaml.trim()) return res.status(400).json({ error: 'yaml is required' });
