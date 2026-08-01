@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronDown, ChevronUp, ClipboardList, Film, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, ClipboardList, Film, Music, Sparkles } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { DiscoverPosterCard } from '../screens';
 import { Carousel } from './Carousel';
@@ -14,6 +14,7 @@ import {
 import { enrichDiscoveryItems, normalizeRawDiscoveryItem } from './discoverItemUtils';
 import { portalRequestsToDiscoveryRowItems } from './myRequestUtils';
 import { filterHiddenAvailableItems, useDiscoveryPreferences } from './useDiscoveryPreferences';
+import { useDiscoveryMe } from './useDiscoveryMe';
 import { fetchDiscoverHomeRowResults } from './discoverFetchUtils';
 import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
 import { WatchlistPanel } from './WatchlistPanel';
@@ -186,6 +187,8 @@ export const DiscoverHome: React.FC<{
 }> = ({ onSelect, formatItem, navigate, pushToast, providerLabel = 'Plex' }) => {
     const { t, locale } = useDiscoverI18n();
     const { preferences, loaded } = useDiscoveryPreferences();
+    const { profile: discoveryMe } = useDiscoveryMe(loaded);
+    const musicEnabled = discoveryMe.musicConfigured !== false && discoveryMe.permissions?.requestMusic !== false;
     const { showLibraryQueue, toggleLibraryQueue } = useLibraryQueueToggle();
     const [gridSize, setGridSize] = useDiscoverGridSize();
     const posterCardClass = discoverRowCardWidthClass(gridSize);
@@ -288,7 +291,9 @@ export const DiscoverHome: React.FC<{
                             ? Promise.resolve(null)
                             : apiFetch('/api/discovery/watchlist').catch(() => null),
                         apiFetch('/api/discovery/because-you-watched').catch(() => null),
-                        apiFetch('/api/discovery/music/recent?limit=24').catch(() => null),
+                        musicEnabled
+                            ? apiFetch('/api/discovery/music/recent?limit=24').catch(() => null)
+                            : Promise.resolve(null),
                     ]);
 
                     if (gen !== loadGenRef.current) return;
@@ -313,7 +318,7 @@ export const DiscoverHome: React.FC<{
                         plexWatchlist,
                         becauseYouWatched: filterHiddenAvailableItems(becauseItems, hideAvailable),
                         becauseYouWatchedSeed: becauseRes?.seed || null,
-                        recentMusic: filterHiddenAvailableItems(recentMusic, hideAvailable),
+                        recentMusic: recentMusic,
                     }));
                 } catch {
                     // Side rails are best-effort.
@@ -350,7 +355,7 @@ export const DiscoverHome: React.FC<{
             window.clearTimeout(paintTimer);
             if (gen === loadGenRef.current) setLoading(false);
         }
-    }, [loaded, preferences.hideAvailableMedia, preferences.discoverRegion, preferences.discoverLanguage, preferences.showRecentlyAdded, preferences.showWatchlist, locale]);
+    }, [loaded, musicEnabled, preferences.hideAvailableMedia, preferences.discoverRegion, preferences.discoverLanguage, preferences.showRecentlyAdded, preferences.showWatchlist, locale]);
 
     useEffect(() => {
         loadData();
@@ -454,7 +459,7 @@ export const DiscoverHome: React.FC<{
                             />
                         )}
 
-                        {(rows.recentMusic?.length ?? 0) > 0 && (
+                        {(rows.recentMusic?.length ?? 0) > 0 && musicEnabled && (
                             <DiscoverHomeRow
                                 title={t('home.recentMusic')}
                                 items={rows.recentMusic}
@@ -464,6 +469,27 @@ export const DiscoverHome: React.FC<{
                                 onSelect={onSelect}
                                 animateEnter={enterAnim}
                                 onViewAll={() => navigate('/discovery/music')}
+                            />
+                        )}
+                        {(rows.recentMusic?.length ?? 0) === 0 && musicEnabled && (
+                            <DiscoverHomeRow
+                                title={t('home.recentMusic')}
+                                items={[]}
+                                posterCardClass={posterCardClass}
+                                viewAllLabel={t('common.viewAll')}
+                                formatItem={formatItem}
+                                onSelect={onSelect}
+                                animateEnter={enterAnim}
+                                onViewAll={() => navigate('/discovery/music')}
+                                empty={(
+                                    <EmptyRail
+                                        title={t('home.recentMusicEmptyTitle')}
+                                        body={t('home.recentMusicEmptyBody')}
+                                        actionLabel={t('home.browseMusic')}
+                                        onAction={() => navigate('/discovery/music')}
+                                        icon={<Music className="w-5 h-5" />}
+                                    />
+                                )}
                             />
                         )}
                     </div>
@@ -591,6 +617,43 @@ export const DiscoverHome: React.FC<{
                         ))}
                     </Carousel>
                 </div>
+
+                {musicEnabled && (
+                <div className="flex flex-col gap-2 relative mt-2">
+                    <div className="px-3 flex items-end justify-between gap-3 flex-wrap">
+                        <div>
+                            <p className={discoveryTheme.personalEyebrow}>{t('home.musicSection')}</p>
+                            <h2 className="text-lg sm:text-xl font-black text-text mt-1">{t('home.recentMusic')}</h2>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => navigate('/discovery/music')}
+                            className="text-xs font-bold text-plex hover:underline inline-flex items-center gap-1"
+                        >
+                            <Music className="w-3.5 h-3.5" /> {t('home.allMusic')}
+                        </button>
+                    </div>
+                    <DiscoverHomeRow
+                        title={t('home.recentMusic')}
+                        items={rows.recentMusic || []}
+                        posterCardClass={posterCardClass}
+                        viewAllLabel={t('common.viewAll')}
+                        formatItem={formatItem}
+                        onSelect={onSelect}
+                        animateEnter={enterAnim}
+                        onViewAll={() => navigate('/discovery/music')}
+                        empty={(
+                            <EmptyRail
+                                title={t('home.recentMusicEmptyTitle')}
+                                body={t('home.recentMusicEmptyBody')}
+                                actionLabel={t('home.browseMusic')}
+                                onAction={() => navigate('/discovery/music')}
+                                icon={<Music className="w-5 h-5" />}
+                            />
+                        )}
+                    />
+                </div>
+                )}
             </section>
         </div>
     );

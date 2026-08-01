@@ -60,7 +60,19 @@ export const MusicArtistPage: React.FC<{
 
     const posterUrl = artist.posterUrl || artist.posterPath || null;
     const availability = resolveMediaAvailabilityState(artist);
-    const canRequest = availability.kind !== 'available' && availability.kind !== 'processing' && availability.kind !== 'requested' && availability.kind !== 'pending';
+    const canRequest = availability.kind !== 'available'
+        && availability.kind !== 'processing'
+        && availability.kind !== 'requested'
+        && availability.kind !== 'pending';
+
+    const requestButtonLabel = (() => {
+        if (availability.kind === 'available') return t('music.inLibrary');
+        if (availability.kind === 'processing') return t('music.processing');
+        if (availability.kind === 'requested') return t('music.requested');
+        if (availability.kind === 'pending') return t('music.pendingApproval');
+        if (availability.kind === 'partial') return t('music.requestMissing');
+        return t('music.requestArtist');
+    })();
 
     return (
         <div className="px-2 sm:px-4 pb-10 flex flex-col gap-5">
@@ -105,10 +117,10 @@ export const MusicArtistPage: React.FC<{
                         <button
                             type="button"
                             onClick={() => setRequestOpen(true)}
-                            disabled={!canRequest && availability.kind === 'available'}
+                            disabled={!canRequest}
                             className="mt-5 px-5 py-2.5 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {availability.kind === 'available' ? t('music.inLibrary') : t('music.requestArtist')}
+                            {requestButtonLabel}
                         </button>
                     </div>
                 </div>

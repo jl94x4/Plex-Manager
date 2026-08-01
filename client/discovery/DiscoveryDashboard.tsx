@@ -204,6 +204,8 @@ const DiscoveryDashboardInner: React.FC<{
         onSelect: (formatted: any) => {
             if (formatted.type === 'person') {
                 navigate(`/discovery/person/${formatted.id}`);
+            } else if (formatted.type === 'music' || formatted.mediaType === 'music') {
+                navigate(`/discovery/music/artist/${encodeURIComponent(String(formatted.mbid || formatted.id))}`);
             } else {
                 stashDiscoverDetailSeed(formatted);
                 navigate(`/discovery/${formatted.type}/${formatted.id}`);

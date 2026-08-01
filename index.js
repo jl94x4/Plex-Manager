@@ -6598,6 +6598,49 @@ const attachDiscoveryAvailabilityCacheToPayload = async (config, sessionUser, da
     return next;
 };
 
+const isMusicDiscoveryEnabled = (config) => {
+    const defaults = getPortalRequestDefaults(config);
+    if (!defaults.allowRequestMusic) return false;
+    return getArrInstances(config, { type: 'lidarr', enabledOnly: true }).some(isArrInstanceReady);
+};
+
+/** Live Lidarr catalog + cache overlay for music discover lists. */
+const enrichMusicDiscoveryPayload = async (config, sessionUser, payload) => {
+    const library = createDiscoveryLibraryAvailability(config);
+    let results = Array.isArray(payload?.results) ? payload.results : [];
+    try {
+        results = await library.enrichItems(results, { blockForCatalog: true });
+    } catch (enrichError) {
+        log(`Music discovery library enrich skipped: ${enrichError.message}`);
+    }
+    return attachDiscoveryAvailabilityCacheToPayload(config, sessionUser, {
+        ...(payload && typeof payload === 'object' ? payload : {}),
+        results,
+    });
+};
+
+const mergeMusicDiscoverySearchResults = async (config, sessionUser, query, results) => {
+    if (!isMusicDiscoveryEnabled(config)) return results;
+    try {
+        const musicPayload = await searchMusicBrainzArtists(query, {
+            limit: 8,
+            fetchImpl: fetchWithTimeout,
+        });
+        let musicResults = Array.isArray(musicPayload?.results) ? musicPayload.results : [];
+        musicResults = await enrichMusicSearchPosters(musicResults, {
+            config,
+            fetchImpl: fetchWithTimeout,
+            maxCoverLookups: 8,
+        });
+        const enriched = await enrichMusicDiscoveryPayload(config, sessionUser, { results: musicResults });
+        musicResults = Array.isArray(enriched?.results) ? enriched.results : musicResults;
+        return [...(Array.isArray(results) ? results : []), ...musicResults].slice(0, 24);
+    } catch (e) {
+        log(`Discovery music search merge skipped: ${e.message}`);
+        return results;
+    }
+};
+
 const getPortalBlocklistService = (config) => createPortalBlocklistService({
     dataDir: BLOCKLIST_DIR,
     config,
@@ -6847,11 +6890,12 @@ app.get('/api/discovery/search', requireAuth, requireMember, async (req, res) =>
             } catch (enrichError) {
                 log(`Discovery TMDB search library enrich skipped: ${enrichError.message}`);
             }
+            const mergedResults = await mergeMusicDiscoverySearchResults(config, req.user, query, results);
             return res.json({
                 page: data.page || 1,
                 totalPages: data.totalPages || 1,
                 totalResults: data.totalResults || resultCount(data) || 0,
-                results,
+                results: mergedResults,
             });
         }
 
@@ -6887,11 +6931,13 @@ app.get('/api/discovery/search', requireAuth, requireMember, async (req, res) =>
         if (!data) {
             return res.status(502).json({ error: 'Search temporarily unavailable. Try again.' });
         }
+        const baseResults = Array.isArray(data.results) ? data.results : [];
+        const mergedResults = await mergeMusicDiscoverySearchResults(config, req.user, query, baseResults);
         res.json({
             page: data.page || 1,
             totalPages: data.totalPages || data.total_pages || 1,
             totalResults: data.totalResults || data.total_results || resultCount(data) || 0,
-            results: Array.isArray(data.results) ? data.results : [],
+            results: mergedResults,
         });
     } catch (e) {
         log(`Discovery search error: ${e.message}`);
@@ -7080,6 +7126,7 @@ app.get('/api/discovery/me', requireAuth, requireMember, async (req, res) => {
                 configured: true,
                 engine: 'portal',
                 userMapped: true,
+                musicConfigured: isMusicDiscoveryEnabled(config),
                 permissions: {
                     request: policy.allowRequestMovies || policy.allowRequestTv || policy.allowRequestMusic,
                     requestMovie: policy.allowRequestMovies,
@@ -7832,9 +7879,9 @@ app.get('/api/discovery/music/search', requireAuth, requireMember, async (req, r
         payload.results = await enrichMusicSearchPosters(payload.results || [], {
             config,
             fetchImpl: fetchWithTimeout,
-            maxCoverLookups: 10,
+            maxCoverLookups: 20,
         });
-        payload = await attachDiscoveryAvailabilityCacheToPayload(config, req.user, payload);
+        payload = await enrichMusicDiscoveryPayload(config, req.user, payload);
         res.json(payload);
     } catch (e) {
         log(`Discovery music search error: ${e.message}`);
@@ -7850,7 +7897,7 @@ app.get('/api/discovery/music/recent', requireAuth, requireMember, async (req, r
             limit,
             fetchImpl: fetchWithTimeout,
         });
-        const payload = await attachDiscoveryAvailabilityCacheToPayload(config, req.user, { results });
+        const payload = await enrichMusicDiscoveryPayload(config, req.user, { results });
         res.json(payload);
     } catch (e) {
         log(`Discovery music recent error: ${e.message}`);

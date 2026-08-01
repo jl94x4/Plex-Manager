@@ -3,6 +3,7 @@ import { apiFetch } from '../shared/api';
 
 export type DiscoveryMeProfile = {
     configured?: boolean;
+    musicConfigured?: boolean;
     userMapped: boolean;
     seerrUserId: number | null;
     displayName?: string | null;
@@ -14,6 +15,7 @@ export type DiscoveryMeProfile = {
         request: boolean;
         requestMovie?: boolean;
         requestTv?: boolean;
+        requestMusic?: boolean;
         request4k: boolean;
         request4kMovie?: boolean;
         request4kTv?: boolean;

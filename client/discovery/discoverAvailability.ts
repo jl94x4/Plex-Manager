@@ -351,6 +351,22 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
     }
 
     if (mediaType === 'music') {
+        if (item?.lidarrLibraryStatus?.matched && !Number.isFinite(Number(mediaStatus))) {
+            if (item?.lidarrLibraryStatus?.hasActiveDownloads) {
+                return {
+                    ...base,
+                    kind: 'processing',
+                    label: 'Processing',
+                    detail: 'Albums are downloading or importing.',
+                };
+            }
+            return {
+                ...base,
+                kind: 'partial',
+                label: 'In Lidarr',
+                detail: 'This artist is monitored in your music library.',
+            };
+        }
         if (mediaStatus === MEDIA_STATUS.AVAILABLE) {
             return {
                 ...base,
