@@ -138,6 +138,9 @@ const Dashboard: React.FC = () => {
     }, [liveLogs]);
 
     const logContainerRef = useRef<HTMLDivElement>(null);
+    const statusFetchGenRef = useRef(0);
+    const healthFetchGenRef = useRef(0);
+    const logsFetchGenRef = useRef(0);
 
     // --- Helpers ---
     const safeParseDate = (dateStr: string): Date | null => {
@@ -324,26 +327,33 @@ const Dashboard: React.FC = () => {
     }, []);
 
     const fetchStatusOnly = useCallback(async () => {
+        const gen = ++statusFetchGenRef.current;
         try {
             const s = await api.getStatus();
+            if (gen !== statusFetchGenRef.current) return;
             setStatus(s);
             calculateNextRun(s);
         } catch (e) { /* ignore */ }
     }, []);
 
     const fetchHealth = useCallback(async () => {
+        const gen = ++healthFetchGenRef.current;
         try {
             const h = await api.getHealth();
+            if (gen !== healthFetchGenRef.current) return;
             setHealth(h);
             setHealthError('');
         } catch (e: any) {
+            if (gen !== healthFetchGenRef.current) return;
             setHealthError(e?.message || 'Health check failed');
         }
     }, []);
 
     const fetchLogsOnly = useCallback(async () => {
+        const gen = ++logsFetchGenRef.current;
         try {
             const l = await api.getLogs();
+            if (gen !== logsFetchGenRef.current) return;
             setLogs(l);
         } catch (e) { /* ignore */ }
     }, []);

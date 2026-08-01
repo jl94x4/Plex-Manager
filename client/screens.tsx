@@ -8391,6 +8391,8 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
     const [discoverSearchResults, setDiscoverSearchResults] = useState<any[] | null>(null);
     const [isDiscoverSearching, setIsDiscoverSearching] = useState(false);
     const searchDropdownRef = useRef<HTMLDivElement>(null);
+    const discoverSearchGenRef = useRef(0);
+    const discoverSearchAbortRef = useRef<AbortController | null>(null);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -8403,39 +8405,62 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const performDiscoverSearch = async () => {
-        if (!discoverSearchQuery.trim()) {
+    useEffect(() => () => {
+        discoverSearchAbortRef.current?.abort();
+    }, []);
+
+    const performDiscoverSearch = useCallback(async (query: string) => {
+        const trimmed = query.trim();
+        if (!trimmed) {
+            discoverSearchAbortRef.current?.abort();
+            discoverSearchAbortRef.current = null;
             setDiscoverSearchResults(null);
             return;
         }
+        discoverSearchAbortRef.current?.abort();
+        const controller = new AbortController();
+        discoverSearchAbortRef.current = controller;
+        const gen = ++discoverSearchGenRef.current;
         setIsDiscoverSearching(true);
         try {
-            const res = await apiFetch(`/api/plex/discover-search?query=${encodeURIComponent(discoverSearchQuery)}`);
+            const res = await apiFetch(
+                `/api/plex/discover-search?query=${encodeURIComponent(trimmed)}`,
+                { signal: controller.signal },
+            );
+            if (gen !== discoverSearchGenRef.current) return;
             if (!res.error) {
                 setDiscoverSearchResults(res.results || []);
             }
-        } catch(err) {
-            // ignore
+        } catch (err) {
+            if (gen !== discoverSearchGenRef.current) return;
+            if (err instanceof DOMException && err.name === 'AbortError') return;
+            if (err instanceof Error && err.name === 'AbortError') return;
         } finally {
-            setIsDiscoverSearching(false);
+            if (gen === discoverSearchGenRef.current) {
+                setIsDiscoverSearching(false);
+            }
         }
-    };
+    }, []);
 
     const handleSearchSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        performDiscoverSearch();
+        performDiscoverSearch(discoverSearchQuery);
     };
 
     useEffect(() => {
         const timer = setTimeout(() => {
             if (discoverSearchQuery.trim().length >= 2) {
-                performDiscoverSearch();
+                performDiscoverSearch(discoverSearchQuery);
             } else if (!discoverSearchQuery.trim()) {
+                discoverSearchGenRef.current += 1;
+                discoverSearchAbortRef.current?.abort();
+                discoverSearchAbortRef.current = null;
                 setDiscoverSearchResults(null);
+                setIsDiscoverSearching(false);
             }
         }, 500);
         return () => clearTimeout(timer);
-    }, [discoverSearchQuery]);
+    }, [discoverSearchQuery, performDiscoverSearch]);
 
     useEffect(() => {
         const mq = window.matchMedia('(min-width: 1024px)');

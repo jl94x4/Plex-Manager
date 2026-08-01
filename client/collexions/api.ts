@@ -11,16 +11,27 @@ const base = (path: string) => {
 /** Match portal Collexions BFF long-op proxy budget (3 min). */
 const COLLEXIONS_LONG_MS = 180_000;
 
-const withTimeout = async <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+type CollexionsFetchInit = Omit<RequestInit, 'signal'>;
+
+/** Collexions BFF fetch with optional abort signal (used by withTimeout). */
+const cx = (path: string, init: CollexionsFetchInit = {}) =>
+    (signal: AbortSignal) => apiFetch(base(path), { ...init, signal });
+
+const withTimeout = async <T,>(
+    task: (signal: AbortSignal) => Promise<T>,
+    ms: number,
+    label: string,
+): Promise<T> => {
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
         return await Promise.race([
-            promise,
+            task(controller.signal),
             new Promise<never>((_, reject) => {
-                timer = setTimeout(
-                    () => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)),
-                    ms,
-                );
+                timer = setTimeout(() => {
+                    controller.abort();
+                    reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
+                }, ms);
             }),
         ]);
     } finally {
@@ -78,12 +89,12 @@ export const collexionsImageUrl = (
 
 class CollexionsApiService {
     async getAuthStatus(): Promise<{ is_setup: boolean; needs_onboarding?: boolean; portal_mode?: boolean }> {
-        return withTimeout(apiFetch(base('/auth/status')), 8000, 'Connecting to Collexions');
+        return withTimeout(cx('/auth/status'), 8000, 'Connecting to Collexions');
     }
 
     /** Portal + worker health (never hangs more than ~8s). */
     async getHealth(): Promise<CollexionsHealth> {
-        return withTimeout(apiFetch(base('/health')), 8000, 'Collexions health check');
+        return withTimeout(cx('/health'), 8000, 'Collexions health check');
     }
 
     /** Real portal Plex/TMDB values for seeding Collexions (admin-only; not masked). */
@@ -94,17 +105,17 @@ class CollexionsApiService {
         mediaServerType?: string;
         sources: { plex: boolean; tmdb: boolean; trakt: boolean; mdblist: boolean };
     }> {
-        return withTimeout(apiFetch(base('/portal-defaults')), 10000, 'Portal defaults');
+        return withTimeout(cx('/portal-defaults'), 10000, 'Portal defaults');
     }
 
     async getConfig(): Promise<AppConfig> {
-        const data = await withTimeout(apiFetch(base('/config')), 10000, 'Loading config');
+        const data = await withTimeout(cx('/config'), 10000, 'Loading config');
         return { ...DEFAULT_CONFIG, ...(data || {}) };
     }
 
     async saveConfig(config: AppConfig): Promise<void> {
         await withTimeout(
-            apiFetch(base('/config'), { method: 'POST', body: JSON.stringify(config) }),
+            cx('/config', { method: 'POST', body: JSON.stringify(config) }),
             COLLEXIONS_LONG_MS,
             'Saving config',
         );
@@ -118,7 +129,7 @@ class CollexionsApiService {
         available_libraries?: string[];
     }> {
         return withTimeout(
-            apiFetch(base('/config/validate'), { method: 'POST', body: JSON.stringify(config) }),
+            cx('/config/validate', { method: 'POST', body: JSON.stringify(config) }),
             COLLEXIONS_LONG_MS,
             'Validating config',
         );
@@ -126,7 +137,7 @@ class CollexionsApiService {
 
     async getStatus(): Promise<AppStatus> {
         try {
-            return await withTimeout(apiFetch(base('/status')), 8000, 'Status');
+            return await withTimeout(cx('/status'), 8000, 'Status');
         } catch {
             return { status: 'Offline', last_update: '', next_run_timestamp: 0 };
         }
@@ -142,7 +153,7 @@ class CollexionsApiService {
         labeled_count?: number;
         pin_slots?: number;
     }> {
-        return withTimeout(apiFetch(base('/summary')), 20000, 'Collexions summary');
+        return withTimeout(cx('/summary'), 20000, 'Collexions summary');
     }
 
     async getLogs(): Promise<string> {
@@ -168,7 +179,7 @@ class CollexionsApiService {
         if (limit) params.append('limit', String(limit));
         const qs = params.toString();
         const data = await withTimeout(
-            apiFetch(base(`/history${qs ? `?${qs}` : ''}`)),
+            cx(`/history${qs ? `?${qs}` : ''}`),
             15000,
             'History',
         );
@@ -187,11 +198,11 @@ class CollexionsApiService {
     }
 
     async runNow(): Promise<void> {
-        await withTimeout(apiFetch(base('/run'), { method: 'POST', body: '{}' }), 60000, 'Start service');
+        await withTimeout(cx('/run', { method: 'POST', body: '{}' }), 60000, 'Start service');
     }
 
     async stopScript(): Promise<void> {
-        await withTimeout(apiFetch(base('/stop'), { method: 'POST', body: '{}' }), 15000, 'Stop service');
+        await withTimeout(cx('/stop', { method: 'POST', body: '{}' }), 15000, 'Stop service');
     }
 
     async getCollections(forceRefresh = false, opts?: { light?: boolean }): Promise<PlexCollection[]> {
@@ -204,7 +215,7 @@ class CollexionsApiService {
         if (opts?.light === false) params.append('light', 'false');
         const qs = params.toString();
         const data = await withTimeout(
-            apiFetch(base(`/collections${qs ? `?${qs}` : ''}`)),
+            cx(`/collections${qs ? `?${qs}` : ''}`),
             90000,
             'Scanning Plex libraries',
         );
@@ -217,7 +228,7 @@ class CollexionsApiService {
     ): Promise<Record<string, boolean>> {
         if (!items.length) return {};
         const data = await withTimeout(
-            apiFetch(base('/collections/resolve-pins'), {
+            cx('/collections/resolve-pins', {
                 method: 'POST',
                 body: JSON.stringify({ items }),
             }),
@@ -233,7 +244,7 @@ class CollexionsApiService {
     ): Promise<{ success: boolean; ok_count: number; results: Array<{ ok: boolean; title: string; library: string; error?: string }> }> {
         const label = action === 'pin' ? 'Bulk pin' : action === 'unpin' ? 'Bulk unpin' : 'Bulk delete';
         return withTimeout(
-            apiFetch(base('/collections/bulk'), {
+            cx('/collections/bulk', {
                 method: 'POST',
                 body: JSON.stringify({ action, items }),
             }),
@@ -259,7 +270,7 @@ class CollexionsApiService {
 
     async searchExternal(query: string, type: 'movie' | 'tv'): Promise<any[]> {
         return withTimeout(
-            apiFetch(base(`/search/external?query=${encodeURIComponent(query)}&type=${type}`)),
+            cx(`/search/external?query=${encodeURIComponent(query)}&type=${type}`),
             90000,
             'External search',
         );
@@ -317,7 +328,7 @@ class CollexionsApiService {
         categories: Array<{ id: string; label: string }>;
         keys: { tmdb: boolean; trakt: boolean };
     }> {
-        return withTimeout(apiFetch(base('/templates')), 15000, 'Templates');
+        return withTimeout(cx('/templates'), 15000, 'Templates');
     }
 
     async searchFranchises(query: string): Promise<Array<{
@@ -330,7 +341,7 @@ class CollexionsApiService {
         film_count?: number | null;
     }>> {
         return withTimeout(
-            apiFetch(base(`/templates/franchise-search?q=${encodeURIComponent(query)}`)),
+            cx(`/templates/franchise-search?q=${encodeURIComponent(query)}`),
             30000,
             'Franchise search',
         );
@@ -346,7 +357,7 @@ class CollexionsApiService {
         auto_sync?: boolean;
     }): Promise<{ success: boolean; matched?: number; total?: number; job_id?: string; title?: string; error?: string }> {
         return withTimeout(
-            apiFetch(base('/templates/create'), { method: 'POST', body: JSON.stringify(payload) }),
+            cx('/templates/create', { method: 'POST', body: JSON.stringify(payload) }),
             120000,
             'Creating collection',
         );
@@ -358,7 +369,7 @@ class CollexionsApiService {
 
     async runJobNow(id: string): Promise<any> {
         return withTimeout(
-            apiFetch(base('/jobs/run'), { method: 'POST', body: JSON.stringify({ id }) }),
+            cx('/jobs/run', { method: 'POST', body: JSON.stringify({ id }) }),
             COLLEXIONS_LONG_MS,
             'Running sync job',
         );
@@ -384,7 +395,7 @@ class CollexionsApiService {
         score?: number | null;
     }>> {
         return withTimeout(
-            apiFetch(base(`/trakt/lists/search?q=${encodeURIComponent(query)}`)),
+            cx(`/trakt/lists/search?q=${encodeURIComponent(query)}`),
             30000,
             'Trakt list search',
         );
@@ -415,7 +426,7 @@ class CollexionsApiService {
         force = false,
     ): Promise<{ success: boolean; ok_count?: number; results?: Array<{ title: string; library: string; ok: boolean }> }> {
         return withTimeout(
-            apiFetch(base('/collections/fix-art'), {
+            cx('/collections/fix-art', {
                 method: 'POST',
                 body: JSON.stringify({ library, title, force }),
             }),
@@ -443,7 +454,7 @@ class CollexionsApiService {
         }>;
     }> {
         return withTimeout(
-            apiFetch(base(`/hubs?library=${encodeURIComponent(library)}`)),
+            cx(`/hubs?library=${encodeURIComponent(library)}`),
             60000,
             'Loading hubs',
         );
@@ -455,7 +466,7 @@ class CollexionsApiService {
         after: string | null,
     ): Promise<{ success: boolean; hubs?: any[]; error?: string }> {
         return withTimeout(
-            apiFetch(base('/hubs/move'), {
+            cx('/hubs/move', {
                 method: 'POST',
                 body: JSON.stringify({ library, identifier, after }),
             }),
@@ -470,7 +481,7 @@ class CollexionsApiService {
         visibility: { recommended?: boolean; home?: boolean; shared?: boolean },
     ): Promise<{ success: boolean; hub?: any; error?: string }> {
         return withTimeout(
-            apiFetch(base('/hubs/visibility'), {
+            cx('/hubs/visibility', {
                 method: 'POST',
                 body: JSON.stringify({ library, identifier, ...visibility }),
             }),

@@ -1109,12 +1109,14 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [reportSeed, setReportSeed] = useState<ReportModalSeed | null>(null);
     const reportDeepLinkHandled = React.useRef(false);
     const editLibraryDeepLinkHandled = React.useRef<string | null>(null);
+    const loadGenRef = React.useRef(0);
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
     }, []);
 
     const load = useCallback(async (quiet = false) => {
+        const gen = ++loadGenRef.current;
         quiet ? setRefreshing(true) : setLoading(true);
         const requests = [
             ['status', mediaAutomationApi.status()],
@@ -1126,6 +1128,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             ['pipelines', mediaAutomationApi.pipelines()],
         ] as const;
         const results = await Promise.allSettled(requests.map((entry) => entry[1]));
+        if (gen !== loadGenRef.current) return;
         const failed: string[] = [];
         results.forEach((result, index) => {
             const key = requests[index][0];
