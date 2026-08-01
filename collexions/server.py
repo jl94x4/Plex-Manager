@@ -1830,6 +1830,7 @@ def _check_plex_quick(config, timeout=3):
 
 
 @app.route('/api/health')
+@require_auth
 def health():
     """Worker health for portal diagnostics (config, script, Plex)."""
     global process

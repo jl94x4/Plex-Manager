@@ -20240,7 +20240,7 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
     }
 });
 
-app.get('/api/media-automation/capabilities', requireAdmin, async (req, res) => {
+app.get('/api/media-automation/capabilities', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
         res.json(await loadMediaAutomationCapabilities({ force: String(req.query.refresh || '') === '1' }));
     } catch (error) {
@@ -20272,7 +20272,7 @@ app.get('/api/media-automation/metrics', requireAdmin, requireMediaAutomation, a
     }
 });
 
-app.post('/api/media-automation/worker/test', requireAdmin, async (req, res) => {
+app.post('/api/media-automation/worker/test', requireAdmin, requireMediaAutomation, async (req, res) => {
     try {
         const capabilities = await loadMediaAutomationCapabilities({ force: true });
         res.json({ ok: true, ...capabilities });
