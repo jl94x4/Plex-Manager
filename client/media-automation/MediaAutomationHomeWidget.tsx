@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Cpu, ListTodo, RefreshCw, Settings2, TriangleAlert } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { CheckCircle2, Cpu, ListTodo, RefreshCw, TriangleAlert } from 'lucide-react';
 import { mediaAutomationApi } from './api';
-import { usePoll } from '../shared/usePoll';
 import type { MediaAutomationStatus } from './types';
 
 type Props = { onOpen?: () => void };
@@ -10,36 +9,24 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
     const [status, setStatus] = useState<MediaAutomationStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [disabled, setDisabled] = useState(false);
-    const loadGenRef = useRef(0);
 
     const load = useCallback(async () => {
-        const gen = ++loadGenRef.current;
         setLoading(true);
         try {
-            const next = await mediaAutomationApi.status();
-            if (gen !== loadGenRef.current) return;
-            setStatus(next);
+            setStatus(await mediaAutomationApi.status());
             setError('');
-            setDisabled(false);
         } catch (err: any) {
-            if (gen !== loadGenRef.current) return;
-            const message = err?.message || 'Media Automation unavailable';
-            const isDisabled = err?.status === 403
-                || /not enabled|disabled/i.test(message);
-            setDisabled(isDisabled);
-            setError(isDisabled ? 'Media Automation is disabled in Settings.' : message);
-            if (isDisabled) setStatus(null);
+            setError(err?.message || 'Media Automation unavailable');
         } finally {
-            if (gen === loadGenRef.current) setLoading(false);
+            setLoading(false);
         }
     }, []);
 
     useEffect(() => {
         void load();
+        const timer = window.setInterval(() => void load(), 15000);
+        return () => window.clearInterval(timer);
     }, [load]);
-
-    usePoll(() => { void load(); }, 15_000);
 
     const dryRun = !!(status?.dryRun || status?.outputMode === 'dry-run');
     const failed = Number(status?.failedJobs || status?.metrics?.failed24h || 0);
@@ -64,14 +51,7 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
                     </div>
                 </div>
                 {error && !status ? (
-                    <p className="flex-1 text-xs text-red-300">
-                        {disabled ? (
-                            <span className="inline-flex items-center gap-1.5">
-                                <Settings2 className="h-3.5 w-3.5 shrink-0" />
-                                {error}
-                            </span>
-                        ) : error}
-                    </p>
+                    <p className="flex-1 text-xs text-red-300">{error}</p>
                 ) : (
                     <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
                         {stats.map(({ label, value, icon: Icon, className }) => (

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../shared/api';
-import { usePoll } from '../shared/usePoll';
 
 /** Poll Media Automation active (processing) job count for the sidebar badge. */
 export const useMediaAutomationActiveCount = (enabled: boolean, pollSeconds = 15) => {
@@ -21,10 +20,11 @@ export const useMediaAutomationActiveCount = (enabled: boolean, pollSeconds = 15
     }, [enabled]);
 
     useEffect(() => {
-        void refresh();
-    }, [refresh]);
-
-    usePoll(refresh, enabled ? intervalMs : null);
+        refresh();
+        if (!enabled) return undefined;
+        const timer = window.setInterval(refresh, intervalMs);
+        return () => window.clearInterval(timer);
+    }, [enabled, intervalMs, refresh]);
 
     return { activeCount, refresh };
 };

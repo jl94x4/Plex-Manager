@@ -41,7 +41,6 @@ import {
     createPlexTarget,
     collectMountRewrites,
     expandPathRewriteCandidates,
-    remapPathOntoLibraryRoot,
 } from './lib/scanner/index.js';
 import {
     buildStepPlan,
@@ -17877,14 +17876,6 @@ const resolveUpgraderMaHandoff = async (config, item) => {
     }
     const enabledLibraries = libraries.filter((library) => library?.enabled !== false && library?.rootPath);
 
-    // Align Sonarr/Radarr folder names onto each MA library root (e.g. /merge/Anime/Show → /media/Anime/Show).
-    for (const library of enabledLibraries) {
-        for (const candidate of [...candidates]) {
-            const remapped = normalizeUpgraderPath(remapPathOntoLibraryRoot(candidate, library.rootPath));
-            if (remapped && !candidates.includes(remapped)) candidates.push(remapped);
-        }
-    }
-
     const findOwningLibrary = (candidate) => enabledLibraries
         .filter((library) => {
             try {
@@ -17895,48 +17886,29 @@ const resolveUpgraderMaHandoff = async (config, item) => {
         })
         .sort((a, b) => String(b.rootPath || '').length - String(a.rootPath || '').length)[0] || null;
 
-    const pathExists = async (candidate) => {
-        try {
-            await fs.access(candidate);
-            return true;
-        } catch {
-            return false;
-        }
-    };
-
     let resolvedPath = null;
     let matchingLibrary = null;
-
-    // Prefer candidates that both sit under an MA library and exist on disk.
     for (const candidate of candidates) {
         const owning = findOwningLibrary(candidate);
-        if (!owning) continue;
-        if (await pathExists(candidate)) {
+        if (owning) {
             resolvedPath = candidate;
             matchingLibrary = owning;
             break;
         }
-        if (!resolvedPath) {
-            resolvedPath = candidate;
-            matchingLibrary = owning;
-        }
     }
-
-    // Next: any candidate that exists on disk (even without an owning library yet).
-    // Always recompute matchingLibrary for the chosen path — never keep a library
-    // that does not contain resolvedPath.
-    if (!resolvedPath || !(await pathExists(resolvedPath))) {
+    if (!resolvedPath) {
         for (const candidate of candidates) {
-            if (await pathExists(candidate)) {
+            try {
+                await fs.access(candidate);
                 resolvedPath = candidate;
-                matchingLibrary = findOwningLibrary(candidate);
                 break;
+            } catch {
+                /* try next rewrite candidate */
             }
         }
     }
-
-    if (!resolvedPath) resolvedPath = candidates.find((c) => findOwningLibrary(c)) || candidates[0] || arrPath;
-    matchingLibrary = findOwningLibrary(resolvedPath);
+    if (!resolvedPath) resolvedPath = candidates[0] || arrPath;
+    if (!matchingLibrary) matchingLibrary = findOwningLibrary(resolvedPath);
 
     const titleLabel = `${item?.title || 'Title'}${item?.year ? ` (${item.year})` : ''}`.slice(0, 120);
     return {
@@ -20934,7 +20906,7 @@ app.get('/api/media-automation/status', requireAdmin, requireMediaAutomation, as
     }
 });
 
-app.get('/api/media-automation/capabilities', requireAdmin, requireMediaAutomation, async (req, res) => {
+app.get('/api/media-automation/capabilities', requireAdmin, async (req, res) => {
     try {
         res.json(await loadMediaAutomationCapabilities({ force: String(req.query.refresh || '') === '1' }));
     } catch (error) {
@@ -20966,7 +20938,7 @@ app.get('/api/media-automation/metrics', requireAdmin, requireMediaAutomation, a
     }
 });
 
-app.post('/api/media-automation/worker/test', requireAdmin, requireMediaAutomation, async (req, res) => {
+app.post('/api/media-automation/worker/test', requireAdmin, async (req, res) => {
     try {
         const capabilities = await loadMediaAutomationCapabilities({ force: true });
         res.json({ ok: true, ...capabilities });
@@ -21671,7 +21643,6 @@ app.get('/api/upgrader/status', requireAdmin, async (req, res) => {
             plexConfigured: !!(config.plexToken && config.serverIdentifier),
             arrConfigured: arrReady,
             automationEnabled: !!config.upgraderAutomationEnabled,
-            mediaAutomationEnabled: !!config.mediaAutomationEnabled,
             profileMapConfigured: Object.keys(normalizeUpgraderProfileMap(config.upgraderProfileMap)).length > 0,
             maxActionsPerHour: Math.max(1, Number(config.upgraderMaxActionsPerHour) || 25),
             recentUpgradeCount: await countRecentUpgraderActions(1),

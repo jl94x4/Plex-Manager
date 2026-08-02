@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePoll } from '../shared/usePoll';
 import {
     Activity,
     AlertTriangle,
@@ -1109,15 +1108,13 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [libraryPathHealth, setLibraryPathHealth] = useState<Record<string, { ok: boolean; message: string }>>({});
     const [reportSeed, setReportSeed] = useState<ReportModalSeed | null>(null);
     const reportDeepLinkHandled = React.useRef(false);
-    const editLibraryDeepLinkHandled = React.useRef<string | null>(null);
-    const loadGenRef = React.useRef(0);
+    const editLibraryDeepLinkHandled = React.useRef(false);
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
     }, []);
 
     const load = useCallback(async (quiet = false) => {
-        const gen = ++loadGenRef.current;
         quiet ? setRefreshing(true) : setLoading(true);
         const requests = [
             ['status', mediaAutomationApi.status()],
@@ -1129,7 +1126,6 @@ export const MediaAutomationDashboard: React.FC = () => {
             ['pipelines', mediaAutomationApi.pipelines()],
         ] as const;
         const results = await Promise.allSettled(requests.map((entry) => entry[1]));
-        if (gen !== loadGenRef.current) return;
         const failed: string[] = [];
         results.forEach((result, index) => {
             const key = requests[index][0];
@@ -1231,16 +1227,15 @@ export const MediaAutomationDashboard: React.FC = () => {
         void openEditor();
         return () => { cancelled = true; };
     }, [libraries, loading]);
-    const pollIntervalMs = useMemo(() => {
+    useEffect(() => {
         const hasActive = jobs.some((job) => {
             const state = jobStateValue(job);
             return ['running', 'processing', 'active', 'probing', 'planning', 'planned', 'verifying', 'committing'].includes(state)
                 || ['running', 'processing', 'active'].includes(String(job.phase || '').toLowerCase());
         });
-        return hasActive ? 2000 : 15000;
-    }, [jobs]);
-
-    usePoll(() => { load(true); }, pollIntervalMs, { immediate: false });
+        const timer = window.setInterval(() => { load(true); }, hasActive ? 2000 : 15000);
+        return () => window.clearInterval(timer);
+    }, [load, jobs]);
     useEffect(() => {
         if (selectedJobId == null) return;
         const latest = jobs.find((job) => String(job.id) === String(selectedJobId));
@@ -1286,18 +1281,11 @@ export const MediaAutomationDashboard: React.FC = () => {
         options: { preview?: boolean; planOnly?: boolean; libraryId?: string | number | null } = {},
         rootsForConfirm?: string[],
     ) => {
-        if (options.libraryId != null) {
-            const target = libraries.find((library) => String(library.id) === String(options.libraryId));
-            if (target && target.enabled === false) {
-                toast('That library is disabled. Enable it before scanning.', 'error');
-                return;
-            }
-        }
         const roots = rootsForConfirm ?? (
             !options.preview && !options.planOnly
                 ? (options.libraryId != null
                     ? libraries
-                        .filter((library) => String(library.id) === String(options.libraryId) && library.enabled !== false)
+                        .filter((library) => String(library.id) === String(options.libraryId))
                         .map((library) => String(library.rootPath || '').trim())
                         .filter(Boolean)
                     : libraries
@@ -3414,23 +3402,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 </div>
                                                 <p className="mt-2 text-sm text-text">{summarizeLibraryOutcome(library, pipelines)}</p>
                                             </div>
-                                            <div className="flex flex-col items-end gap-2">
-                                                <label className="flex items-center gap-2 text-xs font-semibold text-text" title="Enable or disable this library">
-                                                    <SettingsSwitch
-                                                        checked={library.enabled !== false}
-                                                        disabled={library.id === undefined || busy !== null}
-                                                        onChange={(enabled) => {
-                                                            if (library.id === undefined) return;
-                                                            runAction(
-                                                                `toggle-library-${library.id}`,
-                                                                () => mediaAutomationApi.updateLibrary(library.id!, { ...library, enabled }),
-                                                                enabled ? 'Library enabled.' : 'Library disabled.',
-                                                            );
-                                                        }}
-                                                    />
-                                                    Enabled
-                                                </label>
-                                                <div className="flex gap-1">
+                                            <div className="flex gap-1">
                                                 <button type="button" className={buttonClass} onClick={() => setLibraryDraft({ ...emptyLibrary(), ...library })}>
                                                     <Pencil className="h-4 w-4" />
                                                 </button>
@@ -3451,7 +3423,6 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 >
                                                     <Trash2 className="h-4 w-4 text-red-300" />
                                                 </button>
-                                                </div>
                                             </div>
                                         </div>
                                         <div className="mt-3 space-y-2 rounded-lg border border-border/70 bg-background/30 p-3 text-xs">
@@ -3481,8 +3452,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className={buttonClass}
-                                                    disabled={busy !== null || library.enabled === false || !!(status.scanning || status.scanProgress?.running)}
-                                                    title={library.enabled === false ? 'Enable this library to scan' : undefined}
+                                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
                                                     onClick={() => void runScanNow({ preview: true, libraryId: library.id })}
                                                 >
                                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ScanSearch className="h-4 w-4" />}
@@ -3491,8 +3461,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className={buttonClass}
-                                                    disabled={busy !== null || library.enabled === false || !!(status.scanning || status.scanProgress?.running)}
-                                                    title={library.enabled === false ? 'Enable this library to scan' : undefined}
+                                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
                                                     onClick={() => void runScanNow({ planOnly: true, libraryId: library.id })}
                                                 >
                                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -3501,8 +3470,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className={buttonClass}
-                                                    disabled={busy !== null || library.enabled === false || !!(status.scanning || status.scanProgress?.running)}
-                                                    title={library.enabled === false ? 'Enable this library to scan' : undefined}
+                                                    disabled={busy !== null || !!(status.scanning || status.scanProgress?.running)}
                                                     onClick={() => void runScanNow({ libraryId: library.id }, [String(library.rootPath || '').trim()].filter(Boolean))}
                                                 >
                                                     {busy === 'scan-now' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderSearch className="h-4 w-4" />}
