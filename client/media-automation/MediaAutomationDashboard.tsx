@@ -88,6 +88,7 @@ const jobProgressPercent = (job: MediaAutomationJob) => {
 };
 
 const formatDurationSeconds = (value?: number | null) => {
+    if (value == null) return null;
     const seconds = Number(value);
     if (!Number.isFinite(seconds) || seconds < 0) return null;
     const total = Math.round(seconds);
@@ -691,28 +692,35 @@ const QUEUE_JOBS_FETCH_LIMIT = 1000;
 const QUEUE_FILTER_KEY = 'media-automation.queueFilters';
 const QUEUE_FILTER_IDS = ['active', 'queued', 'dry-run', 'failed', 'completed'] as const;
 type QueueFilterId = typeof QUEUE_FILTER_IDS[number];
-const DEFAULT_QUEUE_FILTERS: QueueFilterId[] = ['active', 'queued', 'dry-run', 'failed'];
+type QueueViewFilter = 'all' | QueueFilterId;
 
 const isQueueFilterId = (value: string): value is QueueFilterId => (
     (QUEUE_FILTER_IDS as readonly string[]).includes(value)
 );
 
-const readQueueFilters = (): Set<QueueFilterId> => {
+const readQueueViewFilter = (): QueueViewFilter => {
     try {
         const raw = localStorage.getItem(QUEUE_FILTER_KEY);
-        if (!raw) return new Set(DEFAULT_QUEUE_FILTERS);
+        if (!raw) return 'all';
         const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return new Set(DEFAULT_QUEUE_FILTERS);
-        const next = parsed.filter((entry): entry is QueueFilterId => typeof entry === 'string' && isQueueFilterId(entry));
-        return next.length ? new Set(next) : new Set(DEFAULT_QUEUE_FILTERS);
+        if (typeof parsed === 'string') {
+            return parsed === 'all' || isQueueFilterId(parsed) ? parsed : 'all';
+        }
+        // Legacy multi-select: one choice → that tab; otherwise treat as All.
+        if (Array.isArray(parsed)) {
+            const valid = parsed.filter((entry): entry is QueueFilterId => typeof entry === 'string' && isQueueFilterId(entry));
+            if (valid.length === 1) return valid[0];
+            return 'all';
+        }
+        return 'all';
     } catch {
-        return new Set(DEFAULT_QUEUE_FILTERS);
+        return 'all';
     }
 };
 
-const writeQueueFilters = (filters: Set<QueueFilterId>) => {
+const writeQueueViewFilter = (filter: QueueViewFilter) => {
     try {
-        localStorage.setItem(QUEUE_FILTER_KEY, JSON.stringify([...filters]));
+        localStorage.setItem(QUEUE_FILTER_KEY, JSON.stringify(filter));
     } catch {
         // ignore quota / private mode
     }
@@ -1087,7 +1095,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [queuePage, setQueuePage] = useState(1);
     const [relativePaths, setRelativePaths] = useState(() => readRelativePathsPref());
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
-    const [queueFilters, setQueueFilters] = useState<Set<QueueFilterId>>(() => readQueueFilters());
+    const [queueViewFilter, setQueueViewFilter] = useState<QueueViewFilter>(() => readQueueViewFilter());
     const [queueSearch, setQueueSearch] = useState('');
     const [queueLibraryFilter, setQueueLibraryFilter] = useState('');
     const [queuePipelineFilter, setQueuePipelineFilter] = useState('');
@@ -1431,28 +1439,9 @@ export const MediaAutomationDashboard: React.FC = () => {
         return counts;
     }, [jobs]);
 
-    const allQueueFiltersSelected = QUEUE_FILTER_IDS.every((id) => queueFilters.has(id));
-
-    const toggleQueueFilter = (id: QueueFilterId) => {
-        setQueueFilters((current) => {
-            const next = new Set(current);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            if (next.size === 0) {
-                DEFAULT_QUEUE_FILTERS.forEach((entry) => next.add(entry));
-            }
-            writeQueueFilters(next);
-            return next;
-        });
-    };
-
-    const toggleAllQueueFilters = () => {
-        setQueueFilters((current) => {
-            const fullySelected = QUEUE_FILTER_IDS.every((id) => current.has(id));
-            const next = new Set<QueueFilterId>(fullySelected ? DEFAULT_QUEUE_FILTERS : QUEUE_FILTER_IDS);
-            writeQueueFilters(next);
-            return next;
-        });
+    const selectQueueViewFilter = (filter: QueueViewFilter) => {
+        setQueueViewFilter(filter);
+        writeQueueViewFilter(filter);
     };
     const cancellableJobs = useMemo(() => jobs.filter(isCancellableJob), [jobs]);
     const queuedTopPriority = useMemo(() => jobs.reduce(
@@ -1550,9 +1539,8 @@ export const MediaAutomationDashboard: React.FC = () => {
     const filteredJobs = useMemo(() => {
         const query = queueSearch.trim().toLowerCase();
         const errorQuery = queueErrorFilter.trim().toLowerCase();
-        const activeFilters = queueFilters.size ? queueFilters : new Set(DEFAULT_QUEUE_FILTERS);
         const list = jobs.filter((job) => {
-            const matchesStatus = [...activeFilters].some((filterId) => jobMatchesQueueFilter(job, filterId));
+            const matchesStatus = queueViewFilter === 'all' || jobMatchesQueueFilter(job, queueViewFilter);
             if (!matchesStatus) return false;
             if (queueLibraryFilter) {
                 const libraryId = job.libraryId != null ? String(job.libraryId) : '';
@@ -1577,7 +1565,7 @@ export const MediaAutomationDashboard: React.FC = () => {
         // Active → queued → failed → dry-run → completed (completed stays at the bottom on All).
         list.sort((left, right) => queueListSortRank(left) - queueListSortRank(right));
         return list;
-    }, [jobs, queueFilters, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter]);
+    }, [jobs, queueViewFilter, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter]);
 
     const queuePageCount = Math.max(1, Math.ceil(filteredJobs.length / queuePageSize));
     const pagedJobs = useMemo(() => {
@@ -1587,7 +1575,7 @@ export const MediaAutomationDashboard: React.FC = () => {
 
     useEffect(() => {
         setQueuePage(1);
-    }, [queueFilters, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter, queuePageSize]);
+    }, [queueViewFilter, queueSearch, queueLibraryFilter, queuePipelineFilter, queueErrorFilter, queuePageSize]);
 
     useEffect(() => {
         if (queuePage > queuePageCount) setQueuePage(queuePageCount);
@@ -2612,8 +2600,9 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     <div className="flex flex-wrap gap-2">
                                         <button
                                             type="button"
-                                            className={`${buttonClass} ${allQueueFiltersSelected ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
-                                            onClick={toggleAllQueueFilters}
+                                            className={`${buttonClass} ${queueViewFilter === 'all' ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
+                                            onClick={() => selectQueueViewFilter('all')}
+                                            aria-pressed={queueViewFilter === 'all'}
                                         >
                                             All
                                         </button>
@@ -2627,9 +2616,9 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             <button
                                                 key={id}
                                                 type="button"
-                                                className={`${buttonClass} ${queueFilters.has(id) ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
-                                                onClick={() => toggleQueueFilter(id)}
-                                                aria-pressed={queueFilters.has(id)}
+                                                className={`${buttonClass} ${queueViewFilter === id ? 'border-plex/50 bg-plex/15 text-plex' : ''}`}
+                                                onClick={() => selectQueueViewFilter(id)}
+                                                aria-pressed={queueViewFilter === id}
                                             >
                                                 {label} ({count})
                                             </button>
