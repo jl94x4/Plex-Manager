@@ -107,7 +107,9 @@ const jobProgressMeta = (job: MediaAutomationJob | null | undefined) => {
     const etaLabel = formatDurationSeconds(progress.etaSeconds);
     const speed = Number(progress.speed);
     const speedLabel = Number.isFinite(speed) && speed > 0 ? `${speed.toFixed(2)}x` : null;
-    const elapsed = Number(progress.outTimeUs) >= 0 ? Number(progress.outTimeUs) / 1_000_000 : null;
+    const elapsed = progress.outTimeUs != null && Number(progress.outTimeUs) >= 0
+        ? Number(progress.outTimeUs) / 1_000_000
+        : null;
     const duration = Number(progress.durationSeconds);
     const elapsedLabel = elapsed != null && Number.isFinite(elapsed)
         ? (Number.isFinite(duration) && duration > 0
@@ -1108,7 +1110,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [libraryPathHealth, setLibraryPathHealth] = useState<Record<string, { ok: boolean; message: string }>>({});
     const [reportSeed, setReportSeed] = useState<ReportModalSeed | null>(null);
     const reportDeepLinkHandled = React.useRef(false);
-    const editLibraryDeepLinkHandled = React.useRef(false);
+    const editLibraryDeepLinkHandled = React.useRef<string | null>(null);
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((current) => pushToast(current, message, type));
