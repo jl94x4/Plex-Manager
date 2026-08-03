@@ -17,6 +17,8 @@ export type PosterSetsConfig = {
     arrWatchHookEnabled?: boolean;
     /** Creator usernames shown on Browse → Following (MediUX / ThePosterDB). */
     creatorWhitelist?: string[];
+    /** Where artwork is written after apply: plex, local, plex_local, jellyfin, or emby. */
+    applyDestination?: 'plex' | 'local' | 'plex_local' | 'jellyfin' | 'emby';
     hasToken?: boolean;
     configured?: boolean;
 };
@@ -38,6 +40,11 @@ export type PosterSetsWatch = {
     lastAppliedAt?: string | null;
     lastError?: string | null;
     lastNewCount?: number;
+    plexHint?: {
+        ratingKey?: string | null;
+        title?: string | null;
+        mediaType?: string | null;
+    } | null;
     createdAt?: string | null;
     updatedAt?: string | null;
 };
@@ -278,6 +285,13 @@ export type PosterSetsTitleStatus = {
     title?: string;
     mediaType?: string | null;
     ratingKey?: string | null;
+    titleWatch?: {
+        enabled?: boolean;
+        watchId?: string | null;
+        url?: string | null;
+        setTitle?: string | null;
+        user?: string | null;
+    } | null;
     lastApply?: {
         at?: string | null;
         title?: string | null;
@@ -347,4 +361,5 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     notifyOnWatcherDigest: true,
     arrWatchHookEnabled: true,
     creatorWhitelist: [],
+    applyDestination: 'plex',
 };

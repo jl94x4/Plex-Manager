@@ -10,6 +10,7 @@ import {
     X,
 } from 'lucide-react';
 import { askConfirm } from '../shared/confirm';
+import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle } from './autoMatchTitle';
 import { previewAssetEpisodeLabel } from './previewGroups';
@@ -313,26 +314,39 @@ export function LibraryTitleDetailPanel({
         void runSearch(item);
     }, [item, resetState, runSearch]);
 
+    const refreshTitleStatus = useCallback(async () => {
+        if (!item) return;
+        setStatusLoading(true);
+        try {
+            const response = await posterSetsApi.titleStatus({
+                title: item.title,
+                mediaType: item.mediaType,
+                ratingKey: item.id,
+            });
+            setTitleStatus(response);
+        } catch {
+            setTitleStatus(null);
+        } finally {
+            setStatusLoading(false);
+        }
+    }, [item]);
+
     useEffect(() => {
         if (!item) {
             setTitleStatus(null);
             return;
         }
-        let cancelled = false;
-        setStatusLoading(true);
-        void posterSetsApi.titleStatus({
-            title: item.title,
-            mediaType: item.mediaType,
-            ratingKey: item.id,
-        }).then((response) => {
-            if (!cancelled) setTitleStatus(response);
-        }).catch(() => {
-            if (!cancelled) setTitleStatus(null);
-        }).finally(() => {
-            if (!cancelled) setStatusLoading(false);
-        });
-        return () => { cancelled = true; };
-    }, [item]);
+        void refreshTitleStatus();
+    }, [item, refreshTitleStatus]);
+
+    const titleWatchEnabled = titleStatus?.titleWatch?.enabled === true;
+    const titleWatchSetUrl = String(
+        selectedSet?.url
+        || preview?.url
+        || titleStatus?.titleWatch?.url
+        || titleStatus?.lastApply?.url
+        || '',
+    ).trim();
 
     const runResetArt = async () => {
         if (!item) return;
@@ -394,6 +408,33 @@ export function LibraryTitleDetailPanel({
         };
     };
 
+    const toggleTitleWatch = async (enabled?: boolean) => {
+        if (!item) return;
+        const nextEnabled = enabled ?? !titleWatchEnabled;
+        if (nextEnabled && !titleWatchSetUrl) {
+            toast('Apply a poster set first, or select a set to watch.', 'error');
+            return;
+        }
+        setBusy('title-watch');
+        try {
+            await posterSetsApi.titleWatch({
+                title: item.title,
+                mediaType: item.mediaType,
+                ratingKey: item.id,
+                setUrl: titleWatchSetUrl || undefined,
+                enabled: nextEnabled,
+                setMeta: nextEnabled ? currentSetMeta() : undefined,
+            });
+            toast(nextEnabled ? 'Watching this title for poster updates.' : 'Stopped watching this title.');
+            await refreshTitleStatus();
+            onWatchAdded?.();
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to update title watch', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
     const filtersForSelectedIds = (ids: string[]) => {
         if (!ids.length) return undefined;
         const byId = new Map((preview?.assets || []).map((asset) => [asset.id, asset]));
@@ -445,11 +486,17 @@ export function LibraryTitleDetailPanel({
                 currentSetMeta(),
                 undefined,
                 filtersForSelectedIds(ids),
+                {
+                    ratingKey: item.id,
+                    title: item.title,
+                    mediaType: item.mediaType,
+                },
             );
             toast(queuePaused
                 ? `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'} (queue paused).`
                 : `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'}.`);
             onApplied?.();
+            await refreshTitleStatus();
             setPreview(null);
             setSelectedSet(null);
         } catch (error) {
@@ -576,6 +623,20 @@ export function LibraryTitleDetailPanel({
                             ) : (
                                 <p className="text-sm text-muted">No successful apply recorded for this title yet.</p>
                             )}
+                            <div className="rounded-lg border border-white/10 bg-black/30 px-3">
+                                <SettingsToggleRow
+                                    title="Watch this title"
+                                    description={
+                                        titleWatchSetUrl
+                                            ? `Pin updates for ${titleStatus?.titleWatch?.setTitle || titleStatus?.lastApply?.title || 'the active poster set'}.`
+                                            : 'Apply a poster set first, then auto-queue new art for this title.'
+                                    }
+                                    checked={titleWatchEnabled}
+                                    disabled={busy !== null || ( !titleWatchEnabled && !titleWatchSetUrl )}
+                                    onChange={(next) => { void toggleTitleWatch(next); }}
+                                    border={false}
+                                />
+                            </div>
                             {(titleStatus?.watchingCount || 0) > 0 ? (
                                 <p className="flex items-center gap-1.5 text-xs text-plex">
                                     <Eye className="h-3.5 w-3.5" />

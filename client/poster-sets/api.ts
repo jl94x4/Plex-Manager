@@ -177,6 +177,7 @@ export const posterSetsApi = {
         setMeta?: PosterSetsSetMeta | null,
         source?: 'manual' | 'bulk' | 'watch',
         mediuxFilters?: string[],
+        plexHint?: { ratingKey?: string; title?: string; mediaType?: string } | null,
     ) => (
         apiFetch(`${ROOT}/apply`, json({
             url,
@@ -184,6 +185,7 @@ export const posterSetsApi = {
             ...(setMeta ? { setMeta } : {}),
             ...(source ? { source } : {}),
             ...(mediuxFilters?.length ? { mediuxFilters } : {}),
+            ...(plexHint ? { plexHint } : {}),
         })) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob; queued?: boolean }>
     ),
     imageUrl: (thumbUrl: string) => `${ROOT}/image?url=${encodeURIComponent(thumbUrl)}`,
@@ -311,6 +313,19 @@ export const posterSetsApi = {
         if (payload.ratingKey) params.set('ratingKey', payload.ratingKey);
         return apiFetch(`${ROOT}/title-status?${params.toString()}`) as Promise<PosterSetsTitleStatus & { ok?: boolean }>;
     },
+    titleWatch: (payload: {
+        title: string;
+        mediaType?: string;
+        ratingKey?: string;
+        setUrl?: string;
+        enabled?: boolean;
+        setMeta?: PosterSetsSetMeta | null;
+    }) => apiFetch(`${ROOT}/title-watch`, json(payload)) as Promise<{
+        ok: boolean;
+        enabled: boolean;
+        watch?: PosterSetsWatch | null;
+        titleWatch?: PosterSetsTitleStatus['titleWatch'];
+    }>,
     resetArt: (payload: {
         ratingKey: string;
         mediaType: 'movie' | 'show';

@@ -174,30 +174,122 @@ def cleanup_temp_file(path: Optional[str]) -> None:
 
 def apply_poster_or_art(upload_target, poster: dict, *, art: bool = False, progress: ProgressFn = None) -> None:
     """
-    Upload artwork to Plex.
-
-    MediUX's Next.js image proxy now returns 403/blank HTML to scrapers and to Plex's
-    URL fetch — download the direct api.mediux.pro asset ourselves and upload as a file.
+    Upload artwork to Plex and/or write beside media on disk when local mode is enabled.
     """
+    config = poster.get("_config") if isinstance(poster.get("_config"), dict) else {}
     url = poster.get("url") or ""
     source = poster.get("source")
+    path = None
     if source == "mediux" or "api.mediux.pro/assets/" in url:
         path = download_image(url, progress=progress)
         if not path:
             raise RuntimeError(f"Could not download MediUX image: {url}")
-        try:
-            if art:
-                upload_target.uploadArt(filepath=path)
+    try:
+        if should_write_local(config):
+            write_local_art(upload_target, poster, path=path, art=art, progress=progress)
+        if should_upload_plex(config):
+            if path:
+                if art:
+                    upload_target.uploadArt(filepath=path)
+                else:
+                    upload_target.uploadPoster(filepath=path)
+            elif art:
+                upload_target.uploadArt(url=url)
             else:
-                upload_target.uploadPoster(filepath=path)
-        finally:
-            cleanup_temp_file(path)
-        return
+                upload_target.uploadPoster(url=url)
+        elif not should_write_local(config):
+            raise RuntimeError("No apply destination configured (set applyDestination in Poster Sets settings)")
+    finally:
+        cleanup_temp_file(path)
 
-    if art:
-        upload_target.uploadArt(url=url)
-    else:
-        upload_target.uploadPoster(url=url)
+
+def apply_destination_mode(config: dict | None) -> str:
+    cfg = config if isinstance(config, dict) else {}
+    raw = str(cfg.get("apply_destination") or cfg.get("applyDestination") or "plex").strip().lower()
+    if raw in ("both", "plex+local", "plex_and_local"):
+        return "plex_local"
+    return raw or "plex"
+
+
+def should_upload_plex(config: dict | None) -> bool:
+    mode = apply_destination_mode(config)
+    return mode in ("plex", "plex_local", "")
+
+
+def should_write_local(config: dict | None) -> bool:
+    return apply_destination_mode(config) in ("local", "plex_local")
+
+
+def _item_media_dir(item) -> Optional[str]:
+    try:
+        media = getattr(item, "media", None) or []
+        if media:
+            parts = getattr(media[0], "parts", None) or []
+            if parts:
+                media_file = getattr(parts[0], "file", None) or getattr(parts[0], "file", "")
+                if media_file:
+                    return os.path.dirname(str(media_file))
+    except Exception:
+        pass
+    try:
+        locations = getattr(item, "locations", None) or []
+        if locations:
+            return str(locations[0]).rstrip("\\/")
+    except Exception:
+        pass
+    return None
+
+
+def local_art_path(upload_target, poster: dict, *, art: bool = False) -> Optional[str]:
+    """Resolve on-disk path for local artwork beside Plex media."""
+    base_dir = _item_media_dir(upload_target)
+    if not base_dir:
+        return None
+    season = poster.get("season")
+    episode = poster.get("episode")
+    file_type = asset_file_type("show", poster) if poster.get("season") is not None else asset_file_type("movie", poster)
+    if art or season == "Backdrop" or file_type == "background":
+        return os.path.join(base_dir, "fanart.jpg")
+    if episode not in (None, "", "Cover") and isinstance(episode, (int, float)) or (
+        isinstance(episode, str) and str(episode).isdigit()
+    ):
+        ep_dir = base_dir if os.path.basename(base_dir).lower().startswith("s") else base_dir
+        return os.path.join(ep_dir, "thumb.jpg")
+    if season not in (None, "", "Cover", "Backdrop") and isinstance(season, (int, float)):
+        season_dir = base_dir
+        try:
+            locs = getattr(upload_target, "locations", None) or []
+            if locs:
+                season_dir = str(locs[0]).rstrip("\\/")
+        except Exception:
+            pass
+        if season_dir and season_dir != base_dir:
+            return os.path.join(season_dir, f"season{int(season):02d}-poster.jpg")
+        return os.path.join(base_dir, f"season{int(season):02d}-poster.jpg")
+    return os.path.join(base_dir, "poster.jpg")
+
+
+def write_local_art(upload_target, poster: dict, *, path: Optional[str] = None, art: bool = False, progress: ProgressFn = None) -> None:
+    dest_path = local_art_path(upload_target, poster, art=art)
+    if not dest_path:
+        emit(progress, "Local art skipped: could not resolve media folder")
+        return
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    temp_path = path
+    owned_temp = False
+    if not temp_path:
+        url = poster.get("url") or ""
+        temp_path = download_image(url, progress=progress)
+        owned_temp = True
+        if not temp_path:
+            raise RuntimeError(f"Could not download image for local art: {url}")
+    try:
+        with open(temp_path, "rb") as src, open(dest_path, "wb") as dst:
+            dst.write(src.read())
+        emit(progress, f"Wrote local art: {dest_path}")
+    finally:
+        if owned_temp:
+            cleanup_temp_file(temp_path)
 
 
 def normalize_library_list(value: Any) -> List[str]:

@@ -5309,6 +5309,54 @@ export const PosterSetsDashboard: React.FC = () => {
                             />
                         </div>
                     </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                        <p className="text-sm font-semibold text-text">Apply destination</p>
+                        <p className="mt-1 text-xs text-muted">
+                            Where queued artwork is written after a successful apply. Jellyfin/Emby use Settings → Media Player credentials.
+                            Local mode writes poster.jpg, season posters, and episode thumbs beside Plex media paths.
+                        </p>
+                        <div className="mt-3">
+                            <CustomSelect
+                                value={configDraft.applyDestination || 'plex'}
+                                onChange={(value) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    applyDestination: value as PosterSetsConfig['applyDestination'],
+                                }))}
+                                options={[
+                                    { value: 'plex', label: 'Plex server upload' },
+                                    { value: 'local', label: 'Local files only (beside media)' },
+                                    { value: 'plex_local', label: 'Plex upload + local files' },
+                                    { value: 'jellyfin', label: 'Jellyfin Images API' },
+                                    { value: 'emby', label: 'Emby Images API' },
+                                ]}
+                                className="w-full min-w-[180px] sm:w-auto"
+                            />
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                        <p className="text-sm font-semibold text-text">Apply destination</p>
+                        <p className="mt-1 text-xs text-muted">
+                            Where queued artwork is written after a successful apply. Jellyfin/Emby use Settings → Media Player credentials.
+                            Local mode writes poster.jpg, season posters, and episode thumbs beside Plex media paths.
+                        </p>
+                        <div className="mt-3">
+                            <CustomSelect
+                                value={configDraft.applyDestination || 'plex'}
+                                onChange={(value) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    applyDestination: value as PosterSetsConfig['applyDestination'],
+                                }))}
+                                options={[
+                                    { value: 'plex', label: 'Plex server upload' },
+                                    { value: 'local', label: 'Local files only (beside media)' },
+                                    { value: 'plex_local', label: 'Plex upload + local files' },
+                                    { value: 'jellyfin', label: 'Jellyfin Images API' },
+                                    { value: 'emby', label: 'Emby Images API' },
+                                ]}
+                                className="w-full min-w-[180px] sm:w-auto"
+                            />
+                        </div>
+                    </div>
                     <div className="rounded-xl border border-white/10 bg-black/20 px-4">
                         <SettingsToggleRow
                             title="Clear Kometa Overlay label after upload"
