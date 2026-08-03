@@ -1648,6 +1648,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         try {
             const response = await fetchPosterSetsForTitle(title, {
                 dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
+                mediaType: libraryItem?.mediaType,
                 libraryItem,
             });
             setSearchSets(response.sets || []);

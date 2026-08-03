@@ -225,6 +225,7 @@ export function LibraryTitleDetailPanel({
         try {
             const response = await fetchPosterSetsForTitle(title, {
                 dupePreference,
+                mediaType: libraryItem?.mediaType,
                 libraryItem: libraryItem || undefined,
             });
             setSearchSets(response.sets || []);

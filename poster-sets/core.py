@@ -1465,7 +1465,7 @@ def _posterdb_title_match_key(title: str, year: int | None) -> str:
     return f"{text}|{year_part}"
 
 
-def _parse_posterdb_title_links(soup, *, limit: int = 24) -> list[dict]:
+def _parse_posterdb_title_links(soup, *, limit: int = 24, html: str = "") -> list[dict]:
     titles: list[dict] = []
     seen: set[str] = set()
     for anchor in soup.find_all("a", href=True):
@@ -1489,6 +1489,29 @@ def _parse_posterdb_title_links(soup, *, limit: int = 24) -> list[dict]:
                 "id": posters_id,
                 "title": title,
                 "year": year,
+                "url": _absolute_url("https://theposterdb.com", href.split("?")[0]),
+                "mediaType": None,
+                "provider": "posterdb",
+            }
+        )
+        if len(titles) >= max(1, int(limit or 24)):
+            break
+
+    if titles:
+        return titles
+
+    blob = html or str(soup or "")
+    for match in re.finditer(r'href=["\']([^"\']*/posters/(\d+)[^"\']*)["\']', blob, re.I):
+        posters_id = match.group(2)
+        if posters_id in seen or posters_id == "requests":
+            continue
+        seen.add(posters_id)
+        href = match.group(1)
+        titles.append(
+            {
+                "id": posters_id,
+                "title": f"Title page {posters_id}",
+                "year": None,
                 "url": _absolute_url("https://theposterdb.com", href.split("?")[0]),
                 "mediaType": None,
                 "provider": "posterdb",
@@ -1525,6 +1548,7 @@ def search_posterdb_advanced_titles(
     *,
     tmdb_id: str | int | None = None,
     imdb_id: str | None = None,
+    tvdb_id: str | int | None = None,
     term: str = "",
     category: str = "Shows",
     progress: ProgressFn = None,
@@ -1542,9 +1566,11 @@ def search_posterdb_advanced_titles(
         params["tmdb_id"] = str(tmdb_id).strip()
     if imdb_id:
         params["imdb_id"] = str(imdb_id).strip()
+    if tvdb_id not in (None, ""):
+        params["tvdb_id"] = str(tvdb_id).strip()
     if term:
         params["term"] = str(term).strip()
-    if not params.get("tmdb_id") and not params.get("imdb_id") and not params.get("term"):
+    if not params.get("tmdb_id") and not params.get("imdb_id") and not params.get("tvdb_id") and not params.get("term"):
         return []
     emit(progress, "Searching ThePosterDB advanced catalog…")
 
@@ -1567,7 +1593,7 @@ def search_posterdb_advanced_titles(
             emit(progress, "ThePosterDB advanced search requires login — add TPDB credentials in Poster Sets settings.")
             return []
     soup = BeautifulSoup(response.text, "html.parser")
-    return _parse_posterdb_title_links(soup, limit=limit)
+    return _parse_posterdb_title_links(soup, limit=limit, html=response.text)
 
 
 def resolve_posterdb_title_page(
@@ -1577,6 +1603,7 @@ def resolve_posterdb_title_page(
     year: int | None = None,
     tmdb_id: str | int | None = None,
     imdb_id: str | None = None,
+    tvdb_id: str | int | None = None,
     media_type: str = "show",
     config: dict | None = None,
     progress: ProgressFn = None,
@@ -1601,9 +1628,9 @@ def resolve_posterdb_title_page(
     candidates: dict[str, dict] = {}
     category = _posterdb_advanced_category(media_type)
 
-    if target_tmdb or imdb_id:
+    if target_tmdb or imdb_id or tvdb_id:
         advanced_queries: list[tuple[str, str]] = []
-        if target_tmdb:
+        if target_tmdb or imdb_id or tvdb_id:
             advanced_queries.append(("", category))
             if category != "All":
                 advanced_queries.append(("", "All"))
@@ -1621,6 +1648,7 @@ def resolve_posterdb_title_page(
                 config,
                 tmdb_id=target_tmdb,
                 imdb_id=imdb_id,
+                tvdb_id=tvdb_id,
                 term=term_value,
                 category=category_value,
                 progress=progress,
@@ -1657,6 +1685,7 @@ def resolve_posterdb_title_page(
             config=config,
             tmdb_id=target_tmdb,
             imdb_id=imdb_id,
+            tvdb_id=tvdb_id,
             media_type=media_type,
             _skip_resolve=True,
         )
@@ -1754,6 +1783,7 @@ def search_posterdb_titles(
     config: dict | None = None,
     tmdb_id: str | int | None = None,
     imdb_id: str | None = None,
+    tvdb_id: str | int | None = None,
     media_type: str = "show",
     _skip_resolve: bool = False,
 ) -> dict:
@@ -1765,7 +1795,7 @@ def search_posterdb_titles(
     soup = cook_soup(search_url, config=config)
     titles = _parse_posterdb_title_links(soup, limit=limit)
 
-    if not _skip_resolve and (tmdb_id or imdb_id or len(titles) > 1):
+    if not _skip_resolve and (tmdb_id or imdb_id or tvdb_id or len(titles) > 1):
         year_hint = None
         year_match = re.search(r"(?:\(|^|\s)(19\d{2}|20\d{2})(?:\)|$|\s)", term)
         if year_match:
@@ -1776,6 +1806,7 @@ def search_posterdb_titles(
             year=year_hint,
             tmdb_id=tmdb_id,
             imdb_id=imdb_id,
+            tvdb_id=tvdb_id,
             media_type=media_type,
             config=config,
             progress=progress,
@@ -1798,6 +1829,7 @@ def list_posterdb_sets(
     config: dict | None = None,
     tmdb_id: str | int | None = None,
     imdb_id: str | None = None,
+    tvdb_id: str | int | None = None,
     title_hint: str = "",
     year_hint: int | None = None,
     media_type: str = "show",
@@ -1811,13 +1843,27 @@ def list_posterdb_sets(
             year_val = None
     target_tmdb = str(tmdb_id or "").strip() or None
 
-    if target_tmdb or imdb_id or title_hint:
+    if url and target_tmdb:
+        try:
+            probe = _posterdb_probe_title_page(url, config=config)
+            page_tmdb = str(probe.get("mediaId") or "").strip()
+            if page_tmdb and page_tmdb != target_tmdb:
+                emit(
+                    progress,
+                    f"ThePosterDB title page uses TMDB {page_tmdb}, not {target_tmdb} — resolving canonical page…",
+                )
+                url = ""
+        except Exception:
+            pass
+
+    if target_tmdb or imdb_id or tvdb_id or title_hint:
         resolved = resolve_posterdb_title_page(
             query=title_hint,
             title=title_hint,
             year=year_val,
             tmdb_id=target_tmdb,
             imdb_id=imdb_id,
+            tvdb_id=tvdb_id,
             media_type=media_type,
             config=config,
             progress=progress,
@@ -1848,6 +1894,7 @@ def list_posterdb_sets(
             year=year_val,
             tmdb_id=target_tmdb or page_media_id,
             imdb_id=imdb_id,
+            tvdb_id=tvdb_id,
             media_type=media_type,
             config=config,
             progress=progress,
@@ -1862,6 +1909,7 @@ def list_posterdb_sets(
                 config=config,
                 tmdb_id=target_tmdb or page_media_id,
                 imdb_id=imdb_id,
+                tvdb_id=tvdb_id,
                 title_hint=title_hint or page_title,
                 year_hint=year_val,
                 media_type=media_type,
@@ -2525,6 +2573,7 @@ def search_catalog(
     media_type: str = "movie",
     tmdb_id: str | int | None = None,
     imdb_id: str | None = None,
+    tvdb_id: str | int | None = None,
     title_hint: str = "",
     year_hint: int | None = None,
     mode: str = "title",
@@ -2591,6 +2640,7 @@ def search_catalog(
                 year=year_val,
                 tmdb_id=tmdb_id,
                 imdb_id=imdb_id,
+                tvdb_id=tvdb_id,
                 media_type=media_type,
                 config=config,
                 progress=progress,
@@ -2605,6 +2655,7 @@ def search_catalog(
                 config=config,
                 tmdb_id=tmdb_id,
                 imdb_id=imdb_id,
+                tvdb_id=tvdb_id,
                 title_hint=title_hint,
                 year_hint=year_val,
                 media_type=media_type,
@@ -2616,6 +2667,7 @@ def search_catalog(
             config=config,
             tmdb_id=tmdb_id,
             imdb_id=imdb_id,
+            tvdb_id=tvdb_id,
             media_type=media_type,
         )
 

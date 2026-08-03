@@ -104,6 +104,7 @@ def main() -> int:
                 media_type=str(request.get("mediaType") or request.get("media_type") or "movie"),
                 tmdb_id=request.get("tmdbId") or request.get("tmdb_id"),
                 imdb_id=request.get("imdbId") or request.get("imdb_id"),
+                tvdb_id=request.get("tvdbId") or request.get("tvdb_id"),
                 title_hint=str(request.get("titleHint") or request.get("title_hint") or ""),
                 year_hint=request.get("yearHint") or request.get("year_hint"),
                 mode=mode,
