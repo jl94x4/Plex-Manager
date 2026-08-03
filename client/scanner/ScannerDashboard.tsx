@@ -30,6 +30,13 @@ import {
     type ScannerSourceAppKey,
 } from './eventMeta';
 import { ScannerSourceBadge } from './ScannerSourceBadge';
+import {
+    DashboardHero,
+    DashboardPageShell,
+    DashboardPanel,
+    DashboardStatCard,
+    dashboardGlowClass,
+} from '../shared/dashboard/DashboardChrome';
 
 type ScannerStatus = {
     enabled: boolean;
@@ -109,52 +116,6 @@ const ActionIcon: React.FC<{ action?: string; className?: string }> = ({ action,
     if (key === 'refresh') return <Radar className={className} />;
     return <Radar className={className} />;
 };
-
-const StatCard: React.FC<{
-    label: string;
-    value: React.ReactNode;
-    hint?: string;
-    icon: React.ReactNode;
-    glow: string;
-    accent: string;
-}> = ({ label, value, hint, icon, glow, accent }) => (
-    <div className={`relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 px-4 py-4 ${accent}`}>
-        <div className={`pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full blur-2xl ${glow}`} />
-        <div className="relative flex items-start justify-between gap-3">
-            <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">{label}</p>
-                <p className="mt-1.5 text-2xl font-black tabular-nums tracking-tight text-text md:text-3xl">{value}</p>
-                {hint ? <p className="mt-1 text-[11px] text-muted">{hint}</p> : null}
-            </div>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
-                {icon}
-            </div>
-        </div>
-    </div>
-);
-
-const PanelShell: React.FC<{
-    title: string;
-    subtitle: string;
-    badge?: React.ReactNode;
-    controls?: React.ReactNode;
-    children: React.ReactNode;
-}> = ({ title, subtitle, badge, controls, children }) => (
-    <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-black/25 p-4 shadow-xl md:p-5">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-                <h2 className="text-lg font-bold tracking-tight text-text">{title}</h2>
-                <p className="mt-0.5 text-xs text-muted">{subtitle}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-                {controls}
-                {badge}
-            </div>
-        </div>
-        {children}
-    </section>
-);
 
 const EventCard: React.FC<{
     accent: 'amber' | 'emerald' | 'rose';
@@ -318,32 +279,23 @@ export const ScannerDashboard: React.FC = () => {
     ];
 
     return (
-        <div className="flex w-full animate-fade-in flex-col gap-6 pb-10">
-            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-sky-500/10 via-background/40 to-plex/10 p-5 md:p-6">
-                <div className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-sky-400/10 blur-3xl" />
-                <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="min-w-0">
-                        <div className="mb-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-sky-300/90">
-                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-sky-400/30 bg-sky-500/15">
-                                <Radar className="h-3.5 w-3.5" />
-                            </span>
-                            Library Scanner
-                        </div>
-                        <h1 className="text-3xl font-black tracking-tight text-text md:text-4xl">Refresh with precision</h1>
-                        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted md:text-[15px]">
-                            Queue a folder for a partial library refresh on Plex, Jellyfin, or Emby.
-                            ARR webhooks land here automatically as imports, upgrades, deletes, and renames.
-                        </p>
-                    </div>
+        <DashboardPageShell>
+            <DashboardHero
+                accent="sky"
+                eyebrow="Library Scanner"
+                title="Refresh with precision"
+                description="Queue a folder for a partial library refresh on Plex, Jellyfin, or Emby. ARR webhooks land here automatically as imports, upgrades, deletes, and renames."
+                icon={<Radar className="h-3.5 w-3.5" />}
+                actions={(
                     <button
                         type="button"
                         onClick={() => void refresh()}
-                        className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-white/5 hover:text-text lg:self-auto"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-white/5 hover:text-text"
                     >
                         <RefreshCw className="h-4 w-4" /> Refresh
                     </button>
-                </div>
-            </div>
+                )}
+            />
 
             {status?.showManualPath !== false ? (
             <div className="glass-card space-y-3 p-4 shadow-xl md:p-5">
@@ -403,37 +355,33 @@ export const ScannerDashboard: React.FC = () => {
             )}
 
             <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
-                <StatCard
+                <DashboardStatCard
                     label="Queued"
                     value={status?.remaining ?? '—'}
                     hint="Waiting for min age"
                     icon={<ListTodo className="h-4 w-4 text-amber-300" />}
-                    glow="bg-amber-400/20"
-                    accent=""
+                    glow={dashboardGlowClass('amber')}
                 />
-                <StatCard
+                <DashboardStatCard
                     label="Processed"
                     value={status?.processed ?? '—'}
                     hint="Successful refreshes"
                     icon={<Layers className="h-4 w-4 text-emerald-300" />}
-                    glow="bg-emerald-400/20"
-                    accent=""
+                    glow={dashboardGlowClass('emerald')}
                 />
-                <StatCard
+                <DashboardStatCard
                     label="Targets"
                     value={status?.targetCount ?? '—'}
                     hint="Plex / JF / Emby"
                     icon={<Target className="h-4 w-4 text-violet-300" />}
-                    glow="bg-violet-400/20"
-                    accent=""
+                    glow={dashboardGlowClass('violet')}
                 />
-                <StatCard
+                <DashboardStatCard
                     label="Min age"
                     value={status?.minimumAge ?? '—'}
                     hint="Delay before scan"
                     icon={<Clock3 className="h-4 w-4 text-sky-300" />}
-                    glow="bg-sky-400/20"
-                    accent=""
+                    glow={dashboardGlowClass('sky')}
                 />
             </div>
 
@@ -472,7 +420,7 @@ export const ScannerDashboard: React.FC = () => {
             ) : null}
 
             <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2">
-                <PanelShell
+                <DashboardPanel
                     title="Queue"
                     subtitle="Paths waiting for the minimum age."
                     badge={(
@@ -513,9 +461,9 @@ export const ScannerDashboard: React.FC = () => {
                             })}
                         </ul>
                     )}
-                </PanelShell>
+                </DashboardPanel>
 
-                <PanelShell
+                <DashboardPanel
                     title="Recent activity"
                     subtitle={`Latest ${ACTIVITY_FETCH_LIMIT} events · ${ACTIVITY_PAGE_SIZE} per page.`}
                     controls={configuredSources.length > 0 ? (
@@ -618,9 +566,9 @@ export const ScannerDashboard: React.FC = () => {
                         ) : null}
                         </>
                     )}
-                </PanelShell>
+                </DashboardPanel>
             </div>
-        </div>
+        </DashboardPageShell>
     );
 };
 

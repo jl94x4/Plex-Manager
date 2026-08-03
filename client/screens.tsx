@@ -51,6 +51,15 @@ import {
     type StatusPeriod,
 } from './shared/statusHealth';
 import { StatusSpeedTest } from './shared/StatusSpeedTest';
+import {
+    DashboardHero,
+    DashboardPageShell,
+    DashboardPanel,
+    DashboardStatCard,
+    DashboardSubnav,
+    dashboardGlowClass,
+    dashboardSubnavLinkClass,
+} from './shared/dashboard/DashboardChrome';
 import { ANALYTICS_PERIOD_OPTIONS, persistAnalyticsDays, readPersistedAnalyticsDays } from './shared/analyticsPeriodOptions';
 import { UserDashboardLayout } from './home/UserDashboardLayout';
 import { createBazarrToolsSectionRenderer, createMainGridWidgetRenderer, createMediaAutomationSectionRenderer, createPendingRequestsSectionRenderer, createRecentlyAddedWidgetRenderer, createScannerSectionRenderer } from './home/userDashboardWidgetRenderers';
@@ -7572,24 +7581,34 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
 
     if (isLoading || !statusData) {
         return (
-            <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center">
-                <header className="flex items-center gap-4 w-full mb-8 pb-4 border-b border-border">
-                    {isPublic && (
-                        <button onClick={onBack} className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors flex items-center justify-center text-muted hover:text-text">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+            <DashboardPageShell>
+                <DashboardHero
+                    accent="emerald"
+                    eyebrow="Status Monitor"
+                    title="Server Status"
+                    description="Live health checks and uptime history for your stack."
+                    icon={<Activity className="h-3.5 w-3.5" />}
+                    actions={isPublic ? (
+                        <button
+                            type="button"
+                            onClick={onBack}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-white/5 hover:text-text"
+                        >
+                            <ChevronLeft className="h-4 w-4" /> Back
                         </button>
-                    )}
-                    <h2 className="text-2xl font-bold text-text">Server Status</h2>
-                </header>
+                    ) : undefined}
+                />
                 {hasError ? (
-                    <div className="text-center p-8">
+                    <div className="rounded-2xl border border-white/10 bg-black/25 p-8 text-center">
                         <p className="text-status-expired mb-4">Failed to load status data.</p>
-                        <button onClick={fetchStatus} className="px-4 py-2 bg-plex text-background rounded-lg font-bold">Retry</button>
+                        <button type="button" onClick={() => void fetchStatus()} className="rounded-xl bg-plex px-4 py-2 font-bold text-background">
+                            Retry
+                        </button>
                     </div>
                 ) : (
                     <Loader isLoading={true} />
                 )}
-            </div>
+            </DashboardPageShell>
         );
     }
 
@@ -7625,68 +7644,139 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
         return 'h-1/5';
     };
 
-    return (
-        <div className="w-full flex flex-col">
-            <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between w-full mb-6 pb-4 border-b border-border">
-                <div className="flex items-center gap-4">
-                    {isPublic && (
-                        <button onClick={onBack} className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors flex items-center justify-center text-muted hover:text-text">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                        </button>
-                    )}
-                    <h2 className="text-2xl font-bold text-text">Server Status</h2>
-                </div>
-                <div className="flex flex-wrap gap-1.5 p-1 bg-black/20 rounded-xl border border-border w-fit">
-                    {STATUS_PERIODS.map((p) => (
-                        <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => setPeriod(p.id)}
-                            className={`px-3.5 py-2 rounded-lg font-bold text-xs uppercase tracking-wider transition-all border-none outline-none cursor-pointer ${
-                                period === p.id ? 'bg-plex text-background' : 'bg-transparent text-muted hover:text-text hover:bg-white/5'
-                            }`}
-                        >
-                            {p.label}
-                        </button>
-                    ))}
-                </div>
-            </header>
+    const statusTabs = [
+        { id: 'overview' as const, label: 'Overview', icon: Monitor },
+        { id: 'history' as const, label: 'Detailed History', icon: Clock },
+        { id: 'analytics' as const, label: 'Analytics', icon: LucideLineChart },
+    ];
 
-            <div className="flex flex-wrap gap-2 mb-8 p-1.5 bg-black/20 rounded-xl border border-border w-fit mx-auto md:mx-0">
-                {[
-                    { id: 'overview', label: 'Overview' },
-                    { id: 'history', label: 'Detailed History' },
-                    { id: 'analytics', label: 'Analytics' }
-                ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id as any)}
-                        className={`px-5 py-2.5 rounded-lg font-bold text-sm transition-all duration-200 cursor-pointer border-none outline-none ${activeTab === tab.id
-                            ? 'bg-plex text-background'
-                            : 'bg-transparent text-muted hover:text-text hover:bg-white/5'
-                            }`}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
+    return (
+        <DashboardPageShell>
+            <DashboardHero
+                accent="emerald"
+                eyebrow="Status Monitor"
+                title="Server Status"
+                description={(
+                    <>
+                        {statusCounts.online} of {statusCounts.total} services online
+                        {statusCounts.offline > 0 ? (
+                            <span className="text-status-expired"> · {statusCounts.offline} offline</span>
+                        ) : null}
+                        {' · '}{periodLabel} fleet uptime {fleetPct.toFixed(1)}%
+                    </>
+                )}
+                icon={<Activity className="h-3.5 w-3.5" />}
+                secondaryBlob
+                actions={(
+                    <>
+                        {isPublic ? (
+                            <button
+                                type="button"
+                                onClick={onBack}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-white/5 hover:text-text"
+                            >
+                                <ChevronLeft className="h-4 w-4" /> Back
+                            </button>
+                        ) : null}
+                        <div className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
+                            {STATUS_PERIODS.map((p) => (
+                                <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => setPeriod(p.id)}
+                                    className={`rounded-lg px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition-all border-none outline-none cursor-pointer ${
+                                        period === p.id ? 'bg-plex text-background shadow-md shadow-plex/25' : 'bg-transparent text-muted hover:text-text hover:bg-white/5'
+                                    }`}
+                                >
+                                    {p.label}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => void fetchStatus()}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-white/5 hover:text-text"
+                        >
+                            <RefreshCw className="h-4 w-4" /> Refresh
+                        </button>
+                    </>
+                )}
+            />
+
+            <div className="md:hidden">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">
+                    Status section
+                </label>
+                <CustomSelect
+                    id="status-section-select"
+                    value={activeTab}
+                    onChange={(val) => setActiveTab(val as typeof activeTab)}
+                    options={statusTabs.map((tab) => {
+                        const Icon = tab.icon;
+                        return {
+                            label: tab.label,
+                            value: tab.id,
+                            icon: <Icon className="h-4 w-4" />,
+                        };
+                    })}
+                />
             </div>
+
+            <DashboardSubnav className="mb-1">
+                {statusTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    return (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors border-none outline-none cursor-pointer ${dashboardSubnavLinkClass(activeTab === tab.id)}`}
+                        >
+                            <Icon className="h-4 w-4 shrink-0" />
+                            <span>{tab.label}</span>
+                        </button>
+                    );
+                })}
+            </DashboardSubnav>
 
             <main className="user-content">
                 {activeTab === 'overview' && (
                     <>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
-                            {[
-                                { label: 'Services', value: statusCounts.total, tone: 'text-text' },
-                                { label: 'Online', value: statusCounts.online, tone: 'text-status-active' },
-                                { label: 'Degraded', value: statusCounts.degraded, tone: 'text-status-expiring' },
-                                { label: 'Offline', value: statusCounts.offline, tone: 'text-status-expired' },
-                                { label: `${periodLabel} uptime`, value: `${fleetPct.toFixed(1)}%`, tone: 'text-plex' },
-                            ].map((item) => (
-                                <div key={item.label} className="rounded-xl border border-white/5 bg-card p-4 shadow-lg">
-                                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{item.label}</p>
-                                    <p className={`text-2xl font-black mt-1 ${item.tone}`}>{item.value}</p>
-                                </div>
-                            ))}
+                        <div className="mb-6 grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-5">
+                            <DashboardStatCard
+                                label="Services"
+                                value={statusCounts.total}
+                                icon={<Monitor className="h-4 w-4 text-sky-300" />}
+                                glow={dashboardGlowClass('sky')}
+                            />
+                            <DashboardStatCard
+                                label="Online"
+                                value={statusCounts.online}
+                                icon={<CheckCircle className="h-4 w-4 text-emerald-300" />}
+                                glow={dashboardGlowClass('emerald')}
+                                valueClassName="text-status-active"
+                            />
+                            <DashboardStatCard
+                                label="Degraded"
+                                value={statusCounts.degraded}
+                                icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
+                                glow={dashboardGlowClass('amber')}
+                                valueClassName="text-status-expiring"
+                            />
+                            <DashboardStatCard
+                                label="Offline"
+                                value={statusCounts.offline}
+                                icon={<AlertCircle className="h-4 w-4 text-rose-300" />}
+                                glow={dashboardGlowClass('rose')}
+                                valueClassName="text-status-expired"
+                            />
+                            <DashboardStatCard
+                                label={`${periodLabel} uptime`}
+                                value={`${fleetPct.toFixed(1)}%`}
+                                icon={<TrendingUp className="h-4 w-4 text-plex" />}
+                                glow={dashboardGlowClass('plex')}
+                                valueClassName="text-plex"
+                            />
                         </div>
 
                         {!isPublic && <StatusSpeedTest />}
@@ -7698,33 +7788,36 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                         )}
 
                         {groups.length === 0 && (
-                            <div className="flex flex-col items-center justify-center p-12 text-center border-2 border-dashed border-border rounded-xl bg-card my-8">
-                                <Activity className="w-12 h-12 text-muted mb-4 opacity-50" />
-                                <h3 className="text-xl font-bold text-text mb-2">No Services Monitored</h3>
-                                <p className="text-muted max-w-md">
-                                    The status page is currently blank because no services have been configured yet.
-                                    {isAdmin ? (
-                                        <>
-                                            <br /><br />
-                                            You can add status monitors by going to <strong className="text-text">Settings &gt; Status Page</strong> and adding your services and groups.
-                                        </>
-                                    ) : (
-                                        <>
-                                            <br /><br />
-                                            The server administrator hasn't added any services to monitor yet. Check back later!
-                                        </>
-                                    )}
-                                </p>
-                            </div>
+                            <DashboardPanel title="No services monitored" subtitle="Add monitors in Settings to populate this page.">
+                                <div className="flex flex-col items-center justify-center p-8 text-center">
+                                    <Activity className="mb-4 h-12 w-12 text-muted opacity-50" />
+                                    <p className="max-w-md text-muted">
+                                        The status page is currently blank because no services have been configured yet.
+                                        {isAdmin ? (
+                                            <>
+                                                {' '}You can add status monitors in <strong className="text-text">Settings &gt; Status Page</strong>.
+                                            </>
+                                        ) : (
+                                            <>
+                                                {' '}The server administrator hasn&apos;t added any services to monitor yet. Check back later!
+                                            </>
+                                        )}
+                                    </p>
+                                </div>
+                            </DashboardPanel>
                         )}
 
                         {groups.map((group: any) => {
                             const groupServices = services.filter((s: any) => s.groupId === group.id);
                             if (groupServices.length === 0) return null;
                             return (
-                                <div key={group.id} className="mb-8">
-                                    <h3 className="text-lg font-bold text-muted uppercase tracking-[2px] mb-6 border-b border-white/10 pb-2">{group.name}</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                <DashboardPanel
+                                    key={group.id}
+                                    title={group.name}
+                                    subtitle={`${groupServices.length} service${groupServices.length === 1 ? '' : 's'} · ${periodLabel}`}
+                                    className="mb-6"
+                                >
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                                         {groupServices.map((service: any, index: number) => {
                                             const health = healthData[service.id] || { currentStatus: 'unknown', uptimePercentage: 100, dailyHistory: {} };
                                             const uptime = uptimeForPeriod(health, period);
@@ -7733,7 +7826,7 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                             const avgLatency = periodStats(health, period).latency.avg;
                                             const rangeLeft = period === '24h' ? '24h ago' : period === '7d' ? '7 days ago' : period === '30d' ? '30 days ago' : '90 days ago';
                                             return (
-                                                <div key={service.id} className="bg-card rounded-xl p-4 md:p-6 border border-white/5 shadow-lg flex flex-col gap-4 animate-fade-in hover:-translate-y-1 hover:shadow-plex/10 hover:shadow-2xl hover:border-plex/30 transition-all duration-300" style={{ animationFillMode: 'both', animationDelay: `${index * 75}ms` }}>
+                                                <div key={service.id} className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5 flex flex-col gap-4 animate-fade-in transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/25 hover:shadow-lg hover:shadow-emerald-500/5" style={{ animationFillMode: 'both', animationDelay: `${index * 75}ms` }}>
                                                     <div className="flex justify-between items-start mb-2 gap-4">
                                                         <div className="flex items-center gap-3 min-w-0">
                                                             <StatusServiceIcon service={service} />
@@ -7780,25 +7873,30 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                             );
                                         })}
                                     </div>
-                                </div>
+                                </DashboardPanel>
                             );
                         })}
                     </>
                 )}
 
                 {activeTab === 'history' && (
-                    <div className="flex flex-col gap-8 animate-fade-in">
+                    <div className="flex flex-col gap-6 animate-fade-in">
                         {services.map((service: any) => {
                             const health = healthData[service.id];
                             const rows = historyRowsForPeriod(health, period);
                             const incidents = incidentsForPeriod(health, period);
                             return (
-                                <div key={service.id} className="bg-card border border-white/5 shadow-2xl rounded-2xl overflow-hidden mt-4">
-                                    <div className="p-4 bg-black/20 border-b border-border/50 flex flex-wrap items-center justify-between gap-2">
-                                        <h3 className="text-lg font-bold text-plex uppercase tracking-wider">{service.name}</h3>
-                                        <span className="text-xs text-muted font-bold uppercase tracking-wider">{periodLabel} history</span>
-                                    </div>
-                                    <div className="overflow-x-auto">
+                                <DashboardPanel
+                                    key={service.id}
+                                    title={service.name}
+                                    subtitle={`${periodLabel} history`}
+                                    badge={(
+                                        <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted">
+                                            {periodLabel}
+                                        </span>
+                                    )}
+                                >
+                                    <div className="overflow-x-auto rounded-xl border border-white/5">
                                         <table className="w-full text-left border-collapse">
                                             <thead className="bg-black/40 border-b border-border text-muted text-xs uppercase tracking-wider">
                                                 <tr>
@@ -7878,7 +7976,7 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                             </div>
                                         )}
                                     </div>
-                                </div>
+                                </DashboardPanel>
                             );
                         })}
                     </div>
@@ -7887,16 +7985,16 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                 {activeTab === 'analytics' && (
                     <div className="flex flex-col gap-6 animate-fade-in">
                         {services.length > 1 && (
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-2 rounded-xl border border-white/10 bg-black/20 p-1">
                                 {services.map((service: any) => (
                                     <button
                                         key={service.id}
                                         type="button"
                                         onClick={() => setSelectedServiceId(service.id)}
-                                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors border ${
+                                        className={`rounded-lg px-4 py-2 text-sm font-bold transition-colors border-none outline-none cursor-pointer ${
                                             selectedService?.id === service.id
-                                                ? 'bg-plex text-background border-plex'
-                                                : 'bg-card text-muted border-border hover:text-text hover:border-plex/40'
+                                                ? 'bg-plex text-background shadow-md shadow-plex/25'
+                                                : 'bg-transparent text-muted hover:bg-white/5 hover:text-text'
                                         }`}
                                     >
                                         {service.name}
@@ -7907,28 +8005,21 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
 
                         {selectedService && (
                             <>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                    {[
-                                        { label: 'Uptime', value: `${selectedStats.pct.toFixed(2)}%` },
-                                        { label: 'Checks', value: selectedStats.total.toLocaleString() },
-                                        { label: 'Avg latency', value: formatLatencyMs(selectedStats.latency.avg) },
-                                        { label: 'p95 latency', value: formatLatencyMs(selectedStats.latency.p95) },
-                                        { label: 'Incidents', value: String(selectedStats.incidentCount) },
-                                        { label: 'Longest outage', value: formatDurationShort(selectedStats.longestOutageMs) },
-                                        { label: 'Healthy streak', value: selectedStats.currentStreakHours ? `${selectedStats.currentStreakHours}h` : '—' },
-                                        { label: 'Worst day', value: selectedStats.worstDay ? `${selectedStats.worstDay.pct.toFixed(1)}%` : '—' },
-                                    ].map((chip) => (
-                                        <div key={chip.label} className="rounded-xl border border-white/5 bg-card p-4 shadow-lg">
-                                            <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{chip.label}</p>
-                                            <p className="text-xl font-black mt-1 text-text tabular-nums">{chip.value}</p>
-                                        </div>
-                                    ))}
+                                <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+                                    <DashboardStatCard label="Uptime" value={`${selectedStats.pct.toFixed(2)}%`} icon={<TrendingUp className="h-4 w-4 text-emerald-300" />} glow={dashboardGlowClass('emerald')} />
+                                    <DashboardStatCard label="Checks" value={selectedStats.total.toLocaleString()} icon={<Activity className="h-4 w-4 text-sky-300" />} glow={dashboardGlowClass('sky')} />
+                                    <DashboardStatCard label="Avg latency" value={formatLatencyMs(selectedStats.latency.avg)} icon={<Clock className="h-4 w-4 text-plex" />} glow={dashboardGlowClass('plex')} />
+                                    <DashboardStatCard label="p95 latency" value={formatLatencyMs(selectedStats.latency.p95)} icon={<Clock className="h-4 w-4 text-violet-300" />} glow={dashboardGlowClass('violet')} />
+                                    <DashboardStatCard label="Incidents" value={String(selectedStats.incidentCount)} icon={<AlertTriangle className="h-4 w-4 text-amber-300" />} glow={dashboardGlowClass('amber')} />
+                                    <DashboardStatCard label="Longest outage" value={formatDurationShort(selectedStats.longestOutageMs)} icon={<AlertCircle className="h-4 w-4 text-rose-300" />} glow={dashboardGlowClass('rose')} />
+                                    <DashboardStatCard label="Healthy streak" value={selectedStats.currentStreakHours ? `${selectedStats.currentStreakHours}h` : '—'} icon={<CheckCircle className="h-4 w-4 text-emerald-300" />} glow={dashboardGlowClass('emerald')} />
+                                    <DashboardStatCard label="Worst day" value={selectedStats.worstDay ? `${selectedStats.worstDay.pct.toFixed(1)}%` : '—'} icon={<Calendar className="h-4 w-4 text-muted" />} glow={dashboardGlowClass('muted')} />
                                 </div>
 
-                                <div className="bg-card border border-white/5 shadow-2xl rounded-2xl p-6 md:p-10">
-                                    <h3 className="text-xl font-bold mb-10 text-center text-muted tracking-widest uppercase">
-                                        {selectedService.name} — {periodLabel} Uptime Trend
-                                    </h3>
+                                <DashboardPanel
+                                    title={`${selectedService.name} — uptime trend`}
+                                    subtitle={`${periodLabel} rolling uptime by bucket`}
+                                >
                                     <div className="relative h-64 md:h-80 flex items-end gap-1 w-full pl-12 pr-4 md:pr-8">
                                         <div className="absolute inset-0 pl-12 pr-4 md:pr-8 flex flex-col justify-between pointer-events-none pb-8">
                                             {['100%', '75%', '50%', '25%', '0%'].map((label) => (
@@ -7961,16 +8052,16 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                             })}
                                         </div>
                                     </div>
-                                    <div className="flex justify-between text-[10px] text-muted font-bold tracking-widest mt-2 px-12 uppercase">
+                                    <div className="flex justify-between px-12 text-[10px] font-bold uppercase tracking-widest text-muted mt-2">
                                         <span>{period === '24h' ? '24h ago' : `${periodLabel} ago`}</span>
                                         <span>Now</span>
                                     </div>
-                                </div>
+                                </DashboardPanel>
 
-                                <div className="bg-card border border-white/5 shadow-2xl rounded-2xl p-6 md:p-10">
-                                    <h3 className="text-xl font-bold mb-8 text-center text-muted tracking-widest uppercase">
-                                        {selectedService.name} — {periodLabel} Latency
-                                    </h3>
+                                <DashboardPanel
+                                    title={`${selectedService.name} — latency`}
+                                    subtitle={`${periodLabel} average response time`}
+                                >
                                     {selectedLatencySeries.some((p) => p.avg != null) ? (
                                         <div className="h-56 md:h-72 w-full">
                                             <ResponsiveContainer width="100%" height="100%">
@@ -7993,18 +8084,18 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                         </p>
                                     )}
                                     {selectedStats.bestDay && selectedStats.worstDay && period !== '24h' && (
-                                        <div className="flex flex-wrap justify-center gap-6 mt-6 text-sm text-muted">
+                                        <div className="mt-6 flex flex-wrap justify-center gap-6 text-sm text-muted">
                                             <span>Best: <strong className="text-status-active">{selectedStats.bestDay.key}</strong> ({selectedStats.bestDay.pct.toFixed(1)}%)</span>
                                             <span>Worst: <strong className="text-status-expired">{selectedStats.worstDay.key}</strong> ({selectedStats.worstDay.pct.toFixed(1)}%)</span>
                                         </div>
                                     )}
-                                </div>
+                                </DashboardPanel>
                             </>
                         )}
                     </div>
                 )}
             </main>
-        </div>
+        </DashboardPageShell>
     );
 };
 const StreamSpecCard: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
