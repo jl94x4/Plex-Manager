@@ -41,9 +41,9 @@ import { mediaAutomationApi } from './api';
 import { PathBrowserField } from './PathBrowserField';
 import { PipelineTemplatePicker } from './PipelineTemplatePicker';
 import { MediaAutomationSetupChecklist } from './MediaAutomationSetupChecklist';
+import { EncodeControlCard } from './EncodeControlCard';
 import { MediaAutomationSystemPanel } from './MediaAutomationSystemPanel';
 import { PipelineEditorForm } from './PipelineEditorForm';
-import { MediaAutomationGoLiveWizard } from './MediaAutomationGoLiveWizard';
 import { SavingsAnalyzerPanel } from './SavingsAnalyzerPanel';
 import { ReportModal, type ReportModalSeed } from './ReportModal';
 import {
@@ -386,46 +386,6 @@ const workerStatusLabel = (workerStatus: MediaAutomationStatus) => {
         return 'Encoding';
     }
     return asText(workerStatus.workerState || workerStatus.state, 'stopped');
-};
-
-/** Queue Encode control title — prefers hold reasons when Start is on but claims are blocked. */
-const encodeControlTitle = (workerStatus: MediaAutomationStatus) => {
-    if (workerStatus.autoPausedForQueueDepth || String(workerStatus.workerState || '').toLowerCase() === 'auto-paused') {
-        return 'Auto-paused (queue depth)';
-    }
-    if ((workerStatus.workerPaused ?? workerStatus.paused) !== false) {
-        return 'Paused (queue only)';
-    }
-    if (workerStatus.quietHoursActive) {
-        return 'Quiet hours holding encodes';
-    }
-    if (workerStatus.streamingPauseActive) {
-        return 'Streaming pause active';
-    }
-    if (String(workerStatus.workerState || workerStatus.state || '').toLowerCase() === 'running') {
-        return 'Encoding';
-    }
-    return workerStatusLabel(workerStatus);
-};
-
-const encodeControlSubtitle = (workerStatus: MediaAutomationStatus) => {
-    if (workerStatus.autoPausedForQueueDepth || String(workerStatus.workerState || '').toLowerCase() === 'auto-paused') {
-        return 'Queue depth exceeded the auto-pause limit. Jobs stay queued until depth drops or you raise the limit in Settings.';
-    }
-    if ((workerStatus.workerPaused ?? workerStatus.paused) !== false) {
-        return 'Jobs can still be queued and scanned. Start when you want encodes to run.';
-    }
-    if (workerStatus.quietHoursActive) {
-        return `Quiet hours ${workerStatus.quietHoursStart || '23:00'}–${workerStatus.quietHoursEnd || '07:00'} are holding new encodes.`;
-    }
-    if (workerStatus.streamingPauseActive) {
-        const streams = Number(workerStatus.activeStreamCount) || 0;
-        return `Holding encode lanes while ${streams} stream${streams === 1 ? '' : 's'} ${streams === 1 ? 'is' : 'are'} active.`;
-    }
-    if (workerStatus.dryRun || workerStatus.outputMode === 'dry-run') {
-        return 'Worker may claim jobs, but global dry-run means nothing will rewrite media.';
-    }
-    return 'Worker may claim queued jobs.';
 };
 
 type ScanNowResponse = {
@@ -1121,7 +1081,6 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [queueErrorFilter, setQueueErrorFilter] = useState('');
     const [workerTestResult, setWorkerTestResult] = useState<MediaAutomationCapabilities | null>(null);
     const [workerTestError, setWorkerTestError] = useState('');
-    const [goLiveOpen, setGoLiveOpen] = useState(false);
     const [scanPreview, setScanPreview] = useState<MediaAutomationStatus['lastScanResult'] | null>(null);
     const [skipPreviewDismissedKey, setSkipPreviewDismissedKey] = useState<string | null>(null);
     const [historyEntries, setHistoryEntries] = useState<MediaAutomationHistoryEntry[]>([]);
@@ -1827,9 +1786,6 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 Paused - {Number(status.activeStreamCount) || 0} stream{(Number(status.activeStreamCount) || 0) === 1 ? '' : 's'} active
                             </span>
                         )}
-                        <button type="button" className={buttonClass} onClick={() => setGoLiveOpen(true)}>
-                            <Sparkles className="h-4 w-4" /> Go live
-                        </button>
                         <button type="button" className={buttonClass} onClick={() => load(true)} disabled={refreshing}>
                             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
                         </button>
@@ -2488,80 +2444,12 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </div>
                     )}
                     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                        <section className={`${cardClass} flex h-full flex-col p-5`}>
-                            {(() => {
-                                const encodingPaused = (status.workerPaused ?? status.paused) !== false;
-                                const title = encodeControlTitle(status);
-                                const subtitle = encodeControlSubtitle(status);
-                                const streamCount = Number(status.activeStreamCount) || 0;
-                                const holdGates: Array<{ id: string; label: string }> = [];
-                                if (status.quietHoursActive) {
-                                    holdGates.push({
-                                        id: 'quiet',
-                                        label: `Quiet hours ${status.quietHoursStart || '23:00'}–${status.quietHoursEnd || '07:00'}`,
-                                    });
-                                }
-                                if (status.streamingPauseActive) {
-                                    holdGates.push({
-                                        id: 'streams',
-                                        label: `${streamCount} stream${streamCount === 1 ? '' : 's'} active`,
-                                    });
-                                }
-                                if (status.dryRun || status.outputMode === 'dry-run') {
-                                    holdGates.push({ id: 'dry-run', label: 'Global dry-run' });
-                                }
-                                if (status.autoPausedForQueueDepth || String(status.workerState || '').toLowerCase() === 'auto-paused') {
-                                    holdGates.push({ id: 'queue-depth', label: 'Auto-paused (queue depth)' });
-                                }
-                                return (
-                                    <>
-                                        <div className="mb-4 shrink-0">
-                                            <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
-                                                Encode control
-                                            </div>
-                                            <h2 className="text-lg font-bold tracking-tight text-text">{title}</h2>
-                                            <p className="mt-1 text-xs leading-relaxed text-muted">{subtitle}</p>
-                                        </div>
-                                        <div className="grid min-h-0 flex-1 grid-cols-2 gap-3">
-                                            <button
-                                                type="button"
-                                                className={`${encodingPaused ? primaryButtonClass : buttonClass} h-full min-h-[3.25rem] px-4 py-3 text-base`}
-                                                disabled={busy !== null || !encodingPaused}
-                                                onClick={() => runAction('control-start', () => mediaAutomationApi.control('start'), 'Encoding started.')}
-                                            >
-                                                {busy === 'control-start'
-                                                    ? <Loader2 className="h-5 w-5 animate-spin" />
-                                                    : <CirclePlay className="h-5 w-5" />}
-                                                Start
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className={`${!encodingPaused ? primaryButtonClass : buttonClass} h-full min-h-[3.25rem] px-4 py-3 text-base`}
-                                                disabled={busy !== null || encodingPaused}
-                                                onClick={() => runAction('control-pause', () => mediaAutomationApi.control('pause'), 'Encoding paused (queue only).')}
-                                            >
-                                                {busy === 'control-pause'
-                                                    ? <Loader2 className="h-5 w-5 animate-spin" />
-                                                    : <CirclePause className="h-5 w-5" />}
-                                                Pause
-                                            </button>
-                                        </div>
-                                        {holdGates.length > 0 && (
-                                            <div className="mt-4 flex shrink-0 flex-wrap gap-2">
-                                                {holdGates.map((gate) => (
-                                                    <span
-                                                        key={gate.id}
-                                                        className="inline-flex items-center rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100"
-                                                    >
-                                                        {gate.label}
-                                                    </span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </>
-                                );
-                            })()}
-                        </section>
+                        <EncodeControlCard
+                            status={status}
+                            busy={busy}
+                            onStart={() => runAction('control-start', () => mediaAutomationApi.control('start'), 'Encoding started.')}
+                            onPause={() => runAction('control-pause', () => mediaAutomationApi.control('pause'), 'Encoding paused (queue only).')}
+                        />
                         <section className={`${cardClass} h-full p-5`}>
                             <h2 className="mb-4 font-bold text-text">Enqueue a path</h2>
                             <div className="space-y-3">
@@ -4296,21 +4184,6 @@ export const MediaAutomationDashboard: React.FC = () => {
                 open={templatePickerOpen}
                 onClose={() => setTemplatePickerOpen(false)}
                 onSelect={openPipelineFromPreset}
-            />
-            <MediaAutomationGoLiveWizard
-                open={goLiveOpen}
-                onClose={() => setGoLiveOpen(false)}
-                status={status}
-                libraries={libraries}
-                pipelines={pipelines}
-                busy={busy}
-                onAction={(action) => {
-                    if (!action) return;
-                    handleSetupAction(action);
-                    if (action === 'settings' || action === 'libraries' || action === 'pipelines' || action === 'start-worker' || action === 'scan') {
-                        setGoLiveOpen(false);
-                    }
-                }}
             />
             <ReportModal
                 open={reportSeed !== null}
