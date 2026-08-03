@@ -12,7 +12,7 @@ import {
 import { askConfirm } from '../shared/confirm';
 import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
-import { pickAutoMatchedTitle } from './autoMatchTitle';
+import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem } from './autoMatchTitle';
 import { previewAssetEpisodeLabel } from './previewGroups';
 import { libraryItemPosterSrc, type LibraryRecentItem } from './libraryRecent';
 import { SetInspector, SetInspectorThumbStrip } from './SetInspector';
@@ -293,7 +293,7 @@ export function LibraryTitleDetailPanel({
                 return;
             }
 
-            setSearchTitles(titles);
+            setSearchTitles(rankSearchTitlesForLibraryItem(libraryItem, titles));
             setSearchSets(response?.sets || []);
             setSearchContext(response?.title || libraryItem.title);
             if (response?.partialErrors?.length) toast(response.partialErrors[0], 'error');

@@ -78,7 +78,7 @@ import {
     previewAssetEpisodeLabel,
     type PreviewAssetSections,
 } from './previewGroups';
-import { pickAutoMatchedTitle } from './autoMatchTitle';
+import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem } from './autoMatchTitle';
 import {
     clearLibraryRecentCache,
     readLibraryRecentCache,
@@ -2677,7 +2677,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 return;
             }
 
-            setSearchTitles(titles);
+            setSearchTitles(rankSearchTitlesForLibraryItem(item, titles));
             setSearchSets(response?.sets || []);
             setSearchSetsPage(1);
             setSearchContext(response?.title || item.title);
