@@ -212,17 +212,30 @@ async function fetchPosterdbSets(
 ): Promise<PosterSetsSearchResult> {
     const tmdbId = options.tmdbId || undefined;
     const titleHint = String(options.titleHint || '').trim();
-    return posterSetsApi.search({
-        provider: 'posterdb',
-        // When TMDB is known, resolve the canonical TPDB page instead of a stale text-search URL.
-        titleUrl: tmdbId ? undefined : (source.url || undefined),
+    const basePayload = {
+        provider: 'posterdb' as const,
         query: titleHint || undefined,
-        tmdbId,
         titleHint: titleHint || undefined,
         yearHint: options.yearHint ?? undefined,
         mediaType: options.mediaType,
         limit: 40,
+    };
+    let response = await posterSetsApi.search({
+        ...basePayload,
+        // When TMDB is known, resolve the canonical TPDB page instead of a stale text-search URL.
+        titleUrl: tmdbId ? undefined : (source.url || undefined),
+        tmdbId,
     });
+    if ((response.sets?.length || 0) > 0) return response;
+
+    const pickedUrl = String(response.titles?.[0]?.url || source.url || '').trim();
+    if (!pickedUrl) return response;
+
+    response = await posterSetsApi.search({
+        ...basePayload,
+        titleUrl: pickedUrl,
+    });
+    return response;
 }
 
 async function fetchMediuxSetsViaTmdbLookup(

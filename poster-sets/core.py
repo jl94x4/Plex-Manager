@@ -1479,6 +1479,32 @@ def _posterdb_title_match_key(title: str, year: int | None) -> str:
     return f"{text}|{year_part}"
 
 
+def _posterdb_title_only_key(title: str) -> str:
+    return _posterdb_title_match_key(title, None).split("|", 1)[0]
+
+
+def _pick_posterdb_title_candidate(
+    titles: list[dict],
+    *,
+    title_hint: str = "",
+    year_hint: int | None = None,
+) -> Optional[dict]:
+    """Pick the best TPDB /posters/ title page from text-search hits."""
+    if not titles:
+        return None
+    want_key = _posterdb_title_match_key(title_hint, year_hint)
+    title_only = _posterdb_title_only_key(title_hint)
+    if want_key.split("|", 1)[1]:
+        for item in titles:
+            if _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key:
+                return item
+    if title_only:
+        for item in titles:
+            if _posterdb_title_only_key(item.get("title") or "") == title_only:
+                return item
+    return titles[0]
+
+
 def _parse_posterdb_title_links(soup, *, limit: int = 24, html: str = "") -> list[dict]:
     titles: list[dict] = []
     seen: set[str] = set()
@@ -1753,6 +1779,40 @@ def resolve_posterdb_title_page(
             if tmdb_match and set_count > 0:
                 break
 
+    if best_item is None and target_tmdb:
+        relaxed_score: tuple[int, int, int] = (-1, -1, -1)
+        for idx, item in enumerate(ordered[:max_probes]):
+            url = str(item.get("url") or "").strip()
+            if not url:
+                continue
+            try:
+                probe = _posterdb_probe_title_page(url, config=config)
+            except Exception:
+                continue
+            media_id = probe.get("mediaId")
+            set_count = int(probe.get("setCount") or 0)
+            title_key = _posterdb_title_match_key(item.get("title") or "", item.get("year"))
+            title_match = 1 if want_key and title_key == want_key else 0
+            title_only_match = (
+                1
+                if _posterdb_title_only_key(title or query)
+                and _posterdb_title_only_key(item.get("title") or "") == _posterdb_title_only_key(title or query)
+                else 0
+            )
+            if want_key and want_key.split("|", 1)[1] and not title_match and not title_only_match:
+                continue
+            score = (title_match or title_only_match, set_count, -idx)
+            if score > relaxed_score:
+                relaxed_score = score
+                best_item = {
+                    **item,
+                    "url": url,
+                    "tmdbId": media_id,
+                    "setCount": set_count,
+                }
+                if (title_match or title_only_match) and set_count > 0:
+                    break
+
     return best_item
 
 
@@ -1856,6 +1916,7 @@ def list_posterdb_sets(
         except Exception:
             year_val = None
     target_tmdb = str(tmdb_id or "").strip() or None
+    fallback_url = url
 
     if url and target_tmdb:
         try:
@@ -1864,13 +1925,14 @@ def list_posterdb_sets(
             if page_tmdb and page_tmdb != target_tmdb:
                 emit(
                     progress,
-                    f"ThePosterDB title page uses TMDB {page_tmdb}, not {target_tmdb} — resolving canonical page…",
+                    f"ThePosterDB title page uses TMDB {page_tmdb}, not {target_tmdb} — trying title search…",
                 )
+                fallback_url = url
                 url = ""
         except Exception:
             pass
 
-    if target_tmdb or imdb_id or tvdb_id or title_hint:
+    if not url and (target_tmdb or imdb_id or tvdb_id or title_hint):
         resolved = resolve_posterdb_title_page(
             query=title_hint,
             title=title_hint,
@@ -1887,6 +1949,9 @@ def list_posterdb_sets(
         resolved_url = str(resolved.get("url") or "").strip() if resolved else ""
         if resolved_url:
             url = resolved_url
+
+    if not url and fallback_url:
+        url = fallback_url
 
     if not url or "theposterdb.com" not in url.lower() or "/posters/" not in url.lower():
         raise ValueError("A ThePosterDB /posters/… title URL is required")
@@ -2695,16 +2760,41 @@ def search_catalog(
         search_term = str(query or title_hint or "").strip()
         if not search_term:
             raise ValueError("query or title hint is required for ThePosterDB title search")
-        return search_posterdb_titles(
+        result = search_posterdb_titles(
             search_term,
             progress=progress,
             limit=limit,
             config=config,
-            tmdb_id=tmdb_id,
+            tmdb_id=None,
             imdb_id=imdb_id,
             tvdb_id=tvdb_id,
             media_type=media_type,
+            _skip_resolve=True,
         )
+        titles = list(result.get("titles") or [])
+        picked = _pick_posterdb_title_candidate(
+            titles,
+            title_hint=title_hint or search_term,
+            year_hint=year_val,
+        )
+        picked_url = str(picked.get("url") or "").strip() if picked else ""
+        if picked_url:
+            try:
+                return list_posterdb_sets(
+                    picked_url,
+                    progress=progress,
+                    limit=limit,
+                    config=config,
+                    tmdb_id=None,
+                    imdb_id=imdb_id,
+                    tvdb_id=tvdb_id,
+                    title_hint=title_hint or search_term,
+                    year_hint=year_val,
+                    media_type=media_type,
+                )
+            except Exception as exc:
+                emit(progress, f"ThePosterDB set load failed: {exc}")
+        return result
 
     if tmdb_id:
         return list_mediux_sets(media_type, tmdb_id, progress=progress, limit=limit)
