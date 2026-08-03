@@ -6177,8 +6177,11 @@ export const DiscoverPosterCard: React.FC<{
     onPosterClick?: () => void;
     posterWidth?: number;
     posterHeight?: number;
-}> = ({ item, aspect = '2/3', overlay, variant = 'discover', className = 'w-full', footer, showQualityBadges = true, posterOnlyLink = false, onPosterClick, posterWidth = 300, posterHeight }) => {
-    const resolvedPosterHeight = posterHeight ?? (aspect === 'square' ? posterWidth : Math.round(posterWidth * 1.5));
+}> = ({ item, aspect, overlay, variant = 'discover', className = 'w-full', footer, showQualityBadges = true, posterOnlyLink = false, onPosterClick, posterWidth = 300, posterHeight }) => {
+    const resolvedAspect = aspect ?? (
+        item?.mediaType === 'music' || item?.type === 'music' ? 'square' : '2/3'
+    );
+    const resolvedPosterHeight = posterHeight ?? (resolvedAspect === 'square' ? posterWidth : Math.round(posterWidth * 1.5));
     const posterShell = variant === 'home'
         ? 'relative rounded-xl overflow-hidden bg-background border border-border transition-[border-color] duration-300 group-hover:border-plex/50'
         : 'relative rounded-lg overflow-hidden border border-border group-hover:border-plex transition-colors bg-card';
@@ -6201,7 +6204,7 @@ export const DiscoverPosterCard: React.FC<{
     const hasPoster = !!(primaryPosterSrc || fallbackPosterSrc);
     const showPosterPlaceholder = !hasPoster || posterFailed;
     const posterInner = (
-        <div className={`${posterShell} ${aspect === 'square' ? 'aspect-square' : 'aspect-[2/3]'} w-full`}>
+        <div className={`${posterShell} ${resolvedAspect === 'square' ? 'aspect-square' : 'aspect-[2/3]'} w-full`}>
             {showPosterPlaceholder ? (
                 <NoPosterPlaceholder />
             ) : (
