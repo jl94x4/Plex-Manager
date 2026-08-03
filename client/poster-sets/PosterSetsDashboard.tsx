@@ -32,10 +32,15 @@ import { usePoll } from '../shared/usePoll';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
 import {
+    internalTabFromUrl,
+    normalizePosterLocation,
     parsePosterSetsUrl,
+    urlStateFromInternalTab,
     writePosterSetsUrl,
-    type PosterSetsUrlState,
+    type DiscoverView,
 } from './urlState';
+import { LibraryTitleDetailPanel } from './LibraryTitleDetailPanel';
+import { PosterSetsSetupChecklist } from './PosterSetsSetupChecklist';
 import {
     normalizeUpgraderGridSize,
     UPGRADER_GRID_SIZE_OPTIONS,
@@ -111,7 +116,20 @@ const posterMediaRadiusClass = 'rounded-md';
 const previewStripClass = 'flex w-full min-w-0 gap-3 overflow-x-auto overscroll-x-contain scroll-smooth pb-1 touch-pan-x [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden';
 
 type TabId = 'apply' | 'browse' | 'library' | 'queue' | 'watches' | 'recent' | 'history' | 'settings';
+type PrimaryTabId = 'library' | 'discover' | 'queue' | 'settings';
 type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed' | 'audit';
+
+const DISCOVER_SUB_NAV: Array<{ id: DiscoverView; label: string; internalTab: TabId }> = [
+    { id: 'search', label: 'Search', internalTab: 'apply' },
+    { id: 'browse', label: 'Browse', internalTab: 'browse' },
+    { id: 'watches', label: 'Watching', internalTab: 'watches' },
+    { id: 'recent', label: 'Recent', internalTab: 'recent' },
+    { id: 'history', label: 'History', internalTab: 'history' },
+];
+
+const isDiscoverInternalTab = (id: TabId) => (
+    id === 'apply' || id === 'browse' || id === 'watches' || id === 'recent' || id === 'history'
+);
 type SetProvider = 'mediux' | 'posterdb';
 type SearchProvider = 'both' | SetProvider;
 
@@ -1035,13 +1053,21 @@ export const PosterSetsDashboard: React.FC = () => {
         setToasts((current) => pushToast(current, message, type));
     }, []);
 
-    const initialLocation = useMemo(
+    const initialUrlState = useMemo(
         () => (typeof window !== 'undefined'
             ? parsePosterSetsUrl()
-            : { tab: 'apply' as TabId, rail: null, setUrl: null, creator: null, titleCardsOnly: false }),
+            : urlStateFromInternalTab('library')),
         [],
     );
+    const initialLocation = useMemo(
+        () => ({
+            ...initialUrlState,
+            tab: internalTabFromUrl(initialUrlState),
+        }),
+        [initialUrlState],
+    );
     const [tab, setTab] = useState<TabId>(initialLocation.tab);
+    const [libraryDetailItem, setLibraryDetailItem] = useState<LibraryRecentItem | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
     const [status, setStatus] = useState<PosterSetsStatus | null>(null);
     const [configDraft, setConfigDraft] = useState<PosterSetsConfig>(DEFAULT_POSTER_SETS_CONFIG);
@@ -1285,13 +1311,13 @@ export const PosterSetsDashboard: React.FC = () => {
         titleCardsOnlyRef.current = false;
         syncedSetUrlRef.current = null;
         const creator = searchMode === 'creator' ? String(searchQuery || '').trim().replace(/^@+/, '') || null : null;
-        writePosterSetsUrl({
+        writePosterSetsUrl(normalizePosterLocation({
             tab: tab === 'browse' ? 'browse' : 'apply',
             rail: tab === 'browse' ? browseSeeAllId : null,
             setUrl: null,
             creator: tab === 'apply' ? creator : null,
             titleCardsOnly: false,
-        }, 'replace');
+        }), 'replace');
         if (options?.scrollToSets !== false) {
             requestAnimationFrame(() => {
                 searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1301,15 +1327,18 @@ export const PosterSetsDashboard: React.FC = () => {
 
     const dismissPreviewToSearch = collapseSetInspector;
 
-    const pushPosterLocation = useCallback((next: PosterSetsUrlState, mode: 'push' | 'replace' = 'push') => {
-        syncedSetUrlRef.current = next.tab === 'apply' ? next.setUrl : null;
-        const nextTitleCards = Boolean(next.tab === 'apply' && next.titleCardsOnly && next.setUrl);
+    const pushPosterLocation = useCallback((next: Parameters<typeof normalizePosterLocation>[0], mode: 'push' | 'replace' = 'push') => {
+        const state = normalizePosterLocation(next);
+        const internal = internalTabFromUrl(state);
+        syncedSetUrlRef.current = internal === 'apply' ? state.setUrl : null;
+        const nextTitleCards = Boolean(internal === 'apply' && state.titleCardsOnly && state.setUrl);
         titleCardsOnlyRef.current = nextTitleCards;
         setTitleCardsOnly(nextTitleCards);
-        writePosterSetsUrl(next, mode);
+        writePosterSetsUrl(state, mode);
     }, []);
 
     const goToTab = useCallback((id: TabId, options?: { rail?: string | null; mode?: 'push' | 'replace' }) => {
+        setLibraryDetailItem(null);
         setTab(id);
         const rail = id === 'browse' ? (options?.rail !== undefined ? options.rail : null) : null;
         if (id === 'browse') setBrowseSeeAllId(rail);
@@ -1335,6 +1364,27 @@ export const PosterSetsDashboard: React.FC = () => {
         if (id === 'browse') void loadBrowse({ silent: browseRailsRef.current.length > 0 });
         if (id === 'library') void loadLibraryRecent({ silent: libraryShows.length > 0 || libraryMovies.length > 0 });
     }, [historyFilter, loadAudit, loadBrowse, loadHistory, loadLibraryRecent, loadQueue, loadWatches, libraryMovies.length, libraryShows.length, pushPosterLocation]);
+
+    const goToPrimaryTab = useCallback((id: PrimaryTabId, options?: { mode?: 'push' | 'replace' }) => {
+        if (id === 'discover') {
+            goToTab('apply', options);
+            return;
+        }
+        goToTab(id, options);
+    }, [goToTab]);
+
+    const goToDiscoverView = useCallback((view: DiscoverView, options?: { rail?: string | null; mode?: 'push' | 'replace' }) => {
+        const internal: TabId = view === 'browse'
+            ? 'browse'
+            : view === 'watches'
+                ? 'watches'
+                : view === 'recent'
+                    ? 'recent'
+                    : view === 'history'
+                        ? 'history'
+                        : 'apply';
+        goToTab(internal, options);
+    }, [goToTab]);
 
     const openBrowseRail = useCallback((railId: string | null) => {
         setTab('browse');
@@ -1917,42 +1967,37 @@ export const PosterSetsDashboard: React.FC = () => {
 
     // Keep /poster-sets#… in sync so refresh and browser Back stay inside Poster Sets.
     useEffect(() => {
-        writePosterSetsUrl({
-            tab: initialLocation.tab,
-            rail: initialLocation.rail,
-            setUrl: initialLocation.setUrl,
-            creator: initialLocation.creator,
-            titleCardsOnly: Boolean(initialLocation.titleCardsOnly),
-        }, 'replace');
-    }, [initialLocation]);
+        writePosterSetsUrl(initialUrlState, 'replace');
+    }, [initialUrlState]);
 
     useEffect(() => {
         if (deepLinkHandledRef.current) return;
         deepLinkHandledRef.current = true;
         if (initialLocation.tab !== 'apply') return;
-        const target = initialLocation.setUrl;
+        const target = initialUrlState.setUrl;
         if (target) {
             void openSetForApplyRef.current({
                 setId: '',
                 title: '',
                 url: target,
-                setKind: initialLocation.titleCardsOnly ? 'title_cards' : null,
+                setKind: initialUrlState.titleCardsOnly ? 'title_cards' : null,
             }, { skipUrl: true });
             return;
         }
-        if (initialLocation.creator) {
-            void openCreatorCatalogRef.current(initialLocation.creator, { skipUrl: true });
+        if (initialUrlState.creator) {
+            void openCreatorCatalogRef.current(initialUrlState.creator, { skipUrl: true });
         }
-    }, [initialLocation]);
+    }, [initialLocation.tab, initialUrlState]);
 
     useEffect(() => {
         const onPopState = () => {
             const parsed = parsePosterSetsUrl();
-            setTab(parsed.tab);
-            setBrowseSeeAllId(parsed.tab === 'browse' ? parsed.rail : null);
+            const internalTab = internalTabFromUrl(parsed);
+            setTab(internalTab);
+            setBrowseSeeAllId(internalTab === 'browse' ? parsed.rail : null);
             const nextTitleCards = Boolean(parsed.titleCardsOnly);
 
-            if (parsed.tab === 'apply' && parsed.setUrl) {
+            if (internalTab === 'apply' && parsed.setUrl) {
                 const changed = syncedSetUrlRef.current !== parsed.setUrl
                     || titleCardsOnlyRef.current !== nextTitleCards;
                 syncedSetUrlRef.current = parsed.setUrl;
@@ -1969,7 +2014,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 return;
             }
 
-            if (parsed.tab === 'apply' && parsed.creator) {
+            if (internalTab === 'apply' && parsed.creator) {
                 syncedSetUrlRef.current = null;
                 titleCardsOnlyRef.current = false;
                 setTitleCardsOnly(false);
@@ -2488,13 +2533,13 @@ export const PosterSetsDashboard: React.FC = () => {
                 titleCardsOnly: false,
             }, 'push');
         } else {
-            writePosterSetsUrl({
+            writePosterSetsUrl(normalizePosterLocation({
                 tab: 'apply',
                 rail: null,
                 setUrl: null,
                 creator: handle,
                 titleCardsOnly: false,
-            }, 'replace');
+            }), 'replace');
         }
         requestAnimationFrame(() => {
             searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2504,30 +2549,7 @@ export const PosterSetsDashboard: React.FC = () => {
     openCreatorCatalogRef.current = openCreatorCatalog;
 
     const openLibraryItem = (item: LibraryRecentItem) => {
-        setTab('apply');
-        setBrowseSeeAllId(null);
-        setSearchMode('title');
-        setSearchProvider('both');
-        setSearchQuery(item.title);
-        setTitleCardsOnly(false);
-        titleCardsOnlyRef.current = false;
-        syncedSetUrlRef.current = null;
-        setPreview(null);
-        setSelectedSearchSet(null);
-        setSelectedSearchTitle(null);
-        setSelectedAssetIds([]);
-        setUrl('');
-        pushPosterLocation({
-            tab: 'apply',
-            rail: null,
-            setUrl: null,
-            creator: null,
-            titleCardsOnly: false,
-        }, 'push');
-        requestAnimationFrame(() => {
-            searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-        void runLibraryItemSearch(item);
+        setLibraryDetailItem(item);
     };
 
     const openSearchTitle = async (title: PosterSetsSearchTitle) => {
@@ -2958,8 +2980,8 @@ export const PosterSetsDashboard: React.FC = () => {
                         <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-plex sm:text-xs">Poster Sets</p>
                         <h1 className="mt-1.5 text-xl font-bold tracking-tight text-text sm:mt-2 sm:text-3xl">Artwork from MediUX & ThePosterDB</h1>
                         <p className="mt-1.5 text-xs leading-relaxed text-muted sm:mt-2 sm:text-sm">
-                            Find a title, choose a poster set, preview the art, then apply.
-                            Re-run past sets from the Recent tab. Connection settings live in this section.
+                            Start from your library, pick a title, preview poster sets, and apply.
+                            Search creators and browse rails in Discover. Queue and settings stay one click away.
                         </p>
                     </div>
                     <button type="button" className={buttonClass} onClick={() => void load()} disabled={busy !== null}>
@@ -2998,25 +3020,26 @@ export const PosterSetsDashboard: React.FC = () => {
 
             <div className="flex min-w-0 flex-wrap justify-center gap-1.5 sm:gap-2">
                 {([
-                    ['apply', 'Apply', Sparkles],
-                    ['browse', 'Browse', Compass],
                     ['library', 'Library', Library],
+                    ['discover', 'Discover', Compass],
                     ['queue', 'Queue', ListOrdered],
-                    ['watches', 'Watching', Eye],
-                    ['recent', 'Recent', Clock],
-                    ['history', 'History', History],
                     ['settings', 'Settings', Settings2],
-                ] as const).map(([id, label, Icon]) => (
+                ] as const).map(([id, label, Icon]) => {
+                    const active = id === 'discover'
+                        ? isDiscoverInternalTab(tab)
+                        : tab === id;
+                    return (
                     <button
                         key={id}
                         type="button"
-                        className={`${tab === id ? primaryButtonClass : buttonClass}`}
+                        className={`${active ? primaryButtonClass : buttonClass}`}
                         onClick={() => {
-                            if (id === tab) {
-                                if (id === 'browse' && browseSeeAllId) openBrowseRail(null);
+                            if (active && id === 'discover' && browseSeeAllId) {
+                                openBrowseRail(null);
                                 return;
                             }
-                            goToTab(id);
+                            if (active) return;
+                            goToPrimaryTab(id);
                         }}
                     >
                         <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {label}
@@ -3025,18 +3048,38 @@ export const PosterSetsDashboard: React.FC = () => {
                                 {queueStats.pending}
                             </span>
                         ) : null}
-                        {id === 'watches' && (watchStatsState.errored || 0) > 0 ? (
+                        {id === 'discover' && (watchStatsState.errored || 0) > 0 ? (
                             <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
                                 {watchStatsState.errored}
                             </span>
-                        ) : id === 'watches' && (watchStatsState.enabled || 0) > 0 ? (
+                        ) : id === 'discover' && (watchStatsState.enabled || 0) > 0 ? (
                             <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
                                 {watchStatsState.enabled}
                             </span>
                         ) : null}
                     </button>
-                ))}
+                    );
+                })}
             </div>
+
+            {isDiscoverInternalTab(tab) ? (
+                <div className="flex min-w-0 flex-wrap justify-center gap-1 sm:gap-1.5">
+                    {DISCOVER_SUB_NAV.map(({ id, label, internalTab }) => (
+                        <button
+                            key={id}
+                            type="button"
+                            className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition sm:px-3 sm:text-xs ${
+                                tab === internalTab
+                                    ? 'border-plex/40 bg-plex/15 text-plex'
+                                    : 'border-white/10 bg-black/20 text-muted hover:border-plex/30 hover:text-text'
+                            }`}
+                            onClick={() => goToDiscoverView(id)}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
+            ) : null}
 
             {tab === 'browse' ? (
                 <section className={`${cardClass} space-y-5 p-4 sm:p-5`}>
@@ -3310,12 +3353,22 @@ export const PosterSetsDashboard: React.FC = () => {
 
             {tab === 'library' ? (
                 <section className={`${cardClass} space-y-6 p-4 sm:p-5`}>
+                    <PosterSetsSetupChecklist
+                        status={status}
+                        hasToken={Boolean(configDraft.hasToken || (configDraft.token && configDraft.token !== '********'))}
+                        hasTvLibraries={Boolean(tvText.trim())}
+                        hasMovieLibraries={Boolean(movieText.trim())}
+                        testing={busy === 'test'}
+                        testResult={testResult}
+                        onOpenSettings={() => goToPrimaryTab('settings')}
+                        onTestConnection={() => void runTest()}
+                    />
                     <div className="flex flex-col items-center gap-3 text-center">
                         <div className="min-w-0 max-w-3xl">
                             <h2 className={sectionTitleClass}>Library</h2>
                             <p className={sectionBodyClass}>
-                                Recently added movies and TV from every {status?.mediaServerLabel || 'media server'} library,
-                                or search your server to find a title and browse poster sets for it.
+                                Recently added movies and TV from every {status?.mediaServerLabel || 'media server'} library.
+                                Click a title to browse poster sets without leaving your library.
                             </p>
                             {libraryError ? (
                                 <p className="mt-2 text-xs text-amber-200">{libraryError}</p>
@@ -4234,7 +4287,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                                 aria-label="Apply"
                                                                 title="Apply"
                                                                 onClick={() => {
-                                                                    goToTab('apply');
+                                                                    goToDiscoverView('search');
                                                                     void runApply(false, item.url);
                                                                 }}
                                                             >
@@ -5046,7 +5099,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                                 onClick={() => {
                                                     const target = String(selectedHistoryJob.input?.url || '').trim();
                                                     if (!target) return;
-                                                    goToTab('apply');
+                                                    goToDiscoverView('search');
                                                     void runApply(false, target);
                                                 }}
                                             >
@@ -5316,6 +5369,20 @@ export const PosterSetsDashboard: React.FC = () => {
                     </div>
                 </div>
             ) : null}
+
+            <LibraryTitleDetailPanel
+                item={libraryDetailItem}
+                onClose={() => setLibraryDetailItem(null)}
+                dupePreference={configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb'}
+                queuePaused={queuePaused}
+                watches={watches}
+                toast={toast}
+                onApplied={() => {
+                    void loadQueue();
+                    void loadHistory();
+                }}
+                onWatchAdded={() => void loadWatches()}
+            />
         </div>
     );
 };

@@ -1,6 +1,13 @@
-/** Hash routing for Poster Sets: `/poster-sets#browse`, `#browse/rail`, `#apply?url=…`, `#apply?creator=…` */
+/** Hash routing for Poster Sets — library-first with Discover sub-views. */
 
-export const POSTER_SETS_TABS = [
+export const POSTER_SETS_PRIMARY_TABS = ['library', 'discover', 'queue', 'settings'] as const;
+export type PosterSetsPrimaryTab = (typeof POSTER_SETS_PRIMARY_TABS)[number];
+
+export const DISCOVER_VIEWS = ['search', 'browse', 'watches', 'recent', 'history'] as const;
+export type DiscoverView = (typeof DISCOVER_VIEWS)[number];
+
+/** Internal tabs used by the dashboard render tree (legacy names preserved). */
+export const POSTER_SETS_INTERNAL_TABS = [
     'apply',
     'browse',
     'library',
@@ -10,23 +17,34 @@ export const POSTER_SETS_TABS = [
     'history',
     'settings',
 ] as const;
+export type PosterSetsInternalTab = (typeof POSTER_SETS_INTERNAL_TABS)[number];
 
-export type PosterSetsTabId = (typeof POSTER_SETS_TABS)[number];
+/** @deprecated Use PosterSetsPrimaryTab — kept for gradual migration. */
+export const POSTER_SETS_TABS = POSTER_SETS_INTERNAL_TABS;
+/** @deprecated Use PosterSetsInternalTab */
+export type PosterSetsTabId = PosterSetsInternalTab;
 
 export type PosterSetsUrlState = {
-    tab: PosterSetsTabId;
+    tab: PosterSetsPrimaryTab;
+    discoverView: DiscoverView;
     /** Browse “See all” rail id, e.g. mediux_title_cards */
     rail: string | null;
-    /** Apply deep-link: set URL to preview */
+    /** Discover search deep-link: set URL to preview */
     setUrl: string | null;
-    /** Apply deep-link: open creator catalog (ignored when setUrl is set) */
+    /** Discover search deep-link: open creator catalog (ignored when setUrl is set) */
     creator: string | null;
     /** Restrict MediUX preview/apply to title_card assets only */
     titleCardsOnly: boolean;
 };
 
-const isTab = (value: string): value is PosterSetsTabId =>
-    (POSTER_SETS_TABS as readonly string[]).includes(value);
+const isPrimaryTab = (value: string): value is PosterSetsPrimaryTab =>
+    (POSTER_SETS_PRIMARY_TABS as readonly string[]).includes(value);
+
+const isDiscoverView = (value: string): value is DiscoverView =>
+    (DISCOVER_VIEWS as readonly string[]).includes(value);
+
+const isInternalTab = (value: string): value is PosterSetsInternalTab =>
+    (POSTER_SETS_INTERNAL_TABS as readonly string[]).includes(value);
 
 const normalizeCreator = (value: string | null | undefined) => {
     const handle = String(value || '').trim().replace(/^@+/, '');
@@ -35,12 +53,81 @@ const normalizeCreator = (value: string | null | undefined) => {
 };
 
 const emptyState = (): PosterSetsUrlState => ({
-    tab: 'apply',
+    tab: 'library',
+    discoverView: 'search',
     rail: null,
     setUrl: null,
     creator: null,
     titleCardsOnly: false,
 });
+
+const legacyTabToState = (legacy: PosterSetsInternalTab): Pick<PosterSetsUrlState, 'tab' | 'discoverView'> => {
+    switch (legacy) {
+        case 'library':
+            return { tab: 'library', discoverView: 'search' };
+        case 'queue':
+            return { tab: 'queue', discoverView: 'search' };
+        case 'settings':
+            return { tab: 'settings', discoverView: 'search' };
+        case 'browse':
+            return { tab: 'discover', discoverView: 'browse' };
+        case 'watches':
+            return { tab: 'discover', discoverView: 'watches' };
+        case 'recent':
+            return { tab: 'discover', discoverView: 'recent' };
+        case 'history':
+            return { tab: 'discover', discoverView: 'history' };
+        case 'apply':
+        default:
+            return { tab: 'discover', discoverView: 'search' };
+    }
+};
+
+export function internalTabFromUrl(state: PosterSetsUrlState): PosterSetsInternalTab {
+    if (state.tab === 'library') return 'library';
+    if (state.tab === 'queue') return 'queue';
+    if (state.tab === 'settings') return 'settings';
+    if (state.discoverView === 'browse') return 'browse';
+    if (state.discoverView === 'watches') return 'watches';
+    if (state.discoverView === 'recent') return 'recent';
+    if (state.discoverView === 'history') return 'history';
+    return 'apply';
+}
+
+export function primaryTabFromInternal(tab: PosterSetsInternalTab): PosterSetsPrimaryTab {
+    return legacyTabToState(tab).tab;
+}
+
+export function urlStateFromInternalTab(
+    tab: PosterSetsInternalTab,
+    extras: Partial<Pick<PosterSetsUrlState, 'rail' | 'setUrl' | 'creator' | 'titleCardsOnly'>> = {},
+): PosterSetsUrlState {
+    const base = legacyTabToState(tab);
+    return {
+        ...base,
+        rail: extras.rail ?? null,
+        setUrl: extras.setUrl ?? null,
+        creator: extras.creator ?? null,
+        titleCardsOnly: Boolean(extras.titleCardsOnly),
+    };
+}
+
+/** Accept legacy `{ tab: 'apply' }` shapes from existing dashboard code. */
+export type PosterLocationInput = PosterSetsUrlState | {
+    tab: PosterSetsInternalTab;
+    rail?: string | null;
+    setUrl?: string | null;
+    creator?: string | null;
+    titleCardsOnly?: boolean;
+};
+
+export function normalizePosterLocation(input: PosterLocationInput): PosterSetsUrlState {
+    if ('discoverView' in input && isPrimaryTab(input.tab)) {
+        return input as PosterSetsUrlState;
+    }
+    const legacy = input as { tab: PosterSetsInternalTab; rail?: string | null; setUrl?: string | null; creator?: string | null; titleCardsOnly?: boolean };
+    return urlStateFromInternalTab(legacy.tab, legacy);
+}
 
 export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window.location.hash : ''): PosterSetsUrlState {
     const raw = String(hash || '').replace(/^#/, '').trim();
@@ -57,37 +144,82 @@ export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window
         }
     });
 
-    const tabRaw = String(segments[0] || 'apply').trim().toLowerCase();
-    const tab: PosterSetsTabId = isTab(tabRaw) ? tabRaw : 'apply';
-    const rail = tab === 'browse' && segments[1] ? String(segments[1]).trim() || null : null;
-
+    const first = String(segments[0] || 'library').trim().toLowerCase();
     const params = new URLSearchParams(queryPart);
-    const setUrlRaw = tab === 'apply' ? String(params.get('url') || '').trim() : '';
+
+    // Legacy hash routes (#apply, #browse, …)
+    if (isInternalTab(first) && !isPrimaryTab(first)) {
+        const legacy = first as PosterSetsInternalTab;
+        const mapped = legacyTabToState(legacy);
+        const setUrlRaw = legacy === 'apply' ? String(params.get('url') || '').trim() : '';
+        const setUrl = setUrlRaw || null;
+        const creator = legacy === 'apply' && !setUrl
+            ? normalizeCreator(params.get('creator') || params.get('user'))
+            : null;
+        const assets = String(params.get('assets') || '').trim().toLowerCase();
+        const titleCardsOnly = legacy === 'apply' && Boolean(setUrl) && (
+            assets === 'title_cards'
+            || assets === 'title_card'
+            || assets === 'titlecards'
+        );
+        return {
+            ...mapped,
+            rail: legacy === 'browse' && segments[1] ? String(segments[1]).trim() || null : null,
+            setUrl,
+            creator,
+            titleCardsOnly,
+        };
+    }
+
+    const tab: PosterSetsPrimaryTab = isPrimaryTab(first) ? first : 'library';
+    let discoverView: DiscoverView = 'search';
+    let rail: string | null = null;
+
+    if (tab === 'discover') {
+        const viewRaw = String(segments[1] || 'search').trim().toLowerCase();
+        if (isDiscoverView(viewRaw)) {
+            discoverView = viewRaw;
+            if (viewRaw === 'browse' && segments[2]) {
+                rail = String(segments[2]).trim() || null;
+            }
+        } else if (viewRaw === 'browse') {
+            discoverView = 'browse';
+        }
+    }
+
+    const setUrlRaw = tab === 'discover' && discoverView === 'search'
+        ? String(params.get('url') || '').trim()
+        : '';
     const setUrl = setUrlRaw || null;
-    const creator = tab === 'apply' && !setUrl
+    const creator = tab === 'discover' && discoverView === 'search' && !setUrl
         ? normalizeCreator(params.get('creator') || params.get('user'))
         : null;
     const assets = String(params.get('assets') || '').trim().toLowerCase();
-    const titleCardsOnly = tab === 'apply' && Boolean(setUrl) && (
+    const titleCardsOnly = tab === 'discover' && discoverView === 'search' && Boolean(setUrl) && (
         assets === 'title_cards'
         || assets === 'title_card'
         || assets === 'titlecards'
     );
 
-    return { tab, rail, setUrl, creator, titleCardsOnly };
+    return { tab, discoverView, rail, setUrl, creator, titleCardsOnly };
 }
 
 export function buildPosterSetsHash(state: PosterSetsUrlState): string {
     let hash = `#${state.tab}`;
-    if (state.tab === 'browse' && state.rail) {
-        hash += `/${encodeURIComponent(state.rail)}`;
+    if (state.tab === 'discover') {
+        if (state.discoverView !== 'search') {
+            hash += `/${state.discoverView}`;
+        }
+        if (state.discoverView === 'browse' && state.rail) {
+            hash += `/${encodeURIComponent(state.rail)}`;
+        }
     }
-    if (state.tab === 'apply' && state.setUrl) {
+    if (state.tab === 'discover' && state.discoverView === 'search' && state.setUrl) {
         const params = new URLSearchParams();
         params.set('url', state.setUrl);
         if (state.titleCardsOnly) params.set('assets', 'title_cards');
         hash += `?${params.toString()}`;
-    } else if (state.tab === 'apply' && state.creator) {
+    } else if (state.tab === 'discover' && state.discoverView === 'search' && state.creator) {
         const params = new URLSearchParams();
         params.set('creator', state.creator);
         hash += `?${params.toString()}`;
@@ -100,13 +232,11 @@ export function writePosterSetsUrl(state: PosterSetsUrlState, mode: 'push' | 're
     const desired = buildPosterSetsHash(state);
     const current = window.location.hash || '';
     if (current === desired) return;
-    // Treat bare /poster-sets the same as #apply for replace-only normalize.
-    if (mode === 'replace' && !current && desired === '#apply') {
+    if (mode === 'replace' && !current && desired === '#library') {
         const next = `${window.location.pathname}${window.location.search}${desired}`;
         window.history.replaceState({ posterSets: true }, '', next);
         return;
     }
-    if (!current && desired === '#apply' && mode === 'push') return;
 
     const next = `${window.location.pathname}${window.location.search}${desired}`;
     if (mode === 'push') {
@@ -118,6 +248,7 @@ export function writePosterSetsUrl(state: PosterSetsUrlState, mode: 'push' | 're
 
 export function posterSetsUrlEquals(a: PosterSetsUrlState, b: PosterSetsUrlState): boolean {
     return a.tab === b.tab
+        && a.discoverView === b.discoverView
         && (a.rail || null) === (b.rail || null)
         && (a.setUrl || null) === (b.setUrl || null)
         && (a.creator || null) === (b.creator || null)
