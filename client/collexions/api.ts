@@ -413,10 +413,10 @@ class CollexionsApiService {
         await apiFetch(base('/collections/unpin'), { method: 'POST', body: JSON.stringify({ title, library }) });
     }
 
-    async deleteCollection(title: string, library: string): Promise<{ success: boolean; removed_jobs?: string[] }> {
+    async deleteCollection(title: string, library: string, ratingKey?: string): Promise<{ success: boolean; removed_jobs?: string[] }> {
         return apiFetch(base('/collections/delete'), {
             method: 'POST',
-            body: JSON.stringify({ title, library }),
+            body: JSON.stringify({ title, library, ratingKey }),
         });
     }
 

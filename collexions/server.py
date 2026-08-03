@@ -12,6 +12,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import requests
 import random
 import threading
+from contextlib import contextmanager
 from flask import Flask, request, jsonify, send_from_directory, Response, abort
 from flask_cors import CORS
 try:
@@ -1191,25 +1192,208 @@ def _unregister_jobs_for_collection(library_name, title):
     return removed
 
 
-def _delete_plex_collection(library_name, title):
+_collection_create_locks = {}
+_collection_create_locks_guard = threading.Lock()
+
+
+def _normalize_collection_title(title):
+    return str(title or '').strip()
+
+
+@contextmanager
+def _collection_create_lock(library_name, title):
+    """Serialize create/update for the same library + title to prevent duplicate Plex collections."""
+    key = _managed_job_id(library_name, title)
+    with _collection_create_locks_guard:
+        lock = _collection_create_locks.setdefault(key, threading.Lock())
+    if not lock.acquire(timeout=180):
+        raise RuntimeError(f"Collection '{title}' is already being created or updated.")
+    try:
+        yield
+    finally:
+        lock.release()
+
+
+def _find_collections_by_title(library, title):
+    """Return every Plex collection in this library whose title matches (case-insensitive)."""
+    title = _normalize_collection_title(title)
+    if not title:
+        return []
+    norm = title.lower()
+    matches = []
+    seen_keys = set()
+    try:
+        filtered = library.collections(title=title)
+        for coll in filtered or []:
+            rk = getattr(coll, 'ratingKey', None)
+            if rk is not None and rk not in seen_keys:
+                matches.append(coll)
+                seen_keys.add(rk)
+    except Exception as e:
+        logging.warning(f"Title-filtered collection lookup failed for '{title}': {e}")
+    try:
+        for coll in library.collections():
+            rk = getattr(coll, 'ratingKey', None)
+            if rk is None or rk in seen_keys:
+                continue
+            if str(coll.title or '').strip().lower() == norm:
+                matches.append(coll)
+                seen_keys.add(rk)
+    except Exception as e:
+        logging.warning(f"Collection scan failed for '{title}': {e}")
+    return matches
+
+
+def _collection_item_count(coll):
+    try:
+        if getattr(coll, 'smart', False):
+            return len(coll.items())
+        child_count = getattr(coll, 'childCount', None)
+        if child_count is not None:
+            return int(child_count)
+        return len(coll.items())
+    except Exception:
+        return 0
+
+
+def _pick_primary_collection(collections):
+    """Keep the collection with the most items; tie-break on highest ratingKey."""
+    if not collections:
+        return None
+    return max(
+        collections,
+        key=lambda coll: (_collection_item_count(coll), int(getattr(coll, 'ratingKey', 0) or 0)),
+    )
+
+
+def _delete_duplicate_collections(library, title, keep_rating_key=None):
+    """Delete same-title duplicates, optionally keeping one ratingKey."""
+    keep = str(keep_rating_key) if keep_rating_key is not None else None
+    removed = 0
+    for coll in _find_collections_by_title(library, title):
+        rk = str(getattr(coll, 'ratingKey', ''))
+        if keep and rk == keep:
+            continue
+        try:
+            coll.delete()
+            removed += 1
+            log_action(f"Removed duplicate collection '{coll.title}' (key {rk}).")
+        except Exception as e:
+            logging.warning(f"Failed to delete duplicate collection '{coll.title}': {e}")
+    return removed
+
+
+def _update_collection_items_in_place(coll, matched_items, label):
+    current_items = coll.items()
+    current_titles = {i.title for i in current_items}
+    target_titles = {i.title for i in matched_items}
+    to_add = [i for i in matched_items if i.title not in current_titles]
+    to_remove = [i for i in current_items if i.title not in target_titles]
+    if to_add:
+        coll.addItems(to_add)
+    if to_remove:
+        try:
+            coll.removeItems(to_remove)
+        except Exception as e:
+            logging.warning(f"Failed to remove old items from '{coll.title}': {e}")
+    try:
+        coll.addLabel(label)
+    except Exception:
+        pass
+
+
+def _upsert_plex_collection(library, title, matched_items, sort_order='custom', label='Collexions'):
     """
-    Permanently delete a collection from Plex and drop matching managed jobs.
+    Create or update exactly one Plex collection for title.
+    Merges duplicates by keeping the fullest collection and deleting extras.
+    Returns (collection, created_fresh).
+    """
+    title = _normalize_collection_title(title)
+    if not title:
+        raise ValueError("Collection title is required")
+    if not matched_items:
+        raise ValueError("No matched items to add")
+
+    existing_all = _find_collections_by_title(library, title)
+    if existing_all:
+        coll = _pick_primary_collection(existing_all)
+        keep_key = getattr(coll, 'ratingKey', None)
+        removed = _delete_duplicate_collections(library, title, keep_rating_key=keep_key)
+        if removed:
+            log_action(f"Removed {removed} duplicate collection(s) named '{title}'.")
+
+        is_smart = getattr(coll, 'smart', False)
+        if is_smart or sort_order == 'random':
+            try:
+                coll.delete()
+            except Exception as e:
+                logging.error(f"Failed to delete collection '{title}' before recreate: {e}")
+                raise RuntimeError(f"Could not replace existing collection '{title}'") from e
+            coll = _create_plex_collection(library, title, matched_items, sort_order=sort_order, label=label)
+            return coll, True
+
+        _update_collection_items_in_place(coll, matched_items, label)
+        if sort_order == 'release':
+            try:
+                coll.sortUpdate('release')
+            except Exception as e:
+                logging.warning(f"Failed to set release sort: {e}")
+        return coll, False
+
+    coll = _create_plex_collection(library, title, matched_items, sort_order=sort_order, label=label)
+    return coll, True
+
+
+def _delete_plex_collection(library_name, title=None, rating_key=None):
+    """
+    Permanently delete Plex collection(s) and drop matching managed jobs when none remain.
+    With rating_key, deletes only that collection. With title, deletes all same-title copies.
     Returns (ok: bool, error: str|None, removed_jobs: list).
     """
     plex = get_plex_instance()
     if not plex:
         return False, "Plex connection failed", []
-    if not library_name or not title:
+    if not library_name or (not title and not rating_key):
         return False, "Missing title/library", []
     try:
         library = plex.library.section(library_name)
-        collection = library.collection(title)
-        collection.delete()
-        removed_jobs = _unregister_jobs_for_collection(library_name, title)
-        log_action(f"Deleted collection '{title}' from '{library_name}'.")
+        deleted_title = _normalize_collection_title(title)
+        if rating_key:
+            try:
+                coll = library.fetchItem(int(rating_key))
+                deleted_title = deleted_title or _normalize_collection_title(getattr(coll, 'title', ''))
+                coll.delete()
+                log_action(f"Deleted collection '{deleted_title}' (key {rating_key}) from '{library_name}'.")
+            except Exception as e:
+                return False, str(e), []
+            remaining = _find_collections_by_title(library, deleted_title) if deleted_title else []
+            removed_jobs = _unregister_jobs_for_collection(library_name, deleted_title) if not remaining else []
+            return True, None, removed_jobs
+
+        deleted_title = _normalize_collection_title(title)
+        matches = _find_collections_by_title(library, deleted_title)
+        if not matches:
+            return False, "Collection not found", []
+        for coll in matches:
+            coll.delete()
+        removed_jobs = _unregister_jobs_for_collection(library_name, deleted_title)
+        log_action(f"Deleted {len(matches)} collection(s) named '{deleted_title}' from '{library_name}'.")
         return True, None, removed_jobs
     except Exception as e:
         return False, str(e), []
+
+
+def _resolve_collection(library, title=None, rating_key=None):
+    """Fetch a single collection by ratingKey, or the primary match for title."""
+    if rating_key:
+        try:
+            return library.fetchItem(int(rating_key))
+        except Exception:
+            return None
+    if title:
+        matches = _find_collections_by_title(library, title)
+        return _pick_primary_collection(matches) if matches else None
+    return None
 
 
 def _create_plex_collection(library, title, matched_items, sort_order='custom', label='Collexions'):
@@ -1507,6 +1691,8 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
     Fetch source (or use provided items), match to Plex, create collection, optionally register Job.
     Returns dict: success, matched, total, job_id, title, error?
     """
+    title = _normalize_collection_title(title)
+    library_name = str(library_name or '').strip()
     config = load_config()
     label = config.get('collexions_label', 'Collexions')
     plex = get_plex_instance()
@@ -1538,73 +1724,50 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
         return {"success": False, "error": err}
 
     try:
-        library = plex.library.section(library_name)
-        mismatch = library_media_mismatch_error(library, source_type, source_id, items)
-        if mismatch:
-            return {"success": False, "error": mismatch, "matched": 0, "total": len(items)}
-        logging.info(f"Matching {len(items)} source items against library '{library_name}'...")
-        matched_items = _match_external_to_plex(library, items)
-        if not matched_items:
-            return {"success": False, "error": "No items matched your local library", "matched": 0, "total": len(items)}
+        with _collection_create_lock(library_name, title):
+            library = plex.library.section(library_name)
+            mismatch = library_media_mismatch_error(library, source_type, source_id, items)
+            if mismatch:
+                return {"success": False, "error": mismatch, "matched": 0, "total": len(items)}
+            logging.info(f"Matching {len(items)} source items against library '{library_name}'...")
+            matched_items = _match_external_to_plex(library, items)
+            if not matched_items:
+                return {"success": False, "error": "No items matched your local library", "matched": 0, "total": len(items)}
 
-        # If a collection with this title already exists, update it instead of failing.
-        existing = library.collections(title=title)
-        created_fresh = False
-        if existing:
-            coll = existing[0]
-            is_smart = getattr(coll, 'smart', False)
-            if is_smart or sort_order == 'random':
-                try:
-                    coll.delete()
-                except Exception:
-                    pass
-                coll = _create_plex_collection(library, title, matched_items, sort_order=sort_order, label=label)
-                created_fresh = True
-            else:
-                current_items = coll.items()
-                current_titles = {i.title for i in current_items}
-                target_titles = {i.title for i in matched_items}
-                to_add = [i for i in matched_items if i.title not in current_titles]
-                to_remove = [i for i in current_items if i.title not in target_titles]
-                if to_add:
-                    coll.addItems(to_add)
-                if to_remove:
-                    try:
-                        coll.removeItems(to_remove)
-                    except Exception as e:
-                        logging.warning(f"Failed to remove old items from '{title}': {e}")
-                try:
-                    coll.addLabel(label)
-                except Exception:
-                    pass
-        else:
-            coll = _create_plex_collection(library, title, matched_items, sort_order=sort_order, label=label)
-            created_fresh = True
+            coll, created_fresh = _upsert_plex_collection(
+                library,
+                title,
+                matched_items,
+                sort_order=sort_order,
+                label=label,
+            )
 
-        art_set = _ensure_collection_art(
-            coll,
-            source_type=source_type,
-            source_id=source_id,
-            external_items=items,
-            matched_items=matched_items,
-            config=config,
-            force=created_fresh,
-        )
+            art_set = _ensure_collection_art(
+                coll,
+                source_type=source_type,
+                source_id=source_id,
+                external_items=items,
+                matched_items=matched_items,
+                config=config,
+                force=created_fresh,
+            )
 
-        job_id = None
-        if auto_sync and source_type:
-            job_id = _register_managed_job(library_name, title, source_type, source_id, sort_order, auto_sync=True)
+            job_id = None
+            if auto_sync and source_type:
+                job_id = _register_managed_job(library_name, title, source_type, source_id, sort_order, auto_sync=True)
 
-        GALLERY_CACHE['data'] = None
-        log_action(f"Created/updated collection '{title}' with {len(matched_items)}/{len(items)} items matched.")
-        return {
-            "success": True,
-            "matched": len(matched_items),
-            "total": len(items),
-            "job_id": job_id,
-            "title": title,
-            "art_set": bool(art_set),
-        }
+            GALLERY_CACHE['data'] = None
+            log_action(f"Created/updated collection '{title}' with {len(matched_items)}/{len(items)} items matched.")
+            return {
+                "success": True,
+                "matched": len(matched_items),
+                "total": len(items),
+                "job_id": job_id,
+                "title": title,
+                "art_set": bool(art_set),
+            }
+    except RuntimeError as e:
+        return {"success": False, "error": str(e)}
     except Exception as e:
         logging.error(f"create_collection_from_source error: {e}", exc_info=True)
         return {"success": False, "error": str(e)}
@@ -1695,74 +1858,32 @@ def run_sync_job(job_id=None):
                 log_action(f"Auto-Sync: No matching Plex items found for '{coll_name}'.")
                 continue
 
-            collections = library.collections(title=coll_name)
-            if not collections:
-                log_action(f"Auto-Sync: Collection '{coll_name}' missing — recreating with {len(plex_items)} items.")
-                coll = _create_plex_collection(library, coll_name, plex_items, sort_order=sort_order, label=label)
-                _ensure_collection_art(
-                    coll,
-                    source_type=source_type,
-                    source_id=source_id,
-                    external_items=items,
-                    matched_items=plex_items,
-                    config=config,
-                    force=True,
-                )
-                GALLERY_CACHE['data'] = None
-                continue
-
-            coll = collections[0]
-            is_smart = getattr(coll, 'smart', False)
-
-            if is_smart or sort_order == 'random':
-                log_action(f"Auto-Sync: Recreating '{coll_name}' ({'smart' if is_smart else 'random'}).")
-                try:
-                    coll.delete()
-                except Exception as e:
-                    logging.warning(f"Failed to delete collection before recreate: {e}")
-                coll = _create_plex_collection(library, coll_name, plex_items, sort_order=sort_order if sort_order == 'random' else 'custom', label=label)
-                _ensure_collection_art(
-                    coll,
-                    source_type=source_type,
-                    source_id=source_id,
-                    external_items=items,
-                    matched_items=plex_items,
-                    config=config,
-                    force=True,
-                )
-                log_action(f"Auto-Sync: Successfully recreated '{coll_name}'.")
-            else:
-                current_items = coll.items()
-                current_titles = [i.title for i in current_items]
-                target_titles = [i.title for i in plex_items]
-
-                new_items = [i for i in plex_items if i.title not in current_titles]
-                items_to_remove = [i for i in current_items if i.title not in target_titles]
-
-                if new_items:
-                    coll.addItems(new_items)
-                    log_action(f"Auto-Sync: Added {len(new_items)} new items to '{coll_name}'.")
-
-                if items_to_remove:
-                    try:
-                        coll.removeItems(items_to_remove)
-                        log_action(f"Auto-Sync: Removed {len(items_to_remove)} items from '{coll_name}'.")
-                    except Exception as e:
-                        logging.warning(f"Failed to remove old items from '{coll_name}': {e}")
-
-                if not new_items and not items_to_remove:
-                    log_action(f"Auto-Sync: '{coll_name}' is already up to date.")
-
-                # Fill blank posters for existing managed collections (won't overwrite custom uploads).
-                _ensure_collection_art(
-                    coll,
-                    source_type=source_type,
-                    source_id=source_id,
-                    external_items=items,
-                    matched_items=plex_items,
-                    config=config,
-                    force=False,
-                )
+            try:
+                with _collection_create_lock(lib_name, coll_name):
+                    coll, recreated = _upsert_plex_collection(
+                        library,
+                        coll_name,
+                        plex_items,
+                        sort_order=sort_order,
+                        label=label,
+                    )
+                    _ensure_collection_art(
+                        coll,
+                        source_type=source_type,
+                        source_id=source_id,
+                        external_items=items,
+                        matched_items=plex_items,
+                        config=config,
+                        force=recreated,
+                    )
+                    if recreated:
+                        log_action(f"Auto-Sync: Recreated '{coll_name}' with {len(plex_items)} items.")
+                    else:
+                        log_action(f"Auto-Sync: Updated '{coll_name}'.")
+            except RuntimeError as e:
+                log_action(f"Auto-Sync: Skipping '{coll_name}' — {e}")
+            except Exception as e:
+                log_action(f"Auto-Sync error for '{coll_name}': {e}")
 
         except Exception as e:
             log_action(f"Auto-Sync error for '{coll_name}': {e}")
@@ -2515,6 +2636,7 @@ def list_collections():
                     "has_label": has_label,
                     "thumb": thumb,
                     "ratingKey": str(coll.ratingKey),
+                    "itemCount": _collection_item_count(coll),
                     "key": meta_key,
                     "plexUrl": plex_url,
                 })
@@ -2592,11 +2714,16 @@ def bulk_pin_collections():
     for item in items:
         title = str(item.get('title') or '').strip()
         library_name = str(item.get('library') or '').strip()
-        if not title or not library_name:
+        rating_key = str(item.get('ratingKey') or item.get('rating_key') or '').strip()
+        if not library_name or (not title and not rating_key):
             results.append({"title": title, "library": library_name, "ok": False, "error": "Missing title/library"})
             continue
         if action == 'delete':
-            ok, err, removed_jobs = _delete_plex_collection(library_name, title)
+            ok, err, removed_jobs = _delete_plex_collection(
+                library_name,
+                title=title or None,
+                rating_key=rating_key or None,
+            )
             results.append({
                 "title": title,
                 "library": library_name,
@@ -2607,7 +2734,10 @@ def bulk_pin_collections():
             continue
         try:
             library = plex.library.section(library_name)
-            collection = library.collection(title)
+            collection = _resolve_collection(library, title=title or None, rating_key=rating_key or None)
+            if not collection:
+                results.append({"title": title, "library": library_name, "ok": False, "error": "Collection not found"})
+                continue
             hub = collection.visibility()
             if action == 'pin':
                 collection.addLabel(label)
@@ -3066,10 +3196,15 @@ def delete_collection():
     data = request.json or {}
     title = str(data.get('title') or '').strip()
     library_name = str(data.get('library') or '').strip()
-    if not title or not library_name:
+    rating_key = str(data.get('ratingKey') or data.get('rating_key') or '').strip()
+    if not library_name or (not title and not rating_key):
         return jsonify({"success": False, "error": "Missing title/library"}), 400
 
-    ok, err, removed_jobs = _delete_plex_collection(library_name, title)
+    ok, err, removed_jobs = _delete_plex_collection(
+        library_name,
+        title=title or None,
+        rating_key=rating_key or None,
+    )
     if not ok:
         status = 500 if err == "Plex connection failed" else 400
         return jsonify({"success": False, "error": err or "Delete failed"}), status
@@ -3163,8 +3298,8 @@ def stop_script():
 @require_auth
 def create_custom_collection():
     data = request.json
-    library_name = data.get('library')
-    title = data.get('title')
+    library_name = str(data.get('library') or '').strip()
+    title = _normalize_collection_title(data.get('title'))
     item_keys = data.get('items', []) # List of ratingKeys
     sort_order = data.get('sort_order', 'custom') # 'custom', 'random', 'release'
     
@@ -3179,56 +3314,43 @@ def create_custom_collection():
         return jsonify({"success": False, "error": "Plex connection failed"}), 500
         
     try:
-        library = plex.library.section(library_name)
-        # Fetch actual items by ratingKey
-        items = []
-        for key in item_keys:
-            try:
-                item = library.fetchItem(int(key))
-                items.append(item)
-            except:
-                logging.warning(f"Could not find item with key {key} in library {library_name}")
-                
-        if not items:
-            return jsonify({"success": False, "error": "No matching items found in library"}), 404
-            
-        # Create collection
-        if sort_order == 'random':
-            # Create a SMART collection for true persistent randomness
-            collection = library.createCollection(
-                title=title,
-                smart=True,
-                sort='random',
-                filters={'id': item_keys}
-            )
-        else:
-            # Regular collection for custom/release order
-            collection = library.createCollection(title, items=items)
-            if sort_order == 'release':
+        with _collection_create_lock(library_name, title):
+            library = plex.library.section(library_name)
+            # Fetch actual items by ratingKey
+            items = []
+            for key in item_keys:
                 try:
-                    collection.sortUpdate('release')
-                except Exception as e:
-                    logging.warning(f"Failed to set release sort: {e}")
-        
-        # Add label with soft failure handling
-        try:
-            collection.addLabel(label)
-        except Exception as e:
-            logging.warning(f"Failed to set label: {e}")
+                    item = library.fetchItem(int(key))
+                    items.append(item)
+                except:
+                    logging.warning(f"Could not find item with key {key} in library {library_name}")
+                    
+            if not items:
+                return jsonify({"success": False, "error": "No matching items found in library"}), 404
+                
+            collection, created_fresh = _upsert_plex_collection(
+                library,
+                title,
+                items,
+                sort_order=sort_order,
+                label=label,
+            )
 
-        art_set = _ensure_collection_art(
-            collection,
-            matched_items=items,
-            config=config,
-            force=True,
-        )
-        
-        log_action(f"Created collection '{title}' with {len(items)} items in {library_name} (Sort: {sort_order}).")
-        
-        # Clear cache since library changed
-        GALLERY_CACHE['data'] = None
-        
-        return jsonify({"success": True, "art_set": bool(art_set)})
+            art_set = _ensure_collection_art(
+                collection,
+                matched_items=items,
+                config=config,
+                force=created_fresh,
+            )
+            
+            log_action(f"Created/updated collection '{title}' with {len(items)} items in {library_name} (Sort: {sort_order}).")
+            
+            # Clear cache since library changed
+            GALLERY_CACHE['data'] = None
+            
+            return jsonify({"success": True, "art_set": bool(art_set)})
+    except RuntimeError as e:
+        return jsonify({"success": False, "error": str(e)}), 409
     except Exception as e:
         logging.error(f"Error creating collection: {e}")
         return jsonify({"success": False, "error": str(e)}), 500

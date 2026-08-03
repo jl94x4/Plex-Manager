@@ -38,8 +38,12 @@ const LEGACY_GRID_MAP: Record<string, UpgraderGridSize> = {
 type StatusFilter = 'all' | 'pinned' | 'tracked' | 'missing_art';
 type SortMode = 'title' | 'library';
 
-const collKey = (c: { library: string; title: string }) => `${c.library}\0${c.title}`;
-const collId = (c: { library: string; title: string }) => `${c.library}-${c.title}`;
+const collKey = (c: { library: string; title: string; ratingKey?: string }) => (
+    c.ratingKey ? `${c.library}\0${c.ratingKey}` : `${c.library}\0${c.title}`
+);
+const collId = (c: { library: string; title: string; ratingKey?: string }) => (
+    c.ratingKey ? `${c.library}-${c.ratingKey}` : `${c.library}-${c.title}`
+);
 
 /** Collection art with Discover-style placeholder when missing or load fails. */
 const GalleryCollectionArt: React.FC<{
@@ -242,7 +246,7 @@ const Gallery: React.FC = () => {
         const id = collId(coll);
         setDeletingId(id);
         try {
-            await api.deleteCollection(coll.title, coll.library);
+            await api.deleteCollection(coll.title, coll.library, coll.ratingKey);
             setCollections(prev => prev.filter(c => collKey(c) !== collKey(coll)));
             setSelectedKeys(prev => {
                 const next = new Set(prev);
@@ -346,7 +350,7 @@ const Gallery: React.FC = () => {
     const handleBulk = async (action: 'pin' | 'unpin' | 'delete') => {
         const items = collections
             .filter(c => selectedKeys.has(collKey(c)))
-            .map(c => ({ title: c.title, library: c.library }));
+            .map(c => ({ title: c.title, library: c.library, ratingKey: c.ratingKey }));
         if (!items.length) return;
         if (action === 'delete') {
             const ok = await askConfirm(

@@ -87,6 +87,7 @@ export interface PlexCollection {
   has_label: boolean;
   thumb?: string | null;
   ratingKey: string;
+  itemCount?: number;
   key?: string;
   /** Deep link to open this collection in the Plex web/app UI. */
   plexUrl?: string;
