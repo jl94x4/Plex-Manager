@@ -41,6 +41,7 @@ import {
     MetaPill,
     POSTER_SETS_GRID_OPTIONS,
     PreviewAssetGallery,
+    ProviderCornerBadge,
     ProviderPill,
     RECENT_CATEGORY_ORDER,
     RelatedSetsRail,
@@ -625,6 +626,7 @@ export const PosterSetsSearchView: React.FC = () => {
                                                             <Loader2 className="h-6 w-6 animate-spin text-plex" />
                                                         </div>
                                                     ) : null}
+                                                    <ProviderCornerBadge provider={set.provider} />
                                                 </div>
                                                 <div className="px-3 pt-3">
                                                     <p className="truncate text-sm font-semibold text-text" title={setTitle}>{setTitle}</p>

@@ -63,6 +63,7 @@ export {
 export {
     CreatorPill,
     MetaPill,
+    ProviderCornerBadge,
     ProviderPill,
     SetKindPill,
     StatusPill,

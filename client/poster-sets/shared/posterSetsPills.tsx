@@ -52,6 +52,23 @@ export const ProviderPill: React.FC<{ provider?: string | null; compact?: boolea
     );
 };
 
+/** Corner overlay for poster thumbs — MediUX blue / TPDB orange. */
+export const ProviderCornerBadge: React.FC<{ provider?: string | null; className?: string }> = ({
+    provider,
+    className = '',
+}) => {
+    const key = normalizeProviderKey(provider);
+    if (!key) return null;
+    return (
+        <span
+            title={providerLabel(provider)}
+            className={`pointer-events-none absolute right-1.5 top-1.5 z-10 rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide shadow-md backdrop-blur-sm sm:text-[9px] ${providerPillClass(provider)} ${className}`}
+        >
+            {key === 'posterdb' ? 'TPDB' : 'MediUX'}
+        </span>
+    );
+};
+
 export const CreatorPill: React.FC<{
     user?: string | null;
     onOpen?: (user: string) => void;

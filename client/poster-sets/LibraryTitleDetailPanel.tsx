@@ -10,6 +10,7 @@ import {
     X,
 } from 'lucide-react';
 import { askConfirm } from '../shared/confirm';
+import { ModalPortal } from '../shared/ModalPortal';
 import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem } from './autoMatchTitle';
@@ -26,7 +27,7 @@ import type {
     PosterSetsTitleStatus,
     PosterSetsWatch,
 } from './types';
-import { mediuxFiltersFromAssets } from './types';
+import { ProviderCornerBadge } from './shared/posterSetsPills';
 
 const TITLE_CARD_ONLY_FILTERS = ['title_card'];
 const SETS_PAGE_SIZE = 12;
@@ -87,7 +88,7 @@ function PreviewAssetTile({
             type="button"
             onClick={() => onToggle(asset.id)}
             className={`group shrink-0 overflow-hidden rounded-md border text-left transition ${
-                layout === 'landscape' ? 'w-64 sm:w-72' : 'w-[7.25rem] sm:w-36'
+                layout === 'landscape' ? 'w-72 sm:w-80' : 'w-[5.75rem] sm:w-32'
             } ${
                 selected
                     ? 'border-plex/60 bg-plex/10 ring-1 ring-plex/40'
@@ -558,7 +559,8 @@ export function LibraryTitleDetailPanel({
     if (!item) return null;
 
     return (
-        <>
+        <ModalPortal open>
+            <>
             <button
                 type="button"
                 aria-label="Close title detail"
@@ -567,7 +569,7 @@ export function LibraryTitleDetailPanel({
             />
             <div
                 ref={panelRef}
-                className="fixed top-0 right-0 z-[101] flex h-full w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card shadow-2xl"
+                className="fixed inset-y-0 right-0 z-[101] flex h-[100dvh] max-h-[100dvh] w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card pt-[env(safe-area-inset-top,0px)] shadow-2xl"
             >
                 <div className="flex shrink-0 items-start gap-3 border-b border-white/10 bg-black/20 p-4 sm:p-5">
                     <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black">
@@ -595,7 +597,7 @@ export function LibraryTitleDetailPanel({
                     </button>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 custom-scrollbar">
+                <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:p-5 custom-scrollbar">
                     {statusLoading ? (
                         <div className="mb-4 flex items-center gap-2 text-xs text-muted">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -769,6 +771,7 @@ export function LibraryTitleDetailPanel({
                                                             <ImageIcon className="h-8 w-8 opacity-40" />
                                                         </div>
                                                     )}
+                                                    <ProviderCornerBadge provider={set.provider} />
                                                 </div>
                                                 {watching ? (
                                                     <div className="px-2 pt-2">
@@ -867,7 +870,12 @@ export function LibraryTitleDetailPanel({
                                 onSelectAll={() => setSelectedAssetIds((preview.assets || []).map((a) => a.id))}
                                 onClearSelection={() => setSelectedAssetIds([])}
                                 onClose={backToSets}
-                                thumbStrip={<SetInspectorThumbStrip thumbs={matchedThumbStrip} />}
+                                thumbStrip={(
+                                    <SetInspectorThumbStrip
+                                        thumbs={matchedThumbStrip}
+                                        layout={isTitleCardSet(selectedSet) ? 'landscape' : 'poster'}
+                                    />
+                                )}
                                 gallery={showAssets && preview ? (
                                     <div className="flex w-full min-w-0 gap-3 overflow-x-auto pb-1">
                                         {(preview.assets || []).map((asset) => (
@@ -906,6 +914,7 @@ export function LibraryTitleDetailPanel({
                     ) : null}
                 </div>
             </div>
-        </>
+            </>
+        </ModalPortal>
     );
 }

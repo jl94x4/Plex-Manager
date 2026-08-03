@@ -8,6 +8,7 @@ import {
     X,
 } from 'lucide-react';
 import type { PosterSetsSearchSet } from './types';
+import { ProviderPill } from './shared/posterSetsPills';
 
 const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-plex px-2.5 py-1.5 text-xs font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
@@ -106,7 +107,10 @@ export function SetInspector({
                 <>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
-                            <p className="text-xs font-bold uppercase tracking-wide text-plex">Selected set</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-xs font-bold uppercase tracking-wide text-plex">Selected set</p>
+                                {set ? <ProviderPill provider={set.provider} compact /> : null}
+                            </div>
                             <h3 className="mt-1 truncate text-lg font-bold text-text" title={headerLabel}>
                                 {headerLabel}
                             </h3>
@@ -212,27 +216,32 @@ export function SetInspector({
 /** Compact matched-poster strip shown before expanding the full gallery. */
 export function SetInspectorThumbStrip({
     thumbs,
+    layout = 'poster',
 }: {
     thumbs: Array<{ id: string; thumbUrl?: string; title: string }>;
+    layout?: 'poster' | 'landscape';
 }) {
     if (!thumbs.length) return null;
+    const thumbClass = layout === 'landscape'
+        ? 'aspect-[16/9] w-40 sm:w-48'
+        : 'aspect-[2/3] w-[5.75rem] sm:w-28';
     return (
-        <div className="space-y-1.5">
+        <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
                 Matched preview
             </p>
-            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {thumbs.slice(0, 12).map((thumb) => (
                     <div
                         key={thumb.id}
-                        className="h-20 w-14 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black/40 sm:h-24 sm:w-16"
+                        className={`${thumbClass} shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40 shadow-sm`}
                         title={thumb.title}
                     >
                         {thumb.thumbUrl ? (
                             <img
                                 src={thumb.thumbUrl}
                                 alt=""
-                                className="h-full w-full object-cover"
+                                className="h-full w-full object-contain object-center"
                                 loading="lazy"
                             />
                         ) : (
@@ -241,7 +250,7 @@ export function SetInspectorThumbStrip({
                     </div>
                 ))}
                 {thumbs.length > 12 ? (
-                    <div className="flex h-20 w-14 shrink-0 items-center justify-center rounded-md border border-white/10 bg-black/30 text-[11px] font-semibold text-muted sm:h-24 sm:w-16">
+                    <div className={`${thumbClass} flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-xs font-semibold text-muted`}>
                         +{thumbs.length - 12}
                     </div>
                 ) : null}

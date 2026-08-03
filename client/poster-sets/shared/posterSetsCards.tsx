@@ -5,7 +5,7 @@ import { libraryItemPosterSrc, type LibraryRecentItem } from '../libraryRecent';
 import { type PosterSetsSearchSet } from '../types';
 import { posterMediaRadiusClass, previewStripClass } from './posterSetsUi';
 import { isTitleCardSet } from './posterSetsRecent';
-import { CreatorPill, ProviderPill, SetKindPill } from './posterSetsPills';
+import { CreatorPill, ProviderCornerBadge, ProviderPill, SetKindPill } from './posterSetsPills';
 
 /** Proxied poster thumb with retry + graceful fallback when TPDB rate-limits. */
 export const PosterThumb: React.FC<{
@@ -127,6 +127,7 @@ export function BrowseSetCard({
                         className="absolute inset-0 h-full w-full"
                         imgClassName="absolute inset-0 h-full w-full object-contain object-center"
                     />
+                    <ProviderCornerBadge provider={set.provider} />
                 </div>
                 <div className="min-w-0 px-1.5 pt-1.5 sm:px-2 sm:pt-1.5">
                     <p className="line-clamp-2 text-center text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={setTitle}>{setTitle}</p>
