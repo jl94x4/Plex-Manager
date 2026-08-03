@@ -2573,7 +2573,12 @@ export const PosterSetsDashboard: React.FC = () => {
             // Focus on sets: titles list becomes a back action only.
             setSearchTitles([]);
             const dupes = Number(response.dupesCollapsed || 0);
-            toast(`Sets for ${title.title}${dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} collapsed` : ''}. Expand one to queue.`);
+            const setCount = response.sets?.length || 0;
+            if (!setCount) {
+                toast(`No poster sets found for ${title.title}.`, 'error');
+            } else {
+                toast(`Sets for ${title.title}${dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} collapsed` : ''}. Expand one to queue.`);
+            }
             if (response.partialErrors?.length) toast(response.partialErrors[0], 'error');
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
@@ -2699,6 +2704,14 @@ export const PosterSetsDashboard: React.FC = () => {
         const start = (page - 1) * SEARCH_SETS_PAGE_SIZE;
         return searchSets.slice(start, start + SEARCH_SETS_PAGE_SIZE);
     }, [searchSets, searchSetsPage, searchSetsPageCount]);
+
+    const searchResultsLoading = busy === 'search';
+    const searchHasResults = searchTitles.length > 0 || searchSets.length > 0 || !!preview || !!selectedSearchSet;
+    const searchEmptyLabel = selectedSearchTitle?.title || searchContext || searchQuery.trim();
+    const showSearchEmpty = !searchResultsLoading
+        && !searchLoadingMore
+        && !searchHasResults
+        && Boolean(searchContext || selectedSearchTitle);
 
     const watchedUrlSet = useMemo(() => {
         const urls = new Set<string>();
@@ -4402,6 +4415,31 @@ export const PosterSetsDashboard: React.FC = () => {
                                 </div>
                             ) : null}
 
+                            <div ref={searchSetsSectionRef}>
+                                {searchResultsLoading && !searchHasResults ? (
+                                    <div className="mt-4 flex flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-10 text-sm text-muted">
+                                        <Loader2 className="h-5 w-5 animate-spin text-plex" />
+                                        Searching MediUX and ThePosterDB…
+                                    </div>
+                                ) : null}
+
+                                {showSearchEmpty ? (
+                                    <div className="mt-4 rounded-xl border border-dashed border-amber-400/25 bg-amber-500/5 px-4 py-8 text-center">
+                                        <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-black/25 text-muted">
+                                            <ImageIcon className="h-5 w-5 opacity-60" />
+                                        </div>
+                                        <p className="text-sm font-semibold text-text">
+                                            No poster sets found
+                                            {searchEmptyLabel ? ` for “${searchEmptyLabel}”` : ''}
+                                        </p>
+                                        <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-muted">
+                                            This title matched on your library, but MediUX and ThePosterDB returned no sets.
+                                            Try editing the search above, pick a different title match, or browse the sites directly.
+                                        </p>
+                                    </div>
+                                ) : null}
+                            </div>
+
                             {searchTitles.length ? (
                                 <div className="mt-4 space-y-2">
                                     <p className="text-xs font-bold uppercase tracking-wide text-muted">Choose a title</p>
@@ -4449,7 +4487,7 @@ export const PosterSetsDashboard: React.FC = () => {
                             ) : null}
 
                             {searchSets.length ? (
-                                <div ref={searchSetsSectionRef} className="mt-4 space-y-2">
+                                <div className="mt-4 space-y-2">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
                                         <p className="text-xs font-bold uppercase tracking-wide text-muted">
                                             Poster sets{searchContext ? ` · ${searchContext}` : ''}
