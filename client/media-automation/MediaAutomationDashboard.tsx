@@ -592,9 +592,28 @@ const isBroadLibraryRoot = (rootPath: string) => {
     // Drop Windows drive letter so D:/Media counts as depth 1.
     const meaningful = segments[0] && /^[A-Za-z]:$/.test(segments[0]) ? segments.slice(1) : segments;
     if (meaningful.length === 0) return true;
-    if (meaningful.length <= 2) return true;
-    const base = meaningful[meaningful.length - 1].toLowerCase();
-    return meaningful.length <= 3 && BROAD_LIBRARY_BASENAMES.has(base);
+
+    const base = meaningful[meaningful.length - 1];
+    const baseLower = base.toLowerCase();
+
+    // Season/specials folders are intentionally narrow — not whole-library roots.
+    if (SEASON_FOLDER_RE.test(base)) return false;
+
+    // Three or more folders deep is almost always a show/season path.
+    if (meaningful.length >= 3) return false;
+
+    // Single segment: broad only for known library container names (/media, /movies).
+    if (meaningful.length === 1) {
+        return BROAD_LIBRARY_BASENAMES.has(baseLower);
+    }
+
+    // Two segments: broad when the leaf is a library container (/media/tv, /data/movies).
+    // Show folders under a generic parent (/media/Love Island) are narrow on purpose.
+    if (meaningful.length === 2) {
+        return BROAD_LIBRARY_BASENAMES.has(baseLower);
+    }
+
+    return false;
 };
 
 const confirmBroadLibrarySave = async (rootPath: string) => {
