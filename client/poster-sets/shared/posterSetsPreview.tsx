@@ -143,28 +143,28 @@ export function PreviewAssetStrip({
                     <span className="shrink-0 text-[11px] text-muted/80">{count}</span>
                 </div>
                 {showArrows ? (
-                    <div className="flex shrink-0 items-center gap-0.5">
+                    <div className="flex shrink-0 items-center gap-1">
                         <button
                             type="button"
                             onClick={() => scrollByPage('left')}
                             disabled={atStart}
-                            className={`rounded-md border border-white/10 p-1 transition ${
-                                atStart ? 'cursor-default text-muted/30' : 'text-muted hover:border-plex/40 hover:bg-white/5 hover:text-text'
+                            className={`inline-flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-lg border border-white/10 transition ${
+                                atStart ? 'cursor-default text-muted/30' : 'text-muted hover:border-plex/40 hover:bg-white/5 hover:text-text active:scale-95'
                             }`}
                             aria-label="Scroll left"
                         >
-                            <ChevronLeft className="h-4 w-4" />
+                            <ChevronLeft className="h-5 w-5" />
                         </button>
                         <button
                             type="button"
                             onClick={() => scrollByPage('right')}
                             disabled={atEnd}
-                            className={`rounded-md border border-white/10 p-1 transition ${
-                                atEnd ? 'cursor-default text-muted/30' : 'text-muted hover:border-plex/40 hover:bg-white/5 hover:text-text'
+                            className={`inline-flex min-h-9 min-w-9 touch-manipulation items-center justify-center rounded-lg border border-white/10 transition ${
+                                atEnd ? 'cursor-default text-muted/30' : 'text-muted hover:border-plex/40 hover:bg-white/5 hover:text-text active:scale-95'
                             }`}
                             aria-label="Scroll right"
                         >
-                            <ChevronRight className="h-4 w-4" />
+                            <ChevronRight className="h-5 w-5" />
                         </button>
                     </div>
                 ) : null}

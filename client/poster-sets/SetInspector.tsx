@@ -8,6 +8,7 @@ import {
     X,
 } from 'lucide-react';
 import type { PosterSetsSearchSet } from './types';
+import { PreviewAssetStrip } from './shared/posterSetsPreview';
 import { ProviderPill } from './shared/posterSetsPills';
 
 const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
@@ -226,35 +227,25 @@ export function SetInspectorThumbStrip({
         ? 'aspect-[16/9] w-40 sm:w-48'
         : 'aspect-[2/3] w-[5.75rem] sm:w-28';
     return (
-        <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                Matched preview
-            </p>
-            <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {thumbs.slice(0, 12).map((thumb) => (
-                    <div
-                        key={thumb.id}
-                        className={`${thumbClass} shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40 shadow-sm`}
-                        title={thumb.title}
-                    >
-                        {thumb.thumbUrl ? (
-                            <img
-                                src={thumb.thumbUrl}
-                                alt=""
-                                className="h-full w-full object-contain object-center"
-                                loading="lazy"
-                            />
-                        ) : (
-                            <div className="h-full w-full bg-white/5" />
-                        )}
-                    </div>
-                ))}
-                {thumbs.length > 12 ? (
-                    <div className={`${thumbClass} flex shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30 text-xs font-semibold text-muted`}>
-                        +{thumbs.length - 12}
-                    </div>
-                ) : null}
-            </div>
-        </div>
+        <PreviewAssetStrip title="Matched preview" count={thumbs.length}>
+            {thumbs.map((thumb) => (
+                <div
+                    key={thumb.id}
+                    className={`${thumbClass} shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40 shadow-sm`}
+                    title={thumb.title}
+                >
+                    {thumb.thumbUrl ? (
+                        <img
+                            src={thumb.thumbUrl}
+                            alt=""
+                            className="h-full w-full object-contain object-center"
+                            loading="lazy"
+                        />
+                    ) : (
+                        <div className="h-full w-full bg-white/5" />
+                    )}
+                </div>
+            ))}
+        </PreviewAssetStrip>
     );
 }

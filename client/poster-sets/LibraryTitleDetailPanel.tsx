@@ -20,16 +20,24 @@ import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
 import { previewAssetEpisodeLabel } from './previewGroups';
 import { libraryItemPosterSrc, type LibraryRecentItem } from './libraryRecent';
 import { SetInspector, SetInspectorThumbStrip } from './SetInspector';
-import type {
-    PosterSetsPreview,
-    PosterSetsPreviewAsset,
-    PosterSetsSearchSet,
-    PosterSetsSearchTitle,
-    PosterSetsSetMeta,
-    PosterSetsTitleStatus,
-    PosterSetsWatch,
+import { PreviewAssetStrip } from './shared/posterSetsPreview';
+import {
+    mediuxFiltersFromAssets,
+    type PosterSetsPreview,
+    type PosterSetsPreviewAsset,
+    type PosterSetsSearchSet,
+    type PosterSetsSearchTitle,
+    type PosterSetsSetMeta,
+    type PosterSetsTitleStatus,
+    type PosterSetsWatch,
 } from './types';
 import { ProviderCornerBadge } from './shared/posterSetsPills';
+import {
+    inferRecentSetKindFromAssets,
+    isTitleCardSet,
+    partitionSetsByCategory,
+    SEARCH_SET_CATEGORY_ORDER,
+} from './shared/posterSetsRecent';
 import type { LibraryDetailLayout } from './shared/posterSetsUi';
 
 const TITLE_CARD_ONLY_FILTERS = ['title_card'];
@@ -39,12 +47,6 @@ const SETS_PAGE_SIZE_MODAL = 20;
 const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-plex px-2.5 py-1.5 text-xs font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-xs text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex sm:py-2.5 sm:text-sm';
-
-const isTitleCardSet = (set?: { title?: string | null; setKind?: string | null } | null) => {
-    const kind = String(set?.setKind || '').trim().toLowerCase();
-    if (kind === 'title_cards' || kind === 'title-cards' || kind === 'titlecard') return true;
-    return /(title\s*cards?|episode\s*cards?|cover\s*style)/i.test(String(set?.title || ''));
-};
 
 function PosterThumb({
     src,
@@ -495,6 +497,9 @@ export function LibraryTitleDetailPanel({
                 restrictTitleCards ? TITLE_CARD_ONLY_FILTERS : undefined,
             );
             setPreview(response);
+            if (!restrictTitleCards && inferRecentSetKindFromAssets(response.assets) === 'title_cards') {
+                setTitleCardsOnly(true);
+            }
             setSelectedAssetIds([]);
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Preview failed', 'error');
@@ -574,13 +579,19 @@ export function LibraryTitleDetailPanel({
         }));
     }, [preview]);
 
+    const setsByCategory = useMemo(() => partitionSetsByCategory(searchSets), [searchSets]);
     const setsPageSize = layoutMode === 'modal' ? SETS_PAGE_SIZE_MODAL : SETS_PAGE_SIZE_DRAWER;
-    const setsPageCount = Math.max(1, Math.ceil(searchSets.length / setsPageSize));
-    const pagedSets = useMemo(() => {
+    const setsPageCount = Math.max(1, Math.ceil(setsByCategory.posters.length / setsPageSize));
+    const paginatedPosters = useMemo(() => {
         const page = Math.min(Math.max(1, setsPage), setsPageCount);
         const start = (page - 1) * setsPageSize;
-        return searchSets.slice(start, start + setsPageSize);
-    }, [searchSets, setsPage, setsPageCount, setsPageSize]);
+        return setsByCategory.posters.slice(start, start + setsPageSize);
+    }, [setsByCategory.posters, setsPage, setsPageCount, setsPageSize]);
+
+    const selectedSetUsesLandscape = useMemo(() => {
+        if (titleCardsOnly || isTitleCardSet(selectedSet)) return true;
+        return inferRecentSetKindFromAssets(preview?.assets) === 'title_cards';
+    }, [preview?.assets, selectedSet, titleCardsOnly]);
 
     const readyToApply = Boolean(preview && !busy);
     const headerLabel = item
@@ -593,6 +604,9 @@ export function LibraryTitleDetailPanel({
     const setsGridClass = isModalLayout
         ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
         : 'grid grid-cols-2 gap-3 sm:grid-cols-3';
+    const setsGridClassLandscape = isModalLayout
+        ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
+        : 'grid grid-cols-1 gap-3 sm:grid-cols-2';
     const panelShellClass = isModalLayout
         ? [
             'fixed z-[101] flex max-h-[100dvh] flex-col bg-card shadow-2xl',
@@ -809,61 +823,81 @@ export function LibraryTitleDetailPanel({
                                 </h3>
                                 <span className="text-[11px] text-muted">{searchSets.length} found</span>
                             </div>
-                            <div className={setsGridClass}>
-                                {pagedSets.map((set) => {
-                                    const watching = isSetWatched(set);
-                                    const landscape = isTitleCardSet(set);
-                                    const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
-                                    const expanded = selectedSet?.url === set.url;
+                            <div className="space-y-5">
+                                {SEARCH_SET_CATEGORY_ORDER.map((category) => {
+                                    const items = category.id === 'title_cards'
+                                        ? setsByCategory.titleCards
+                                        : category.id === 'backgrounds'
+                                            ? setsByCategory.backgrounds
+                                            : paginatedPosters;
+                                    if (!items.length) return null;
+                                    const landscape = category.landscape;
                                     return (
-                                        <div
-                                            key={`${set.provider}-${set.setId}-${set.url}`}
-                                            className={`flex flex-col overflow-hidden rounded-md border bg-black/20 transition ${
-                                                expanded ? 'border-plex/60 ring-1 ring-plex/30' : 'border-white/10 hover:border-plex/40'
-                                            }`}
-                                        >
-                                            <button
-                                                type="button"
-                                                className="text-left"
-                                                disabled={busy !== null}
-                                                onClick={() => void runPreview(set)}
-                                            >
-                                                <div className={`relative bg-black text-center ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
-                                                    {set.thumbUrl ? (
-                                                        <img
-                                                            src={posterSetsApi.imageUrl(set.thumbUrl)}
-                                                            alt={setTitle}
-                                                            className="absolute inset-0 h-full w-full object-contain object-center"
-                                                            loading="lazy"
-                                                        />
-                                                    ) : (
-                                                        <div className="absolute inset-0 flex items-center justify-center text-muted">
-                                                            <ImageIcon className="h-8 w-8 opacity-40" />
+                                        <div key={category.id} className="space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="text-xs font-bold uppercase tracking-wide text-muted">
+                                                    {category.title}
+                                                </h4>
+                                                <span className="text-[11px] text-muted">{items.length}</span>
+                                            </div>
+                                            <div className={landscape ? setsGridClassLandscape : setsGridClass}>
+                                                {items.map((set) => {
+                                                    const watching = isSetWatched(set);
+                                                    const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
+                                                    const expanded = selectedSet?.url === set.url;
+                                                    return (
+                                                        <div
+                                                            key={`${set.provider}-${set.setId}-${set.url}`}
+                                                            className={`flex flex-col overflow-hidden rounded-md border bg-black/20 transition ${
+                                                                expanded ? 'border-plex/60 ring-1 ring-plex/30' : 'border-white/10 hover:border-plex/40'
+                                                            }`}
+                                                        >
+                                                            <button
+                                                                type="button"
+                                                                className="text-left"
+                                                                disabled={busy !== null}
+                                                                onClick={() => void runPreview(set)}
+                                                            >
+                                                                <div className={`relative bg-black text-center ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
+                                                                    {set.thumbUrl ? (
+                                                                        <img
+                                                                            src={posterSetsApi.imageUrl(set.thumbUrl)}
+                                                                            alt={setTitle}
+                                                                            className="absolute inset-0 h-full w-full object-contain object-center"
+                                                                            loading="lazy"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="absolute inset-0 flex items-center justify-center text-muted">
+                                                                            <ImageIcon className="h-8 w-8 opacity-40" />
+                                                                        </div>
+                                                                    )}
+                                                                    <ProviderCornerBadge provider={set.provider} />
+                                                                </div>
+                                                                {watching ? (
+                                                                    <div className="px-2 pt-2">
+                                                                        <span className="inline-flex rounded-full border border-plex/35 bg-plex/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-plex">
+                                                                            Watching
+                                                                        </span>
+                                                                    </div>
+                                                                ) : null}
+                                                                <p className="line-clamp-2 px-2 py-2 text-center text-[11px] font-semibold text-text">
+                                                                    {setTitle}
+                                                                </p>
+                                                            </button>
+                                                            <div className="flex justify-center gap-1 px-2 pb-2">
+                                                                <button
+                                                                    type="button"
+                                                                    className={buttonClass}
+                                                                    disabled={busy !== null || watching}
+                                                                    title="Watch for updates"
+                                                                    onClick={() => void addWatch(set)}
+                                                                >
+                                                                    <Eye className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                    )}
-                                                    <ProviderCornerBadge provider={set.provider} />
-                                                </div>
-                                                {watching ? (
-                                                    <div className="px-2 pt-2">
-                                                        <span className="inline-flex rounded-full border border-plex/35 bg-plex/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-plex">
-                                                            Watching
-                                                        </span>
-                                                    </div>
-                                                ) : null}
-                                                <p className="line-clamp-2 px-2 py-2 text-center text-[11px] font-semibold text-text">
-                                                    {setTitle}
-                                                </p>
-                                            </button>
-                                            <div className="flex justify-center gap-1 px-2 pb-2">
-                                                <button
-                                                    type="button"
-                                                    className={buttonClass}
-                                                    disabled={busy !== null || watching}
-                                                    title="Watch for updates"
-                                                    onClick={() => void addWatch(set)}
-                                                >
-                                                    <Eye className="h-3.5 w-3.5" />
-                                                </button>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     );
@@ -943,17 +977,20 @@ export function LibraryTitleDetailPanel({
                                 thumbStrip={(
                                     <SetInspectorThumbStrip
                                         thumbs={matchedThumbStrip}
-                                        layout={isTitleCardSet(selectedSet) ? 'landscape' : 'poster'}
+                                        layout={selectedSetUsesLandscape ? 'landscape' : 'poster'}
                                     />
                                 )}
                                 gallery={showAssets && preview ? (
-                                    <div className="flex w-full min-w-0 gap-3 overflow-x-auto pb-1">
+                                    <PreviewAssetStrip
+                                        title="All assets"
+                                        count={(preview.assets || []).length}
+                                    >
                                         {(preview.assets || []).map((asset) => (
                                             <PreviewAssetTile
                                                 key={asset.id}
                                                 asset={asset}
                                                 selected={selectedAssetIds.includes(asset.id)}
-                                                layout={isTitleCardSet(selectedSet) ? 'landscape' : 'poster'}
+                                                layout={selectedSetUsesLandscape ? 'landscape' : 'poster'}
                                                 onToggle={(id) => setSelectedAssetIds((current) => (
                                                     current.includes(id)
                                                         ? current.filter((entry) => entry !== id)
@@ -961,7 +998,7 @@ export function LibraryTitleDetailPanel({
                                                 ))}
                                             />
                                         ))}
-                                    </div>
+                                    </PreviewAssetStrip>
                                 ) : undefined}
                             />
                             {!isSetWatched(selectedSet) ? (

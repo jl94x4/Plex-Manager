@@ -96,6 +96,25 @@ export const RECENT_CATEGORY_ORDER: Array<{ id: RecentSetCategory; title: string
     { id: 'title_cards', title: 'Title cards', landscape: true },
 ];
 
+/** Split search/browse results so title-card packs use landscape rows. */
+export const partitionSetsByCategory = (sets: Array<{ title?: string | null; setKind?: string | null }>) => {
+    const titleCards: typeof sets = [];
+    const backgrounds: typeof sets = [];
+    const posters: typeof sets = [];
+    for (const set of sets) {
+        if (isTitleCardSet(set)) titleCards.push(set);
+        else if (isBackgroundSet(set)) backgrounds.push(set);
+        else posters.push(set);
+    }
+    return { titleCards, backgrounds, posters };
+};
+
+export const SEARCH_SET_CATEGORY_ORDER: Array<{ id: RecentSetCategory; title: string; landscape: boolean }> = [
+    { id: 'title_cards', title: 'Title cards', landscape: true },
+    { id: 'posters', title: 'Posters', landscape: false },
+    { id: 'backgrounds', title: 'Backgrounds', landscape: true },
+];
+
 export const parseSetRef = (rawUrl: string): { provider: SetProvider | null; setId: string | null; url: string } => {
     const url = String(rawUrl || '').trim();
     const lower = url.toLowerCase();

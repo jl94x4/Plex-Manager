@@ -1959,6 +1959,23 @@ def _infer_set_kind(*, title: str = "", card_text: str = "") -> Optional[str]:
     return None
 
 
+def _infer_mediux_set_kind_from_card(card) -> Optional[str]:
+    """MediUX show pages use aspect-video shells for title-card carousels."""
+    if card is None or not hasattr(card, "find_all"):
+        return None
+    video = 0
+    poster = 0
+    for node in card.find_all(True):
+        classes = " ".join(node.get("class") or [])
+        if "aspect-video" in classes:
+            video += 1
+        elif "aspect-2/3" in classes:
+            poster += 1
+    if video > poster:
+        return "title_cards"
+    return None
+
+
 def _mediux_card_row(node):
     current = node
     for _ in range(12):
@@ -2026,9 +2043,10 @@ def _enrich_mediux_set_entry(anchor, entry: dict) -> None:
             title = _title_from_mediux_card_text(card_text, entry.get("user") or user)
         if title:
             entry["title"] = title
-    kind = _infer_set_kind(title=str(entry.get("title") or ""), card_text=card_text)
+    section_kind = _infer_mediux_set_kind_from_card(card)
+    kind = section_kind or _infer_set_kind(title=str(entry.get("title") or ""), card_text=card_text)
     existing_kind = str(entry.get("setKind") or "").strip()
-    if kind == "boxset" or (kind and not existing_kind):
+    if kind == "title_cards" or kind == "boxset" or (kind and not existing_kind):
         entry["setKind"] = kind
     elif not existing_kind:
         inferred = _infer_set_kind(title=str(entry.get("title") or ""))
