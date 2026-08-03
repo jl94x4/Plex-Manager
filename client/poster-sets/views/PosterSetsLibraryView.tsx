@@ -311,52 +311,19 @@ export const PosterSetsLibraryView: React.FC = () => {
                         onOpenSettings={() => goToPrimaryTab('settings')}
                         onTestConnection={() => void runTest()}
                     />
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 max-w-3xl">
-                            <h2 className={sectionTitleClass}>Library</h2>
-                            <p className={sectionBodyClass}>
-                                Recently added movies and TV from every {status?.mediaServerLabel || 'media server'} library.
-                                Click a title to browse poster sets without leaving your library.
-                            </p>
-                            {libraryError ? (
-                                <p className="mt-2 text-xs text-amber-200">{libraryError}</p>
-                            ) : null}
-                        </div>
-                        {libraryViewMode === 'recent' ? (
-                        <div className="flex w-full max-w-2xl gap-2 sm:max-w-md">
-                            <div className="relative min-w-0 flex-1">
-                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                                <input
-                                    type="search"
-                                    value={librarySearchQuery}
-                                    onChange={(e) => setLibrarySearchQuery(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') void runLibrarySearch(librarySearchQuery);
-                                    }}
-                                    placeholder={`Search ${status?.mediaServerLabel || 'media server'} for a movie or show…`}
-                                    className={`${fieldClass} pl-10`}
-                                />
+                    <div className="space-y-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0 flex-1 max-w-3xl">
+                                <h2 className={sectionTitleClass}>Library</h2>
+                                <p className={sectionBodyClass}>
+                                    Recently added movies and TV from every {status?.mediaServerLabel || 'media server'} library.
+                                    Click a title to browse poster sets without leaving your library.
+                                </p>
+                                {libraryError ? (
+                                    <p className="mt-2 text-xs text-amber-200">{libraryError}</p>
+                                ) : null}
                             </div>
-                            <button
-                                type="button"
-                                className={buttonClass}
-                                disabled={librarySearching || librarySearchQuery.trim().length < 2}
-                                onClick={() => void runLibrarySearch(librarySearchQuery)}
-                            >
-                                {librarySearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                                Search
-                            </button>
-                        </div>
-                        ) : null}
-                        <div className="flex flex-wrap items-center gap-2">
-                            <CustomSelect
-                                value={gridSize === 'list' ? 'medium' : gridSize}
-                                onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
-                                options={POSTER_SETS_GRID_OPTIONS}
-                                className="w-full min-w-[140px] sm:w-auto"
-                                compact
-                            />
-                            <div className="flex rounded-xl border border-white/10 bg-black/20 p-0.5">
+                            <div className="inline-flex shrink-0 self-start rounded-xl border border-white/10 bg-black/20 p-0.5">
                                 {([
                                     ['recent', 'Recent'],
                                     ['browse', 'Browse all'],
@@ -364,7 +331,7 @@ export const PosterSetsLibraryView: React.FC = () => {
                                     <button
                                         key={id}
                                         type="button"
-                                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition sm:px-4 sm:text-sm ${
                                             libraryViewMode === id
                                                 ? 'bg-plex text-background'
                                                 : 'text-muted hover:text-text'
@@ -375,28 +342,74 @@ export const PosterSetsLibraryView: React.FC = () => {
                                     </button>
                                 ))}
                             </div>
-                            <button
-                                type="button"
-                                className={buttonClass}
-                                disabled={libraryLoading || busy !== null}
-                                onClick={() => void loadLibraryRecent({ refresh: true })}
-                            >
-                                {libraryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                                Refresh
-                            </button>
-                            {librarySearchQuery.trim() ? (
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    onClick={() => {
-                                        setLibrarySearchQuery('');
-                                        setLibrarySearchResults([]);
-                                    }}
-                                >
-                                    <X className="h-4 w-4" />
-                                    Clear search
-                                </button>
-                            ) : null}
+                        </div>
+
+                        <div className="flex flex-col gap-3 border-t border-white/10 pt-4 lg:flex-row lg:items-center lg:justify-between">
+                            {libraryViewMode === 'recent' ? (
+                                <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                                    <div className="relative min-w-0 flex-1">
+                                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                        <input
+                                            type="search"
+                                            value={librarySearchQuery}
+                                            onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') void runLibrarySearch(librarySearchQuery);
+                                            }}
+                                            placeholder={`Search ${status?.mediaServerLabel || 'media server'} for a movie or show…`}
+                                            className={`${fieldClass} w-full pl-10`}
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className={`${primaryButtonClass} w-full sm:w-auto sm:shrink-0`}
+                                        disabled={librarySearching || librarySearchQuery.trim().length < 2}
+                                        onClick={() => void runLibrarySearch(librarySearchQuery)}
+                                    >
+                                        {librarySearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                        Search
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-muted sm:text-sm">
+                                    Browse your full library by section, type, and sort order.
+                                </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+                                <CustomSelect
+                                    value={gridSize === 'list' ? 'medium' : gridSize}
+                                    onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
+                                    options={POSTER_SETS_GRID_OPTIONS}
+                                    className="w-full min-w-[9.5rem] sm:w-auto"
+                                    compact
+                                />
+                                {libraryViewMode === 'recent' ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={libraryLoading || busy !== null}
+                                            onClick={() => void loadLibraryRecent({ refresh: true })}
+                                        >
+                                            {libraryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                            Refresh
+                                        </button>
+                                        {librarySearchQuery.trim() ? (
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                onClick={() => {
+                                                    setLibrarySearchQuery('');
+                                                    setLibrarySearchResults([]);
+                                                }}
+                                            >
+                                                <X className="h-4 w-4" />
+                                                Clear
+                                            </button>
+                                        ) : null}
+                                    </>
+                                ) : null}
+                            </div>
                         </div>
                     </div>
         

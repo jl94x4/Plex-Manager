@@ -75,7 +75,7 @@ export const PosterSetsShell: React.FC = () => {
                             },
                             {
                                 label: 'Config',
-                                value: status?.configured ? 'Connected' : 'Setup',
+                                value: status?.configured ? 'Valid' : 'Setup',
                             },
                             {
                                 label: 'Last job',
