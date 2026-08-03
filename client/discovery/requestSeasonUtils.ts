@@ -150,7 +150,29 @@ export const hasAnyEpisodeAired = (details: any): boolean => {
     const last = details?.lastEpisodeToAir;
     const season = Number(last?.seasonNumber);
     const episode = Number(last?.episodeNumber);
-    return Number.isFinite(season) && season > 0 && Number.isFinite(episode) && episode > 0;
+    if (!Number.isFinite(season) || season <= 0 || !Number.isFinite(episode) || episode <= 0) {
+        return false;
+    }
+    const airDate = last?.airDate || last?.air_date;
+    if (airDate) {
+        const parsed = Date.parse(String(airDate));
+        if (!Number.isNaN(parsed) && parsed > Date.now()) return false;
+    }
+    return true;
+};
+
+/** Sonarr episode rows confirm at least one monitored episode has aired. */
+export const sonarrHasAiredEpisodes = (sonarr: any): boolean => {
+    if (!sonarr?.matched) return false;
+    return (sonarr.seasons || []).some((season: any) => Number(season?.airedTotal) > 0);
+};
+
+/** Never badge unreleased / pre-premiere shows as library-available. */
+export const canMarkTvAsAvailable = (details: any): boolean => {
+    if (!hasAnyEpisodeAired(details)) return false;
+    const sonarr = details?.sonarrLibraryStatus;
+    if (sonarr?.matched && !sonarrHasAiredEpisodes(sonarr)) return false;
+    return true;
 };
 
 /** True when this season has at least one aired episode. */
@@ -210,6 +232,7 @@ export const isTvShowLibraryComplete = (
     seasonRows: SeasonStatusInfo[],
     mediaInfo?: any,
 ): boolean => {
+    if (!canMarkTvAsAvailable(details)) return false;
     const info = mediaInfo || details?.mediaInfo;
     if (hasActiveShowDownloads(details, info)) return false;
 
@@ -349,6 +372,7 @@ export const applySonarrLibrarySeasonOverrides = (
     if (sonarr.showComplete) {
         return seasonRows.map((row) => {
             if (!isMainSeasonNumber(Number(row.seasonNumber))) return row;
+            if (!canMarkTvAsAvailable(details)) return row;
             return {
                 ...row,
                 requestable: false,
@@ -371,7 +395,7 @@ export const applySonarrLibrarySeasonOverrides = (
         const probe = bySeason.get(seasonNumber);
         if (!probe) return row;
 
-        if (probe.complete) {
+        if (probe.complete && Number(probe.airedTotal) > 0) {
             return {
                 ...row,
                 requestable: false,

@@ -24,6 +24,7 @@ import type { CombinedRatings } from './mediaDetailUtils';
 import { fetchCombinedRatings } from './mediaDetailUtils';
 import {
     buildSeasonStatusFromDetails,
+    canMarkTvAsAvailable,
     getRequestButtonState,
     seasonStatusBadgeClass,
 } from './requestSeasonUtils';
@@ -188,11 +189,16 @@ export const MediaDetailsPage: React.FC<{
                     setDetails((prev) => {
                         if (!prev) return prev;
                         const seasons = Array.isArray(sonarr.seasons) ? sonarr.seasons : [];
-                        const mainComplete = seasons
-                            .filter((s: any) => Number(s?.seasonNumber) > 0 && Number(s?.airedTotal) > 0)
-                            .every((s: any) => !!s.complete);
-                        const effectivelyComplete = !!sonarr.showComplete
-                            || (!sonarr.hasActiveDownloads && !sonarr.nextAiring && mainComplete && seasons.some((s: any) => Number(s?.seasonNumber) > 0));
+                        const airedMainSeasons = seasons.filter(
+                            (s: any) => Number(s?.seasonNumber) > 0 && Number(s?.airedTotal) > 0,
+                        );
+                        const mainComplete = airedMainSeasons.length > 0
+                            && airedMainSeasons.every((s: any) => !!s.complete);
+                        const effectivelyComplete = canMarkTvAsAvailable(prev)
+                            && (
+                                !!sonarr.showComplete
+                                || (!sonarr.hasActiveDownloads && !sonarr.nextAiring && mainComplete)
+                            );
 
                         let nextStatus = prev.mediaInfo?.status;
                         if (sonarr.hasActiveDownloads) {
@@ -202,7 +208,7 @@ export const MediaDetailsPage: React.FC<{
                         } else if (Number(sonarr.fileCount) > 0) {
                             nextStatus = 4; // PARTIAL
                         } else if (Number(sonarr.episodeCount) > 0) {
-                            nextStatus = 3; // tracked in Sonarr, nothing on disk yet
+                            nextStatus = null; // tracked in Sonarr, nothing aired/on disk yet
                         }
 
                         const librarySeasons = seasons
@@ -294,12 +300,12 @@ export const MediaDetailsPage: React.FC<{
                                 let nextStatus = prev.mediaInfo?.status;
                                 if (sonarr.hasActiveDownloads) {
                                     nextStatus = 3;
-                                } else if (sonarr.showComplete) {
+                                } else if (sonarr.showComplete && canMarkTvAsAvailable(prev)) {
                                     nextStatus = 5;
                                 } else if (Number(sonarr.fileCount) > 0) {
                                     nextStatus = 4;
                                 } else if (Number(sonarr.episodeCount) > 0) {
-                                    nextStatus = 3;
+                                    nextStatus = null;
                                 }
                                 return {
                                     ...prev,

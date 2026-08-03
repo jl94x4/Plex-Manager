@@ -1,6 +1,7 @@
 import { normalizeRawDiscoveryItem } from './discoverItemUtils';
 import {
     buildSeasonStatusFromDetails,
+    canMarkTvAsAvailable,
     hasActiveSeerrDownloads,
     hasActiveShowDownloads,
     hasAnyEpisodeAired,
@@ -182,7 +183,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
         ? isTvShowLibraryComplete(item, seasonRows, mediaInfo)
         : false;
 
-    if (tvLibraryComplete) {
+    if (tvLibraryComplete && canMarkTvAsAvailable(item)) {
         const showUpToDate = isReturningSeries(item) && hasAnyEpisodeAired(item);
         return {
             ...base,
@@ -220,7 +221,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
         const mainHandled = handledSeasons.filter((s) => isMainSeasonNumber(s.seasonNumber));
 
         if (!approvalStillOpen && endedShow && mainRequestable.length === 0 && mainHandled.length > 0
-            && (mainAvailable.length > 0 || mainUpToDate.length > 0)) {
+            && (mainAvailable.length > 0 || mainUpToDate.length > 0) && canMarkTvAsAvailable(item)) {
             return {
                 ...base,
                 kind: 'available',
@@ -241,7 +242,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
                     ),
                 };
             }
-            if (availableSeasons.length > 0 || upToDateSeasons.length > 0) {
+            if ((availableSeasons.length > 0 || upToDateSeasons.length > 0) && canMarkTvAsAvailable(item)) {
                 return {
                     ...base,
                     kind: 'available',
@@ -420,7 +421,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
                 : (formatSeasonSummary(seasonRows) || 'Part of this series is already in your library.'),
         };
     }
-    if (mediaType === 'tv' && mediaStatus === MEDIA_STATUS.AVAILABLE) {
+    if (mediaType === 'tv' && mediaStatus === MEDIA_STATUS.AVAILABLE && canMarkTvAsAvailable(item)) {
         const showUpToDate = isReturningSeries(item) && hasAnyEpisodeAired(item);
         return {
             ...base,
@@ -443,7 +444,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
     }
 
     if (mediaStatus === MEDIA_STATUS.PARTIAL) {
-        if (mediaType === 'tv' && item?.sonarrLibraryStatus?.showComplete) {
+        if (mediaType === 'tv' && item?.sonarrLibraryStatus?.showComplete && canMarkTvAsAvailable(item)) {
             return {
                 ...base,
                 kind: 'available',
