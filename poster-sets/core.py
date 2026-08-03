@@ -429,14 +429,35 @@ def test_posterdb_login(config: dict | None = None) -> dict:
         return {"ok": False, "configured": True, "error": "ThePosterDB login failed — check TPDB username/password."}
     response = session.get(
         "https://theposterdb.com/search/advanced/results",
-        params={"category": "shows", "tmdb_id": "97546"},
+        params={"category": "Shows", "tmdb_id": "97546"},
         timeout=60,
         allow_redirects=True,
     )
     if "theposterdb.com/login" in str(response.url or "").lower():
         _posterdb_invalidate_sessions(user)
         return {"ok": False, "configured": True, "error": "ThePosterDB session expired or login was rejected."}
-    return {"ok": True, "configured": True, "username": user}
+    soup = BeautifulSoup(response.text, "html.parser")
+    titles = _parse_posterdb_title_links(soup, limit=8)
+    matched = None
+    for item in titles:
+        url = str(item.get("url") or "")
+        if not url:
+            continue
+        try:
+            probe = _posterdb_probe_title_page(url, config=config)
+        except Exception:
+            continue
+        if str(probe.get("mediaId") or "") == "97546":
+            matched = item
+            break
+    if not matched:
+        return {
+            "ok": False,
+            "configured": True,
+            "error": "ThePosterDB login succeeded but TMDB advanced search returned no Ted Lasso title page.",
+            "resultCount": len(titles),
+        }
+    return {"ok": True, "configured": True, "username": user, "sampleTitle": matched.get("title")}
 
 
 def cook_soup(url: str, *, config: dict | None = None) -> BeautifulSoup:
@@ -1489,13 +1510,23 @@ def _posterdb_probe_title_page(url: str, *, config: dict | None = None) -> dict:
     }
 
 
+def _posterdb_advanced_category(media_type: str = "show") -> str:
+    """TPDB advanced search expects title-case category values (Shows, Movies, All)."""
+    raw = str(media_type or "show").strip().lower()
+    if raw in {"movie", "movies", "film"}:
+        return "Movies"
+    if raw in {"show", "shows", "tv", "series"}:
+        return "Shows"
+    return "All"
+
+
 def search_posterdb_advanced_titles(
     config: dict | None,
     *,
     tmdb_id: str | int | None = None,
     imdb_id: str | None = None,
     term: str = "",
-    category: str = "shows",
+    category: str = "Shows",
     progress: ProgressFn = None,
     limit: int = 24,
 ) -> list[dict]:
@@ -1504,8 +1535,9 @@ def search_posterdb_advanced_titles(
     if not isinstance(session, requests.Session):
         return []
     params: dict[str, str] = {}
-    if str(category or "").strip():
-        params["category"] = str(category).strip().lower()
+    category_value = str(category or "").strip()
+    if category_value:
+        params["category"] = category_value
     if tmdb_id not in (None, ""):
         params["tmdb_id"] = str(tmdb_id).strip()
     if imdb_id:
@@ -1567,24 +1599,39 @@ def resolve_posterdb_title_page(
         search_terms.append(target_tmdb)
 
     candidates: dict[str, dict] = {}
-    media_raw = str(media_type or "show").strip().lower()
-    category = "movies" if media_raw in {"movie", "movies", "film"} else "shows"
+    category = _posterdb_advanced_category(media_type)
 
     if target_tmdb or imdb_id:
-        advanced = search_posterdb_advanced_titles(
-            config,
-            tmdb_id=target_tmdb,
-            imdb_id=imdb_id,
-            term=title or query,
-            category=category,
-            progress=progress,
-            limit=limit,
-        )
-        for item in advanced:
-            pid = str(item.get("id") or "")
-            if pid:
-                candidates[pid] = item
-        if target_tmdb and candidates:
+        advanced_queries: list[tuple[str, str]] = []
+        if target_tmdb:
+            advanced_queries.append(("", category))
+            if category != "All":
+                advanced_queries.append(("", "All"))
+        hint = str(title or query or "").strip()
+        if hint:
+            advanced_queries.append((hint, category))
+        seen_queries: set[tuple[str, str]] = set()
+        advanced: list[dict] = []
+        for term_value, category_value in advanced_queries:
+            key = (term_value, category_value)
+            if key in seen_queries:
+                continue
+            seen_queries.add(key)
+            batch = search_posterdb_advanced_titles(
+                config,
+                tmdb_id=target_tmdb,
+                imdb_id=imdb_id,
+                term=term_value,
+                category=category_value,
+                progress=progress,
+                limit=limit,
+            )
+            for item in batch:
+                pid = str(item.get("id") or "")
+                if pid and pid not in candidates:
+                    candidates[pid] = item
+                    advanced.append(item)
+        if target_tmdb:
             for item in advanced:
                 url = str(item.get("url") or "").strip()
                 if not url:
@@ -2530,15 +2577,29 @@ def search_catalog(
         )
 
     if source == "posterdb":
-        if title_url:
-            year_val = year_hint
-            if year_val is not None and not isinstance(year_val, int):
-                try:
-                    year_val = int(year_val)
-                except Exception:
-                    year_val = None
+        year_val = year_hint
+        if year_val is not None and not isinstance(year_val, int):
+            try:
+                year_val = int(year_val)
+            except Exception:
+                year_val = None
+        title_url_value = str(title_url or "").strip()
+        if not title_url_value and tmdb_id:
+            resolved = resolve_posterdb_title_page(
+                query=title_hint or query,
+                title=title_hint or query,
+                year=year_val,
+                tmdb_id=tmdb_id,
+                imdb_id=imdb_id,
+                media_type=media_type,
+                config=config,
+                progress=progress,
+                limit=limit,
+            )
+            title_url_value = str(resolved.get("url") or "").strip() if resolved else ""
+        if title_url_value:
             return list_posterdb_sets(
-                title_url,
+                title_url_value,
                 progress=progress,
                 limit=limit,
                 config=config,

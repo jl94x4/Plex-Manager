@@ -232,7 +232,9 @@ export function LibraryTitleDetailPanel({
             setSearchContext(response.title || title.title);
             setSearchTitles([]);
             if (response.partialErrors?.length) {
-                toast(response.partialErrors[0], 'error');
+                const msg = response.partialErrors[0];
+                const soft = msg.includes('ThePosterDB returned no sets');
+                toast(msg, soft ? undefined : 'error');
             }
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
@@ -288,7 +290,11 @@ export function LibraryTitleDetailPanel({
             setSearchTitles(rankSearchTitlesForLibraryItem(libraryItem, titles));
             setSearchSets(response?.sets || []);
             setSearchContext(response?.title || libraryItem.title);
-            if (response?.partialErrors?.length) toast(response.partialErrors[0], 'error');
+            if (response?.partialErrors?.length) {
+                const msg = response.partialErrors[0];
+                const soft = msg.includes('ThePosterDB returned no sets');
+                toast(msg, soft ? undefined : 'error');
+            }
         } catch (error) {
             if (generation === loadGenRef.current) {
                 toast(error instanceof Error ? error.message : 'Search failed', 'error');

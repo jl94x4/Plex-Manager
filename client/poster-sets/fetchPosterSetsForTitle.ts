@@ -80,6 +80,7 @@ async function fetchPosterdbSets(
         tmdbId?: string | null;
         titleHint?: string;
         yearHint?: number | null;
+        mediaType?: 'show' | 'movie';
     },
 ): Promise<PosterSetsSearchResult> {
     return posterSetsApi.search({
@@ -88,6 +89,7 @@ async function fetchPosterdbSets(
         tmdbId: options.tmdbId || undefined,
         titleHint: options.titleHint,
         yearHint: options.yearHint ?? undefined,
+        mediaType: options.mediaType,
         limit: 40,
     });
 }
@@ -189,6 +191,7 @@ export async function fetchPosterSetsForTitle(
                 tmdbId: linkedTmdbId,
                 titleHint,
                 yearHint,
+                mediaType: fallbackMedia,
             });
     } else {
         response = { ok: true, sets: [], titles: [] };
