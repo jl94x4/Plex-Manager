@@ -983,8 +983,13 @@ import {
     searchMusicArtists,
 } from './lib/discovery-music-enrich.js';
 import {
+    browseJellyfinLibraryMedia,
+    browsePlexLibraryMedia,
     fetchJellyfinLibraryRecent,
+    fetchJellyfinLibrarySections,
     fetchPlexLibraryRecent,
+    fetchPlexLibrarySections,
+    resetPlexLibraryArtwork,
     searchJellyfinLibraryMedia,
     searchPlexLibraryMedia,
 } from './lib/media-server-library.js';
@@ -11368,6 +11373,88 @@ const mediaServerLibraryCacheId = (config = {}) => {
 
 const shouldBypassLibraryCache = (req) => ['1', 'true', 'yes'].includes(String(req.query.refresh || '').toLowerCase());
 
+const mediaServerLibraryDeps = () => ({
+    getPlexConnectionUri,
+    plexClientHeaders,
+    fetchImpl: fetchWithTimeout,
+    fetchJellyfinItems,
+    resolveIntegrationUrlForFetch,
+    jellyfinHeaders,
+    fetchWithTimeout,
+    withBasePath,
+});
+
+app.get('/api/media-server/library/sections', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const serverType = String(config.mediaServerType || 'plex').toLowerCase();
+        const bypassCache = shouldBypassLibraryCache(req);
+        const cacheKey = `media_library_sections_${mediaServerLibraryCacheId(config)}`;
+        const fetchSections = async () => {
+            if (isEmbyLikeMediaServer(config)) {
+                if (!isJellyfinConfigured(config)) {
+                    throw Object.assign(new Error('Jellyfin not configured'), { status: 503 });
+                }
+                return fetchJellyfinLibrarySections(config, mediaServerLibraryDeps());
+            }
+            if (!config.plexToken || !config.serverIdentifier) {
+                throw Object.assign(new Error('Plex not configured'), { status: 503 });
+            }
+            return fetchPlexLibrarySections(config, mediaServerLibraryDeps());
+        };
+        if (bypassCache) apiCache.delete(cacheKey);
+        const sections = await withCache(cacheKey, 300_000, fetchSections);
+        return res.json({ serverType, sections });
+    } catch (e) {
+        const status = Number(e.status) || 502;
+        if (status === 503) {
+            return res.status(503).json({ error: e.message || 'Media server not configured' });
+        }
+        log(`Media server library sections error: ${e.message}`);
+        res.status(502).json({ error: e.message || 'Failed to load library sections' });
+    }
+});
+
+app.get('/api/media-server/library/browse', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const serverType = String(config.mediaServerType || 'plex').toLowerCase();
+        const sectionKey = String(req.query.section || req.query.sectionKey || '').trim();
+        const mediaType = String(req.query.type || req.query.mediaType || '').trim().toLowerCase();
+        const sort = String(req.query.sort || 'titleAsc').trim();
+        const start = Math.max(parseInt(req.query.start, 10) || 0, 0);
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 120);
+        const bypassCache = shouldBypassLibraryCache(req);
+        const cacheKey = `media_library_browse_${mediaServerLibraryCacheId(config)}_${sectionKey}_${mediaType}_${sort}_${start}_${limit}`;
+        const fetchBrowse = async () => {
+            if (isEmbyLikeMediaServer(config)) {
+                if (!isJellyfinConfigured(config)) {
+                    throw Object.assign(new Error('Jellyfin not configured'), { status: 503 });
+                }
+                return browseJellyfinLibraryMedia(config, mediaServerLibraryDeps(), {
+                    sectionKey, mediaType, sort, start, limit,
+                });
+            }
+            if (!config.plexToken || !config.serverIdentifier) {
+                throw Object.assign(new Error('Plex not configured'), { status: 503 });
+            }
+            return browsePlexLibraryMedia(config, mediaServerLibraryDeps(), {
+                sectionKey, mediaType, sort, start, limit,
+            });
+        };
+        if (bypassCache) apiCache.delete(cacheKey);
+        const payload = await withCache(cacheKey, 120_000, fetchBrowse);
+        return res.json({ serverType, ...payload });
+    } catch (e) {
+        const status = Number(e.status) || 502;
+        if (status === 503) {
+            return res.status(503).json({ error: e.message || 'Media server not configured' });
+        }
+        log(`Media server library browse error: ${e.message}`);
+        res.status(502).json({ error: e.message || 'Failed to browse media server library' });
+    }
+});
+
 app.get('/api/media-server/library/recent', requireAuth, requireAdmin, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
@@ -20202,6 +20289,8 @@ app.use('/api/poster-sets', createPosterSetsRouter({
     requireAdmin,
     requirePosterSets,
     loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+    mediaLibraryDeps: mediaServerLibraryDeps(),
+    resetLibraryArtwork: resetPlexLibraryArtwork,
     importFromPortalPlex: async () => {
         const config = await loadFile(CONFIG_PATH, {});
         if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex') {

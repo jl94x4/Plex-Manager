@@ -3,10 +3,13 @@ import {
     CheckCircle2,
     ChevronLeft,
     Eye,
+    History,
     Image as ImageIcon,
     Loader2,
+    RotateCcw,
     X,
 } from 'lucide-react';
+import { askConfirm } from '../shared/confirm';
 import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle } from './autoMatchTitle';
 import { previewAssetEpisodeLabel } from './previewGroups';
@@ -18,6 +21,7 @@ import type {
     PosterSetsSearchSet,
     PosterSetsSearchTitle,
     PosterSetsSetMeta,
+    PosterSetsTitleStatus,
     PosterSetsWatch,
 } from './types';
 import { mediuxFiltersFromAssets } from './types';
@@ -111,15 +115,24 @@ function PreviewAssetTile({
     );
 }
 
+const formatWhen = (value?: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+};
+
 export type LibraryTitleDetailPanelProps = {
     item: LibraryRecentItem | null;
     onClose: () => void;
     dupePreference: 'mediux' | 'posterdb';
     queuePaused: boolean;
     watches: PosterSetsWatch[];
+    serverType?: string;
     toast: (message: string, type?: 'success' | 'error') => void;
     onApplied?: () => void;
     onWatchAdded?: () => void;
+    onArtReset?: () => void;
 };
 
 export function LibraryTitleDetailPanel({
@@ -131,9 +144,14 @@ export function LibraryTitleDetailPanel({
     toast,
     onApplied,
     onWatchAdded,
+    onArtReset,
+    serverType = 'plex',
 }: LibraryTitleDetailPanelProps) {
     const [busy, setBusy] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [titleStatus, setTitleStatus] = useState<PosterSetsTitleStatus | null>(null);
+    const [statusLoading, setStatusLoading] = useState(false);
+    const [resetScope, setResetScope] = useState<'poster' | 'seasons' | 'episodes' | 'all'>('poster');
     const [searchTitles, setSearchTitles] = useState<PosterSetsSearchTitle[]>([]);
     const [searchSets, setSearchSets] = useState<PosterSetsSearchSet[]>([]);
     const [searchContext, setSearchContext] = useState('');
@@ -182,6 +200,7 @@ export function LibraryTitleDetailPanel({
         setShowAssets(false);
         setTitleCardsOnly(false);
         setSetsPage(1);
+        setTitleStatus(null);
     }, []);
 
     const loadSetsForTitle = useCallback(async (title: PosterSetsSearchTitle) => {
@@ -293,6 +312,63 @@ export function LibraryTitleDetailPanel({
         }
         void runSearch(item);
     }, [item, resetState, runSearch]);
+
+    useEffect(() => {
+        if (!item) {
+            setTitleStatus(null);
+            return;
+        }
+        let cancelled = false;
+        setStatusLoading(true);
+        void posterSetsApi.titleStatus({
+            title: item.title,
+            mediaType: item.mediaType,
+            ratingKey: item.id,
+        }).then((response) => {
+            if (!cancelled) setTitleStatus(response);
+        }).catch(() => {
+            if (!cancelled) setTitleStatus(null);
+        }).finally(() => {
+            if (!cancelled) setStatusLoading(false);
+        });
+        return () => { cancelled = true; };
+    }, [item]);
+
+    const runResetArt = async () => {
+        if (!item) return;
+        const scopeLabel = item.mediaType === 'movie'
+            ? 'poster'
+            : resetScope === 'all'
+                ? 'show poster, all season posters, and all episode thumbs'
+                : resetScope === 'seasons'
+                    ? 'show and season posters'
+                    : resetScope === 'episodes'
+                        ? 'all episode thumbs'
+                        : 'show poster only';
+        const ok = await askConfirm(
+            `Reset ${scopeLabel} for “${item.title}” to Plex defaults? Custom art from poster sets will be cleared.`,
+            {
+                title: 'Reset artwork?',
+                confirmLabel: 'Reset',
+                cancelLabel: 'Cancel',
+            },
+        );
+        if (!ok) return;
+        setBusy('reset');
+        try {
+            await posterSetsApi.resetArt({
+                ratingKey: item.id,
+                mediaType: item.mediaType,
+                scope: item.mediaType === 'movie' ? 'poster' : resetScope,
+            });
+            toast('Artwork reset to Plex defaults.');
+            onArtReset?.();
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to reset artwork', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
 
     useEffect(() => {
         if (!item) return undefined;
@@ -469,6 +545,82 @@ export function LibraryTitleDetailPanel({
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5 custom-scrollbar">
+                    {statusLoading ? (
+                        <div className="mb-4 flex items-center gap-2 text-xs text-muted">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Loading title status…
+                        </div>
+                    ) : null}
+                    {(titleStatus || String(serverType).toLowerCase() === 'plex') && !statusLoading ? (
+                        <div className="mb-4 space-y-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted">
+                                <History className="h-3.5 w-3.5" />
+                                Title status
+                            </div>
+                            {titleStatus?.lastApply ? (
+                                <div className="text-sm">
+                                    <p className="font-semibold text-text">
+                                        Last applied
+                                        {titleStatus.lastApply.uploaded != null
+                                            ? ` · ${titleStatus.lastApply.uploaded} uploaded`
+                                            : ''}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-muted">
+                                        {titleStatus.lastApply.title || titleStatus.lastApply.url || 'Poster set'}
+                                        {titleStatus.lastApply.user ? ` · @${titleStatus.lastApply.user}` : ''}
+                                    </p>
+                                    {titleStatus.lastApply.at ? (
+                                        <p className="mt-0.5 text-[11px] text-muted">{formatWhen(titleStatus.lastApply.at)}</p>
+                                    ) : null}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted">No successful apply recorded for this title yet.</p>
+                            )}
+                            {(titleStatus?.watchingCount || 0) > 0 ? (
+                                <p className="flex items-center gap-1.5 text-xs text-plex">
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Watching {titleStatus?.watchingCount} set{(titleStatus?.watchingCount || 0) === 1 ? '' : 's'} for updates
+                                </p>
+                            ) : null}
+                            {String(serverType).toLowerCase() === 'plex' ? (
+                                <div className="space-y-2 border-t border-white/10 pt-3">
+                                    {item.mediaType === 'show' ? (
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {([
+                                                ['poster', 'Show poster'],
+                                                ['seasons', '+ seasons'],
+                                                ['episodes', 'Episodes'],
+                                                ['all', 'All'],
+                                            ] as const).map(([id, label]) => (
+                                                <button
+                                                    key={id}
+                                                    type="button"
+                                                    className={`rounded-lg border px-2 py-1 text-[10px] font-semibold ${
+                                                        resetScope === id
+                                                            ? 'border-plex/40 bg-plex/15 text-plex'
+                                                            : 'border-white/10 text-muted hover:text-text'
+                                                    }`}
+                                                    onClick={() => setResetScope(id)}
+                                                >
+                                                    {label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                    <button
+                                        type="button"
+                                        className={`${buttonClass} w-full`}
+                                        disabled={busy !== null}
+                                        onClick={() => void runResetArt()}
+                                    >
+                                        {busy === 'reset' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                                        Reset to default art
+                                    </button>
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
+
                     {loading ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted">
                             <Loader2 className="h-6 w-6 animate-spin text-plex" />

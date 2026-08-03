@@ -274,6 +274,34 @@ export type PosterSetsAuditEntry = {
     error?: string | null;
 };
 
+export type PosterSetsTitleStatus = {
+    title?: string;
+    mediaType?: string | null;
+    ratingKey?: string | null;
+    lastApply?: {
+        at?: string | null;
+        title?: string | null;
+        url?: string | null;
+        user?: string | null;
+        uploaded?: number | null;
+        attempted?: number | null;
+        source?: string | null;
+        jobId?: string | null;
+    } | null;
+    watches?: Array<{
+        id: string;
+        enabled?: boolean;
+        title?: string | null;
+        url?: string | null;
+        user?: string | null;
+        provider?: string | null;
+        lastAppliedAt?: string | null;
+        lastCheckedAt?: string | null;
+        lastError?: string | null;
+    }>;
+    watchingCount?: number;
+};
+
 export const MEDIUX_FILTER_OPTIONS = [
     { id: 'show_cover', label: 'Show cover' },
     { id: 'season_cover', label: 'Season cover' },

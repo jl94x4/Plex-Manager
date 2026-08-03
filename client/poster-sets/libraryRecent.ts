@@ -9,7 +9,18 @@ export type LibraryRecentItem = {
     thumbUrl?: string | null;
     posterFallbackUrl?: string | null;
     addedAt?: number;
+    librarySection?: string | null;
+    librarySectionKey?: string | null;
 };
+
+export type LibrarySection = {
+    key: string;
+    title: string;
+    type: 'show' | 'movie';
+    count?: number;
+};
+
+export type LibraryBrowseSort = 'titleAsc' | 'titleDesc' | 'yearDesc' | 'yearAsc' | 'addedDesc' | 'addedAsc';
 
 const mapMovie = (item: Record<string, unknown>): LibraryRecentItem | null => {
     const title = String(item.title || '').trim();
@@ -83,6 +94,8 @@ export const normalizeLibraryItems = (items: Record<string, unknown>[] = []): Li
             thumbUrl: item.thumbUrl ? String(item.thumbUrl) : null,
             posterFallbackUrl: item.posterFallbackUrl ? String(item.posterFallbackUrl) : null,
             addedAt: Number(item.addedAt) || 0,
+            librarySection: item.librarySection ? String(item.librarySection) : null,
+            librarySectionKey: item.librarySectionKey ? String(item.librarySectionKey) : null,
         };
     }).filter(Boolean) as LibraryRecentItem[];
 

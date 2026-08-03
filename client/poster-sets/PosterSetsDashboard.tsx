@@ -41,6 +41,8 @@ import {
 } from './urlState';
 import { LibraryTitleDetailPanel } from './LibraryTitleDetailPanel';
 import { PosterSetsSetupChecklist } from './PosterSetsSetupChecklist';
+import { PosterSetsLibraryBrowse } from './PosterSetsLibraryBrowse';
+import { PosterSetsCreatorsPanel } from './PosterSetsCreatorsPanel';
 import {
     normalizeUpgraderGridSize,
     UPGRADER_GRID_SIZE_OPTIONS,
@@ -1068,6 +1070,7 @@ export const PosterSetsDashboard: React.FC = () => {
     );
     const [tab, setTab] = useState<TabId>(initialLocation.tab);
     const [libraryDetailItem, setLibraryDetailItem] = useState<LibraryRecentItem | null>(null);
+    const [libraryViewMode, setLibraryViewMode] = useState<'recent' | 'browse'>('recent');
     const [busy, setBusy] = useState<string | null>(null);
     const [status, setStatus] = useState<PosterSetsStatus | null>(null);
     const [configDraft, setConfigDraft] = useState<PosterSetsConfig>(DEFAULT_POSTER_SETS_CONFIG);
@@ -1589,6 +1592,30 @@ export const PosterSetsDashboard: React.FC = () => {
             setSelectedQueueJob(response.job);
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to open job', 'error');
+        }
+    };
+
+    const saveCreatorsConfig = async (partial: Partial<PosterSetsConfig>) => {
+        setBusy('save');
+        try {
+            const response = await posterSetsApi.saveConfig({
+                ...configDraft,
+                tv_library: textToList(tvText),
+                movie_library: textToList(movieText),
+                creatorWhitelist: textToList(whitelistText).map((item) => item.replace(/^@+/, '')),
+                ...partial,
+            });
+            setConfigDraft({
+                ...response.config,
+                token: response.config.hasToken ? '********' : '',
+            });
+            setWhitelistText(listToText(response.config.creatorWhitelist));
+            void loadBrowse({ refresh: true, silent: true });
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to save creators', 'error');
+            throw error;
+        } finally {
+            setBusy(null);
         }
     };
 
@@ -3208,7 +3235,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                     <h2 className={sectionTitleClass}>Browse recently added</h2>
                                     <p className={sectionBodyClass}>
                                         First results appear immediately; more fill in the background (up to 600 per row). Tap a row title to see all.
-                                        Check sets to queue many at once without opening each one. Add creators in Settings to get a “Creators you follow” row.
+                                        Check sets to queue many at once without opening each one.
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center justify-center gap-2">
@@ -3230,6 +3257,14 @@ export const PosterSetsDashboard: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
+                            <PosterSetsCreatorsPanel
+                                creators={textToList(whitelistText).map((item) => item.replace(/^@+/, ''))}
+                                busy={busy}
+                                onChange={(next) => setWhitelistText(listToText(next))}
+                                onSave={saveCreatorsConfig}
+                                onOpenCreator={openCreatorCatalog}
+                                toast={toast}
+                            />
                             {browseLoading && !browseRails.length ? (
                                 <div className="flex items-center gap-2 text-sm text-muted">
                                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -3374,6 +3409,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                 <p className="mt-2 text-xs text-amber-200">{libraryError}</p>
                             ) : null}
                         </div>
+                        {libraryViewMode === 'recent' ? (
                         <div className="flex w-full max-w-2xl gap-2">
                             <div className="relative min-w-0 flex-1">
                                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -3398,6 +3434,7 @@ export const PosterSetsDashboard: React.FC = () => {
                                 Search
                             </button>
                         </div>
+                        ) : null}
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <CustomSelect
                                 value={gridSize === 'list' ? 'medium' : gridSize}
@@ -3406,6 +3443,25 @@ export const PosterSetsDashboard: React.FC = () => {
                                 className="w-full min-w-[140px] sm:w-auto"
                                 compact
                             />
+                            <div className="flex rounded-xl border border-white/10 bg-black/20 p-0.5">
+                                {([
+                                    ['recent', 'Recent'],
+                                    ['browse', 'Browse all'],
+                                ] as const).map(([id, label]) => (
+                                    <button
+                                        key={id}
+                                        type="button"
+                                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                            libraryViewMode === id
+                                                ? 'bg-plex text-background'
+                                                : 'text-muted hover:text-text'
+                                        }`}
+                                        onClick={() => setLibraryViewMode(id)}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
                             <button
                                 type="button"
                                 className={buttonClass}
@@ -3431,7 +3487,16 @@ export const PosterSetsDashboard: React.FC = () => {
                         </div>
                     </div>
 
-                    {librarySearchQuery.trim().length >= 2 ? (
+                    {libraryViewMode === 'browse' ? (
+                        <PosterSetsLibraryBrowse
+                            disabled={busy !== null}
+                            gridSize={gridSize}
+                            onGridSizeChange={setGridSize}
+                            onOpenItem={openLibraryItem}
+                        />
+                    ) : null}
+
+                    {libraryViewMode === 'recent' && librarySearchQuery.trim().length >= 2 ? (
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
                                 <h3 className="text-sm font-bold text-text sm:text-base">
@@ -3468,20 +3533,20 @@ export const PosterSetsDashboard: React.FC = () => {
                         </div>
                     ) : null}
 
-                    {!librarySearchQuery.trim() && libraryLoading && !libraryShows.length && !libraryMovies.length ? (
+                    {libraryViewMode === 'recent' && !librarySearchQuery.trim() && libraryLoading && !libraryShows.length && !libraryMovies.length ? (
                         <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
                             <Loader2 className="h-4 w-4 animate-spin" />
                             Loading recently added…
                         </div>
                     ) : null}
 
-                    {!librarySearchQuery.trim() && !libraryLoading && !libraryShows.length && !libraryMovies.length && !libraryError ? (
+                    {libraryViewMode === 'recent' && !librarySearchQuery.trim() && !libraryLoading && !libraryShows.length && !libraryMovies.length && !libraryError ? (
                         <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
                             No recently added movies or TV found on your media server.
                         </p>
                     ) : null}
 
-                    {!librarySearchQuery.trim() && libraryMovies.length ? (
+                    {libraryViewMode === 'recent' && !librarySearchQuery.trim() && libraryMovies.length ? (
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
                                 <h3 className="text-sm font-bold text-text sm:text-base">Movies</h3>
@@ -3500,7 +3565,7 @@ export const PosterSetsDashboard: React.FC = () => {
                         </div>
                     ) : null}
 
-                    {!librarySearchQuery.trim() && libraryShows.length ? (
+                    {libraryViewMode === 'recent' && !librarySearchQuery.trim() && libraryShows.length ? (
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
                                 <h3 className="text-sm font-bold text-text sm:text-base">TV shows</h3>
@@ -5376,6 +5441,7 @@ export const PosterSetsDashboard: React.FC = () => {
                 dupePreference={configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb'}
                 queuePaused={queuePaused}
                 watches={watches}
+                serverType={status?.mediaServerLabel?.toLowerCase() === 'jellyfin' ? 'jellyfin' : 'plex'}
                 toast={toast}
                 onApplied={() => {
                     void loadQueue();

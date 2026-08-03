@@ -11,6 +11,7 @@ import type {
     PosterSetsSearchResult,
     PosterSetsSetMeta,
     PosterSetsStatus,
+    PosterSetsTitleStatus,
     PosterSetsWatch,
     PosterSetsWatchStats,
 } from './types';
@@ -278,4 +279,41 @@ export const posterSetsApi = {
         serverType?: string;
         results?: Array<Record<string, unknown>>;
     }>,
+    librarySections: (options?: { refresh?: boolean }) => apiFetch(
+        `/api/media-server/library/sections${options?.refresh ? '?refresh=1' : ''}`,
+    ) as Promise<{ serverType?: string; sections?: Array<{ key: string; title: string; type: string; count?: number }> }>,
+    libraryBrowse: (options: {
+        section?: string;
+        type?: 'movie' | 'show' | '';
+        sort?: string;
+        start?: number;
+        limit?: number;
+        refresh?: boolean;
+    } = {}) => {
+        const params = new URLSearchParams();
+        if (options.section) params.set('section', options.section);
+        if (options.type) params.set('type', options.type);
+        if (options.sort) params.set('sort', options.sort);
+        if (options.start != null) params.set('start', String(options.start));
+        if (options.limit != null) params.set('limit', String(options.limit));
+        if (options.refresh) params.set('refresh', '1');
+        const qs = params.toString();
+        return apiFetch(`/api/media-server/library/browse${qs ? `?${qs}` : ''}`) as Promise<{
+            serverType?: string;
+            items?: Array<Record<string, unknown>>;
+            total?: number;
+            sort?: string;
+        }>;
+    },
+    titleStatus: (payload: { title: string; mediaType?: string; ratingKey?: string }) => {
+        const params = new URLSearchParams({ title: payload.title });
+        if (payload.mediaType) params.set('mediaType', payload.mediaType);
+        if (payload.ratingKey) params.set('ratingKey', payload.ratingKey);
+        return apiFetch(`${ROOT}/title-status?${params.toString()}`) as Promise<PosterSetsTitleStatus & { ok?: boolean }>;
+    },
+    resetArt: (payload: {
+        ratingKey: string;
+        mediaType: 'movie' | 'show';
+        scope?: 'poster' | 'seasons' | 'episodes' | 'all' | 'art';
+    }) => apiFetch(`${ROOT}/reset-art`, json(payload)) as Promise<{ ok?: boolean; cleared?: number }>,
 };
