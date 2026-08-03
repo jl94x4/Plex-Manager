@@ -48,7 +48,7 @@ export const formatTime = (value?: string | null) => {
 
 export const statusTone = (value?: string | null) => {
     const state = String(value || '').toLowerCase();
-    if (['succeeded', 'completed', 'success', 'ready', 'connected'].includes(state)) {
+    if (['succeeded', 'completed', 'success', 'ready', 'connected', 'valid'].includes(state)) {
         return 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200';
     }
     if (['failed', 'error', 'missing'].includes(state)) {

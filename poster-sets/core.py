@@ -361,6 +361,21 @@ _POSTERDB_UA = (
 )
 
 
+def _posterdb_session_cache_key(user: str, password: str) -> str:
+    digest = hashlib.sha256(f"{user}\0{password}".encode("utf-8")).hexdigest()[:20]
+    return f"{user.lower()}:{digest}"
+
+
+def _posterdb_invalidate_sessions(user: str = "") -> None:
+    if not user:
+        _POSTERDB_SESSIONS.clear()
+        return
+    prefix = f"{user.lower()}:"
+    for key in list(_POSTERDB_SESSIONS.keys()):
+        if key.startswith(prefix):
+            del _POSTERDB_SESSIONS[key]
+
+
 def _posterdb_http_client(config: dict | None = None) -> requests.Session | type(requests):
     """Return an authenticated TPDB session when credentials exist in config."""
     config = config if isinstance(config, dict) else {}
@@ -368,7 +383,7 @@ def _posterdb_http_client(config: dict | None = None) -> requests.Session | type
     password = str(config.get("tpdb_password") or "").strip()
     if not user or not password or password == "********":
         return requests
-    cache_key = user.lower()
+    cache_key = _posterdb_session_cache_key(user, password)
     cached = _POSTERDB_SESSIONS.get(cache_key)
     if cached is not None:
         return cached
@@ -399,6 +414,29 @@ def _posterdb_http_client(config: dict | None = None) -> requests.Session | type
     except Exception as exc:
         emit(None, f"ThePosterDB login error: {exc}")
         return requests
+
+
+def test_posterdb_login(config: dict | None = None) -> dict:
+    """Verify TPDB credentials (advanced search requires an authenticated session)."""
+    config = config if isinstance(config, dict) else {}
+    user = str(config.get("tpdb_username") or config.get("tpdb_login") or "").strip()
+    password = str(config.get("tpdb_password") or "").strip()
+    if not user or not password or password == "********":
+        return {"ok": False, "configured": False, "error": "TPDB username and password are not configured."}
+    _posterdb_invalidate_sessions(user)
+    session = _posterdb_http_client(config)
+    if not isinstance(session, requests.Session):
+        return {"ok": False, "configured": True, "error": "ThePosterDB login failed — check TPDB username/password."}
+    response = session.get(
+        "https://theposterdb.com/search/advanced/results",
+        params={"category": "shows", "tmdb_id": "97546"},
+        timeout=60,
+        allow_redirects=True,
+    )
+    if "theposterdb.com/login" in str(response.url or "").lower():
+        _posterdb_invalidate_sessions(user)
+        return {"ok": False, "configured": True, "error": "ThePosterDB session expired or login was rejected."}
+    return {"ok": True, "configured": True, "username": user}
 
 
 def cook_soup(url: str, *, config: dict | None = None) -> BeautifulSoup:
@@ -1477,15 +1515,25 @@ def search_posterdb_advanced_titles(
     if not params.get("tmdb_id") and not params.get("imdb_id") and not params.get("term"):
         return []
     emit(progress, "Searching ThePosterDB advanced catalog…")
-    response = session.get(
-        "https://theposterdb.com/search/advanced/results",
-        params=params,
-        timeout=60,
-        allow_redirects=True,
-    )
+
+    def _fetch(active_session: requests.Session) -> requests.Response:
+        return active_session.get(
+            "https://theposterdb.com/search/advanced/results",
+            params=params,
+            timeout=60,
+            allow_redirects=True,
+        )
+
+    response = _fetch(session)
     if "theposterdb.com/login" in str(response.url or "").lower():
-        emit(progress, "ThePosterDB advanced search requires login — add TPDB credentials in Poster Sets settings.")
-        return []
+        user = str((config or {}).get("tpdb_username") or (config or {}).get("tpdb_login") or "").strip()
+        _posterdb_invalidate_sessions(user)
+        retry_session = _posterdb_http_client(config)
+        if isinstance(retry_session, requests.Session):
+            response = _fetch(retry_session)
+        if "theposterdb.com/login" in str(response.url or "").lower():
+            emit(progress, "ThePosterDB advanced search requires login — add TPDB credentials in Poster Sets settings.")
+            return []
     soup = BeautifulSoup(response.text, "html.parser")
     return _parse_posterdb_title_links(soup, limit=limit)
 
@@ -1497,6 +1545,7 @@ def resolve_posterdb_title_page(
     year: int | None = None,
     tmdb_id: str | int | None = None,
     imdb_id: str | None = None,
+    media_type: str = "show",
     config: dict | None = None,
     progress: ProgressFn = None,
     limit: int = 24,
@@ -1518,23 +1567,52 @@ def resolve_posterdb_title_page(
         search_terms.append(target_tmdb)
 
     candidates: dict[str, dict] = {}
+    media_raw = str(media_type or "show").strip().lower()
+    category = "movies" if media_raw in {"movie", "movies", "film"} else "shows"
 
     if target_tmdb or imdb_id:
-        for item in search_posterdb_advanced_titles(
+        advanced = search_posterdb_advanced_titles(
             config,
             tmdb_id=target_tmdb,
             imdb_id=imdb_id,
             term=title or query,
-            category="shows" if not title else "shows",
+            category=category,
             progress=progress,
             limit=limit,
-        ):
+        )
+        for item in advanced:
             pid = str(item.get("id") or "")
             if pid:
                 candidates[pid] = item
+        if target_tmdb and candidates:
+            for item in advanced:
+                url = str(item.get("url") or "").strip()
+                if not url:
+                    continue
+                try:
+                    probe = _posterdb_probe_title_page(url, config=config)
+                except Exception:
+                    continue
+                if str(probe.get("mediaId") or "") == target_tmdb:
+                    set_count = int(probe.get("setCount") or 0)
+                    return {
+                        **item,
+                        "url": url,
+                        "tmdbId": probe.get("mediaId"),
+                        "setCount": set_count,
+                    }
 
     for term in search_terms:
-        result = search_posterdb_titles(term, progress=progress, limit=limit, config=config, _skip_resolve=True)
+        result = search_posterdb_titles(
+            term,
+            progress=progress,
+            limit=limit,
+            config=config,
+            tmdb_id=target_tmdb,
+            imdb_id=imdb_id,
+            media_type=media_type,
+            _skip_resolve=True,
+        )
         for item in result.get("titles") or []:
             pid = str(item.get("id") or "")
             if pid and pid not in candidates:
@@ -1546,6 +1624,9 @@ def resolve_posterdb_title_page(
     want_key = _posterdb_title_match_key(title or query, year)
     best_item: Optional[dict] = None
     best_score: tuple[int, int, int, int] = (-1, -1, -1, -1)
+    max_probes = max(1, int(probe_limit or 10))
+    if target_tmdb:
+        max_probes = min(max_probes, 4)
 
     ordered = list(candidates.values())
     if want_key and not want_key.startswith("|"):
@@ -1553,7 +1634,7 @@ def resolve_posterdb_title_page(
         if exact:
             ordered = exact + [item for item in ordered if item not in exact]
 
-    for idx, item in enumerate(ordered[: max(1, int(probe_limit or 10))]):
+    for idx, item in enumerate(ordered[:max_probes]):
         url = str(item.get("url") or "").strip()
         if not url:
             continue
@@ -1626,6 +1707,7 @@ def search_posterdb_titles(
     config: dict | None = None,
     tmdb_id: str | int | None = None,
     imdb_id: str | None = None,
+    media_type: str = "show",
     _skip_resolve: bool = False,
 ) -> dict:
     term = str(query or "").strip()
@@ -1647,6 +1729,7 @@ def search_posterdb_titles(
             year=year_hint,
             tmdb_id=tmdb_id,
             imdb_id=imdb_id,
+            media_type=media_type,
             config=config,
             progress=progress,
             limit=limit,
@@ -1670,8 +1753,34 @@ def list_posterdb_sets(
     imdb_id: str | None = None,
     title_hint: str = "",
     year_hint: int | None = None,
+    media_type: str = "show",
 ) -> dict:
     url = str(title_url or "").strip()
+    year_val = year_hint
+    if year_val is not None and not isinstance(year_val, int):
+        try:
+            year_val = int(year_val)
+        except Exception:
+            year_val = None
+    target_tmdb = str(tmdb_id or "").strip() or None
+
+    if target_tmdb or imdb_id or title_hint:
+        resolved = resolve_posterdb_title_page(
+            query=title_hint,
+            title=title_hint,
+            year=year_val,
+            tmdb_id=target_tmdb,
+            imdb_id=imdb_id,
+            media_type=media_type,
+            config=config,
+            progress=progress,
+            limit=limit,
+            probe_limit=4 if target_tmdb else 8,
+        )
+        resolved_url = str(resolved.get("url") or "").strip() if resolved else ""
+        if resolved_url:
+            url = resolved_url
+
     if not url or "theposterdb.com" not in url.lower() or "/posters/" not in url.lower():
         raise ValueError("A ThePosterDB /posters/… title URL is required")
     emit(progress, f"Loading sets from {url}")
@@ -1689,9 +1798,10 @@ def list_posterdb_sets(
         resolved = resolve_posterdb_title_page(
             query=title_hint or page_title,
             title=title_hint or page_title,
-            year=year_hint,
-            tmdb_id=tmdb_id or page_media_id,
+            year=year_val,
+            tmdb_id=target_tmdb or page_media_id,
             imdb_id=imdb_id,
+            media_type=media_type,
             config=config,
             progress=progress,
         )
@@ -1703,10 +1813,11 @@ def list_posterdb_sets(
                 progress=progress,
                 limit=limit,
                 config=config,
-                tmdb_id=tmdb_id or page_media_id,
+                tmdb_id=target_tmdb or page_media_id,
                 imdb_id=imdb_id,
                 title_hint=title_hint or page_title,
-                year_hint=year_hint,
+                year_hint=year_val,
+                media_type=media_type,
             )
 
         poster_fallback = _collect_posterdb_show_posters(soup, limit=limit, page_title=page_title)
@@ -2435,6 +2546,7 @@ def search_catalog(
                 imdb_id=imdb_id,
                 title_hint=title_hint,
                 year_hint=year_val,
+                media_type=media_type,
             )
         return search_posterdb_titles(
             query,
@@ -2443,6 +2555,7 @@ def search_catalog(
             config=config,
             tmdb_id=tmdb_id,
             imdb_id=imdb_id,
+            media_type=media_type,
         )
 
     if tmdb_id:

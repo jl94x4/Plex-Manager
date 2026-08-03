@@ -505,6 +505,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 ...DEFAULT_POSTER_SETS_CONFIG,
                 ...cfg,
                 token: cfg.hasToken ? '********' : '',
+                tpdb_password: cfg.hasTpdbPassword ? '********' : '',
             });
             setTvText(listToText(cfg.tv_library));
             setMovieText(listToText(cfg.movie_library));
@@ -653,6 +654,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
             setConfigDraft({
                 ...response.config,
                 token: response.config.hasToken ? '********' : '',
+                tpdb_password: response.config.hasTpdbPassword ? '********' : '',
             });
             setWhitelistText(listToText(response.config.creatorWhitelist));
             void loadBrowse({ refresh: true, silent: true });
@@ -676,6 +678,8 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 tv_library: textToList(tvText),
                 movie_library: textToList(movieText),
                 creatorWhitelist: textToList(whitelistText).map((item) => item.replace(/^@+/, '')),
+                token: configDraft.token === '********' ? undefined : configDraft.token,
+                tpdb_password: configDraft.tpdb_password === '********' ? undefined : configDraft.tpdb_password,
             };
             const nextWhitelist = (payload.creatorWhitelist || [])
                 .map((item) => String(item).replace(/^@+/, '').toLowerCase())
@@ -685,6 +689,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
             setConfigDraft({
                 ...response.config,
                 token: response.config.hasToken ? '********' : '',
+                tpdb_password: response.config.hasTpdbPassword ? '********' : '',
             });
             setTvText(listToText(response.config.tv_library));
             setMovieText(listToText(response.config.movie_library));
@@ -713,6 +718,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 ...DEFAULT_POSTER_SETS_CONFIG,
                 ...cfg,
                 token: cfg.hasToken ? '********' : '',
+                tpdb_password: cfg.hasTpdbPassword ? '********' : '',
             });
             setTvText(listToText(cfg.tv_library));
             setMovieText(listToText(cfg.movie_library));
@@ -737,13 +743,22 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 tv_library: textToList(tvText),
                 movie_library: textToList(movieText),
                 token: configDraft.token === '********' ? undefined : configDraft.token,
+                tpdb_password: configDraft.tpdb_password === '********' ? undefined : configDraft.tpdb_password,
             });
             const libraries = [
                 ...(response.tvLibraries || []).map((name) => `TV: ${name}`),
                 ...(response.movieLibraries || []).map((name) => `Movie: ${name}`),
             ];
+            const tpdbLine = response.tpdb?.ok
+                ? 'ThePosterDB login OK.'
+                : response.tpdb?.error
+                    ? `ThePosterDB: ${response.tpdb.error}`
+                    : '';
             const message = response.ok
-                ? `Connected${response.server ? ` to ${response.server}` : ''}. ${libraries.join(' · ') || 'No matched libraries.'}`
+                ? [
+                    `Connected${response.server ? ` to ${response.server}` : ''}. ${libraries.join(' · ') || 'No matched libraries.'}`,
+                    tpdbLine,
+                ].filter(Boolean).join(' ')
                 : (response.error || 'Connection test failed');
             setTestResult(message);
             toast(message, response.ok ? 'success' : 'error');

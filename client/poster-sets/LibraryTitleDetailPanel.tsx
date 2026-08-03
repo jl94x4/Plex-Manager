@@ -205,6 +205,14 @@ export function LibraryTitleDetailPanel({
         setTitleStatus(null);
     }, []);
 
+    const backToSets = useCallback(() => {
+        setPreview(null);
+        setSelectedSet(null);
+        setSelectedAssetIds([]);
+        setShowAssets(false);
+        setTitleCardsOnly(false);
+    }, []);
+
     const loadSetsForTitle = useCallback(async (
         title: PosterSetsSearchTitle,
         libraryItem?: LibraryRecentItem | null,
@@ -261,6 +269,9 @@ export function LibraryTitleDetailPanel({
                     mode: 'title',
                     dupePreference,
                     limit: 24,
+                    mediaType: libraryItem.mediaType,
+                    titleHint: libraryItem.title,
+                    yearHint: libraryItem.year ?? undefined,
                 });
                 titles = response.titles || [];
                 autoMatch = pickAutoMatchedTitle(libraryItem, titles);
@@ -368,11 +379,16 @@ export function LibraryTitleDetailPanel({
     useEffect(() => {
         if (!item) return undefined;
         const onKey = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') onClose();
+            if (event.key !== 'Escape') return;
+            if (preview || selectedSet) {
+                backToSets();
+                return;
+            }
+            onClose();
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [item, onClose]);
+    }, [item, onClose, preview, selectedSet, backToSets]);
 
     const currentSetMeta = (): PosterSetsSetMeta | null => {
         if (!selectedSet && !preview?.setMeta) return null;
@@ -695,7 +711,7 @@ export function LibraryTitleDetailPanel({
                         </div>
                     ) : null}
 
-                    {!loading && !searchTitles.length && !searchSets.length && !preview ? (
+                    {!loading && !searchTitles.length && !searchSets.length && !selectedSet ? (
                         <div className="rounded-xl border border-dashed border-white/10 px-4 py-12 text-center">
                             <ImageIcon className="mx-auto h-10 w-10 text-muted opacity-40" />
                             <p className="mt-3 text-sm font-semibold text-text">No poster sets found</p>
@@ -705,7 +721,7 @@ export function LibraryTitleDetailPanel({
                         </div>
                     ) : null}
 
-                    {!loading && searchSets.length > 0 && !preview ? (
+                    {!loading && searchSets.length > 0 && !selectedSet ? (
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-baseline justify-between gap-2">
                                 <h3 className="text-sm font-bold text-text">
@@ -799,20 +815,38 @@ export function LibraryTitleDetailPanel({
                         </div>
                     ) : null}
 
-                    {preview && selectedSet ? (
-                        <div className="mt-4">
+                    {selectedSet ? (
+                        <div className="sticky top-0 z-10 -mt-1 mb-4 border-b border-white/10 bg-card/95 pb-3 backdrop-blur-sm">
+                            <button
+                                type="button"
+                                className={`${buttonClass} w-full justify-between`}
+                                disabled={busy === 'preview'}
+                                onClick={backToSets}
+                            >
+                                <span className="inline-flex items-center gap-1.5">
+                                    <ChevronLeft className="h-4 w-4" />
+                                    Back to all sets
+                                </span>
+                                <span className="text-muted">{searchSets.length}</span>
+                            </button>
+                        </div>
+                    ) : null}
+
+                    {selectedSet ? (
+                        <div className="mt-0">
                             <SetInspector
                                 set={selectedSet}
-                                headerLabel={String(preview.setMeta?.title || selectedSet.title || selectedSet.url || '')}
+                                headerLabel={String(preview?.setMeta?.title || selectedSet.title || selectedSet.url || '')}
                                 loading={busy === 'preview'}
                                 ready={readyToApply}
                                 matchedCount={matchedAssetCount}
-                                unmatchedCount={preview.unmatched ?? 0}
-                                totalCount={preview.total || 0}
+                                unmatchedCount={preview?.unmatched ?? 0}
+                                totalCount={preview?.total || 0}
                                 selectedCount={selectedAssetIds.length}
                                 titleCardsOnly={titleCardsOnly}
                                 showAssets={showAssets}
                                 busy={busy}
+                                closeLabel="Back to sets"
                                 onToggleShowAssets={() => setShowAssets((value) => !value)}
                                 onQueueMatched={() => void applyMatched()}
                                 onQueueSelected={() => void applyMatched()}
@@ -825,12 +859,9 @@ export function LibraryTitleDetailPanel({
                                 }}
                                 onSelectAll={() => setSelectedAssetIds((preview.assets || []).map((a) => a.id))}
                                 onClearSelection={() => setSelectedAssetIds([])}
-                                onClose={() => {
-                                    setPreview(null);
-                                    setSelectedSet(null);
-                                }}
+                                onClose={backToSets}
                                 thumbStrip={<SetInspectorThumbStrip thumbs={matchedThumbStrip} />}
-                                gallery={showAssets ? (
+                                gallery={showAssets && preview ? (
                                     <div className="flex w-full min-w-0 gap-3 overflow-x-auto pb-1">
                                         {(preview.assets || []).map((asset) => (
                                             <PreviewAssetTile

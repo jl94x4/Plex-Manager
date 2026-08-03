@@ -167,57 +167,70 @@ export function PosterSetsLibraryBrowse({
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-center gap-2">
-                <CustomSelect
-                    value={sectionKey}
-                    onChange={(value) => {
-                        setSectionKey(value);
-                        setPage(0);
-                    }}
-                    options={sectionOptions.length ? sectionOptions : [{ value: '', label: 'No libraries' }]}
-                    className="w-full min-w-[160px] sm:w-auto"
-                    compact
-                    disabled={sectionsLoading || !sectionOptions.length}
-                />
-                <div className="flex flex-wrap gap-1.5">
-                    {([
-                        ['', 'All'],
-                        ['movie', 'Movies'],
-                        ['show', 'TV'],
-                    ] as const).map(([id, label]) => (
-                        <button
-                            key={id || 'all'}
-                            type="button"
-                            className={`${buttonClass} ${mediaType === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
-                            onClick={() => {
-                                setMediaType(id);
-                                setPage(0);
-                            }}
-                        >
-                            {label}
-                        </button>
-                    ))}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                    <CustomSelect
+                        value={sectionKey}
+                        onChange={(value) => {
+                            setSectionKey(value);
+                            setPage(0);
+                        }}
+                        options={sectionOptions.length ? sectionOptions : [{ value: '', label: 'No libraries' }]}
+                        className="min-w-[10rem] flex-1 sm:max-w-[14rem] sm:flex-none"
+                        compact
+                        disabled={sectionsLoading || !sectionOptions.length}
+                    />
+                    <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-0.5">
+                        {([
+                            ['', 'All'],
+                            ['movie', 'Movies'],
+                            ['show', 'TV'],
+                        ] as const).map(([id, label]) => (
+                            <button
+                                key={id || 'all'}
+                                type="button"
+                                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition sm:px-3 sm:py-1.5 sm:text-sm ${
+                                    mediaType === id ? 'bg-plex text-background' : 'text-muted hover:text-text'
+                                }`}
+                                onClick={() => {
+                                    setMediaType(id);
+                                    setPage(0);
+                                }}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-                <CustomSelect
-                    value={sort}
-                    onChange={(value) => {
-                        setSort(value as LibraryBrowseSort);
-                        setPage(0);
-                    }}
-                    options={SORT_OPTIONS}
-                    className="w-full min-w-[140px] sm:w-auto"
-                    compact
-                />
-                <CustomSelect
-                    value={gridSize === 'list' ? 'medium' : gridSize}
-                    onChange={(value) => onGridSizeChange(normalizeUpgraderGridSize(value))}
-                    options={UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list')}
-                    className="w-full min-w-[120px] sm:w-auto"
-                    compact
-                />
-                <button type="button" className={buttonClass} disabled={loading || disabled} onClick={() => void loadBrowse()}>
-                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                </button>
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                    <CustomSelect
+                        value={sort}
+                        onChange={(value) => {
+                            setSort(value as LibraryBrowseSort);
+                            setPage(0);
+                        }}
+                        options={SORT_OPTIONS}
+                        className="min-w-[9.5rem]"
+                        compact
+                    />
+                    <CustomSelect
+                        value={gridSize === 'list' ? 'medium' : gridSize}
+                        onChange={(value) => onGridSizeChange(normalizeUpgraderGridSize(value))}
+                        options={UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list')}
+                        className="min-w-[9.5rem]"
+                        compact
+                    />
+                    <button
+                        type="button"
+                        className={buttonClass}
+                        disabled={loading || disabled}
+                        title="Refresh browse results"
+                        onClick={() => void loadBrowse()}
+                    >
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                        <span className="hidden sm:inline">Refresh</span>
+                    </button>
+                </div>
             </div>
 
             {error ? <p className="text-center text-xs text-amber-200">{error}</p> : null}

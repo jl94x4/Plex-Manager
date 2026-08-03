@@ -116,7 +116,7 @@ export const SetKindPill: React.FC<{
 
 export const StatusPill: React.FC<{ value?: string | null; className?: string }> = ({ value, className = '' }) => {
     const label = value || 'unknown';
-    const done = ['succeeded', 'completed', 'success', 'ready', 'connected'].includes(String(label).toLowerCase());
+    const done = ['succeeded', 'completed', 'success', 'ready', 'connected', 'valid'].includes(String(label).toLowerCase());
     return (
         <span className={`inline-flex max-w-full items-center gap-1 truncate rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide sm:px-2.5 sm:py-1 sm:text-[11px] ${statusTone(value)} ${className}`}>
             {done ? <CheckCircle2 className="h-3 w-3 shrink-0" /> : null}

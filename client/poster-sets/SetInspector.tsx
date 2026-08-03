@@ -2,6 +2,7 @@ import React from 'react';
 import {
     CheckCircle2,
     ChevronDown,
+    ChevronLeft,
     ChevronUp,
     Loader2,
     X,
@@ -34,6 +35,8 @@ export type SetInspectorProps = {
     onSelectAll: () => void;
     onClearSelection: () => void;
     onClose: () => void;
+    /** Override the dismiss button label (e.g. "Back to sets" in the library drawer). */
+    closeLabel?: string;
     thumbStrip?: React.ReactNode;
     gallery?: React.ReactNode;
     relatedRail?: React.ReactNode;
@@ -62,6 +65,7 @@ export function SetInspector({
     onSelectAll,
     onClearSelection,
     onClose,
+    closeLabel = 'Close',
     thumbStrip,
     gallery,
     relatedRail,
@@ -73,6 +77,10 @@ export function SetInspector({
         : selectedCount
             ? `Queue selected (${selectedCount})`
             : 'Queue matched';
+
+    const dismissIcon = closeLabel.toLowerCase().includes('back')
+        ? <ChevronLeft className="h-4 w-4" />
+        : <X className="h-4 w-4" />;
 
     return (
         <div
@@ -88,8 +96,8 @@ export function SetInspector({
                             {headerLabel || set?.title || set?.url}
                         </p>
                     </div>
-                    <button type="button" className={buttonClass} onClick={onClose} aria-label="Close">
-                        <X className="h-4 w-4" />
+                    <button type="button" className={buttonClass} onClick={onClose} aria-label={closeLabel}>
+                        {dismissIcon}
                     </button>
                 </div>
             ) : null}
@@ -137,8 +145,8 @@ export function SetInspector({
                                     Queue entire set
                                 </button>
                                 <button type="button" className={buttonClass} onClick={onClose}>
-                                    <X className="h-4 w-4" />
-                                    Close
+                                    {dismissIcon}
+                                    {closeLabel}
                                 </button>
                             </div>
                         </div>

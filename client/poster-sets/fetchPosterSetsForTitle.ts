@@ -178,6 +178,7 @@ export async function fetchPosterSetsForTitle(
             dupePreference,
             limit: 40,
             tmdbId: linkedTmdbId || undefined,
+            titleHint: titleHint || undefined,
             yearHint: yearHint ?? undefined,
         });
     } else if (sources.length === 1) {

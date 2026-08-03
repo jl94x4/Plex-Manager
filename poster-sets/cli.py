@@ -8,7 +8,7 @@ import json
 import sys
 import traceback
 
-from core import apply_bulk, apply_url, list_assets, parse_bulk_urls, preview_url, search_catalog, test_connection
+from core import apply_bulk, apply_url, list_assets, parse_bulk_urls, preview_url, search_catalog, test_connection, test_posterdb_login
 
 
 def write_event(event_type: str, **payload) -> None:
@@ -22,7 +22,7 @@ def progress(message: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poster Sets headless CLI")
-    parser.add_argument("command", choices=["test", "preview", "apply", "bulk", "search", "inspect"])
+    parser.add_argument("command", choices=["test", "test-tpdb", "preview", "apply", "bulk", "search", "inspect"])
     parser.add_argument("--payload", default="", help="JSON payload string (otherwise read stdin)")
     args = parser.parse_args()
 
@@ -39,6 +39,11 @@ def main() -> int:
             result = test_connection(config)
             write_event("result", **result)
             return 0
+
+        if args.command == "test-tpdb":
+            result = test_posterdb_login(config)
+            write_event("result", **result)
+            return 0 if result.get("ok") else 1
 
         if args.command == "inspect":
             url = str(request.get("url") or "").strip()
