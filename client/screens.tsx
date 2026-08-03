@@ -7398,7 +7398,8 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                                             </div>
                                             <div className="flex-1 min-w-0 flex flex-col justify-center">
                                                 <p className="text-sm text-muted truncate">
-                                                    Watched <span className="font-bold text-text group-hover:text-plex transition-colors">{item.title}</span>
+                                                    {item.type === 'track' ? 'Listened to' : 'Watched'}{' '}
+                                                    <span className="font-bold text-text group-hover:text-plex transition-colors">{item.title}</span>
                                                 </p>
                                                 {item.episodeTitle && <p className="text-[11px] font-semibold text-muted/70 truncate mt-0.5">{item.episodeTitle}</p>}
                                                 <div className="flex items-center gap-1.5 mt-1.5">
