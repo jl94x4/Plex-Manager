@@ -55,6 +55,7 @@ import {
     ALL_MEDIUX_FILTER_IDS,
     DISCOVER_SUB_NAV,
     POSTER_SETS_GRID_STORAGE_KEY,
+    POSTER_SETS_LIBRARY_DETAIL_LAYOUT_KEY,
     SEARCH_SETS_PAGE_SIZE,
     TITLE_CARD_ONLY_FILTERS,
     browseRailsCache,
@@ -72,6 +73,7 @@ import {
     jobTitle,
     listToText,
     MAX_RECENT_SETS,
+    normalizeLibraryDetailLayout,
     normalizeRecentSetKind,
     parseSetRef,
     readRecentSets,
@@ -146,6 +148,10 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
     const [gridSize, setGridSize] = useState<UpgraderGridSize>(() => {
         if (typeof window === 'undefined') return 'medium';
         return normalizeUpgraderGridSize(window.localStorage.getItem(POSTER_SETS_GRID_STORAGE_KEY));
+    });
+    const [libraryDetailLayout, setLibraryDetailLayout] = useState(() => {
+        if (typeof window === 'undefined') return normalizeLibraryDetailLayout('drawer');
+        return normalizeLibraryDetailLayout(window.localStorage.getItem(POSTER_SETS_LIBRARY_DETAIL_LAYOUT_KEY));
     });
     const [preview, setPreview] = useState<PosterSetsPreview | null>(null);
     const [relatedSets, setRelatedSets] = useState<PosterSetsSearchSet[]>([]);
@@ -750,7 +756,9 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 ...(response.movieLibraries || []).map((name) => `Movie: ${name}`),
             ];
             const tpdbLine = response.tpdb?.ok
-                ? 'ThePosterDB login OK.'
+                ? (response.tpdb.warning
+                    ? `ThePosterDB login OK. ${response.tpdb.warning}`
+                    : 'ThePosterDB login OK.')
                 : response.tpdb?.error
                     ? `ThePosterDB: ${response.tpdb.error}`
                     : '';
@@ -1467,6 +1475,11 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         window.localStorage.setItem(POSTER_SETS_GRID_STORAGE_KEY, gridSize === 'list' ? 'medium' : gridSize);
     }, [gridSize]);
 
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        window.localStorage.setItem(POSTER_SETS_LIBRARY_DETAIL_LAYOUT_KEY, libraryDetailLayout);
+    }, [libraryDetailLayout]);
+
     const posterGridClass = useMemo(
         () => upgraderPosterGridClass(gridSize === 'list' ? 'medium' : gridSize),
         [gridSize],
@@ -2035,6 +2048,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         toasts, setToasts, toast,
         tab, setTab,
         libraryDetailItem, setLibraryDetailItem,
+        libraryDetailLayout, setLibraryDetailLayout,
         libraryViewMode, setLibraryViewMode,
         busy, setBusy,
         status, setStatus,

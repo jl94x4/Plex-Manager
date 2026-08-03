@@ -1,12 +1,14 @@
 import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle } from './autoMatchTitle';
 import type { LibraryRecentItem } from './libraryRecent';
-import type { PosterSetsSearchResult, PosterSetsSearchTitle } from './types';
+import type { PosterSetsSearchResult, PosterSetsSearchSet, PosterSetsSearchTitle } from './types';
 
 export type FetchPosterSetsOptions = {
     dupePreference: 'mediux' | 'posterdb';
     mediaType?: 'show' | 'movie' | null;
     libraryItem?: Pick<LibraryRecentItem, 'title' | 'year' | 'mediaType'>;
+    /** Called with MediUX sets as soon as they are ready (TPDB may still be loading). */
+    onPartial?: (result: PosterSetsSearchResult) => void;
 };
 
 type TitleSource = {
@@ -56,6 +58,79 @@ const mediuxMediaType = (source: TitleSource, fallback: 'show' | 'movie') =>
     normalizePosterSetsMediaType(source.mediaType) || fallback;
 
 const TPDB_EMPTY_HINT = 'ThePosterDB returned no sets for this title; showing MediUX sets instead.';
+
+const mergeSetsForDisplay = (
+    parts: PosterSetsSearchResult[],
+    dupePreference: 'mediux' | 'posterdb',
+): PosterSetsSearchSet[] => {
+    const preferMediux = dupePreference === 'mediux';
+    const buckets: { mediux: PosterSetsSearchSet[]; posterdb: PosterSetsSearchSet[] } = {
+        mediux: [],
+        posterdb: [],
+    };
+    for (const part of parts) {
+        for (const set of part.sets || []) {
+            const provider = String(set.provider || '').toLowerCase() === 'mediux' ? 'mediux' : 'posterdb';
+            buckets[provider].push(set);
+        }
+    }
+    const order = preferMediux ? (['mediux', 'posterdb'] as const) : (['posterdb', 'mediux'] as const);
+    const seen = new Set<string>();
+    const out: PosterSetsSearchSet[] = [];
+    for (const provider of order) {
+        for (const set of buckets[provider]) {
+            const key = `${set.provider || provider}:${set.setId}:${set.url}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push(set);
+        }
+    }
+    return out;
+};
+
+async function fetchBothSetsProgressive(
+    linkedTmdbId: string,
+    options: {
+        dupePreference: 'mediux' | 'posterdb';
+        fallbackMedia: 'show' | 'movie';
+        titleHint: string;
+        yearHint: number | null;
+        onPartial?: (result: PosterSetsSearchResult) => void;
+    },
+): Promise<PosterSetsSearchResult> {
+    const posterdbSource: TitleSource = {
+        provider: 'posterdb',
+        id: '',
+        url: '',
+        mediaType: options.fallbackMedia,
+    };
+    const mediuxP = fetchMediuxSets(linkedTmdbId, options.fallbackMedia);
+    const posterdbP = fetchPosterdbSets(posterdbSource, {
+        tmdbId: linkedTmdbId,
+        titleHint: options.titleHint,
+        yearHint: options.yearHint,
+        mediaType: options.fallbackMedia,
+    });
+    void mediuxP.then((partial) => {
+        if ((partial.sets?.length || 0) > 0) options.onPartial?.(partial);
+    });
+    const [mediuxResult, posterdbResult] = await Promise.all([mediuxP, posterdbP]);
+    const sets = mergeSetsForDisplay([mediuxResult, posterdbResult], options.dupePreference);
+    const partialErrors = [
+        ...(mediuxResult.partialErrors || []),
+        ...(posterdbResult.partialErrors || []),
+    ];
+    if ((posterdbResult.sets?.length || 0) === 0 && (mediuxResult.sets?.length || 0) > 0) {
+        partialErrors.push(TPDB_EMPTY_HINT);
+    }
+    return {
+        ok: true,
+        sets,
+        titles: [],
+        title: mediuxResult.title || posterdbResult.title,
+        partialErrors: partialErrors.length ? partialErrors : undefined,
+    };
+}
 
 async function fetchMediuxSets(
     tmdbId: string,
@@ -203,6 +278,8 @@ export async function fetchPosterSetsForTitle(
 
     let response: PosterSetsSearchResult;
 
+    const useProgressive = Boolean(options.onPartial && linkedTmdbId);
+
     const fetchBothSources = async (sourceList: TitleSource[]) => (
         posterSetsApi.search({
             provider: 'both',
@@ -218,7 +295,15 @@ export async function fetchPosterSetsForTitle(
         })
     );
 
-    if (sources.length > 1) {
+    if (useProgressive && linkedTmdbId) {
+        response = await fetchBothSetsProgressive(linkedTmdbId, {
+            dupePreference,
+            fallbackMedia,
+            titleHint: titleHint || title.title,
+            yearHint,
+            onPartial: options.onPartial,
+        });
+    } else if (sources.length > 1) {
         response = await fetchBothSources(sources);
     } else if (sources.length === 1) {
         const source = sources[0];

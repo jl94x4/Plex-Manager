@@ -40,6 +40,7 @@ import {
     LibraryMediaCard,
     MetaPill,
     POSTER_SETS_GRID_OPTIONS,
+    LIBRARY_DETAIL_LAYOUT_OPTIONS,
     PreviewAssetGallery,
     ProviderPill,
     RECENT_CATEGORY_ORDER,
@@ -78,6 +79,8 @@ export const PosterSetsSettingsView: React.FC = () => {
         setTab,
         libraryDetailItem,
         setLibraryDetailItem,
+        libraryDetailLayout,
+        setLibraryDetailLayout,
         libraryViewMode,
         setLibraryViewMode,
         busy,
@@ -417,6 +420,21 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     </button>
                                 );
                             })}
+                        </div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+                        <p className="text-sm font-semibold text-text">Library title panel</p>
+                        <p className="mt-1 text-xs text-muted">
+                            On desktop, open a library title in a right-side drawer or a larger centered modal.
+                            Mobile always uses the slide-out drawer. You can also toggle layout from the panel header.
+                        </p>
+                        <div className="mt-3">
+                            <CustomSelect
+                                value={libraryDetailLayout}
+                                onChange={(value) => setLibraryDetailLayout(value === 'modal' ? 'modal' : 'drawer')}
+                                options={[...LIBRARY_DETAIL_LAYOUT_OPTIONS]}
+                                className="w-full min-w-[180px] sm:w-auto"
+                            />
                         </div>
                     </div>
                     <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">

@@ -40,6 +40,8 @@ export const PosterSetsShell: React.FC = () => {
         inspectorOpen,
         libraryDetailItem,
         setLibraryDetailItem,
+        libraryDetailLayout,
+        setLibraryDetailLayout,
         configDraft,
         queuePaused,
         watches,
@@ -175,6 +177,8 @@ export const PosterSetsShell: React.FC = () => {
                     queuePaused={queuePaused}
                     watches={watches}
                     serverType={status?.mediaServerLabel?.toLowerCase() === 'jellyfin' ? 'jellyfin' : 'plex'}
+                    layoutMode={libraryDetailLayout}
+                    onLayoutModeChange={setLibraryDetailLayout}
                     toast={toast}
                     onApplied={() => {
                         void loadQueue();

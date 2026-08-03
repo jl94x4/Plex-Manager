@@ -451,11 +451,25 @@ def test_posterdb_login(config: dict | None = None) -> dict:
             matched = item
             break
     if not matched:
+        if titles:
+            return {
+                "ok": True,
+                "configured": True,
+                "username": user,
+                "warning": (
+                    "ThePosterDB login OK. Advanced search responded, but the Ted Lasso TMDB probe "
+                    "did not match — canonical TMDB resolve may still need TPDB Pro."
+                ),
+                "resultCount": len(titles),
+            }
         return {
             "ok": False,
             "configured": True,
-            "error": "ThePosterDB login succeeded but TMDB advanced search returned no Ted Lasso title page.",
-            "resultCount": len(titles),
+            "error": (
+                "ThePosterDB login may have succeeded, but advanced TMDB search returned no title pages. "
+                "Check credentials and whether your TPDB account includes advanced search (Pro)."
+            ),
+            "resultCount": 0,
         }
     return {"ok": True, "configured": True, "username": user, "sampleTitle": matched.get("title")}
 

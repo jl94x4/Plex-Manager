@@ -40,6 +40,7 @@ import {
     LibraryMediaCard,
     MetaPill,
     POSTER_SETS_GRID_OPTIONS,
+    PosterThumb,
     PreviewAssetGallery,
     ProviderPill,
     RECENT_CATEGORY_ORDER,

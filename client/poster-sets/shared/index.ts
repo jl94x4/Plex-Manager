@@ -1,7 +1,9 @@
 export {
     ALL_MEDIUX_FILTER_IDS,
+    LIBRARY_DETAIL_LAYOUT_OPTIONS,
     POSTER_SETS_GRID_OPTIONS,
     POSTER_SETS_GRID_STORAGE_KEY,
+    POSTER_SETS_LIBRARY_DETAIL_LAYOUT_KEY,
     SEARCH_SETS_PAGE_SIZE,
     TITLE_CARD_ONLY_FILTERS,
     WATCHES_PAGE_SIZE_OPTIONS,
@@ -9,11 +11,13 @@ export {
     buttonClass,
     cardClass,
     fieldClass,
+    normalizeLibraryDetailLayout,
     posterMediaRadiusClass,
     previewStripClass,
     primaryButtonClass,
     sectionBodyClass,
     sectionTitleClass,
+    type LibraryDetailLayout,
 } from './posterSetsUi';
 
 export {

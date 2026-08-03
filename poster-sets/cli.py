@@ -43,7 +43,7 @@ def main() -> int:
         if args.command == "test-tpdb":
             result = test_posterdb_login(config)
             write_event("result", **result)
-            return 0 if result.get("ok") else 1
+            return 0
 
         if args.command == "inspect":
             url = str(request.get("url") or "").strip()

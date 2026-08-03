@@ -2,7 +2,19 @@ import { UPGRADER_GRID_SIZE_OPTIONS } from '../../shared/portalLayout';
 import { MEDIUX_FILTER_OPTIONS, type PosterSetsBrowseRail } from '../types';
 
 export const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
+export const POSTER_SETS_LIBRARY_DETAIL_LAYOUT_KEY = 'posterSetsLibraryDetailLayout';
 export const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
+
+export type LibraryDetailLayout = 'drawer' | 'modal';
+
+export const LIBRARY_DETAIL_LAYOUT_OPTIONS = [
+    { value: 'drawer', label: 'Side drawer' },
+    { value: 'modal', label: 'Centered modal' },
+] as const;
+
+export const normalizeLibraryDetailLayout = (value?: string | null): LibraryDetailLayout => (
+    value === 'modal' ? 'modal' : 'drawer'
+);
 export const SEARCH_SETS_PAGE_SIZE = 24;
 export const WATCHES_PAGE_SIZE_OPTIONS = [
     { value: '12', label: '12 per page' },

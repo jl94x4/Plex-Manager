@@ -6,7 +6,9 @@ import {
     History,
     Image as ImageIcon,
     Loader2,
+    PanelRight,
     RotateCcw,
+    Square,
     X,
 } from 'lucide-react';
 import { askConfirm } from '../shared/confirm';
@@ -28,9 +30,11 @@ import type {
     PosterSetsWatch,
 } from './types';
 import { ProviderCornerBadge } from './shared/posterSetsPills';
+import type { LibraryDetailLayout } from './shared/posterSetsUi';
 
 const TITLE_CARD_ONLY_FILTERS = ['title_card'];
-const SETS_PAGE_SIZE = 12;
+const SETS_PAGE_SIZE_DRAWER = 12;
+const SETS_PAGE_SIZE_MODAL = 20;
 
 const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-plex px-2.5 py-1.5 text-xs font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
@@ -132,6 +136,8 @@ export type LibraryTitleDetailPanelProps = {
     queuePaused: boolean;
     watches: PosterSetsWatch[];
     serverType?: string;
+    layoutMode?: LibraryDetailLayout;
+    onLayoutModeChange?: (layout: LibraryDetailLayout) => void;
     toast: (message: string, type?: 'success' | 'error') => void;
     onApplied?: () => void;
     onWatchAdded?: () => void;
@@ -149,9 +155,12 @@ export function LibraryTitleDetailPanel({
     onWatchAdded,
     onArtReset,
     serverType = 'plex',
+    layoutMode = 'drawer',
+    onLayoutModeChange,
 }: LibraryTitleDetailPanelProps) {
     const [busy, setBusy] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [loadingMoreSets, setLoadingMoreSets] = useState(false);
     const [titleStatus, setTitleStatus] = useState<PosterSetsTitleStatus | null>(null);
     const [statusLoading, setStatusLoading] = useState(false);
     const [resetScope, setResetScope] = useState<'poster' | 'seasons' | 'episodes' | 'all'>('poster');
@@ -193,6 +202,7 @@ export function LibraryTitleDetailPanel({
     const resetState = useCallback(() => {
         setBusy(null);
         setLoading(false);
+        setLoadingMoreSets(false);
         setSearchTitles([]);
         setSearchSets([]);
         setSearchContext('');
@@ -223,11 +233,21 @@ export function LibraryTitleDetailPanel({
         setSelectedTitle(title);
         setSelectedSet(null);
         setPreview(null);
+        const hasLinkedTmdb = String(title.provider || '').toLowerCase() === 'mediux' && Boolean(title.id);
+        if (hasLinkedTmdb) setLoadingMoreSets(true);
         try {
             const response = await fetchPosterSetsForTitle(title, {
                 dupePreference,
                 mediaType: libraryItem?.mediaType,
                 libraryItem: libraryItem || undefined,
+                onPartial: (partial) => {
+                    if ((partial.sets?.length || 0) > 0) {
+                        setSearchSets(partial.sets || []);
+                        setSearchContext(partial.title || title.title);
+                        setLoading(false);
+                        setLoadingMoreSets(true);
+                    }
+                },
             });
             setSearchSets(response.sets || []);
             setSetsPage(1);
@@ -242,12 +262,14 @@ export function LibraryTitleDetailPanel({
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
         } finally {
             setBusy(null);
+            setLoadingMoreSets(false);
         }
     }, [dupePreference, toast]);
 
     const runSearch = useCallback(async (libraryItem: LibraryRecentItem) => {
         const generation = ++loadGenRef.current;
         setLoading(true);
+        setLoadingMoreSets(false);
         setSearchTitles([]);
         setSearchSets([]);
         setSearchContext('');
@@ -261,30 +283,38 @@ export function LibraryTitleDetailPanel({
             : [libraryItem.title];
 
         try {
-            let response: Awaited<ReturnType<typeof posterSetsApi.search>> | null = null;
-            let titles: PosterSetsSearchTitle[] = [];
-            let autoMatch: PosterSetsSearchTitle | null = null;
+            const responses = await Promise.all(queries.map((query) => posterSetsApi.search({
+                provider: 'mediux',
+                query,
+                mode: 'title',
+                dupePreference,
+                limit: 24,
+                mediaType: libraryItem.mediaType,
+                titleHint: libraryItem.title,
+                yearHint: libraryItem.year ?? undefined,
+            })));
 
-            for (const query of queries) {
-                if (generation !== loadGenRef.current) return;
-                response = await posterSetsApi.search({
-                    provider: 'both',
-                    query,
-                    mode: 'title',
-                    dupePreference,
-                    limit: 24,
-                    mediaType: libraryItem.mediaType,
-                    titleHint: libraryItem.title,
-                    yearHint: libraryItem.year ?? undefined,
-                });
-                titles = response.titles || [];
-                autoMatch = pickAutoMatchedTitle(libraryItem, titles);
-                if (autoMatch) break;
+            if (generation !== loadGenRef.current) return;
+
+            let autoMatch: PosterSetsSearchTitle | null = null;
+            let titles: PosterSetsSearchTitle[] = [];
+            let response: (typeof responses)[number] | null = null;
+
+            for (const result of responses) {
+                titles = [...titles, ...(result.titles || [])];
+                response = result;
+                const match = pickAutoMatchedTitle(libraryItem, result.titles || []);
+                if (match) {
+                    autoMatch = match;
+                    break;
+                }
             }
 
             if (generation !== loadGenRef.current) return;
 
             if (autoMatch) {
+                setLoading(false);
+                setLoadingMoreSets(true);
                 await loadSetsForTitle(autoMatch, libraryItem);
                 return;
             }
@@ -544,12 +574,13 @@ export function LibraryTitleDetailPanel({
         }));
     }, [preview]);
 
-    const setsPageCount = Math.max(1, Math.ceil(searchSets.length / SETS_PAGE_SIZE));
+    const setsPageSize = layoutMode === 'modal' ? SETS_PAGE_SIZE_MODAL : SETS_PAGE_SIZE_DRAWER;
+    const setsPageCount = Math.max(1, Math.ceil(searchSets.length / setsPageSize));
     const pagedSets = useMemo(() => {
         const page = Math.min(Math.max(1, setsPage), setsPageCount);
-        const start = (page - 1) * SETS_PAGE_SIZE;
-        return searchSets.slice(start, start + SETS_PAGE_SIZE);
-    }, [searchSets, setsPage, setsPageCount]);
+        const start = (page - 1) * setsPageSize;
+        return searchSets.slice(start, start + setsPageSize);
+    }, [searchSets, setsPage, setsPageCount, setsPageSize]);
 
     const readyToApply = Boolean(preview && !busy);
     const headerLabel = item
@@ -557,6 +588,18 @@ export function LibraryTitleDetailPanel({
         : '';
 
     if (!item) return null;
+
+    const isModalLayout = layoutMode === 'modal';
+    const setsGridClass = isModalLayout
+        ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+        : 'grid grid-cols-2 gap-3 sm:grid-cols-3';
+    const panelShellClass = isModalLayout
+        ? [
+            'fixed z-[101] flex max-h-[100dvh] flex-col bg-card shadow-2xl',
+            'inset-y-0 right-0 h-[100dvh] w-full max-w-[min(100%,520px)] border-l border-white/10 pt-[env(safe-area-inset-top,0px)]',
+            'md:inset-auto md:left-1/2 md:top-1/2 md:h-auto md:w-[min(96vw,960px)] md:max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-white/10 md:pt-0',
+        ].join(' ')
+        : 'fixed inset-y-0 right-0 z-[101] flex h-[100dvh] max-h-[100dvh] w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card pt-[env(safe-area-inset-top,0px)] shadow-2xl';
 
     return (
         <ModalPortal open>
@@ -569,9 +612,9 @@ export function LibraryTitleDetailPanel({
             />
             <div
                 ref={panelRef}
-                className="fixed inset-y-0 right-0 z-[101] flex h-[100dvh] max-h-[100dvh] w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card pt-[env(safe-area-inset-top,0px)] shadow-2xl"
+                className={panelShellClass}
             >
-                <div className="flex shrink-0 items-start gap-3 border-b border-white/10 bg-black/20 p-4 sm:p-5">
+                <div className="flex shrink-0 items-start gap-3 border-b border-white/10 bg-black/20 p-4 sm:p-5 md:rounded-t-2xl">
                     <div className="relative h-20 w-14 shrink-0 overflow-hidden rounded-md border border-white/10 bg-black">
                         <PosterThumb
                             src={libraryItemPosterSrc(item)}
@@ -592,9 +635,22 @@ export function LibraryTitleDetailPanel({
                             <p className="mt-1 truncate text-xs text-muted">Matched as “{searchContext}”</p>
                         ) : null}
                     </div>
-                    <button type="button" className={buttonClass} onClick={onClose} aria-label="Close">
-                        <X className="h-4 w-4" />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                        {onLayoutModeChange ? (
+                            <button
+                                type="button"
+                                className={`${buttonClass} hidden md:inline-flex`}
+                                onClick={() => onLayoutModeChange(isModalLayout ? 'drawer' : 'modal')}
+                                title={isModalLayout ? 'Switch to side drawer' : 'Switch to centered modal'}
+                                aria-label={isModalLayout ? 'Switch to side drawer' : 'Switch to centered modal'}
+                            >
+                                {isModalLayout ? <PanelRight className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                            </button>
+                        ) : null}
+                        <button type="button" className={buttonClass} onClick={onClose} aria-label="Close">
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:p-5 custom-scrollbar">
@@ -691,7 +747,21 @@ export function LibraryTitleDetailPanel({
                     {loading ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted">
                             <Loader2 className="h-6 w-6 animate-spin text-plex" />
-                            Searching MediUX and ThePosterDB…
+                            Finding title on MediUX…
+                        </div>
+                    ) : null}
+
+                    {loadingMoreSets && searchSets.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted">
+                            <Loader2 className="h-6 w-6 animate-spin text-plex" />
+                            Loading poster sets…
+                        </div>
+                    ) : null}
+
+                    {loadingMoreSets && searchSets.length > 0 ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-xs text-muted">
+                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-plex" />
+                            Loading more sets from ThePosterDB…
                         </div>
                     ) : null}
 
@@ -720,7 +790,7 @@ export function LibraryTitleDetailPanel({
                         </div>
                     ) : null}
 
-                    {!loading && !searchTitles.length && !searchSets.length && !selectedSet ? (
+                    {!loading && !loadingMoreSets && !searchTitles.length && !searchSets.length && !selectedSet ? (
                         <div className="rounded-xl border border-dashed border-white/10 px-4 py-12 text-center">
                             <ImageIcon className="mx-auto h-10 w-10 text-muted opacity-40" />
                             <p className="mt-3 text-sm font-semibold text-text">No poster sets found</p>
@@ -739,7 +809,7 @@ export function LibraryTitleDetailPanel({
                                 </h3>
                                 <span className="text-[11px] text-muted">{searchSets.length} found</span>
                             </div>
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            <div className={setsGridClass}>
                                 {pagedSets.map((set) => {
                                     const watching = isSetWatched(set);
                                     const landscape = isTitleCardSet(set);
