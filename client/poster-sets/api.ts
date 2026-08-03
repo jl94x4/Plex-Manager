@@ -29,6 +29,9 @@ export type PosterSetsSearchPayload = {
     query?: string;
     titleUrl?: string;
     tmdbId?: string | number;
+    imdbId?: string | number;
+    titleHint?: string;
+    yearHint?: number | null;
     mediaType?: string;
     mode?: 'title' | 'creator';
     titleSources?: Array<{

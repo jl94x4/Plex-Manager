@@ -1,0 +1,236 @@
+import React, { useEffect, useState } from 'react';
+import { Image as ImageIcon, Loader2 } from 'lucide-react';
+import { posterSetsApi } from '../api';
+import { libraryItemPosterSrc, type LibraryRecentItem } from '../libraryRecent';
+import { type PosterSetsSearchSet } from '../types';
+import { posterMediaRadiusClass, previewStripClass } from './posterSetsUi';
+import { isTitleCardSet } from './posterSetsRecent';
+import { CreatorPill, ProviderPill, SetKindPill } from './posterSetsPills';
+
+/** Proxied poster thumb with retry + graceful fallback when TPDB rate-limits. */
+export const PosterThumb: React.FC<{
+    src?: string | null;
+    alt?: string;
+    className?: string;
+    imgClassName?: string;
+    loading?: 'lazy' | 'eager';
+    onLoad?: (event: React.SyntheticEvent<HTMLImageElement>) => void;
+}> = ({ src, alt = '', className = '', imgClassName = '', loading = 'lazy', onLoad }) => {
+    const [failed, setFailed] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+    const resolved = String(src || '').trim();
+    useEffect(() => {
+        setFailed(false);
+        setAttempt(0);
+    }, [resolved]);
+    if (!resolved || failed) {
+        return (
+            <div className={`flex items-center justify-center bg-black text-muted ${className}`}>
+                <ImageIcon className="h-8 w-8 opacity-40 sm:h-10 sm:w-10" />
+            </div>
+        );
+    }
+    return (
+        <div className={`overflow-hidden bg-black ${className}`}>
+            <img
+                key={`${resolved}::${attempt}`}
+                src={resolved}
+                alt={alt}
+                loading={loading}
+                decoding="async"
+                className={imgClassName || 'h-full w-full object-contain object-center'}
+                onLoad={onLoad}
+                onError={() => {
+                    if (attempt < 2) {
+                        window.setTimeout(() => setAttempt((value) => value + 1), 900 + attempt * 700);
+                        return;
+                    }
+                    setFailed(true);
+                }}
+            />
+        </div>
+    );
+};
+
+export type BulkSetSelection = {
+    url: string;
+    title?: string | null;
+    user?: string | null;
+    thumbUrl?: string;
+    provider?: string | null;
+    setId?: string | null;
+    setKind?: string | null;
+};
+
+export const bulkEntryFromSet = (set: PosterSetsSearchSet): BulkSetSelection => ({
+    url: set.url,
+    title: set.title,
+    user: set.user,
+    thumbUrl: set.thumbUrl,
+    provider: set.provider,
+    setId: set.setId,
+    setKind: set.setKind || (isTitleCardSet(set) ? 'title_cards' : null),
+});
+
+export function BrowseSetCard({
+    set,
+    onOpen,
+    onOpenCreator,
+    disabled,
+    bulkSelected = false,
+    expanded = false,
+    onToggleBulk,
+}: {
+    set: PosterSetsSearchSet;
+    onOpen: (set: PosterSetsSearchSet) => void;
+    onOpenCreator?: (user: string) => void;
+    disabled?: boolean;
+    bulkSelected?: boolean;
+    expanded?: boolean;
+    onToggleBulk?: () => void;
+}) {
+    const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
+    const landscape = isTitleCardSet(set);
+    return (
+        <div className={`group relative flex w-full min-w-0 flex-col overflow-hidden ${posterMediaRadiusClass} border bg-black/20 text-center transition hover:border-plex/40 ${
+            expanded
+                ? 'border-plex/60 ring-1 ring-plex/30'
+                : bulkSelected
+                    ? 'border-plex/40 ring-1 ring-plex/20'
+                    : 'border-white/10'
+        }`}>
+            {onToggleBulk ? (
+                <label
+                    className="absolute left-2 top-2 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-white/20 bg-black/60"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-[var(--plex,#e5a00d)]"
+                        checked={bulkSelected}
+                        onChange={onToggleBulk}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label={`Select ${setTitle}`}
+                    />
+                </label>
+            ) : null}
+            <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onOpen(set)}
+                className="flex w-full min-w-0 flex-col text-center disabled:opacity-50"
+            >
+                <div className={`relative w-full shrink-0 overflow-hidden bg-black ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
+                    <PosterThumb
+                        src={set.thumbUrl ? posterSetsApi.imageUrl(set.thumbUrl) : ''}
+                        alt={setTitle}
+                        className="absolute inset-0 h-full w-full"
+                        imgClassName="absolute inset-0 h-full w-full object-contain object-center"
+                    />
+                </div>
+                <div className="min-w-0 px-1.5 pt-1.5 sm:px-2 sm:pt-1.5">
+                    <p className="line-clamp-2 text-center text-[10px] font-medium leading-snug text-text/90 sm:text-[11px]" title={setTitle}>{setTitle}</p>
+                </div>
+            </button>
+            <div className="flex flex-wrap items-center gap-0.5 px-1.5 pb-1.5 pt-1 sm:px-2 sm:pb-2">
+                <CreatorPill user={set.user} onOpen={onOpenCreator} compact />
+                <SetKindPill set={set} compact />
+                <ProviderPill provider={set.provider} compact />
+            </div>
+        </div>
+    );
+}
+
+export function LibraryMediaCard({
+    item,
+    disabled,
+    onOpen,
+}: {
+    item: LibraryRecentItem;
+    disabled?: boolean;
+    onOpen: (item: LibraryRecentItem) => void;
+}) {
+    const label = item.year ? `${item.title} (${item.year})` : item.title;
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onOpen(item)}
+            className="group flex w-full min-w-0 flex-col overflow-hidden rounded-md border border-white/10 bg-black/20 text-left transition hover:border-plex/40 disabled:opacity-50"
+        >
+            <div className="relative aspect-[2/3] w-full shrink-0 overflow-hidden bg-black text-center">
+                <PosterThumb
+                    src={libraryItemPosterSrc(item)}
+                    alt={item.title}
+                    className="absolute inset-0 h-full w-full"
+                    imgClassName="absolute inset-0 h-full w-full object-cover"
+                />
+                <span className="absolute left-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+                    {item.mediaType === 'movie' ? 'Movie' : 'TV'}
+                </span>
+            </div>
+            <div className="min-w-0 px-2 py-2 text-left">
+                <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-text sm:text-xs" title={label}>
+                    {item.title}
+                </p>
+                {item.year ? (
+                    <p className="mt-0.5 text-[10px] text-muted">{item.year}</p>
+                ) : null}
+            </div>
+        </button>
+    );
+}
+
+export function RelatedSetsRail({
+    sets,
+    loading,
+    mediaLabel,
+    disabled,
+    onOpen,
+    onOpenCreator,
+}: {
+    sets: PosterSetsSearchSet[];
+    loading: boolean;
+    mediaLabel: string;
+    disabled?: boolean;
+    onOpen: (set: PosterSetsSearchSet) => void;
+    onOpenCreator?: (user: string) => void;
+}) {
+    if (!loading && !sets.length) return null;
+    return (
+        <div className="space-y-2.5 border-t border-white/10 pt-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-muted">
+                    Other sets for this {mediaLabel}
+                </h3>
+                {loading ? (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] text-muted">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Finding sets…
+                    </span>
+                ) : (
+                    <span className="text-[11px] text-muted">{sets.length} available</span>
+                )}
+            </div>
+            {sets.length ? (
+                <div className={previewStripClass}>
+                    {sets.map((set) => (
+                        <div
+                            key={`${set.provider || 'set'}-${set.setId}`}
+                            className="w-[7.5rem] shrink-0 sm:w-36"
+                        >
+                            <BrowseSetCard
+                                set={set}
+                                disabled={disabled}
+                                onOpen={onOpen}
+                                onOpenCreator={onOpenCreator}
+                            />
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <p className="text-xs text-muted">Looking for more packs on MediUX and ThePosterDB…</p>
+            )}
+        </div>
+    );
+}

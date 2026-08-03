@@ -1,0 +1,205 @@
+import { posterSetsApi } from './api';
+import { pickAutoMatchedTitle } from './autoMatchTitle';
+import type { LibraryRecentItem } from './libraryRecent';
+import type { PosterSetsSearchResult, PosterSetsSearchTitle } from './types';
+
+export type FetchPosterSetsOptions = {
+    dupePreference: 'mediux' | 'posterdb';
+    mediaType?: 'show' | 'movie' | null;
+    libraryItem?: Pick<LibraryRecentItem, 'title' | 'year' | 'mediaType'>;
+};
+
+type TitleSource = {
+    provider: string;
+    id: string;
+    url: string;
+    mediaType?: string | null;
+};
+
+export const normalizePosterSetsMediaType = (value?: string | null): 'show' | 'movie' => {
+    const raw = String(value || '').toLowerCase();
+    if (raw === 'show' || raw === 'tv' || raw === 'series') return 'show';
+    return 'movie';
+};
+
+/** Merge primary, sources, and alsoOn into a deduped provider list. */
+export const collectTitleSources = (title: PosterSetsSearchTitle): TitleSource[] => {
+    const primary: TitleSource = {
+        provider: String(title.provider || 'mediux').toLowerCase(),
+        id: String(title.id || ''),
+        url: String(title.url || ''),
+        mediaType: title.mediaType,
+    };
+    const candidates = [
+        ...(title.sources?.length ? title.sources : [primary]),
+        ...(title.alsoOn || []),
+    ].map((source) => ({
+        provider: String(source.provider || '').toLowerCase(),
+        id: String(source.id || ''),
+        url: String(source.url || ''),
+        mediaType: source.mediaType ?? title.mediaType,
+    }));
+
+    const seen = new Set<string>();
+    const out: TitleSource[] = [];
+    for (const source of candidates) {
+        if (!source.id && !source.url) continue;
+        const key = `${source.provider}:${source.id || source.url}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(source);
+    }
+    return out;
+};
+
+const mediuxMediaType = (source: TitleSource, fallback: 'show' | 'movie') =>
+    normalizePosterSetsMediaType(source.mediaType) || fallback;
+
+const TPDB_EMPTY_HINT = 'ThePosterDB returned no sets for this title; showing MediUX sets instead.';
+
+async function fetchMediuxSets(
+    tmdbId: string,
+    mediaType: 'show' | 'movie',
+): Promise<PosterSetsSearchResult> {
+    return posterSetsApi.search({
+        provider: 'mediux',
+        tmdbId,
+        mediaType,
+        limit: 40,
+    });
+}
+
+const posterdbTmdbFromSources = (sources: TitleSource[]) => {
+    const mediux = sources.find((source) => source.provider === 'mediux' && source.id);
+    return mediux?.id || null;
+};
+
+async function fetchPosterdbSets(
+    source: TitleSource,
+    options: {
+        tmdbId?: string | null;
+        titleHint?: string;
+        yearHint?: number | null;
+    },
+): Promise<PosterSetsSearchResult> {
+    return posterSetsApi.search({
+        provider: 'posterdb',
+        titleUrl: source.url,
+        tmdbId: options.tmdbId || undefined,
+        titleHint: options.titleHint,
+        yearHint: options.yearHint ?? undefined,
+        limit: 40,
+    });
+}
+
+async function fetchMediuxSetsViaTmdbLookup(
+    libraryItem: Pick<LibraryRecentItem, 'title' | 'year' | 'mediaType'>,
+    fallbackMedia: 'show' | 'movie',
+): Promise<PosterSetsSearchResult | null> {
+    const queries = libraryItem.year != null
+        ? [`${libraryItem.title} ${libraryItem.year}`, libraryItem.title]
+        : [libraryItem.title];
+
+    for (const query of queries) {
+        const titleSearch = await posterSetsApi.search({
+            provider: 'mediux',
+            query,
+            mode: 'title',
+            limit: 24,
+        });
+        const match = pickAutoMatchedTitle(libraryItem, titleSearch.titles || []);
+        if (!match?.id) continue;
+        const response = await fetchMediuxSets(
+            match.id,
+            normalizePosterSetsMediaType(match.mediaType) || fallbackMedia,
+        );
+        if ((response.sets?.length || 0) > 0) {
+            return {
+                ...response,
+                title: match.title,
+                partialErrors: [TPDB_EMPTY_HINT],
+            };
+        }
+        return null;
+    }
+    return null;
+}
+
+async function tryMediuxFallback(
+    sources: TitleSource[],
+    fallbackMedia: 'show' | 'movie',
+    libraryItem: FetchPosterSetsOptions['libraryItem'],
+    partialErrors: string[] = [],
+): Promise<PosterSetsSearchResult | null> {
+    const mediuxSource = sources.find((source) => source.provider === 'mediux' && source.id);
+    if (mediuxSource) {
+        const response = await fetchMediuxSets(
+            mediuxSource.id,
+            mediuxMediaType(mediuxSource, fallbackMedia),
+        );
+        if ((response.sets?.length || 0) > 0) {
+            return {
+                ...response,
+                partialErrors: [...partialErrors, TPDB_EMPTY_HINT],
+            };
+        }
+    }
+
+    if (libraryItem) {
+        return fetchMediuxSetsViaTmdbLookup(libraryItem, fallbackMedia);
+    }
+    return null;
+}
+
+/** Load poster sets for a matched catalog title, with MediUX fallback when TPDB scrape is empty. */
+export async function fetchPosterSetsForTitle(
+    title: PosterSetsSearchTitle,
+    options: FetchPosterSetsOptions,
+): Promise<PosterSetsSearchResult> {
+    const fallbackMedia = options.mediaType
+        || (options.libraryItem ? normalizePosterSetsMediaType(options.libraryItem.mediaType) : null)
+        || normalizePosterSetsMediaType(title.mediaType);
+    const sources = collectTitleSources(title);
+    const dupePreference = options.dupePreference;
+    const linkedTmdbId = posterdbTmdbFromSources(sources)
+        || (String(title.provider || '').toLowerCase() === 'mediux' && title.id ? title.id : null);
+    const titleHint = options.libraryItem?.title || title.title;
+    const yearHint = options.libraryItem?.year ?? title.year ?? null;
+
+    let response: PosterSetsSearchResult;
+
+    if (sources.length > 1) {
+        response = await posterSetsApi.search({
+            provider: 'both',
+            query: title.title,
+            title: title.title,
+            titleSources: sources,
+            mediaType: fallbackMedia,
+            dupePreference,
+            limit: 40,
+            tmdbId: linkedTmdbId || undefined,
+            yearHint: yearHint ?? undefined,
+        });
+    } else if (sources.length === 1) {
+        const source = sources[0];
+        response = source.provider === 'mediux'
+            ? await fetchMediuxSets(source.id, mediuxMediaType(source, fallbackMedia))
+            : await fetchPosterdbSets(source, {
+                tmdbId: linkedTmdbId,
+                titleHint,
+                yearHint,
+            });
+    } else {
+        response = { ok: true, sets: [], titles: [] };
+    }
+
+    if ((response.sets?.length || 0) > 0) return response;
+
+    const fallback = await tryMediuxFallback(
+        sources,
+        fallbackMedia,
+        options.libraryItem,
+        response.partialErrors || [],
+    );
+    return fallback || response;
+}

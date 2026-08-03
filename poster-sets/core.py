@@ -354,16 +354,64 @@ def base_url_safe(config: dict) -> str:
     return str(config.get("base_url") or "").strip()
 
 
-def cook_soup(url: str) -> BeautifulSoup:
+_POSTERDB_SESSIONS: dict[str, requests.Session] = {}
+_POSTERDB_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+)
+
+
+def _posterdb_http_client(config: dict | None = None) -> requests.Session | type(requests):
+    """Return an authenticated TPDB session when credentials exist in config."""
+    config = config if isinstance(config, dict) else {}
+    user = str(config.get("tpdb_username") or config.get("tpdb_login") or "").strip()
+    password = str(config.get("tpdb_password") or "").strip()
+    if not user or not password or password == "********":
+        return requests
+    cache_key = user.lower()
+    cached = _POSTERDB_SESSIONS.get(cache_key)
+    if cached is not None:
+        return cached
+
+    session = requests.Session()
+    session.headers.update({"User-Agent": _POSTERDB_UA})
+    try:
+        login_page = session.get("https://theposterdb.com/login", timeout=60)
+        login_soup = BeautifulSoup(login_page.text, "html.parser")
+        token_node = login_soup.find("input", {"name": "_token"})
+        token = str(token_node.get("value") or "") if token_node else ""
+        response = session.post(
+            "https://theposterdb.com/login",
+            data={
+                "_token": token,
+                "login": user,
+                "password": password,
+                "remember": "on",
+            },
+            timeout=60,
+            allow_redirects=True,
+        )
+        if "theposterdb.com/login" in str(response.url or "").lower() and response.status_code == 200:
+            emit(None, "ThePosterDB login failed — check TPDB username/password in Poster Sets settings.")
+            return requests
+        _POSTERDB_SESSIONS[cache_key] = session
+        return session
+    except Exception as exc:
+        emit(None, f"ThePosterDB login error: {exc}")
+        return requests
+
+
+def cook_soup(url: str, *, config: dict | None = None) -> BeautifulSoup:
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-        ),
+        "User-Agent": _POSTERDB_UA,
         "Sec-Ch-Ua-Mobile": "?0",
         "Sec-Ch-Ua-Platform": "Windows",
     }
-    response = requests.get(url, headers=headers, timeout=60)
+    client = _posterdb_http_client(config) if "theposterdb.com" in str(url or "").lower() else requests
+    if isinstance(client, requests.Session):
+        response = client.get(url, headers=headers, timeout=60)
+    else:
+        response = requests.get(url, headers=headers, timeout=60)
     if response.status_code == 200 or (response.status_code == 500 and "mediux.pro" in url):
         return BeautifulSoup(response.text, "html.parser")
     raise RuntimeError(f"Failed to retrieve the page. Status code: {response.status_code}")
@@ -1337,15 +1385,30 @@ def _decode_next_image_url(src: str) -> str:
     return ""
 
 
-def search_posterdb_titles(query: str, progress: ProgressFn = None, limit: int = 24) -> dict:
-    term = str(query or "").strip()
-    if not term:
-        raise ValueError("query is required")
-    search_url = f"https://theposterdb.com/search?term={quote(term)}"
-    emit(progress, f"Searching ThePosterDB for “{term}”…")
-    soup = cook_soup(search_url)
-    titles = []
-    seen = set()
+def _posterdb_page_media(soup) -> Tuple[Optional[str], Optional[str]]:
+    node = soup.find(attrs={"data-media-id": True}) if soup else None
+    if not node:
+        return None, None
+    media_id = str(node.get("data-media-id") or "").strip() or None
+    media_source = str(node.get("data-media-source") or "").strip().lower() or None
+    return media_id, media_source
+
+
+def _posterdb_count_set_links(soup) -> int:
+    return len(set(re.findall(r"/set/(\d+)", str(soup or ""))))
+
+
+def _posterdb_title_match_key(title: str, year: int | None) -> str:
+    text = str(title or "").strip().lower()
+    text = re.sub(r"\(\s*(?:\d{4}|n/a)\s*\)\s*$", "", text, flags=re.I).strip()
+    text = re.sub(r"[^a-z0-9]+", " ", text).strip()
+    year_part = str(int(year)) if year is not None and str(year).isdigit() else ""
+    return f"{text}|{year_part}"
+
+
+def _parse_posterdb_title_links(soup, *, limit: int = 24) -> list[dict]:
+    titles: list[dict] = []
+    seen: set[str] = set()
     for anchor in soup.find_all("a", href=True):
         href = str(anchor.get("href") or "")
         match = re.search(r"/posters/(\d+)", href)
@@ -1374,83 +1437,283 @@ def search_posterdb_titles(query: str, progress: ProgressFn = None, limit: int =
         )
         if len(titles) >= max(1, int(limit or 24)):
             break
+    return titles
+
+
+def _posterdb_probe_title_page(url: str, *, config: dict | None = None) -> dict:
+    soup = cook_soup(url, config=config)
+    media_id, media_source = _posterdb_page_media(soup)
+    return {
+        "mediaId": media_id,
+        "mediaSource": media_source,
+        "setCount": _posterdb_count_set_links(soup),
+        "soup": soup,
+    }
+
+
+def search_posterdb_advanced_titles(
+    config: dict | None,
+    *,
+    tmdb_id: str | int | None = None,
+    imdb_id: str | None = None,
+    term: str = "",
+    category: str = "shows",
+    progress: ProgressFn = None,
+    limit: int = 24,
+) -> list[dict]:
+    """Authenticated advanced search — required for canonical /posters/ pages on many titles."""
+    session = _posterdb_http_client(config)
+    if not isinstance(session, requests.Session):
+        return []
+    params: dict[str, str] = {}
+    if str(category or "").strip():
+        params["category"] = str(category).strip().lower()
+    if tmdb_id not in (None, ""):
+        params["tmdb_id"] = str(tmdb_id).strip()
+    if imdb_id:
+        params["imdb_id"] = str(imdb_id).strip()
+    if term:
+        params["term"] = str(term).strip()
+    if not params.get("tmdb_id") and not params.get("imdb_id") and not params.get("term"):
+        return []
+    emit(progress, "Searching ThePosterDB advanced catalog…")
+    response = session.get(
+        "https://theposterdb.com/search/advanced/results",
+        params=params,
+        timeout=60,
+        allow_redirects=True,
+    )
+    if "theposterdb.com/login" in str(response.url or "").lower():
+        emit(progress, "ThePosterDB advanced search requires login — add TPDB credentials in Poster Sets settings.")
+        return []
+    soup = BeautifulSoup(response.text, "html.parser")
+    return _parse_posterdb_title_links(soup, limit=limit)
+
+
+def resolve_posterdb_title_page(
+    *,
+    query: str = "",
+    title: str = "",
+    year: int | None = None,
+    tmdb_id: str | int | None = None,
+    imdb_id: str | None = None,
+    config: dict | None = None,
+    progress: ProgressFn = None,
+    limit: int = 24,
+    probe_limit: int = 10,
+) -> Optional[dict]:
+    """Pick the best TPDB /posters/ page — prefer TMDB match and the most sets."""
+    target_tmdb = str(tmdb_id or "").strip() or None
+    search_terms: list[str] = []
+    if query:
+        search_terms.append(str(query).strip())
+    if title:
+        if year is not None:
+            with_year = f"{title} {year}"
+            if with_year not in search_terms:
+                search_terms.append(with_year)
+        if title not in search_terms:
+            search_terms.append(title)
+    if not search_terms and target_tmdb:
+        search_terms.append(target_tmdb)
+
+    candidates: dict[str, dict] = {}
+
+    if target_tmdb or imdb_id:
+        for item in search_posterdb_advanced_titles(
+            config,
+            tmdb_id=target_tmdb,
+            imdb_id=imdb_id,
+            term=title or query,
+            category="shows" if not title else "shows",
+            progress=progress,
+            limit=limit,
+        ):
+            pid = str(item.get("id") or "")
+            if pid:
+                candidates[pid] = item
+
+    for term in search_terms:
+        result = search_posterdb_titles(term, progress=progress, limit=limit, config=config, _skip_resolve=True)
+        for item in result.get("titles") or []:
+            pid = str(item.get("id") or "")
+            if pid and pid not in candidates:
+                candidates[pid] = item
+
+    if not candidates:
+        return None
+
+    want_key = _posterdb_title_match_key(title or query, year)
+    best_item: Optional[dict] = None
+    best_score: tuple[int, int, int, int] = (-1, -1, -1, -1)
+
+    ordered = list(candidates.values())
+    if want_key and not want_key.startswith("|"):
+        exact = [item for item in ordered if _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key]
+        if exact:
+            ordered = exact + [item for item in ordered if item not in exact]
+
+    for idx, item in enumerate(ordered[: max(1, int(probe_limit or 10))]):
+        url = str(item.get("url") or "").strip()
+        if not url:
+            continue
+        try:
+            probe = _posterdb_probe_title_page(url, config=config)
+        except Exception:
+            continue
+        media_id = probe.get("mediaId")
+        set_count = int(probe.get("setCount") or 0)
+        tmdb_match = 1 if target_tmdb and str(media_id or "") == target_tmdb else 0
+        title_key = _posterdb_title_match_key(item.get("title") or "", item.get("year"))
+        title_match = 1 if want_key and title_key == want_key else 0
+        if target_tmdb and not tmdb_match:
+            continue
+        if want_key and not want_key.startswith("|") and not title_match:
+            continue
+        score = (tmdb_match, title_match, set_count, -idx)
+        if score > best_score:
+            best_score = score
+            best_item = {
+                **item,
+                "url": url,
+                "tmdbId": media_id,
+                "setCount": set_count,
+            }
+            if tmdb_match and set_count > 0:
+                break
+
+    return best_item
+
+
+def _collect_posterdb_show_posters(soup, *, limit: int = 40, page_title: str = "") -> list[dict]:
+    """Fallback: title pages that list individual posters instead of /set/ links."""
+    results: dict[str, dict] = {}
+    for node in soup.select("[data-poster-id]"):
+        poster_id = str(node.get("data-poster-id") or "").strip()
+        if not poster_id or not poster_id.isdigit() or poster_id in results:
+            continue
+        thumb = ""
+        img = node.find("img")
+        if img:
+            thumb = str(img.get("data-src") or img.get("src") or "").strip()
+            if thumb.startswith("/"):
+                thumb = _absolute_url("https://theposterdb.com", thumb)
+        user = None
+        user_node = node.find("a", href=re.compile(r"/user/"))
+        if user_node:
+            user = user_node.get_text(" ", strip=True) or None
+        label = page_title or "Poster"
+        results[poster_id] = {
+            "setId": poster_id,
+            "url": _absolute_url("https://theposterdb.com", f"/poster/{poster_id}"),
+            "title": label,
+            "thumbUrl": thumb,
+            "user": user,
+            "posterCount": 1,
+            "provider": "posterdb",
+            "setKind": "posters",
+        }
+        if len(results) >= max(1, int(limit or 40)):
+            break
+    return list(results.values())
+
+
+def search_posterdb_titles(
+    query: str,
+    progress: ProgressFn = None,
+    limit: int = 24,
+    *,
+    config: dict | None = None,
+    tmdb_id: str | int | None = None,
+    imdb_id: str | None = None,
+    _skip_resolve: bool = False,
+) -> dict:
+    term = str(query or "").strip()
+    if not term:
+        raise ValueError("query is required")
+    search_url = f"https://theposterdb.com/search?term={quote(term)}"
+    emit(progress, f"Searching ThePosterDB for “{term}”…")
+    soup = cook_soup(search_url, config=config)
+    titles = _parse_posterdb_title_links(soup, limit=limit)
+
+    if not _skip_resolve and (tmdb_id or imdb_id or len(titles) > 1):
+        year_hint = None
+        year_match = re.search(r"(?:\(|^|\s)(19\d{2}|20\d{2})(?:\)|$|\s)", term)
+        if year_match:
+            year_hint = int(year_match.group(1))
+        resolved = resolve_posterdb_title_page(
+            query=term,
+            title=term,
+            year=year_hint,
+            tmdb_id=tmdb_id,
+            imdb_id=imdb_id,
+            config=config,
+            progress=progress,
+            limit=limit,
+        )
+        if resolved:
+            rid = str(resolved.get("id") or "")
+            if rid:
+                titles = [t for t in titles if str(t.get("id") or "") != rid]
+                titles.insert(0, resolved)
+
     return {"ok": True, "provider": "posterdb", "phase": "titles", "query": term, "titles": titles, "sets": []}
 
 
-def list_posterdb_sets(title_url: str, progress: ProgressFn = None, limit: int = 40) -> dict:
+def list_posterdb_sets(
+    title_url: str,
+    progress: ProgressFn = None,
+    limit: int = 40,
+    *,
+    config: dict | None = None,
+    tmdb_id: str | int | None = None,
+    imdb_id: str | None = None,
+    title_hint: str = "",
+    year_hint: int | None = None,
+) -> dict:
     url = str(title_url or "").strip()
     if not url or "theposterdb.com" not in url.lower() or "/posters/" not in url.lower():
         raise ValueError("A ThePosterDB /posters/… title URL is required")
     emit(progress, f"Loading sets from {url}")
-    soup = cook_soup(url)
+    soup = cook_soup(url, config=config)
     page_title = ""
     heading = soup.find(["h1", "h2", "title"])
     if heading:
         page_title = heading.get_text(" ", strip=True)
     sets: dict = {}
-    for badge in soup.select("a.set_poster_count[href*='/set/']"):
-        href = str(badge.get("href") or "")
-        match = re.search(r"/set/(\d+)", href)
-        if not match:
-            continue
-        set_id = match.group(1)
-        poster_count = None
-        count_text = badge.get_text(" ", strip=True)
-        if count_text.isdigit():
-            poster_count = int(count_text)
-        card = badge
-        for _ in range(8):
-            if card.parent is None:
-                break
-            card = card.parent
-            classes = card.get("class") or []
-            if "hovereffect" in classes:
-                break
-        title = ""
-        user = None
-        thumb = ""
-        title_node = card.select_one(".poster-title-correction p") if hasattr(card, "select_one") else None
-        if title_node:
-            title = title_node.get_text(" ", strip=True)
-        user_node = card.select_one("a[href*='/user/']") if hasattr(card, "select_one") else None
-        if user_node:
-            user = user_node.get_text(" ", strip=True) or None
-        picture = card.find("picture") if hasattr(card, "find") else None
-        if picture:
-            for source in picture.find_all("source", srcset=True):
-                candidate = str(source.get("srcset") or "").split()[0].strip()
-                if candidate and "missing_poster" not in candidate:
-                    thumb = candidate
-                    break
-        if not thumb:
-            img = card.find("img") if hasattr(card, "find") else None
-            if img:
-                thumb = img.get("data-src") or img.get("src") or ""
-        if thumb and thumb.startswith("/"):
-            thumb = _absolute_url("https://theposterdb.com", thumb)
-        if thumb and "missing_poster" in thumb:
-            thumb = ""
-        entry = sets.get(set_id) or {
-            "setId": set_id,
-            "url": _absolute_url("https://theposterdb.com", f"/set/{set_id}"),
-            "title": "",
-            "thumbUrl": "",
-            "user": None,
-            "posterCount": None,
-            "provider": "posterdb",
-        }
-        if title and not entry["title"]:
-            entry["title"] = title
-        if user and not entry["user"]:
-            entry["user"] = user
-        if thumb and not entry["thumbUrl"]:
-            entry["thumbUrl"] = thumb
-        if poster_count is not None:
-            entry["posterCount"] = poster_count
-        sets[set_id] = entry
-        if len(sets) >= max(1, int(limit or 40)):
-            break
+    _collect_posterdb_set_cards(soup, sets=sets, limit=limit)
     results = list(sets.values())
+
+    if not results:
+        page_media_id, _ = _posterdb_page_media(soup)
+        resolved = resolve_posterdb_title_page(
+            query=title_hint or page_title,
+            title=title_hint or page_title,
+            year=year_hint,
+            tmdb_id=tmdb_id or page_media_id,
+            imdb_id=imdb_id,
+            config=config,
+            progress=progress,
+        )
+        alt_url = str(resolved.get("url") or "").strip() if resolved else ""
+        if alt_url and alt_url.rstrip("/") != url.rstrip("/"):
+            emit(progress, f"Retrying ThePosterDB title page {alt_url}")
+            return list_posterdb_sets(
+                alt_url,
+                progress=progress,
+                limit=limit,
+                config=config,
+                tmdb_id=tmdb_id or page_media_id,
+                imdb_id=imdb_id,
+                title_hint=title_hint or page_title,
+                year_hint=year_hint,
+            )
+
+        poster_fallback = _collect_posterdb_show_posters(soup, limit=limit, page_title=page_title)
+        if poster_fallback:
+            emit(progress, f"Using {len(poster_fallback)} individual poster(s) from ThePosterDB title page.")
+            results = poster_fallback
+
     for item in results:
         if not item.get("title"):
             item["title"] = page_title or f"Set {item['setId']}"
@@ -2103,6 +2366,9 @@ def search_catalog(
     title_url: str = "",
     media_type: str = "movie",
     tmdb_id: str | int | None = None,
+    imdb_id: str | None = None,
+    title_hint: str = "",
+    year_hint: int | None = None,
     mode: str = "title",
     kind: str = "posters",
     page: int = 1,
@@ -2110,8 +2376,10 @@ def search_catalog(
     progress: ProgressFn = None,
     on_batch: BatchFn = None,
     batch_pages: int = 3,
+    config: dict | None = None,
 ) -> dict:
     """Scrape MediUX / ThePosterDB discovery pages (user-initiated only)."""
+    config = config if isinstance(config, dict) else {}
     source = str(provider or "").strip().lower()
     if source in {"tpdb", "posterdb", "theposterdb"}:
         source = "posterdb"
@@ -2152,8 +2420,30 @@ def search_catalog(
 
     if source == "posterdb":
         if title_url:
-            return list_posterdb_sets(title_url, progress=progress, limit=limit)
-        return search_posterdb_titles(query, progress=progress, limit=limit)
+            year_val = year_hint
+            if year_val is not None and not isinstance(year_val, int):
+                try:
+                    year_val = int(year_val)
+                except Exception:
+                    year_val = None
+            return list_posterdb_sets(
+                title_url,
+                progress=progress,
+                limit=limit,
+                config=config,
+                tmdb_id=tmdb_id,
+                imdb_id=imdb_id,
+                title_hint=title_hint,
+                year_hint=year_val,
+            )
+        return search_posterdb_titles(
+            query,
+            progress=progress,
+            limit=limit,
+            config=config,
+            tmdb_id=tmdb_id,
+            imdb_id=imdb_id,
+        )
 
     if tmdb_id:
         return list_mediux_sets(media_type, tmdb_id, progress=progress, limit=limit)

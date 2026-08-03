@@ -19,6 +19,10 @@ export type PosterSetsConfig = {
     creatorWhitelist?: string[];
     /** Where artwork is written after apply: plex, local, plex_local, jellyfin, or emby. */
     applyDestination?: 'plex' | 'local' | 'plex_local' | 'jellyfin' | 'emby';
+    /** Optional ThePosterDB login for advanced title search (canonical /posters/ pages). */
+    tpdb_username?: string;
+    tpdb_password?: string;
+    hasTpdbPassword?: boolean;
     hasToken?: boolean;
     configured?: boolean;
 };

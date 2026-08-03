@@ -1,0 +1,504 @@
+import React from 'react';
+import {
+    CheckCircle2,
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    ChevronUp,
+    Clock,
+    Download,
+    ExternalLink,
+    Eye,
+    History,
+    Image as ImageIcon,
+    Loader2,
+    Pause,
+    Play,
+    RefreshCw,
+    RotateCcw,
+    Save,
+    Search,
+    Sparkles,
+    Trash2,
+    User,
+    X,
+} from 'lucide-react';
+import { CustomSelect, SettingsToggleRow } from '../../shared/ui';
+import { askConfirm } from '../../shared/confirm';
+import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
+import { posterSetsApi } from '../api';
+import { MEDIUX_FILTER_OPTIONS } from '../types';
+import { PosterSetsSetupChecklist } from '../PosterSetsSetupChecklist';
+import { PosterSetsLibraryBrowse } from '../PosterSetsLibraryBrowse';
+import { PosterSetsCreatorsPanel } from '../PosterSetsCreatorsPanel';
+import { SetInspector, SetInspectorThumbStrip } from '../SetInspector';
+import { inferPreviewMediaType, relatedSetKey } from '../posterSetsDashboardUtils';
+import {
+    ALL_MEDIUX_FILTER_IDS,
+    BrowseSetCard,
+    CreatorPill,
+    LibraryMediaCard,
+    MetaPill,
+    POSTER_SETS_GRID_OPTIONS,
+    PreviewAssetGallery,
+    ProviderPill,
+    RECENT_CATEGORY_ORDER,
+    RelatedSetsRail,
+    SEARCH_SETS_PAGE_SIZE,
+    SetKindPill,
+    StatusPill,
+    WATCHES_PAGE_SIZE_OPTIONS,
+    bulkEntryFromSet,
+    buttonClass,
+    cardClass,
+    fieldClass,
+    formatSetLabel,
+    formatTime,
+    isTitleCardRail,
+    isTitleCardSet,
+    jobCardTone,
+    jobSetMeta,
+    jobTitle,
+    posterMediaRadiusClass,
+    primaryButtonClass,
+    providerLabel,
+    sectionBodyClass,
+    sectionTitleClass,
+    textToList,
+    upsertRecentSet,
+} from '../shared';
+import { usePosterSetsDashboard } from '../PosterSetsDashboardContext';
+
+export const PosterSetsLibraryView: React.FC = () => {
+    const {
+        toasts,
+        setToasts,
+        toast,
+        tab,
+        setTab,
+        libraryDetailItem,
+        setLibraryDetailItem,
+        libraryViewMode,
+        setLibraryViewMode,
+        busy,
+        setBusy,
+        status,
+        setStatus,
+        configDraft,
+        setConfigDraft,
+        tvText,
+        setTvText,
+        movieText,
+        setMovieText,
+        whitelistText,
+        setWhitelistText,
+        url,
+        setUrl,
+        titleCardsOnly,
+        setTitleCardsOnly,
+        bulkText,
+        setBulkText,
+        findProvider,
+        setFindProvider,
+        findId,
+        setFindId,
+        searchProvider,
+        setSearchProvider,
+        searchMode,
+        setSearchMode,
+        searchQuery,
+        setSearchQuery,
+        searchTitles,
+        setSearchTitles,
+        searchSets,
+        setSearchSets,
+        searchSetsPage,
+        setSearchSetsPage,
+        searchLoadingMore,
+        setSearchLoadingMore,
+        searchContext,
+        setSearchContext,
+        creatorSearchAbortRef,
+        selectedSearchTitle,
+        setSelectedSearchTitle,
+        selectedSearchSet,
+        setSelectedSearchSet,
+        advancedOpen,
+        setAdvancedOpen,
+        showInspectorAssets,
+        setShowInspectorAssets,
+        previewPanelRef,
+        searchSetsSectionRef,
+        recentTick,
+        setRecentTick,
+        gridSize,
+        setGridSize,
+        preview,
+        setPreview,
+        relatedSets,
+        setRelatedSets,
+        relatedSetsLoading,
+        setRelatedSetsLoading,
+        relatedSetsAbortRef,
+        relatedSetsGenRef,
+        browseLoadGenRef,
+        queueLoadGenRef,
+        watchesLoadGenRef,
+        selectedAssetIds,
+        setSelectedAssetIds,
+        activeJob,
+        setActiveJob,
+        testResult,
+        setTestResult,
+        historyJobs,
+        setHistoryJobs,
+        historyFilter,
+        setHistoryFilter,
+        historySearch,
+        setHistorySearch,
+        selectedHistoryJob,
+        setSelectedHistoryJob,
+        selectedQueueJob,
+        setSelectedQueueJob,
+        auditEntries,
+        setAuditEntries,
+        queueJobs,
+        setQueueJobs,
+        queuePaused,
+        setQueuePaused,
+        queueStats,
+        setQueueStats,
+        watches,
+        setWatches,
+        watchStatsState,
+        setWatchStatsState,
+        watchUrlDraft,
+        setWatchUrlDraft,
+        watchesPage,
+        setWatchesPage,
+        watchesPageSize,
+        setWatchesPageSize,
+        watchesFilter,
+        setWatchesFilter,
+        selectedBulkSets,
+        setSelectedBulkSets,
+        browseRails,
+        setBrowseRails,
+        browseRailsRef,
+        browseLoading,
+        setBrowseLoading,
+        browseSeeAllId,
+        setBrowseSeeAllId,
+        libraryShows,
+        setLibraryShows,
+        libraryMovies,
+        setLibraryMovies,
+        libraryLoading,
+        setLibraryLoading,
+        libraryError,
+        setLibraryError,
+        librarySearchQuery,
+        setLibrarySearchQuery,
+        librarySearchResults,
+        setLibrarySearchResults,
+        librarySearching,
+        setLibrarySearching,
+        librarySearchDebounceRef,
+        libraryLoadGenRef,
+        scrollPreviewAfterLoadRef,
+        syncedSetUrlRef,
+        titleCardsOnlyRef,
+        deepLinkHandledRef,
+        openCreatorCatalogRef,
+        loadHistory,
+        loadAudit,
+        loadQueue,
+        loadWatches,
+        loadLibraryRecent,
+        runLibrarySearch,
+        loadBrowse,
+        collapseSetInspector,
+        dismissPreviewToSearch,
+        pushPosterLocation,
+        goToTab,
+        goToPrimaryTab,
+        goToDiscoverView,
+        openBrowseRail,
+        currentSetMeta,
+        rememberRecentFromContext,
+        load,
+        openHistoryJob,
+        openQueueJob,
+        saveCreatorsConfig,
+        saveSettings,
+        importFromPortal,
+        runTest,
+        runPreview,
+        expandSetInline,
+        openSetForApply,
+        openSetForApplyRef,
+        filtersForSelectedIds,
+        runApply,
+        applyMatched,
+        applyUnmatched,
+        applyNewSinceWatch,
+        toggleBulkSet,
+        clearBulkSelection,
+        selectBrowseSets,
+        queueBulkSelected,
+        watchBulkSelected,
+        useFindId,
+        posterGridClass,
+        posterGridStyle,
+        titleCardGridStyle,
+        searchSetsUseTitleCardGrid,
+        runCatalogSearch,
+        openCreatorCatalog,
+        openLibraryItem,
+        openSearchTitle,
+        runLibraryItemSearch,
+        pickSearchSet,
+        backToTitles,
+        clearSearch,
+        matchedAssetCount,
+        previewSections,
+        searchSetsPageCount,
+        pagedSearchSets,
+        searchResultsLoading,
+        searchHasResults,
+        searchEmptyLabel,
+        showSearchEmpty,
+        watchedUrlSet,
+        isSetWatched,
+        filteredWatches,
+        watchGroups,
+        watchesPageCount,
+        pagedWatchGroups,
+        readyToApply,
+        inspectorOpen,
+        matchedThumbStrip,
+        queueEntireWithConfirm,
+        browseSeeAllRail,
+        toggleAsset,
+        selectPreviewAssets,
+        runBulk,
+        toggleFilter,
+        jobLogs,
+        selectedLogs,
+        selectedQueueLogs,
+        recentSets,
+        recentSetsByCategory,
+        selectedBulkCount,
+        previewHeaderLabel,
+        filteredHistory,
+        filteredAudit,
+        initialUrlState,
+        initialLocation,
+    } = usePosterSetsDashboard();
+    if (tab !== 'library') return null;
+    return (
+
+
+
+        <section className={`${cardClass} space-y-6 p-4 sm:p-5`}>
+                    <PosterSetsSetupChecklist
+                        status={status}
+                        hasToken={Boolean(configDraft.hasToken || (configDraft.token && configDraft.token !== '********'))}
+                        hasTvLibraries={Boolean(tvText.trim())}
+                        hasMovieLibraries={Boolean(movieText.trim())}
+                        testing={busy === 'test'}
+                        testResult={testResult}
+                        onOpenSettings={() => goToPrimaryTab('settings')}
+                        onTestConnection={() => void runTest()}
+                    />
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0 max-w-3xl">
+                            <h2 className={sectionTitleClass}>Library</h2>
+                            <p className={sectionBodyClass}>
+                                Recently added movies and TV from every {status?.mediaServerLabel || 'media server'} library.
+                                Click a title to browse poster sets without leaving your library.
+                            </p>
+                            {libraryError ? (
+                                <p className="mt-2 text-xs text-amber-200">{libraryError}</p>
+                            ) : null}
+                        </div>
+                        {libraryViewMode === 'recent' ? (
+                        <div className="flex w-full max-w-2xl gap-2 sm:max-w-md">
+                            <div className="relative min-w-0 flex-1">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                <input
+                                    type="search"
+                                    value={librarySearchQuery}
+                                    onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') void runLibrarySearch(librarySearchQuery);
+                                    }}
+                                    placeholder={`Search ${status?.mediaServerLabel || 'media server'} for a movie or show…`}
+                                    className={`${fieldClass} pl-10`}
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={librarySearching || librarySearchQuery.trim().length < 2}
+                                onClick={() => void runLibrarySearch(librarySearchQuery)}
+                            >
+                                {librarySearching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                Search
+                            </button>
+                        </div>
+                        ) : null}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <CustomSelect
+                                value={gridSize === 'list' ? 'medium' : gridSize}
+                                onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
+                                options={POSTER_SETS_GRID_OPTIONS}
+                                className="w-full min-w-[140px] sm:w-auto"
+                                compact
+                            />
+                            <div className="flex rounded-xl border border-white/10 bg-black/20 p-0.5">
+                                {([
+                                    ['recent', 'Recent'],
+                                    ['browse', 'Browse all'],
+                                ] as const).map(([id, label]) => (
+                                    <button
+                                        key={id}
+                                        type="button"
+                                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                                            libraryViewMode === id
+                                                ? 'bg-plex text-background'
+                                                : 'text-muted hover:text-text'
+                                        }`}
+                                        onClick={() => setLibraryViewMode(id)}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={libraryLoading || busy !== null}
+                                onClick={() => void loadLibraryRecent({ refresh: true })}
+                            >
+                                {libraryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                Refresh
+                            </button>
+                            {librarySearchQuery.trim() ? (
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    onClick={() => {
+                                        setLibrarySearchQuery('');
+                                        setLibrarySearchResults([]);
+                                    }}
+                                >
+                                    <X className="h-4 w-4" />
+                                    Clear search
+                                </button>
+                            ) : null}
+                        </div>
+                    </div>
+        
+                    {libraryViewMode === 'browse' ? (
+                        <PosterSetsLibraryBrowse
+                            disabled={busy !== null}
+                            gridSize={gridSize}
+                            onGridSizeChange={setGridSize}
+                            onOpenItem={openLibraryItem}
+                        />
+                    ) : null}
+        
+                    {libraryViewMode === 'recent' && librarySearchQuery.trim().length >= 2 ? (
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+                                <h3 className="text-sm font-bold text-text sm:text-base">
+                                    Search results
+                                    {librarySearchQuery.trim() ? ` · "${librarySearchQuery.trim()}"` : ''}
+                                </h3>
+                                <span className="text-[11px] text-muted">
+                                    {librarySearching ? 'Searching…' : `${librarySearchResults.length} found`}
+                                </span>
+                            </div>
+                            {librarySearching && !librarySearchResults.length ? (
+                                <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Searching your library…
+                                </div>
+                            ) : null}
+                            {!librarySearching && !librarySearchResults.length ? (
+                                <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
+                                    No movies or TV shows matched that search on your media server.
+                                </p>
+                            ) : null}
+                            {librarySearchResults.length ? (
+                                <div className={posterGridClass} style={posterGridStyle}>
+                                    {librarySearchResults.map((item) => (
+                                        <LibraryMediaCard
+                                            key={`library-search-${item.mediaType}-${item.id}`}
+                                            item={item}
+                                            disabled={busy !== null}
+                                            onOpen={openLibraryItem}
+                                        />
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
+        
+                    {libraryViewMode === 'recent' && !librarySearchQuery.trim() && libraryLoading && !libraryShows.length && !libraryMovies.length ? (
+                        <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading recently added…
+                        </div>
+                    ) : null}
+        
+                    {libraryViewMode === 'recent' && !librarySearchQuery.trim() && !libraryLoading && !libraryShows.length && !libraryMovies.length && !libraryError ? (
+                        <p className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted">
+                            No recently added movies or TV found on your media server.
+                        </p>
+                    ) : null}
+        
+                    {libraryViewMode === 'recent' && !librarySearchQuery.trim() && libraryMovies.length ? (
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+                                <h3 className="text-sm font-bold text-text sm:text-base">Movies</h3>
+                                <span className="text-[11px] text-muted">{libraryMovies.length}</span>
+                            </div>
+                            <div className={posterGridClass} style={posterGridStyle}>
+                                {libraryMovies.map((item) => (
+                                    <LibraryMediaCard
+                                        key={`library-movie-${item.id}`}
+                                        item={item}
+                                        disabled={busy !== null}
+                                        onOpen={openLibraryItem}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+        
+                    {libraryViewMode === 'recent' && !librarySearchQuery.trim() && libraryShows.length ? (
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+                                <h3 className="text-sm font-bold text-text sm:text-base">TV shows</h3>
+                                <span className="text-[11px] text-muted">{libraryShows.length}</span>
+                            </div>
+                            <div className={posterGridClass} style={posterGridStyle}>
+                                {libraryShows.map((item) => (
+                                    <LibraryMediaCard
+                                        key={`library-show-${item.id}`}
+                                        item={item}
+                                        disabled={busy !== null}
+                                        onOpen={openLibraryItem}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+                </section>
+    
+    
+    
+    );
+};

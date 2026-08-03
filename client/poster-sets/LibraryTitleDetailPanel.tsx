@@ -13,6 +13,7 @@ import { askConfirm } from '../shared/confirm';
 import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem } from './autoMatchTitle';
+import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
 import { previewAssetEpisodeLabel } from './previewGroups';
 import { libraryItemPosterSrc, type LibraryRecentItem } from './libraryRecent';
 import { SetInspector, SetInspectorThumbStrip } from './SetInspector';
@@ -204,47 +205,27 @@ export function LibraryTitleDetailPanel({
         setTitleStatus(null);
     }, []);
 
-    const loadSetsForTitle = useCallback(async (title: PosterSetsSearchTitle) => {
+    const loadSetsForTitle = useCallback(async (
+        title: PosterSetsSearchTitle,
+        libraryItem?: LibraryRecentItem | null,
+    ) => {
         setBusy('search');
         setSearchSets([]);
         setSelectedTitle(title);
         setSelectedSet(null);
         setPreview(null);
         try {
-            const sources = (title.sources?.length
-                ? title.sources
-                : [{
-                    provider: title.provider || 'mediux',
-                    id: title.id,
-                    url: title.url,
-                    mediaType: title.mediaType,
-                }]).filter((source) => source?.id || source?.url);
-
-            const response = sources.length > 1
-                ? await posterSetsApi.search({
-                    provider: 'both',
-                    query: title.title,
-                    title: title.title,
-                    titleSources: sources,
-                    dupePreference,
-                    limit: 40,
-                })
-                : (String(sources[0]?.provider || '').toLowerCase() === 'mediux'
-                    ? await posterSetsApi.search({
-                        provider: 'mediux',
-                        tmdbId: sources[0].id,
-                        mediaType: sources[0].mediaType === 'show' ? 'show' : 'movie',
-                        limit: 40,
-                    })
-                    : await posterSetsApi.search({
-                        provider: 'posterdb',
-                        titleUrl: sources[0].url,
-                        limit: 40,
-                    }));
+            const response = await fetchPosterSetsForTitle(title, {
+                dupePreference,
+                libraryItem: libraryItem || undefined,
+            });
             setSearchSets(response.sets || []);
             setSetsPage(1);
             setSearchContext(response.title || title.title);
             setSearchTitles([]);
+            if (response.partialErrors?.length) {
+                toast(response.partialErrors[0], 'error');
+            }
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
         } finally {
@@ -289,7 +270,7 @@ export function LibraryTitleDetailPanel({
             if (generation !== loadGenRef.current) return;
 
             if (autoMatch) {
-                await loadSetsForTitle(autoMatch);
+                await loadSetsForTitle(autoMatch, libraryItem);
                 return;
             }
 
@@ -701,7 +682,7 @@ export function LibraryTitleDetailPanel({
                                         type="button"
                                         className={`${fieldClass} text-left transition hover:border-plex/40`}
                                         disabled={busy !== null}
-                                        onClick={() => void loadSetsForTitle(title)}
+                                        onClick={() => void loadSetsForTitle(title, item)}
                                     >
                                         <span className="font-semibold text-text">{title.title}</span>
                                         {title.year ? <span className="text-muted"> ({title.year})</span> : null}
@@ -719,7 +700,7 @@ export function LibraryTitleDetailPanel({
                             <ImageIcon className="mx-auto h-10 w-10 text-muted opacity-40" />
                             <p className="mt-3 text-sm font-semibold text-text">No poster sets found</p>
                             <p className="mt-1 text-xs text-muted">
-                                Nothing matched “{item.title}” on MediUX or ThePosterDB. Try Discover to search manually.
+                                Nothing matched “{item.title}” on MediUX or ThePosterDB yet. Try Discover to search manually, or pick a title match if shown above.
                             </p>
                         </div>
                     ) : null}

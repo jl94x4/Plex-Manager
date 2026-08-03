@@ -98,6 +98,9 @@ def main() -> int:
                 title_url=str(request.get("titleUrl") or request.get("title_url") or ""),
                 media_type=str(request.get("mediaType") or request.get("media_type") or "movie"),
                 tmdb_id=request.get("tmdbId") or request.get("tmdb_id"),
+                imdb_id=request.get("imdbId") or request.get("imdb_id"),
+                title_hint=str(request.get("titleHint") or request.get("title_hint") or ""),
+                year_hint=request.get("yearHint") or request.get("year_hint"),
                 mode=mode,
                 kind=str(request.get("kind") or request.get("railKind") or "posters"),
                 page=int(request.get("page") or 1),
@@ -105,6 +108,7 @@ def main() -> int:
                 progress=progress,
                 on_batch=on_batch if stream_batches else None,
                 batch_pages=batch_pages,
+                config=config,
             )
             write_event("result", **result)
             return 0
