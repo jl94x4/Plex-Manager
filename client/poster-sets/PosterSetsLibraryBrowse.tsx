@@ -61,12 +61,12 @@ function LibraryMediaCard({
                     {item.mediaType === 'movie' ? 'Movie' : 'TV'}
                 </span>
             </div>
-            <div className="min-w-0 px-2 py-2">
-                <p className="line-clamp-2 text-center text-[11px] font-semibold leading-snug text-text sm:text-xs" title={label}>
+            <div className="min-w-0 px-2 py-2 text-left">
+                <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-text sm:text-xs" title={label}>
                     {item.title}
                 </p>
                 {item.librarySection ? (
-                    <p className="mt-0.5 truncate text-center text-[10px] text-muted">{item.librarySection}</p>
+                    <p className="mt-0.5 truncate text-[10px] text-muted">{item.librarySection}</p>
                 ) : null}
             </div>
         </button>
