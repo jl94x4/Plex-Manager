@@ -3497,8 +3497,33 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         }
     }, [viewerPage, totalViewerPages]);
 
-    if (isLoading) return <Loader isLoading={true} />;
-    if (error) return <div className="text-red-500 font-bold p-8 text-center">{error}</div>;
+    if (isLoading) {
+        return (
+            <DashboardPageShell>
+                <DashboardHero
+                    accent="violet"
+                    eyebrow="Analytics"
+                    title="Advanced Analytics"
+                    description="Playback trends, library health, and viewer insights for your server."
+                    icon={<BarChart3 className="h-3.5 w-3.5" />}
+                />
+                <Loader isLoading={true} />
+            </DashboardPageShell>
+        );
+    }
+    if (error) {
+        return (
+            <DashboardPageShell>
+                <DashboardHero
+                    accent="violet"
+                    eyebrow="Analytics"
+                    title="Advanced Analytics"
+                    icon={<BarChart3 className="h-3.5 w-3.5" />}
+                />
+                <div className="rounded-2xl border border-white/10 bg-black/25 p-8 text-center font-bold text-red-400">{error}</div>
+            </DashboardPageShell>
+        );
+    }
     if (!analyticsData) return null;
 
     const { topUsers, topLibraries, topMovies, topShows, topMusic, topDevices, peakHours, totalPlaybacks, maxConcurrentStreams, maxDirectPlays, maxTranscodes } = analyticsData;
@@ -3549,152 +3574,229 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
             </span>
         );
     };
+    const analyticsPeriodLabel = (() => {
+        if (days === '1') return 'Last 24 hours';
+        if (days === '7') return 'Last 7 days';
+        if (days === '30') return 'Last 30 days';
+        if (days === '60') return 'Last 60 days';
+        if (days === '365') return 'Last year';
+        if (days === '1825') return 'Last 5 years';
+        if (days === 'all') return 'All time';
+        return `Last ${days} days`;
+    })();
+
+    const analyticsTabs = [
+        { id: 'overview' as const, label: 'Overview', icon: Activity },
+        ...(!isJellyfinPortal ? [{ id: 'graphs' as const, label: 'Graphs', icon: LucideLineChart }] : []),
+    ];
+
 return (
-        <div className="w-full min-w-0 animate-fade-in flex flex-col gap-6">
-            <div className="flex flex-col gap-4 mb-6">
-                <h1 className="text-3xl font-black text-text flex items-center gap-3 uppercase tracking-wider">
-                    <BarChart3 className="w-8 h-8 text-plex" />
-                    Advanced Analytics
-                </h1>
-                <div className="flex flex-row items-center justify-between gap-3 w-full">
-                    <div className="flex bg-black/40 rounded-lg p-1 border border-white/5 w-fit overflow-x-auto hide-scrollbar">
-                        <button onClick={() => setViewTab('overview')} className={`px-3 md:px-4 py-2 rounded-md text-xs md:text-sm font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 md:gap-2 ${viewTab === 'overview' ? 'bg-plex text-background' : 'text-muted hover:text-text'}`}>
-                            <Activity className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">Overview</span><span className="sm:hidden">Overview</span>
-                        </button>
-                        {!isJellyfinPortal && (
-                            <button onClick={() => setViewTab('graphs')} className={`px-3 md:px-4 py-2 rounded-md text-xs md:text-sm font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 md:gap-2 ${viewTab === 'graphs' ? 'bg-plex text-background' : 'text-muted hover:text-text'}`}>
-                                <LucideLineChart className="w-4 h-4 shrink-0" /> <span className="hidden sm:inline">Graphs</span><span className="sm:hidden">Graphs</span>
-                            </button>
-                        )}
+        <DashboardPageShell>
+            <DashboardHero
+                accent="violet"
+                eyebrow="Analytics"
+                title="Advanced Analytics"
+                description={(
+                    <>
+                        {totalPlaybacks.toLocaleString()} playbacks · {uniqueActiveViewers} active viewers · {analyticsPeriodLabel.toLowerCase()}
+                    </>
+                )}
+                icon={<BarChart3 className="h-3.5 w-3.5" />}
+                secondaryBlob
+                actions={viewTab === 'overview' ? (
+                    <div className="w-[140px] md:w-48 shrink-0">
+                        <CustomSelect
+                            value={days}
+                            onChange={(val) => setDays(val as string)}
+                            compact={true}
+                            options={[
+                                { label: 'Last 24 Hours', value: '1' },
+                                { label: 'Last 7 Days', value: '7' },
+                                { label: 'Last 30 Days', value: '30' },
+                                { label: 'Last 60 Days', value: '60' },
+                                { label: 'Last 1 Year', value: '365' },
+                                { label: 'Last 5 Years', value: '1825' },
+                                { label: 'All Time', value: 'all' },
+                            ]}
+                        />
                     </div>
-                    {viewTab === 'overview' && (
-                        <div className="w-[140px] md:w-48 shrink-0">
-                            <CustomSelect
-                                value={days}
-                                onChange={(val) => setDays(val as string)}
-                                compact={true}
-                                options={[
-                                    { label: 'Last 24 Hours', value: '1' },
-                                    { label: 'Last 7 Days', value: '7' },
-                                    { label: 'Last 30 Days', value: '30' },
-                                    { label: 'Last 60 Days', value: '60' },
-                                    { label: 'Last 1 Year', value: '365' },
-                                    { label: 'Last 5 Years', value: '1825' },
-                                    { label: 'All Time', value: 'all' }
-                                ]}
-                            />
-                        </div>
-                    )}
-                </div>
+                ) : undefined}
+            />
+
+            <div className="md:hidden">
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">
+                    Analytics section
+                </label>
+                <CustomSelect
+                    id="analytics-section-select"
+                    value={viewTab}
+                    onChange={(val) => setViewTab(val as typeof viewTab)}
+                    options={analyticsTabs.map((tab) => {
+                        const Icon = tab.icon;
+                        return {
+                            label: tab.label,
+                            value: tab.id,
+                            icon: <Icon className="h-4 w-4" />,
+                        };
+                    })}
+                />
             </div>
+
+            <DashboardSubnav className="mb-1">
+                {analyticsTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    return (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setViewTab(tab.id)}
+                            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors border-none outline-none cursor-pointer ${dashboardSubnavLinkClass(viewTab === tab.id)}`}
+                        >
+                            <Icon className="h-4 w-4 shrink-0" />
+                            <span>{tab.label}</span>
+                        </button>
+                    );
+                })}
+            </DashboardSubnav>
 
             {viewTab === 'graphs' && <TautulliGraphsTab />}
 
             {viewTab === 'overview' && (
                 <>
-                    {/* removed erroneous ServerInsightsOverview */}
                     {analyticsData.cacheFallback && (
                         <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
                             Analytics cache for this period is still building. Showing cached data from the last {analyticsData.cachePeriodDays} day period instead.
                         </div>
                     )}
-                    {/* High Level Stats Overview */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="glass-card-sm p-6 flex items-center gap-4">
-                            <div className="bg-plex/10 p-4 rounded-full">
-                                <PlaySquare className="text-plex w-8 h-8" />
-                            </div>
-                            <div>
-                                <p className="text-muted text-sm uppercase tracking-wider font-bold mb-1">Total Playbacks</p>
-                                <p className="text-2xl font-black text-text"><CountUp end={totalPlaybacks} /></p>
-                                {renderDelta(compare?.totalPlaybacks)}
-                            </div>
-                        </div>
-                        <div className="glass-card-sm p-6 flex items-center gap-4">
-                            <div className="bg-plex/10 p-4 rounded-full">
-                                <Users className="text-plex w-8 h-8" />
-                            </div>
-                            <div>
-                                <p className="text-muted text-sm uppercase tracking-wider font-bold mb-1">Unique Viewers</p>
-                                <p className="text-lg font-bold text-text truncate max-w-[150px]" title={String(uniqueActiveViewers)}>{uniqueActiveViewers}</p>
-                                {renderDelta(compare?.uniqueViewers)}
-                            </div>
-                        </div>
-                        <div className="glass-card-sm p-6 flex items-center gap-4 col-span-1 sm:col-span-2">
-                            <div className="w-full h-full flex flex-col justify-center">
-                                <p className="text-muted text-sm uppercase tracking-wider font-bold mb-2 flex items-center gap-2"><Clock className="w-4 h-4 text-plex" /> Peak Viewing Hours</p>
-                                <div className="flex items-end gap-1 h-12 w-full mt-auto">
-                                    {peakHours.map((val, idx) => (
-                                        <div key={idx} className="flex-1 bg-plex opacity-20 hover:opacity-80 transition-opacity rounded-t-sm relative group" style={{ height: `${Math.max((val / maxPeakHour) * 100, 5)}%` }}>
-                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-black/80 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
-                                                {idx === 0 ? '12 AM' : idx < 12 ? `${idx} AM` : idx === 12 ? '12 PM' : `${idx - 12} PM`}: {val} plays
-                                            </div>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+                        <DashboardStatCard
+                            label="Total Playbacks"
+                            value={(
+                                <span className="inline-flex flex-wrap items-center gap-2">
+                                    <CountUp end={totalPlaybacks} />
+                                    {renderDelta(compare?.totalPlaybacks)}
+                                </span>
+                            )}
+                            icon={<PlaySquare className="h-4 w-4 text-plex" />}
+                            glow={dashboardGlowClass('plex')}
+                        />
+                        <DashboardStatCard
+                            label="Unique Viewers"
+                            value={(
+                                <span className="inline-flex flex-wrap items-center gap-2">
+                                    {uniqueActiveViewers}
+                                    {renderDelta(compare?.uniqueViewers)}
+                                </span>
+                            )}
+                            icon={<Users className="h-4 w-4 text-violet-300" />}
+                            glow={dashboardGlowClass('violet')}
+                        />
+                        <DashboardPanel
+                            title="Peak viewing hours"
+                            subtitle="Plays by hour of day"
+                            className="col-span-2"
+                        >
+                            <div className="flex items-end gap-1 h-12 w-full">
+                                {peakHours.map((val, idx) => (
+                                    <div key={idx} className="flex-1 bg-plex opacity-20 hover:opacity-80 transition-opacity rounded-t-sm relative group" style={{ height: `${Math.max((val / maxPeakHour) * 100, 5)}%` }}>
+                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-black/80 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
+                                            {idx === 0 ? '12 AM' : idx < 12 ? `${idx} AM` : idx === 12 ? '12 PM' : `${idx - 12} PM`}: {val} plays
                                         </div>
-                                    ))}
-                                </div>
-                                <div className="flex justify-between text-[10px] text-muted mt-1 font-mono">
-                                    <span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span>
-                                </div>
+                                    </div>
+                                ))}
                             </div>
-                        </div>
+                            <div className="flex justify-between text-[10px] text-muted mt-2 font-mono">
+                                <span>12am</span><span>6am</span><span>12pm</span><span>6pm</span><span>11pm</span>
+                            </div>
+                        </DashboardPanel>
                     </div>
                     {libraryHealth && (
                         <>
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="glass-card-sm p-4">
-                                    <p className="text-muted text-xs uppercase tracking-wider font-bold mb-1">Library Balance</p>
-                                    <p className="text-xl font-black text-plex">{libraryHealth.healthLabel}</p>
-                                    <p className="text-[10px] text-muted mt-1 leading-snug">How evenly viewing is spread across libraries — not server health.</p>
-                                </div>
-                                <div className="glass-card-sm p-4">
-                                    <p className="text-muted text-xs uppercase tracking-wider font-bold mb-1">Active Libraries</p>
-                                    <p className="text-xl font-black text-text">{libraryHealth.activeLibraries}</p>
-                                </div>
-                                <div className="glass-card-sm p-4">
-                                    <p className="text-muted text-xs uppercase tracking-wider font-bold mb-1">Catalog Size</p>
-                                    <p className="text-xl font-black text-text">{libraryHealth.totalCatalogItems.toLocaleString()}</p>
-                                    <p className="text-[11px] text-muted">{formatSizeCeil(libraryHealth.totalCatalogBytes ?? libraryHealth.sizeGB * 1024 ** 3)}</p>
-                                </div>
-                                <div className="glass-card-sm p-4">
-                                    <p className="text-muted text-xs uppercase tracking-wider font-bold mb-1">Usage Concentration</p>
-                                    <p className="text-xl font-black text-text">{libraryHealth.concentrationPct}%</p>
-                                    <p className="text-[11px] text-muted truncate">Watched: {libraryHealth.catalogWatchedPct || 0}% • 4K: {libraryHealth.fourKPercent}%</p>
-                                </div>
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+                                <DashboardStatCard
+                                    label="Library Balance"
+                                    value={libraryHealth.healthLabel}
+                                    hint="How evenly viewing is spread across libraries"
+                                    icon={<PieChart className="h-4 w-4 text-plex" />}
+                                    glow={dashboardGlowClass('plex')}
+                                    valueClassName="text-plex text-xl md:text-2xl"
+                                />
+                                <DashboardStatCard
+                                    label="Active Libraries"
+                                    value={libraryHealth.activeLibraries}
+                                    icon={<Layers className="h-4 w-4 text-sky-300" />}
+                                    glow={dashboardGlowClass('sky')}
+                                />
+                                <DashboardStatCard
+                                    label="Catalog Size"
+                                    value={libraryHealth.totalCatalogItems.toLocaleString()}
+                                    hint={formatSizeCeil(libraryHealth.totalCatalogBytes ?? libraryHealth.sizeGB * 1024 ** 3)}
+                                    icon={<HardDrive className="h-4 w-4 text-violet-300" />}
+                                    glow={dashboardGlowClass('violet')}
+                                />
+                                <DashboardStatCard
+                                    label="Usage Concentration"
+                                    value={`${libraryHealth.concentrationPct}%`}
+                                    hint={`Watched: ${libraryHealth.catalogWatchedPct || 0}% · 4K: ${libraryHealth.fourKPercent}%`}
+                                    icon={<TrendingUp className="h-4 w-4 text-amber-300" />}
+                                    glow={dashboardGlowClass('amber')}
+                                />
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="glass-card-sm p-4 flex flex-col justify-center">
-                                    <p className="text-muted text-xs uppercase tracking-wider font-bold mb-1">Movies Catalog</p>
-                                    <div className="flex items-center">
-                                        <p className="text-xl font-black text-text"><CountUp end={libraryHealth.movies || 0} /></p>
-                                        <LibraryDeltaBadge value={libraryDeltas.movies} />
-                                    </div>
-                                    <p className="text-[11px] text-muted">Total movies in library</p>
-                                </div>
-                                <div className="glass-card-sm p-4 flex flex-col justify-center">
-                                    <p className="text-muted text-xs uppercase tracking-wider font-bold mb-1">TV Shows Catalog</p>
-                                    <div className="flex items-center gap-1">
-                                        <p className="text-xl font-black text-text"><CountUp end={libraryHealth.shows || 0} /></p>
-                                        <span className="text-xs font-semibold text-muted ml-1">Shows</span>
-                                        <LibraryDeltaBadge value={libraryDeltas.shows} />
-                                    </div>
-                                    <div className="flex items-center text-[11px] text-muted mt-0.5">
-                                        <CountUp end={libraryHealth.episodes || 0} /> <span className="ml-1">episodes</span>
-                                        <LibraryDeltaBadge value={libraryDeltas.episodes} />
-                                    </div>
-                                </div>
-                                <div className="glass-card-sm p-4 flex flex-col justify-center">
-                                    <p className="text-muted text-xs uppercase tracking-wider font-bold mb-1">Music Catalog</p>
-                                    <div className="flex items-center gap-1">
-                                        <p className="text-xl font-black text-text"><CountUp end={libraryHealth.artists || 0} /></p>
-                                        <span className="text-xs font-semibold text-muted ml-1">Artists</span>
-                                        <LibraryDeltaBadge value={libraryDeltas.artists} />
-                                    </div>
-                                    <div className="flex items-center text-[11px] text-muted mt-0.5">
-                                        <CountUp end={libraryHealth.albums || 0} /> <span className="mx-1">albums</span> <LibraryDeltaBadge value={libraryDeltas.albums} />
-                                        <span className="mx-1">•</span> 
-                                        <CountUp end={libraryHealth.tracks || 0} /> <span className="mx-1">tracks</span> <LibraryDeltaBadge value={libraryDeltas.tracks} />
-                                    </div>
-                                </div>
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
+                                <DashboardStatCard
+                                    label="Movies Catalog"
+                                    value={(
+                                        <span className="inline-flex items-center gap-1">
+                                            <CountUp end={libraryHealth.movies || 0} />
+                                            <LibraryDeltaBadge value={libraryDeltas.movies} />
+                                        </span>
+                                    )}
+                                    hint="Total movies in library"
+                                    icon={<Film className="h-4 w-4 text-plex" />}
+                                    glow={dashboardGlowClass('plex')}
+                                />
+                                <DashboardStatCard
+                                    label="TV Shows Catalog"
+                                    value={(
+                                        <span className="inline-flex items-center gap-1">
+                                            <CountUp end={libraryHealth.shows || 0} />
+                                            <span className="text-sm font-semibold text-muted">shows</span>
+                                            <LibraryDeltaBadge value={libraryDeltas.shows} />
+                                        </span>
+                                    )}
+                                    hint={(
+                                        <span className="inline-flex items-center gap-1">
+                                            <CountUp end={libraryHealth.episodes || 0} />
+                                            <span>episodes</span>
+                                            <LibraryDeltaBadge value={libraryDeltas.episodes} />
+                                        </span>
+                                    )}
+                                    icon={<Tv className="h-4 w-4 text-sky-300" />}
+                                    glow={dashboardGlowClass('sky')}
+                                />
+                                <DashboardStatCard
+                                    label="Music Catalog"
+                                    value={(
+                                        <span className="inline-flex items-center gap-1">
+                                            <CountUp end={libraryHealth.artists || 0} />
+                                            <span className="text-sm font-semibold text-muted">artists</span>
+                                            <LibraryDeltaBadge value={libraryDeltas.artists} />
+                                        </span>
+                                    )}
+                                    hint={(
+                                        <span className="inline-flex flex-wrap items-center gap-1">
+                                            <CountUp end={libraryHealth.albums || 0} />
+                                            <span>albums</span>
+                                            <LibraryDeltaBadge value={libraryDeltas.albums} />
+                                            <span>·</span>
+                                            <CountUp end={libraryHealth.tracks || 0} />
+                                            <span>tracks</span>
+                                            <LibraryDeltaBadge value={libraryDeltas.tracks} />
+                                        </span>
+                                    )}
+                                    icon={<Music className="h-4 w-4 text-violet-300" />}
+                                    glow={dashboardGlowClass('violet')}
+                                />
                             </div>
 
                             {libraryHealth.resolutions && libraryHealth.codecs && libraryHealth.fileSizes && (() => {
@@ -3723,54 +3825,49 @@ return (
                                 const maxFileSizeCount = Math.max(...fileSizeEntries.map(e => e.total), 1);
 
                                 return (
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="glass-card-sm p-5 flex flex-col justify-between">
-                                            <div>
-                                                <h3 className="text-muted text-xs uppercase tracking-wider font-bold mb-4">Video Codecs</h3>
-                                                <div className="flex flex-col gap-3">
-                                                    {sortedCodecs.map((item) => {
-                                                        const pct = Math.round((item.count / totalCodecs) * 100);
-                                                        return (
-                                                            <div key={item.name} className="flex flex-col gap-1">
-                                                                <div className="flex justify-between text-xs font-semibold">
-                                                                    <span className="text-text">{item.name}</span>
-                                                                    <span className="text-muted font-mono">{item.count.toLocaleString()} ({pct}%)</span>
-                                                                </div>
-                                                                <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
-                                                                    <div className="bg-plex h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-                                                                </div>
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                        <DashboardPanel title="Video Codecs" subtitle="Share of library by codec">
+                                            <div className="flex flex-col gap-3">
+                                                {sortedCodecs.map((item) => {
+                                                    const pct = Math.round((item.count / totalCodecs) * 100);
+                                                    return (
+                                                        <div key={item.name} className="flex flex-col gap-1">
+                                                            <div className="flex justify-between text-xs font-semibold">
+                                                                <span className="text-text">{item.name}</span>
+                                                                <span className="text-muted font-mono">{item.count.toLocaleString()} ({pct}%)</span>
                                                             </div>
-                                                        );
-                                                    })}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="glass-card-sm p-5 flex flex-col justify-between">
-                                            <div>
-                                                <h3 className="text-muted text-xs uppercase tracking-wider font-bold mb-4">Resolutions</h3>
-                                                <div className="flex flex-col gap-3">
-                                                    {sortedResolutions.map((item) => {
-                                                        const pct = Math.round((item.count / totalResolutions) * 100);
-                                                        return (
-                                                            <div key={item.name} className="flex flex-col gap-1">
-                                                                <div className="flex justify-between text-xs font-semibold">
-                                                                    <span className="text-text">{item.name}</span>
-                                                                    <span className="text-muted font-mono">{item.count.toLocaleString()} ({pct}%)</span>
-                                                                </div>
-                                                                <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
-                                                                    <div className="bg-plex h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-                                                                </div>
+                                                            <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                                                                <div className="bg-plex h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                                                             </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
-                                        </div>
+                                        </DashboardPanel>
 
-                                        <div className="glass-card-sm p-5 flex flex-col">
-                                            <div className="flex items-center justify-between mb-1">
-                                                <h3 className="text-muted text-xs uppercase tracking-wider font-bold">File Size Distribution</h3>
+                                        <DashboardPanel title="Resolutions" subtitle="Share of library by resolution">
+                                            <div className="flex flex-col gap-3">
+                                                {sortedResolutions.map((item) => {
+                                                    const pct = Math.round((item.count / totalResolutions) * 100);
+                                                    return (
+                                                        <div key={item.name} className="flex flex-col gap-1">
+                                                            <div className="flex justify-between text-xs font-semibold">
+                                                                <span className="text-text">{item.name}</span>
+                                                                <span className="text-muted font-mono">{item.count.toLocaleString()} ({pct}%)</span>
+                                                            </div>
+                                                            <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                                                                <div className="bg-plex h-full rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </DashboardPanel>
+
+                                        <DashboardPanel
+                                            title="File Size Distribution"
+                                            subtitle="Movies vs TV episodes by size bucket"
+                                            controls={(
                                                 <div className="flex items-center gap-3 text-[10px] text-muted font-semibold">
                                                     <span className="flex items-center gap-1">
                                                         <span className="w-2 h-2 bg-plex rounded-sm inline-block" />
@@ -3781,8 +3878,9 @@ return (
                                                         <span>TV Shows</span>
                                                     </span>
                                                 </div>
-                                            </div>
-                                            <div className="flex items-end justify-between h-40 pt-4 px-2 w-full gap-3 mt-auto">
+                                            )}
+                                        >
+                                            <div className="flex items-end justify-between h-40 pt-4 px-2 w-full gap-3">
                                                 {fileSizeEntries.map((item) => {
                                                     const totalHeightPct = (item.total / maxFileSizeCount) * 100;
                                                     const moviesPctOfBar = item.total > 0 ? (item.movies / item.total) * 100 : 0;
@@ -3825,7 +3923,7 @@ return (
                                                     );
                                                 })}
                                             </div>
-                                        </div>
+                                        </DashboardPanel>
                                     </div>
                                 );
                             })()}
@@ -3833,16 +3931,10 @@ return (
                     )}
 
                     {isAdmin ? (
-                        <div className="w-full glass-card-sm p-4 md:p-5">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                                <div>
-                                    <h2 className="text-lg font-bold text-text uppercase tracking-wider flex items-center gap-2">
-                                        <Search className="text-plex w-4 h-4" /> Find user
-                                    </h2>
-                                    <p className="mt-1 text-xs text-muted">
-                                        Search by username or email to open their stats and watch history.
-                                    </p>
-                                </div>
+                        <DashboardPanel
+                            title="Find user"
+                            subtitle="Search by username or email to open their stats and watch history."
+                            controls={(
                                 <div className="relative w-full sm:max-w-sm">
                                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                     <input
@@ -3899,8 +3991,8 @@ return (
                                         </div>
                                     ) : null}
                                 </div>
-                            </div>
-                        </div>
+                            )}
+                        />
                     ) : null}
 
                     <div className="w-full">
@@ -3925,10 +4017,8 @@ return (
 
                         {/* Top Devices & Libraries Container */}
                         <div className="flex flex-col gap-6 lg:col-span-1">
-                            {/* Popular Libraries Card */}
-                            <div className="glass-card-sm p-4 md:p-6">
-                                <h2 className="text-xl font-bold text-text mb-4 uppercase tracking-wider flex items-center gap-2"><PlaySquare className="text-plex w-5 h-5" /> Popular Libraries</h2>
-                                <div className="flex flex-col gap-5 mt-2">
+                            <DashboardPanel title="Popular Libraries" subtitle="Most played libraries in this period">
+                                <div className="flex flex-col gap-5 mt-1">
                                     {topLibraries.length === 0 ? <p className="text-muted text-sm">No data available.</p> : topLibraries.map((lib, idx) => (
                                         <div key={lib.id} className="flex flex-col gap-2">
                                             <div className="flex justify-between items-end">
@@ -3941,12 +4031,10 @@ return (
                                         </div>
                                     ))}
                                 </div>
-                            </div>
+                            </DashboardPanel>
 
-                            {/* Top Devices Card */}
                             {topDevices && topDevices.length > 0 && (
-                                <div className="glass-card-sm p-4 md:p-6">
-                                    <h2 className="text-xl font-bold text-text mb-4 uppercase tracking-wider flex items-center gap-2"><MonitorSmartphone className="text-plex w-5 h-5" /> Top Devices</h2>
+                                <DashboardPanel title="Top Devices" subtitle="Where your users watch from">
                                     <div className="flex flex-col gap-4">
                                         {topDevices.slice(0, 5).map((device: any, idx: number) => (
                                             <div key={idx} className="flex flex-col gap-1.5">
@@ -3962,22 +4050,24 @@ return (
                                             </div>
                                         ))}
                                     </div>
-                                </div>
+                                </DashboardPanel>
                             )}
                         </div>
 
 
 
-                        {/* Trending Content Card */}
-                        <div className="glass-card-sm p-4 md:p-6 col-span-full">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
-                                <h2 className="text-xl font-bold text-text uppercase tracking-wider flex items-center gap-2"><TrendingUp className="text-plex w-5 h-5" /> Trending Content</h2>
-                                <div className="flex items-center gap-2 bg-black/30 p-1 rounded-lg border border-border">
-                                    <button onClick={() => setContentTab('movies')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${contentTab === 'movies' ? 'bg-plex text-black shadow-md' : 'text-muted hover:text-text hover:bg-white/5'}`}>Movies</button>
-                                    <button onClick={() => setContentTab('shows')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${contentTab === 'shows' ? 'bg-plex text-black shadow-md' : 'text-muted hover:text-text hover:bg-white/5'}`}>TV Shows</button>
-                                    <button onClick={() => setContentTab('music')} className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${contentTab === 'music' ? 'bg-plex text-black shadow-md' : 'text-muted hover:text-text hover:bg-white/5'}`}>Music</button>
+                        <DashboardPanel
+                            title="Trending Content"
+                            subtitle="Most played titles in this period"
+                            className="col-span-full"
+                            controls={(
+                                <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-1">
+                                    <button onClick={() => setContentTab('movies')} className={`rounded-lg px-4 py-1.5 text-sm font-bold transition-all border-none outline-none cursor-pointer ${contentTab === 'movies' ? 'bg-plex text-background shadow-md shadow-plex/25' : 'text-muted hover:text-text hover:bg-white/5'}`}>Movies</button>
+                                    <button onClick={() => setContentTab('shows')} className={`rounded-lg px-4 py-1.5 text-sm font-bold transition-all border-none outline-none cursor-pointer ${contentTab === 'shows' ? 'bg-plex text-background shadow-md shadow-plex/25' : 'text-muted hover:text-text hover:bg-white/5'}`}>TV Shows</button>
+                                    <button onClick={() => setContentTab('music')} className={`rounded-lg px-4 py-1.5 text-sm font-bold transition-all border-none outline-none cursor-pointer ${contentTab === 'music' ? 'bg-plex text-background shadow-md shadow-plex/25' : 'text-muted hover:text-text hover:bg-white/5'}`}>Music</button>
                                 </div>
-                            </div>
+                            )}
+                        >
                             <div className="flex flex-col gap-4">
                                 {activeContent.length === 0 ? <p className="text-muted text-sm col-span-full">No data available.</p> : activeContent.slice(0, 10).map((item, idx) => (
                                     <a key={item.key} href={item.plexUrl} target="_blank" rel="noreferrer" className="flex flex-col sm:flex-row bg-black/20 rounded-xl overflow-hidden hover:bg-black/40 transition-all cursor-pointer group hover:ring-1 hover:ring-plex shadow-md">
@@ -4028,7 +4118,7 @@ return (
                                     </a>
                                 ))}
                             </div>
-                        </div>
+                        </DashboardPanel>
                     </div>
                 </>
             )}
@@ -4046,7 +4136,7 @@ return (
                     }}
                 />
             )}
-        </div>
+        </DashboardPageShell>
     );
 };
 

@@ -122,7 +122,7 @@ export const DashboardHero: React.FC<{
 export const DashboardStatCard: React.FC<{
     label: string;
     value: React.ReactNode;
-    hint?: string;
+    hint?: React.ReactNode;
     icon: React.ReactNode;
     glow?: string;
     valueClassName?: string;
