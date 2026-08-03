@@ -246,8 +246,9 @@ const UserCard: React.FC<{
     }
 
     return (
-        <div className={`bg-card/45 backdrop-blur-md rounded-xl p-5 shadow-lg border border-white/5 border-l-4 ${borderClass} ${glowClass} hover:-translate-y-1 hover:scale-[1.01] transition-all duration-300 flex flex-col relative cursor-pointer ${isSelected ? 'border-plex/40 shadow-[0_0_15px_rgba(229,160,13,0.12)] bg-card/75' : ''}`} onClick={handleCardClick}>
-            <div className="flex justify-between items-start mb-3">
+        <div className={`relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 p-5 shadow-lg border-l-4 ${borderClass} ${glowClass} hover:-translate-y-0.5 transition-all duration-300 flex flex-col cursor-pointer ${isSelected ? 'border-sky-400/40 shadow-lg shadow-sky-500/10 bg-black/35' : ''}`} onClick={handleCardClick}>
+            <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full blur-2xl bg-sky-400/10" />
+            <div className="relative flex justify-between items-start mb-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                     <input className="w-4 h-4 flex-shrink-0 appearance-none rounded-full border border-muted checked:bg-plex checked:border-plex transition-colors cursor-pointer relative checked:after:content-[''] checked:after:block checked:after:w-1.5 checked:after:h-1.5 checked:after:bg-background checked:after:rounded-full checked:after:absolute checked:after:top-1/2 checked:after:left-1/2 checked:after:-translate-x-1/2 checked:after:-translate-y-1/2"
                         type="checkbox"
@@ -269,7 +270,7 @@ const UserCard: React.FC<{
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider whitespace-nowrap ${pillClass}`}>{statusText}</span>
             </div>
-            <div className="flex flex-col gap-2 mt-3 flex-grow">
+            <div className="relative flex flex-col gap-2 mt-3 flex-grow">
                 <div className="flex justify-between items-center text-xs pb-1.5 border-b border-white/5 last:border-0 last:pb-0">
                     <span className="text-muted text-[10px] uppercase tracking-wider font-bold">Joined</span>
                     <span className="text-text font-medium">{formatDate(user.joiningDate)}</span>
@@ -293,10 +294,10 @@ const UserCard: React.FC<{
                     <span className="text-text font-medium">{user.lastLogin ? formatDate(user.lastLogin) : 'Never'}</span>
                 </div>
             </div>
-            <div className="flex flex-wrap gap-2 mt-auto pt-4" onClick={e => e.stopPropagation()}>
+            <div className="relative flex flex-wrap gap-2 mt-auto pt-4" onClick={e => e.stopPropagation()}>
                 {onViewAnalytics && (
                     <button
-                        className="px-3 py-1.5 bg-border text-text rounded-md text-xs font-semibold hover:bg-opacity-80 transition-colors flex items-center justify-center gap-1.5"
+                        className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5"
                         onClick={onViewAnalytics}
                         title="Open user analytics"
                     >
@@ -305,15 +306,15 @@ const UserCard: React.FC<{
                     </button>
                 )}
                 {onViewAs && (
-                    <button className="px-3 py-1.5 bg-plex/15 text-plex border border-plex/30 rounded-md text-xs font-semibold hover:bg-plex/25 transition-colors flex items-center justify-center gap-1.5" onClick={onViewAs} title="View portal as this user">
+                    <button className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-500/20 flex items-center justify-center gap-1.5" onClick={onViewAs} title="View portal as this user">
                         <Eye className="w-3.5 h-3.5" />
                         View as
                     </button>
                 )}
-                <button className="px-3 py-1.5 bg-border text-text rounded-md text-xs font-semibold hover:bg-opacity-80 transition-colors flex items-center justify-center gap-1.5" onClick={onEdit}>Edit</button>
-                <button className="px-3 py-1.5 bg-border text-text rounded-md text-xs font-semibold hover:bg-opacity-80 transition-colors flex items-center justify-center gap-1.5" onClick={onDelete}>Delete</button>
+                <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onEdit}>Edit</button>
+                <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onDelete}>Delete</button>
                 {status === 'expired' && user.plexAccessStatus !== 'revoked' && (
-                    <button className="px-3 py-1.5 bg-border text-text rounded-md text-xs font-semibold hover:bg-opacity-80 transition-colors flex items-center justify-center gap-1.5" onClick={onRevoke} disabled={!isConfigured}>Revoke</button>
+                    <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onRevoke} disabled={!isConfigured}>Revoke</button>
                 )}
             </div>
         </div>
@@ -4890,56 +4891,111 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
     const filteredUserIds = useMemo(() => filteredAndSortedUsers.map(u => u.id), [filteredAndSortedUsers]);
     const allFilteredSelected = filteredUserIds.length > 0 && filteredUserIds.every(id => selectedUserIds.includes(id));
 
+    const userStats = useMemo(() => {
+        let active = 0;
+        let expiring = 0;
+        let expired = 0;
+        let trial = 0;
+        let revoked = 0;
+        for (const user of users) {
+            if (user.plexAccessStatus === 'revoked') {
+                revoked += 1;
+                continue;
+            }
+            if (user.isTrial) {
+                trial += 1;
+                continue;
+            }
+            const days = getDaysUntilExpiry(user.expiryDate);
+            if (days !== null && days < 0) expired += 1;
+            else if (days !== null && days <= 30) expiring += 1;
+            else active += 1;
+        }
+        return { total: users.length, active, expiring, expired, trial, revoked };
+    }, [users]);
+
     return (
-        <div className="w-full flex flex-col">
+        <DashboardPageShell>
             <Loader isLoading={isLoading} />
             <ToastContainer toasts={toasts} setToasts={setToasts} />
 
-            <header className="page-header">
-                <h1 className="page-title">Users Management</h1>
-            </header>
+            <DashboardHero
+                accent="sky"
+                eyebrow="User Management"
+                title="Users"
+                description={isConfigured ? (
+                    <>
+                        {userStats.total} portal users · {userStats.active} active · {filteredAndSortedUsers.length} shown
+                    </>
+                ) : (
+                    <>Configure your media server to manage portal access.</>
+                )}
+                icon={<Users className="h-3.5 w-3.5" />}
+                secondaryBlob
+                actions={isConfigured ? (
+                    <button
+                        type="button"
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-sky-300 disabled:opacity-50"
+                        onClick={handleImportUsers}
+                        disabled={isLoading}
+                    >
+                        <RefreshCw className="h-4 w-4" />
+                        Sync {mediaServerLabel} Users
+                    </button>
+                ) : undefined}
+            />
+
             <main>
                 {isConfigured && (
-                    <div className="flex flex-col md:flex-row gap-4 md:items-center mb-8 glass-card-sm p-4 shadow-md">
-                        <span className="font-bold text-muted uppercase tracking-wider text-sm hidden md:inline-block mr-2">Quick Actions:</span>
-                        <div className="grid grid-cols-2 md:flex md:flex-row gap-3 w-full md:w-auto flex-1">
-                            <button className="col-span-2 md:col-span-1 px-3 py-2 bg-plex text-background rounded-md font-bold hover:bg-plex-hover transition-colors flex items-center justify-center gap-2 text-sm md:text-base" onClick={handleImportUsers} disabled={isLoading}>
-                                Sync {mediaServerLabel} Users
-                            </button>
-                        </div>
+                    <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 xl:gap-4">
+                        <DashboardStatCard
+                            label="Total Users"
+                            value={userStats.total}
+                            icon={<Users className="h-4 w-4 text-sky-300" />}
+                            glow={dashboardGlowClass('sky')}
+                        />
+                        <DashboardStatCard
+                            label="Active"
+                            value={userStats.active}
+                            icon={<CheckCircle className="h-4 w-4 text-emerald-300" />}
+                            glow={dashboardGlowClass('emerald')}
+                            valueClassName="text-status-active"
+                        />
+                        <DashboardStatCard
+                            label="Expiring"
+                            value={userStats.expiring}
+                            icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
+                            glow={dashboardGlowClass('amber')}
+                            valueClassName="text-status-expiring"
+                        />
+                        <DashboardStatCard
+                            label="Expired"
+                            value={userStats.expired}
+                            icon={<AlertCircle className="h-4 w-4 text-rose-300" />}
+                            glow={dashboardGlowClass('rose')}
+                            valueClassName="text-status-expired"
+                        />
+                        <DashboardStatCard
+                            label="Trial"
+                            value={userStats.trial}
+                            icon={<Sparkles className="h-4 w-4 text-violet-300" />}
+                            glow={dashboardGlowClass('violet')}
+                        />
+                        <DashboardStatCard
+                            label="Revoked"
+                            value={userStats.revoked}
+                            icon={<Shield className="h-4 w-4 text-muted" />}
+                            glow={dashboardGlowClass('muted')}
+                        />
                     </div>
                 )}
 
-                {/* Search & Filter Controls */}
                 {isConfigured && (
-                    <div className="flex flex-col xl:flex-row justify-between xl:items-center bg-card border border-border p-4 rounded-xl mb-8 gap-4 xl:gap-6 w-full">
-                        <div className="relative w-full xl:w-auto xl:flex-1 min-w-[250px]">
-                            <input
-                                type="text"
-                                placeholder="Search by username or email..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full py-3 pr-10 pl-4 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
-                            />
-                            {searchQuery && (
-                                <button className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text text-xl" onClick={() => setSearchQuery('')}>×</button>
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-1 bg-background p-1 rounded-lg border border-border w-full xl:w-auto sm:flex sm:flex-row sm:gap-0 sm:overflow-x-auto sm:custom-scrollbar">
-                            {(['all', 'active', 'trial', 'expiring', 'expired', 'revoked'] as const).map((status) => (
-                                <button
-                                    key={status}
-                                    className={`w-full sm:w-auto min-w-0 px-2 sm:px-4 py-2 rounded-md font-medium transition-all text-xs sm:text-sm text-center truncate ${statusFilter === status ? 'bg-plex text-background shadow-md font-bold' : 'text-muted hover:bg-white/5 hover:text-text'}`}
-                                    onClick={() => setStatusFilter(status)}
-                                >
-                                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                                </button>
-                            ))}
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 whitespace-nowrap w-full xl:w-auto xl:ml-auto">
-                            <label htmlFor="sortSelect" className="text-muted font-bold text-sm hidden sm:block">Sort By</label>
+                    <DashboardPanel
+                        title="Search & filter"
+                        subtitle="Find users by name or email, then narrow by access status."
+                        className="mb-6"
+                        controls={(
                             <CustomSelect
                                 id="sortSelect"
                                 value={sortBy}
@@ -4950,41 +5006,79 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     { label: 'Username (Z-A)', value: 'username-desc' },
                                     { label: 'Expiry (Soonest)', value: 'expiry-asc' },
                                     { label: 'Expiry (Furthest)', value: 'expiry-desc' },
-                                    { label: 'Joined Date (Newest)', value: 'joined-desc' }
+                                    { label: 'Joined Date (Newest)', value: 'joined-desc' },
                                 ]}
                             />
+                        )}
+                    >
+                        <div className="flex flex-col gap-4">
+                            <div className="relative w-full">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                <input
+                                    type="text"
+                                    placeholder="Search by username or email..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pr-10 pl-10 text-sm text-text outline-none transition focus:border-sky-400/40 focus:ring-1 focus:ring-sky-400/20"
+                                />
+                                {searchQuery && (
+                                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text text-xl" onClick={() => setSearchQuery('')}>×</button>
+                                )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
+                                {(['all', 'active', 'trial', 'expiring', 'expired', 'revoked'] as const).map((status) => (
+                                    <button
+                                        key={status}
+                                        type="button"
+                                        className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors border-none outline-none cursor-pointer sm:text-sm ${dashboardSubnavLinkClass(statusFilter === status)}`}
+                                        onClick={() => setStatusFilter(status)}
+                                    >
+                                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    </DashboardPanel>
                 )}
 
                 {selectedUserIds.length > 0 && (
-                    <div className="glass-card-sm p-4 mb-8 w-full space-y-4">
-                        <div className="flex justify-between items-center flex-wrap gap-4">
-                            <div className="flex items-center flex-wrap gap-4 text-sm font-medium">
-                                <span className="text-plex">{selectedUserIds.length} selected</span>
+                    <DashboardPanel
+                        title="Bulk actions"
+                        subtitle={`${selectedUserIds.length} user${selectedUserIds.length === 1 ? '' : 's'} selected`}
+                        className="mb-6"
+                        badge={(
+                            <span className="rounded-full border border-sky-400/30 bg-sky-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-sky-200">
+                                {selectedUserIds.length} selected
+                            </span>
+                        )}
+                    >
+                        <div className="space-y-4">
+                            <div className="flex flex-wrap items-center gap-4 text-sm font-medium">
                                 {allFilteredSelected ? (
-                                    <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds(prev => prev.filter(id => !filteredUserIds.includes(id)))}>Unselect Filtered</button>
+                                    <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => setSelectedUserIds(prev => prev.filter(id => !filteredUserIds.includes(id)))}>Unselect Filtered</button>
                                 ) : (
-                                    <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds(prev => Array.from(new Set([...prev, ...filteredUserIds])))}>Select Filtered ({filteredAndSortedUsers.length})</button>
+                                    <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => setSelectedUserIds(prev => Array.from(new Set([...prev, ...filteredUserIds])))}>Select Filtered ({filteredAndSortedUsers.length})</button>
                                 )}
                                 {selectedUserIds.length < users.length && (
-                                    <button className="text-muted hover:text-text transition-colors underline" onClick={() => setSelectedUserIds(users.map(user => user.id))}>Select All ({users.length})</button>
+                                    <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => setSelectedUserIds(users.map(user => user.id))}>Select All ({users.length})</button>
                                 )}
-                                <button className="text-muted hover:text-text transition-colors underline" onClick={() => { setSelectedUserIds([]); setBulkLibrariesOpen(false); }}>Unselect All</button>
+                                <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => { setSelectedUserIds([]); setBulkLibrariesOpen(false); }}>Unselect All</button>
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={() => handleBulkUpdate('addMonth')}>+1 Month</button>
-                                <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={() => handleBulkUpdate('addYear')}>+1 Year</button>
-                                <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={() => handleBulkUpdate('unlimited')}>Unlimited</button>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkUpdate('addMonth')}>+1 Month</button>
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkUpdate('addYear')}>+1 Year</button>
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkUpdate('unlimited')}>Unlimited</button>
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="date"
                                         value={bulkCustomDate}
                                         onChange={(e) => setBulkCustomDate(e.target.value)}
-                                        className="p-2 rounded-md border border-border bg-background text-text text-sm outline-none focus:border-plex cursor-pointer"
+                                        className="cursor-pointer rounded-xl border border-white/10 bg-black/20 p-2 text-sm text-text outline-none focus:border-sky-400/40"
                                     />
                                     <button
-                                        className="px-4 py-2 bg-plex text-background rounded-md font-medium hover:bg-plex-hover transition-colors flex items-center justify-center gap-2"
+                                        type="button"
+                                        className="rounded-xl bg-plex px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-plex-hover"
                                         onClick={() => {
                                             if (!bulkCustomDate) {
                                                 addToast('Please select a custom expiry date.', 'error');
@@ -4998,7 +5092,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                 </div>
                                 <button
                                     type="button"
-                                    className={`px-4 py-2 rounded-md font-medium transition-colors flex items-center justify-center gap-2 ${bulkLibrariesOpen ? 'bg-plex text-background' : 'bg-border text-text hover:bg-opacity-80'}`}
+                                    className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${bulkLibrariesOpen ? 'bg-plex text-background' : 'border border-white/10 bg-black/20 text-text hover:bg-white/5'}`}
                                     onClick={() => {
                                         if (bulkLibrariesOpen) setBulkLibrariesOpen(false);
                                         else openBulkLibraries();
@@ -5007,78 +5101,89 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     Libraries
                                 </button>
                             </div>
-                        </div>
-                        {bulkLibrariesOpen && (
-                            <div className="pt-3 border-t border-border">
-                                <p className="text-xs text-muted mb-3">
-                                    Set library access for {selectedUserIds.length} selected user{selectedUserIds.length === 1 ? '' : 's'}. All start checked — uncheck any to remove.
-                                </p>
-                                {bulkLibrariesLoading ? (
-                                    <div className="text-sm text-muted py-2">Loading libraries…</div>
-                                ) : bulkLibraries.length === 0 ? (
-                                    <div className="text-sm text-muted py-2">No libraries found. Check Plex connection in Settings.</div>
-                                ) : (
-                                    <div className="flex flex-wrap gap-2 mb-3">
-                                        {bulkLibraries.map((lib) => (
-                                            <label key={lib.id} className="flex items-center gap-2 bg-background border border-border px-3 py-2 rounded-lg cursor-pointer hover:border-plex transition-colors">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={bulkSelectedLibraries.includes(lib.id)}
-                                                    onChange={(e) => {
-                                                        if (e.target.checked) setBulkSelectedLibraries([...bulkSelectedLibraries, lib.id]);
-                                                        else setBulkSelectedLibraries(bulkSelectedLibraries.filter((id) => id !== lib.id));
-                                                    }}
-                                                    className="accent-plex"
-                                                />
-                                                <span className="text-sm font-medium">{lib.title}</span>
-                                            </label>
-                                        ))}
+                            {bulkLibrariesOpen && (
+                                <div className="border-t border-white/10 pt-4">
+                                    <p className="mb-3 text-xs text-muted">
+                                        Set library access for {selectedUserIds.length} selected user{selectedUserIds.length === 1 ? '' : 's'}. All start checked — uncheck any to remove.
+                                    </p>
+                                    {bulkLibrariesLoading ? (
+                                        <div className="py-2 text-sm text-muted">Loading libraries…</div>
+                                    ) : bulkLibraries.length === 0 ? (
+                                        <div className="py-2 text-sm text-muted">No libraries found. Check Plex connection in Settings.</div>
+                                    ) : (
+                                        <div className="mb-3 flex flex-wrap gap-2">
+                                            {bulkLibraries.map((lib) => (
+                                                <label key={lib.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 transition-colors hover:border-sky-400/30">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={bulkSelectedLibraries.includes(lib.id)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) setBulkSelectedLibraries([...bulkSelectedLibraries, lib.id]);
+                                                            else setBulkSelectedLibraries(bulkSelectedLibraries.filter((id) => id !== lib.id));
+                                                        }}
+                                                        className="accent-plex"
+                                                    />
+                                                    <span className="text-sm font-medium">{lib.title}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className="rounded-xl bg-plex px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-plex-hover disabled:opacity-50"
+                                            disabled={bulkLibrariesLoading || bulkLibraries.length === 0}
+                                            onClick={handleBulkLibraries}
+                                        >
+                                            Apply Libraries
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5"
+                                            onClick={() => setBulkSelectedLibraries(bulkLibraries.map((l) => l.id))}
+                                        >
+                                            Select All
+                                        </button>
                                     </div>
-                                )}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <button
-                                        type="button"
-                                        className="px-4 py-2 bg-plex text-background rounded-md font-medium hover:bg-plex-hover transition-colors disabled:opacity-50"
-                                        disabled={bulkLibrariesLoading || bulkLibraries.length === 0}
-                                        onClick={handleBulkLibraries}
-                                    >
-                                        Apply Libraries
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors"
-                                        onClick={() => setBulkSelectedLibraries(bulkLibraries.map((l) => l.id))}
-                                    >
-                                        Select All
-                                    </button>
                                 </div>
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
+                    </DashboardPanel>
                 )}
 
                 {isConfigured && filteredAndSortedUsers.length === 0 && !isLoading && (
-                    <p className="text-center text-muted p-8 border border-dashed border-border rounded-xl mt-4 w-full">No users found matching your filters. Try syncing or widening filters.</p>
+                    <DashboardPanel title="No users found" subtitle="Try syncing from Plex or widening your filters.">
+                        <p className="text-center text-sm text-muted">No users match the current search and status filters.</p>
+                    </DashboardPanel>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full">
-                    {filteredAndSortedUsers.map((user) => (
-                        <UserCard
-                            key={user.id}
-                            user={user}
-                            onEdit={() => handleOpenUserModal(user)}
-                            onDelete={() => handleDeleteUser(user.id)}
-                            onRevoke={() => revokePlexAccess(user.id)}
-                            onViewAs={() => handleViewAsUser(user)}
-                            onViewAnalytics={() => {
-                                window.location.assign(portalUrl(`/analytics#user=${encodeURIComponent(user.username)}`));
-                            }}
-                            isConfigured={isConfigured}
-                            isSelected={selectedUserIds.includes(user.id)}
-                            onSelect={handleToggleSelection}
-                            providerLabel={mediaServerLabel}
-                        />
-                    ))}
-                </div>
+
+                {isConfigured && filteredAndSortedUsers.length > 0 && (
+                    <DashboardPanel
+                        title="Portal users"
+                        subtitle={`Showing ${filteredAndSortedUsers.length} of ${users.length}`}
+                        className="mb-6"
+                    >
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                            {filteredAndSortedUsers.map((user) => (
+                                <UserCard
+                                    key={user.id}
+                                    user={user}
+                                    onEdit={() => handleOpenUserModal(user)}
+                                    onDelete={() => handleDeleteUser(user.id)}
+                                    onRevoke={() => revokePlexAccess(user.id)}
+                                    onViewAs={() => handleViewAsUser(user)}
+                                    onViewAnalytics={() => {
+                                        window.location.assign(portalUrl(`/analytics#user=${encodeURIComponent(user.username)}`));
+                                    }}
+                                    isConfigured={isConfigured}
+                                    isSelected={selectedUserIds.includes(user.id)}
+                                    onSelect={handleToggleSelection}
+                                    providerLabel={mediaServerLabel}
+                                />
+                            ))}
+                        </div>
+                    </DashboardPanel>
+                )}
             </main>
             <UserModal
                 isOpen={isUserModalOpen}
@@ -5086,7 +5191,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 onSave={handleSaveUser}
                 user={editingUser}
             />
-        </div>
+        </DashboardPageShell>
     );
 };
 
