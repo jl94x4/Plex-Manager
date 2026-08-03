@@ -114,12 +114,32 @@ async function fetchBothSetsProgressive(
     void mediuxP.then((partial) => {
         if ((partial.sets?.length || 0) > 0) options.onPartial?.(partial);
     });
-    const [mediuxResult, posterdbResult] = await Promise.all([mediuxP, posterdbP]);
-    const sets = mergeSetsForDisplay([mediuxResult, posterdbResult], options.dupePreference);
+    const [mediuxSettled, posterdbSettled] = await Promise.allSettled([mediuxP, posterdbP]);
+    const mediuxResult: PosterSetsSearchResult = mediuxSettled.status === 'fulfilled'
+        ? mediuxSettled.value
+        : { ok: false, sets: [], titles: [] };
+    const posterdbResult: PosterSetsSearchResult = posterdbSettled.status === 'fulfilled'
+        ? posterdbSettled.value
+        : { ok: false, sets: [], titles: [] };
     const partialErrors = [
         ...(mediuxResult.partialErrors || []),
         ...(posterdbResult.partialErrors || []),
     ];
+    if (mediuxSettled.status === 'rejected') {
+        partialErrors.push(
+            mediuxSettled.reason instanceof Error
+                ? mediuxSettled.reason.message
+                : 'MediUX search failed',
+        );
+    }
+    if (posterdbSettled.status === 'rejected') {
+        partialErrors.push(
+            posterdbSettled.reason instanceof Error
+                ? posterdbSettled.reason.message
+                : 'ThePosterDB search failed',
+        );
+    }
+    const sets = mergeSetsForDisplay([mediuxResult, posterdbResult], options.dupePreference);
     if ((posterdbResult.sets?.length || 0) === 0 && (mediuxResult.sets?.length || 0) > 0) {
         partialErrors.push(TPDB_EMPTY_HINT);
     }
@@ -191,12 +211,14 @@ async function fetchPosterdbSets(
     },
 ): Promise<PosterSetsSearchResult> {
     const tmdbId = options.tmdbId || undefined;
+    const titleHint = String(options.titleHint || '').trim();
     return posterSetsApi.search({
         provider: 'posterdb',
         // When TMDB is known, resolve the canonical TPDB page instead of a stale text-search URL.
         titleUrl: tmdbId ? undefined : (source.url || undefined),
+        query: titleHint || undefined,
         tmdbId,
-        titleHint: options.titleHint,
+        titleHint: titleHint || undefined,
         yearHint: options.yearHint ?? undefined,
         mediaType: options.mediaType,
         limit: 40,

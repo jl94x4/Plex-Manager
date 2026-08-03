@@ -2692,8 +2692,11 @@ def search_catalog(
                 year_hint=year_val,
                 media_type=media_type,
             )
+        search_term = str(query or title_hint or "").strip()
+        if not search_term:
+            raise ValueError("query or title hint is required for ThePosterDB title search")
         return search_posterdb_titles(
-            query,
+            search_term,
             progress=progress,
             limit=limit,
             config=config,
