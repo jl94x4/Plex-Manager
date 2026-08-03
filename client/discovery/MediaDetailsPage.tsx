@@ -190,10 +190,12 @@ export const MediaDetailsPage: React.FC<{
                         if (!prev) return prev;
                         const seasons = Array.isArray(sonarr.seasons) ? sonarr.seasons : [];
                         const airedMainSeasons = seasons.filter(
-                            (s: any) => Number(s?.seasonNumber) > 0 && Number(s?.airedTotal) > 0,
+                            (s: any) => Number(s?.seasonNumber) > 0
+                                && (Number(s?.airedTotal) > 0 || Number(s?.withFile) > 0),
                         );
                         const mainComplete = airedMainSeasons.length > 0
-                            && airedMainSeasons.every((s: any) => !!s.complete);
+                            && airedMainSeasons.every((s: any) => !!s.complete
+                                || (Number(s.total) > 0 && Number(s.withFile) >= Number(s.total)));
                         const effectivelyComplete = canMarkTvAsAvailable(prev)
                             && (
                                 !!sonarr.showComplete

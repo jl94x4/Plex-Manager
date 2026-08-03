@@ -161,10 +161,32 @@ export const hasAnyEpisodeAired = (details: any): boolean => {
     return true;
 };
 
-/** Sonarr episode rows confirm at least one monitored episode has aired. */
+/** Sonarr episode rows confirm at least one episode has aired (or files on disk). */
 export const sonarrHasAiredEpisodes = (sonarr: any): boolean => {
     if (!sonarr?.matched) return false;
-    return (sonarr.seasons || []).some((season: any) => Number(season?.airedTotal) > 0);
+    if ((sonarr.seasons || []).some((season: any) => Number(season?.airedTotal) > 0)) return true;
+    return Number(sonarr.fileCount) > 0;
+};
+
+/** True when Sonarr confirms every aired main season is complete on disk. */
+export const sonarrMainSeasonsFullyOnDisk = (details: any): boolean => {
+    const sonarr = details?.sonarrLibraryStatus;
+    if (!sonarr?.matched || sonarr.hasActiveDownloads || sonarr.nextAiring) return false;
+    if (sonarr.showComplete) return true;
+
+    const main = (sonarr.seasons || []).filter((s: any) => isMainSeasonNumber(Number(s?.seasonNumber)));
+    if (!main.length) return false;
+
+    const airedMain = main.filter((s: any) => Number(s?.airedTotal) > 0);
+    if (airedMain.length > 0) {
+        return airedMain.every((s: any) => !!s.complete);
+    }
+
+    // Unmonitored libraries: trust per-season file totals when every season is full.
+    return main.every(
+        (s: any) => !!s.complete
+            || (Number(s.total) > 0 && Number(s.withFile) >= Number(s.total)),
+    );
 };
 
 /** Never badge unreleased / pre-premiere shows as library-available. */
@@ -243,6 +265,7 @@ export const isTvShowLibraryComplete = (
     if (sonarr?.matched) {
         if (sonarr.hasActiveDownloads) return false;
         if (sonarr.showComplete) return true;
+        if (sonarrMainSeasonsFullyOnDisk(details)) return true;
         // Fall through: showComplete can be conservative (specials / undated eps).
         // Prefer per-season evidence below when Sonarr matched but didn't flip complete.
     }
@@ -395,11 +418,13 @@ export const applySonarrLibrarySeasonOverrides = (
         const probe = bySeason.get(seasonNumber);
         if (!probe) return row;
 
-        if (probe.complete && Number(probe.airedTotal) > 0) {
+        const seasonComplete = !!probe.complete
+            || (Number(probe.total) > 0 && Number(probe.withFile) >= Number(probe.total));
+        if (seasonComplete && (Number(probe.airedTotal) > 0 || Number(probe.withFile) > 0)) {
             return {
                 ...row,
                 requestable: false,
-                statusLabel: 'Available',
+                statusLabel: isEndedShow(details) ? 'Available' : resolvePartialSeasonLabel(details, seasonNumber),
                 libraryStatus: MEDIA_STATUS.AVAILABLE,
             };
         }
@@ -672,7 +697,8 @@ export const getRequestButtonState = (
         };
     }
 
-    const libraryComplete = isTvShowLibraryComplete(details, seasonRows, mediaInfo);
+    const libraryComplete = isTvShowLibraryComplete(details, seasonRows, mediaInfo)
+        || sonarrMainSeasonsFullyOnDisk(details);
     if (libraryComplete) {
         return {
             label: details && isReturningSeries(details) && hasAnyEpisodeAired(details) ? 'Up to date' : 'Available',
@@ -689,6 +715,12 @@ export const getRequestButtonState = (
         ));
         if (waiting) {
             return { label: 'Requested', disabled: true, variant: 'pending' as const };
+        }
+        const mainRows = seasonRows.filter((s) => isMainSeasonNumber(s.seasonNumber));
+        const allMainAvailable = mainRows.length > 0
+            && mainRows.every((s) => s.statusLabel === 'Available' || s.statusLabel === 'Up to date');
+        if (allMainAvailable || (details && isEndedShow(details) && sonarrMainSeasonsFullyOnDisk(details))) {
+            return { label: 'Available', disabled: true, variant: 'available' as const };
         }
         if (details && isReturningSeries(details) && hasAnyEpisodeAired(details)) {
             return { label: 'Up to date', disabled: true, variant: 'available' as const };

@@ -146,7 +146,9 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
         const stamped = Number(mediaInfo?.status);
         const ended = isEndedShow(item);
         const returning = isReturningSeries(item);
-        const continuingInLibrary = Boolean(sonarr?.matched)
+        const libraryBadgeAllowed = canMarkTvAsAvailable(item);
+        const continuingInLibrary = libraryBadgeAllowed
+            && Boolean(sonarr?.matched)
             && !ended
             && (
                 Boolean(sonarr?.nextAiring)
@@ -167,7 +169,9 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
                     : 'This series is in your library and still airing.',
             };
         }
-        if (stamped === MEDIA_STATUS.PARTIAL) {
+        // Ended/canceled shows may keep a stale Seerr PARTIAL stamp after every
+        // season is on disk — defer to library-complete checks below.
+        if (libraryBadgeAllowed && stamped === MEDIA_STATUS.PARTIAL && !ended) {
             return {
                 ...base,
                 kind: 'partial',
@@ -411,7 +415,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
     }
 
     // TV list stamps from the disk cache (no full season rows). Trust mediaInfo.status.
-    if (mediaType === 'tv' && mediaStatus === MEDIA_STATUS.PARTIAL) {
+    if (mediaType === 'tv' && mediaStatus === MEDIA_STATUS.PARTIAL && canMarkTvAsAvailable(item)) {
         return {
             ...base,
             kind: 'partial',
@@ -452,12 +456,16 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
                 detail: 'All aired episodes are on disk (verified via Sonarr).',
             };
         }
-        return {
-            ...base,
-            kind: 'partial',
-            label: 'Partially available',
-            detail: formatSeasonSummary(seasonRows) || undefined,
-        };
+        if (mediaType === 'tv' && !canMarkTvAsAvailable(item)) {
+            // Pre-premiere Sonarr monitoring — fall through to request/none handling below.
+        } else {
+            return {
+                ...base,
+                kind: 'partial',
+                label: 'Partially available',
+                detail: formatSeasonSummary(seasonRows) || undefined,
+            };
+        }
     }
 
     if (inProgressDisplay) {
