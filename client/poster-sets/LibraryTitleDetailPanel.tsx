@@ -844,6 +844,7 @@ export function LibraryTitleDetailPanel({
                                                 {items.map((set) => {
                                                     const watching = isSetWatched(set);
                                                     const setTitle = String(set.title || '').trim() || `Set #${set.setId}`;
+                                                    const creator = String(set.user || '').trim().replace(/^@+/, '');
                                                     const expanded = selectedSet?.url === set.url;
                                                     return (
                                                         <div
@@ -880,9 +881,16 @@ export function LibraryTitleDetailPanel({
                                                                         </span>
                                                                     </div>
                                                                 ) : null}
-                                                                <p className="line-clamp-2 px-2 py-2 text-center text-[11px] font-semibold text-text">
-                                                                    {setTitle}
-                                                                </p>
+                                                                <div className="px-2 py-2 text-center">
+                                                                    <p className="line-clamp-2 text-[11px] font-semibold text-text">
+                                                                        {setTitle}
+                                                                    </p>
+                                                                    {creator ? (
+                                                                        <p className="mt-0.5 truncate text-[10px] text-muted" title={`@${creator}`}>
+                                                                            @{creator}
+                                                                        </p>
+                                                                    ) : null}
+                                                                </div>
                                                             </button>
                                                             <div className="flex justify-center gap-1 px-2 pb-2">
                                                                 <button

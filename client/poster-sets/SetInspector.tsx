@@ -115,6 +115,11 @@ export function SetInspector({
                             <h3 className="mt-1 truncate text-lg font-bold text-text" title={headerLabel}>
                                 {headerLabel}
                             </h3>
+                            {set?.user ? (
+                                <p className="mt-0.5 truncate text-sm text-muted">
+                                    @{String(set.user).trim().replace(/^@+/, '')}
+                                </p>
+                            ) : null}
                             <p className="mt-1 text-sm text-muted">
                                 <span className="text-emerald-300">{matchedCount} matched</span>
                                 {' · '}
