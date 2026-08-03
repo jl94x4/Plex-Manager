@@ -2288,11 +2288,13 @@ const getPlexShareLibraryIds = async (user, config) => {
 /**
  * Update live share libraries. Empty libraryIds = share all (sends every local section id on PUT).
  * If no share exists, falls back to inviteUserToPlex.
+ * @returns {{ ok: boolean, error?: string }}
  */
 const updatePlexShareLibraries = async (user, config, libraryIds = []) => {
     if (!config?.serverIdentifier || !config?.plexToken) {
+        const msg = 'Plex server or token not configured in Settings.';
         log(`Error: Cannot update libraries for ${user?.username} — missing server ID or token.`);
-        return false;
+        return { ok: false, error: msg };
     }
 
     const selected = normalizeLibraryIds(libraryIds);
@@ -2320,16 +2322,28 @@ const updatePlexShareLibraries = async (user, config, libraryIds = []) => {
             if (!res.ok) {
                 const errText = await res.text();
                 log(`Error: Failed to update share libraries for ${user.username}. Status: ${res.status}. Response: ${errText}`);
-                return false;
+                return {
+                    ok: false,
+                    error: `Plex rejected the library update (HTTP ${res.status}). Check portal logs for details.`,
+                };
             }
-            return true;
+            return { ok: true };
         }
 
         // No existing share — invite (empty selected = all libraries)
-        return inviteUserToPlex(user, config, selected.length > 0 ? selected : null);
+        const invited = await inviteUserToPlex(user, config, selected.length > 0 ? selected : null);
+        if (!invited) {
+            return {
+                ok: false,
+                error: user.email
+                    ? 'No Plex friend share found for this user and the invite failed. They may be a Plex Home user (managed in Plex, not via sharing) or already invited under another email.'
+                    : 'No Plex share found and this user has no email — add an email before sharing libraries.',
+            };
+        }
+        return { ok: true };
     } catch (error) {
         log(`An exception occurred while updating libraries for ${user?.username}: ${error.message}`);
-        return false;
+        return { ok: false, error: error.message || 'Failed to update Plex library access.' };
     }
 };
 
@@ -10194,7 +10208,8 @@ app.put('/api/users/:id', requireAdmin, async (req, res) => {
 
     if (libraryIdsProvided) {
         try {
-            plexShareUpdated = await updatePlexShareLibraries(users[userIndex], config, users[userIndex].libraryIds);
+            const shareResult = await updatePlexShareLibraries(users[userIndex], config, users[userIndex].libraryIds);
+            plexShareUpdated = !!shareResult.ok;
             if (plexShareUpdated && users[userIndex].plexAccessStatus === 'revoked') {
                 users[userIndex].plexAccessStatus = 'pending';
                 await saveFile(USERS_PATH, users);
@@ -10204,7 +10219,7 @@ app.put('/api/users/:id', requireAdmin, async (req, res) => {
                     libraryIds: users[userIndex].libraryIds,
                 });
             } else {
-                plexShareError = 'Saved locally but failed to update Plex library access.';
+                plexShareError = shareResult.error || 'Saved locally but failed to update Plex library access.';
             }
         } catch (error) {
             plexShareError = error.message || 'Failed to update Plex library access.';
@@ -10381,8 +10396,8 @@ app.post('/api/users/bulk-libraries', requireAdmin, async (req, res) => {
             await appendAuditLog('user_bulk_libraries_updated', req.user, user, { libraryIds: normalized });
 
             try {
-                const ok = await updatePlexShareLibraries(user, config, normalized);
-                if (ok) {
+                const shareResult = await updatePlexShareLibraries(user, config, normalized);
+                if (shareResult.ok) {
                     plexUpdatedCount++;
                     if (user.plexAccessStatus === 'revoked') {
                         user.plexAccessStatus = 'pending';

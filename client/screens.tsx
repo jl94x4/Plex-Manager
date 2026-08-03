@@ -342,6 +342,19 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
     const [allowRequest4kMovies, setAllowRequest4kMovies] = useState<'default' | 'on' | 'off'>('default');
     const [allowRequest4kTv, setAllowRequest4kTv] = useState<'default' | 'on' | 'off'>('default');
     const [allowAdvancedRequests, setAllowAdvancedRequests] = useState<'default' | 'on' | 'off'>('default');
+    const initialLibraryPayloadRef = useRef<string[] | null>(null);
+    const [librariesTouched, setLibrariesTouched] = useState(false);
+
+    const libraryIdsPayloadFromSelection = useCallback((
+        selected: string[],
+        allLibraryIds: string[],
+    ): string[] => {
+        const allSelected =
+            allLibraryIds.length > 0 &&
+            selected.length >= allLibraryIds.length &&
+            allLibraryIds.every((id) => selected.includes(id));
+        return allSelected || selected.length === 0 ? [] : selected;
+    }, []);
 
     const triFrom = (value: boolean | null | undefined): 'default' | 'on' | 'off' => {
         if (value === true) return 'on';
@@ -363,6 +376,8 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             setOptOutNewsletter(!!user.optOutNewsletter);
             setSelectedLibraries(Array.isArray(user.libraryIds) ? user.libraryIds.map(String) : []);
             setLibraryShareSource(null);
+            initialLibraryPayloadRef.current = null;
+            setLibrariesTouched(false);
             const ov = user.requestOverrides || {};
             setOverrideMovieQuota(ov.movieQuotaLimit != null);
             setMovieQuotaLimit(Number(ov.movieQuotaLimit) || 0);
@@ -412,27 +427,27 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                 setLibraries(mapped);
                 setLibraryShareSource(share?.source || null);
 
-                // Live Plex share wins. Do not invent "all checked" when there is no share.
+                let nextSelected: string[] = [];
                 if (share?.hasShare === false || share?.source === 'no-share') {
-                    setSelectedLibraries([]);
+                    nextSelected = [];
                 } else if (share?.source === 'plex-all' || (share?.hasShare && share?.selectedIds == null)) {
-                    setSelectedLibraries(allIds);
+                    nextSelected = allIds;
                 } else if (share && Array.isArray(share.selectedIds)) {
                     const liveIds = share.selectedIds.map(String);
-                    // Keep only ids that exist in the local library list
                     const matched = liveIds.filter((id: string) => allIds.includes(id));
-                    setSelectedLibraries(matched.length ? matched : liveIds);
+                    nextSelected = matched.length ? matched : liveIds;
                 } else if (Array.isArray(user.libraryIds) && user.libraryIds.length > 0) {
-                    setSelectedLibraries(user.libraryIds.map(String));
-                } else {
-                    setSelectedLibraries([]);
+                    nextSelected = user.libraryIds.map(String);
                 }
+                setSelectedLibraries(nextSelected);
+                initialLibraryPayloadRef.current = libraryIdsPayloadFromSelection(nextSelected, allIds);
+                setLibrariesTouched(false);
             })
             .finally(() => {
                 if (!cancelled) setLibrariesLoading(false);
             });
         return () => { cancelled = true; };
-    }, [isOpen, user?.id]);
+    }, [isOpen, user?.id, user?.libraryIds, libraryIdsPayloadFromSelection]);
 
     if (!isOpen) return null;
 
@@ -452,20 +467,23 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             allowAdvancedRequests: triTo(allowAdvancedRequests),
         };
         const allLibraryIds = libraries.map((l) => l.id);
-        const allSelected =
-            allLibraryIds.length > 0 &&
-            selectedLibraries.length >= allLibraryIds.length &&
-            allLibraryIds.every((id) => selectedLibraries.includes(id));
-        // All checked (or none) → [] means share all on the backend
-        const libraryIdsToSave = allSelected || selectedLibraries.length === 0 ? [] : selectedLibraries;
+        const libraryIdsToSave = libraryIdsPayloadFromSelection(selectedLibraries, allLibraryIds);
+        const initialPayload = initialLibraryPayloadRef.current;
+        const librariesChanged = librariesTouched || (
+            initialPayload == null
+                ? libraryIdsToSave.length > 0
+                : JSON.stringify([...libraryIdsToSave].sort()) !== JSON.stringify([...initialPayload].sort())
+        );
         const updatedUser: User = {
             ...user,
             expiryDate,
             exemptFromCleanup,
             optOutNewsletter,
             requestOverrides,
-            libraryIds: libraryIdsToSave,
         };
+        if (librariesChanged) {
+            updatedUser.libraryIds = libraryIdsToSave;
+        }
         onSave(updatedUser);
     };
 
@@ -561,7 +579,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                     </p>
                     {libraryShareSource === 'no-share' ? (
                         <p className="mb-3 text-xs text-amber-300">
-                            No active Plex share found for this user — nothing is checked. Saving will invite/update access with the libraries you select.
+                            No Plex friend share found for this user. Expiry and portal settings save normally; library changes here only apply when you check libraries and Save.
                         </p>
                     ) : libraryShareSource === 'plex-all' ? (
                         <p className="mb-3 text-xs text-muted">Plex reports all libraries shared with this user.</p>
@@ -580,6 +598,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                                         type="checkbox"
                                         checked={selectedLibraries.includes(lib.id)}
                                         onChange={(e) => {
+                                            setLibrariesTouched(true);
                                             if (e.target.checked) setSelectedLibraries([...selectedLibraries, lib.id]);
                                             else setSelectedLibraries(selectedLibraries.filter((id) => id !== lib.id));
                                         }}
@@ -4682,15 +4701,18 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
     const handleSaveUser = async (userToSave: User) => {
         setLoading(true);
         try {
+            const payload: Record<string, unknown> = {
+                expiryDate: userToSave.expiryDate,
+                exemptFromCleanup: userToSave.exemptFromCleanup,
+                optOutNewsletter: userToSave.optOutNewsletter,
+                requestOverrides: userToSave.requestOverrides || {},
+            };
+            if (userToSave.libraryIds !== undefined) {
+                payload.libraryIds = Array.isArray(userToSave.libraryIds) ? userToSave.libraryIds : [];
+            }
             const updatedUser = await apiFetch(`/api/users/${userToSave.id}`, {
                 method: 'PUT',
-                body: JSON.stringify({
-                    expiryDate: userToSave.expiryDate,
-                    exemptFromCleanup: userToSave.exemptFromCleanup,
-                    optOutNewsletter: userToSave.optOutNewsletter,
-                    requestOverrides: userToSave.requestOverrides || {},
-                    libraryIds: Array.isArray(userToSave.libraryIds) ? userToSave.libraryIds : [],
-                })
+                body: JSON.stringify(payload),
             });
             setUsers(users.map(u => u.id === updatedUser.id ? updatedUser : u));
             handleCloseModal();
