@@ -20637,7 +20637,7 @@ app.get('/api/scanner/queue', requireAdmin, requireScanner, async (req, res) => 
 
 app.get('/api/scanner/log', requireAdmin, requireScanner, async (req, res) => {
     try {
-        const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+        const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 50));
         const config = await loadFile(CONFIG_PATH, {});
         const payload = await listLog(limit);
         res.json({
