@@ -12,6 +12,7 @@ import os
 import re
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Set, Tuple
 
 from urllib.parse import quote, unquote
@@ -474,20 +475,73 @@ def test_posterdb_login(config: dict | None = None) -> dict:
     return {"ok": True, "configured": True, "username": user, "sampleTitle": matched.get("title")}
 
 
-def cook_soup(url: str, *, config: dict | None = None) -> BeautifulSoup:
+def cook_soup(url: str, *, config: dict | None = None, timeout: float | None = None) -> BeautifulSoup:
     headers = {
         "User-Agent": _POSTERDB_UA,
         "Sec-Ch-Ua-Mobile": "?0",
         "Sec-Ch-Ua-Platform": "Windows",
     }
+    wait = 15 if timeout is None and "theposterdb.com/search" in str(url or "").lower() else timeout
+    if wait is None:
+        wait = 60
     client = _posterdb_http_client(config) if "theposterdb.com" in str(url or "").lower() else requests
     if isinstance(client, requests.Session):
-        response = client.get(url, headers=headers, timeout=60)
+        response = client.get(url, headers=headers, timeout=wait)
     else:
-        response = requests.get(url, headers=headers, timeout=60)
+        response = requests.get(url, headers=headers, timeout=wait)
     if response.status_code == 200 or (response.status_code == 500 and "mediux.pro" in url):
         return BeautifulSoup(response.text, "html.parser")
     raise RuntimeError(f"Failed to retrieve the page. Status code: {response.status_code}")
+
+
+_POSTERDB_RESOLVE_CACHE: dict[str, tuple[float, Optional[dict]]] = {}
+_POSTERDB_RESOLVE_CACHE_TTL_S = 10 * 60
+
+
+def _posterdb_resolve_cache_key(
+    *,
+    title: str,
+    year: int | None,
+    tmdb_id: str | None,
+    imdb_id: str | None,
+    tvdb_id: str | None,
+    media_type: str,
+) -> str:
+    return "|".join([
+        str(title or "").strip().lower(),
+        str(year or ""),
+        str(tmdb_id or ""),
+        str(imdb_id or ""),
+        str(tvdb_id or ""),
+        str(media_type or "").strip().lower(),
+    ])
+
+
+def _posterdb_resolve_cache_get(key: str) -> tuple[bool, Optional[dict]]:
+    hit = _POSTERDB_RESOLVE_CACHE.get(key)
+    if not hit:
+        return False, None
+    at, value = hit
+    if (time.time() - at) > _POSTERDB_RESOLVE_CACHE_TTL_S:
+        _POSTERDB_RESOLVE_CACHE.pop(key, None)
+        return False, None
+    return True, value
+
+
+def _posterdb_resolve_cache_set(key: str, value: Optional[dict]) -> None:
+    _POSTERDB_RESOLVE_CACHE[key] = (time.time(), value)
+    # Bound memory — drop oldest entries when oversized.
+    if len(_POSTERDB_RESOLVE_CACHE) > 128:
+        oldest = sorted(_POSTERDB_RESOLVE_CACHE.items(), key=lambda item: item[1][0])[:32]
+        for stale_key, _ in oldest:
+            _POSTERDB_RESOLVE_CACHE.pop(stale_key, None)
+
+
+def _posterdb_has_credentials(config: dict | None) -> bool:
+    config = config if isinstance(config, dict) else {}
+    user = str(config.get("tpdb_username") or config.get("tpdb_login") or "").strip()
+    password = str(config.get("tpdb_password") or "").strip()
+    return bool(user and password and password != "********")
 
 
 def parse_string_to_dict(input_string: str) -> dict:
@@ -1771,38 +1825,63 @@ def resolve_posterdb_title_page(
 ) -> Optional[dict]:
     """Pick the best TPDB /posters/ page — prefer TMDB match and the most sets."""
     target_tmdb = str(tmdb_id or "").strip() or None
-    search_terms: list[str] = []
-    if query:
-        search_terms.append(str(query).strip())
-    if title:
-        if year is not None:
-            with_year = f"{title} {year}"
-            if with_year not in search_terms:
-                search_terms.append(with_year)
-        if title not in search_terms:
-            search_terms.append(title)
-    if not search_terms and target_tmdb:
-        search_terms.append(target_tmdb)
+    clean_title = str(title or "").strip()
+    clean_query = str(query or "").strip()
+    # Prefer bare title for search pagination (year is matched from result labels).
+    bare_title = re.sub(r"\s*\(\s*(?:\d{4}|n/a)\s*\)\s*$", "", clean_title or clean_query, flags=re.I).strip()
+    cache_key = _posterdb_resolve_cache_key(
+        title=bare_title or clean_title or clean_query,
+        year=year,
+        tmdb_id=target_tmdb,
+        imdb_id=str(imdb_id or "").strip() or None,
+        tvdb_id=str(tvdb_id or "").strip() or None,
+        media_type=media_type,
+    )
+    cached_hit, cached_value = _posterdb_resolve_cache_get(cache_key)
+    if cached_hit:
+        return cached_value
+
+    def _finish(value: Optional[dict]) -> Optional[dict]:
+        _posterdb_resolve_cache_set(cache_key, value)
+        return value
 
     candidates: dict[str, dict] = {}
     category = _posterdb_advanced_category(media_type)
+    want_key = _posterdb_title_match_key(bare_title or clean_title or clean_query, year)
+    has_creds = _posterdb_has_credentials(config)
 
-    if target_tmdb or imdb_id or tvdb_id:
-        advanced_queries: list[tuple[str, str]] = []
-        if target_tmdb or imdb_id or tvdb_id:
-            advanced_queries.append(("", category))
-            if category != "All":
-                advanced_queries.append(("", "All"))
-        hint = str(title or query or "").strip()
-        if hint:
-            advanced_queries.append((hint, category))
-        seen_queries: set[tuple[str, str]] = set()
-        advanced: list[dict] = []
+    def _accept_year_hit(item: dict) -> Optional[dict]:
+        url = str(item.get("url") or "").strip()
+        if not url:
+            return None
+        if not target_tmdb:
+            return {**item, "url": url, "setCount": int(item.get("setCount") or 0)}
+        try:
+            probe = _posterdb_probe_title_page(url, config=config)
+        except Exception:
+            return None
+        if str(probe.get("mediaId") or "") == target_tmdb:
+            return {
+                **item,
+                "url": url,
+                "tmdbId": probe.get("mediaId"),
+                "setCount": int(probe.get("setCount") or 0),
+            }
+        if not probe.get("mediaId"):
+            return {
+                **item,
+                "url": url,
+                "tmdbId": target_tmdb,
+                "setCount": int(probe.get("setCount") or 0),
+            }
+        return None
+
+    # When logged in, TMDB advanced search is one request — try it before multi-page text search.
+    if has_creds and (target_tmdb or imdb_id or tvdb_id):
+        advanced_queries: list[tuple[str, str]] = [("", category)]
+        if category != "All":
+            advanced_queries.append(("", "All"))
         for term_value, category_value in advanced_queries:
-            key = (term_value, category_value)
-            if key in seen_queries:
-                continue
-            seen_queries.add(key)
             batch = search_posterdb_advanced_titles(
                 config,
                 tmdb_id=target_tmdb,
@@ -1817,46 +1896,61 @@ def resolve_posterdb_title_page(
                 pid = str(item.get("id") or "")
                 if pid and pid not in candidates:
                     candidates[pid] = item
-                    advanced.append(item)
-        if target_tmdb:
-            for item in advanced:
                 url = str(item.get("url") or "").strip()
-                if not url:
+                if not url or not target_tmdb:
                     continue
                 try:
                     probe = _posterdb_probe_title_page(url, config=config)
                 except Exception:
                     continue
                 if str(probe.get("mediaId") or "") == target_tmdb:
-                    set_count = int(probe.get("setCount") or 0)
-                    return {
+                    return _finish({
                         **item,
                         "url": url,
                         "tmdbId": probe.get("mediaId"),
-                        "setCount": set_count,
-                    }
+                        "setCount": int(probe.get("setCount") or 0),
+                    })
 
-    for term in search_terms:
-        result = search_posterdb_titles(
-            term,
+    # Fast path: parallel paginated text search for exact title+year (no login required).
+    if year is not None and bare_title:
+        text = search_posterdb_titles(
+            bare_title,
+            progress=progress,
+            limit=max(limit, 36),
+            config=config,
+            media_type=media_type,
+            _skip_resolve=True,
+            year_hint=year,
+            max_pages=3,
+        )
+        for item in text.get("titles") or []:
+            pid = str(item.get("id") or "")
+            if pid and pid not in candidates:
+                candidates[pid] = item
+            if want_key and _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key:
+                accepted = _accept_year_hit(item)
+                if accepted:
+                    return _finish(accepted)
+
+    # No year hint (or year path missed) — one page of bare text search, then probe.
+    if not candidates and bare_title:
+        text = search_posterdb_titles(
+            bare_title,
             progress=progress,
             limit=limit,
             config=config,
-            tmdb_id=target_tmdb,
-            imdb_id=imdb_id,
-            tvdb_id=tvdb_id,
             media_type=media_type,
             _skip_resolve=True,
+            max_pages=1,
         )
-        for item in result.get("titles") or []:
+        for item in text.get("titles") or []:
             pid = str(item.get("id") or "")
             if pid and pid not in candidates:
                 candidates[pid] = item
 
     if not candidates:
-        return None
+        return _finish(None)
 
-    want_key = _posterdb_title_match_key(title or query, year)
     best_item: Optional[dict] = None
     best_score: tuple[int, int, int, int] = (-1, -1, -1, -1)
     max_probes = max(1, int(probe_limit or 10))
@@ -1884,7 +1978,7 @@ def resolve_posterdb_title_page(
         title_match = 1 if want_key and title_key == want_key else 0
         if target_tmdb and not tmdb_match:
             continue
-        if want_key and not want_key.startswith("|") and not title_match:
+        if want_key and not want_key.startswith("|") and not title_match and not target_tmdb:
             continue
         score = (tmdb_match, title_match, set_count, -idx)
         if score > best_score:
@@ -1895,44 +1989,18 @@ def resolve_posterdb_title_page(
                 "tmdbId": media_id,
                 "setCount": set_count,
             }
-            if tmdb_match and set_count > 0:
+            if (tmdb_match or title_match) and set_count > 0:
                 break
 
-    if best_item is None and target_tmdb:
-        relaxed_score: tuple[int, int, int] = (-1, -1, -1)
-        for idx, item in enumerate(ordered[:max_probes]):
-            url = str(item.get("url") or "").strip()
-            if not url:
-                continue
-            try:
-                probe = _posterdb_probe_title_page(url, config=config)
-            except Exception:
-                continue
-            media_id = probe.get("mediaId")
-            set_count = int(probe.get("setCount") or 0)
-            title_key = _posterdb_title_match_key(item.get("title") or "", item.get("year"))
-            title_match = 1 if want_key and title_key == want_key else 0
-            title_only_match = (
-                1
-                if _posterdb_title_only_key(title or query)
-                and _posterdb_title_only_key(item.get("title") or "") == _posterdb_title_only_key(title or query)
-                else 0
-            )
-            if want_key and want_key.split("|", 1)[1] and not title_match and not title_only_match:
-                continue
-            score = (title_match or title_only_match, set_count, -idx)
-            if score > relaxed_score:
-                relaxed_score = score
-                best_item = {
-                    **item,
-                    "url": url,
-                    "tmdbId": media_id,
-                    "setCount": set_count,
-                }
-                if (title_match or title_only_match) and set_count > 0:
-                    break
+    # Do NOT relax into a different TMDB id — that caused Sisters (2026) for Sisters (2015).
+    if best_item is None and not target_tmdb and year is not None and want_key:
+        for item in ordered:
+            if _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key:
+                url = str(item.get("url") or "").strip()
+                if url:
+                    return _finish({**item, "url": url, "setCount": int(item.get("setCount") or 0)})
 
-    return best_item
+    return _finish(best_item)
 
 
 def _collect_posterdb_show_posters(soup, *, limit: int = 40, page_title: str = "") -> list[dict]:
@@ -1979,24 +2047,90 @@ def search_posterdb_titles(
     tvdb_id: str | int | None = None,
     media_type: str = "show",
     _skip_resolve: bool = False,
+    year_hint: int | None = None,
+    max_pages: int = 1,
 ) -> dict:
     term = str(query or "").strip()
     if not term:
         raise ValueError("query is required")
-    search_url = f"https://theposterdb.com/search?term={quote(term)}"
-    emit(progress, f"Searching ThePosterDB for “{term}”…")
-    soup = cook_soup(search_url, config=config)
-    titles = _parse_posterdb_title_links(soup, limit=limit)
-
-    if not _skip_resolve and (tmdb_id or imdb_id or tvdb_id or len(titles) > 1):
-        year_hint = None
+    year_val = year_hint
+    if year_val is None:
         year_match = re.search(r"(?:\(|^|\s)(19\d{2}|20\d{2})(?:\)|$|\s)", term)
         if year_match:
-            year_hint = int(year_match.group(1))
+            year_val = int(year_match.group(1))
+    # Ambiguous titles (Sisters, etc.) bury the matching year on later pages.
+    # Cap at 3 and fetch in parallel — usually enough, much faster than serial page walks.
+    pages = max(1, int(max_pages or 1))
+    if year_val is not None or tmdb_id:
+        pages = max(pages, 3)
+    pages = min(pages, 3)
+
+    titles: list[dict] = []
+    seen: set[str] = set()
+    title_only = _posterdb_title_only_key(term)
+    want_key = _posterdb_title_match_key(term, year_val) if year_val is not None else ""
+
+    def _page_url(page: int) -> str:
+        base = f"https://theposterdb.com/search?term={quote(term)}"
+        return f"{base}&page={page}" if page > 1 else base
+
+    def _fetch_page(page: int):
+        emit(
+            progress,
+            f"Searching ThePosterDB for “{term}” (page {page})…" if page > 1 else f"Searching ThePosterDB for “{term}”…",
+        )
+        soup = cook_soup(_page_url(page), config=config, timeout=12)
+        return page, _parse_posterdb_title_links(soup, limit=max(limit, 36))
+
+    def _batch_has_year_match(batch: list[dict]) -> bool:
+        if want_key and any(
+            _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key
+            for item in batch
+        ):
+            return True
+        if year_val is not None and title_only and any(
+            _posterdb_title_only_key(item.get("title") or "") == title_only
+            and item.get("year") == year_val
+            for item in batch
+        ):
+            return True
+        return False
+
+    page_batches: dict[int, list[dict]] = {}
+    if pages <= 1:
+        page_num, batch = _fetch_page(1)
+        page_batches[page_num] = batch
+    else:
+        # Parallel page fetch — Sisters (2015) lives on page 2; one round-trip beats serial walking.
+        with ThreadPoolExecutor(max_workers=min(pages, 3)) as pool:
+            futures = [pool.submit(_fetch_page, page) for page in range(1, pages + 1)]
+            for future in as_completed(futures):
+                try:
+                    page_num, batch = future.result()
+                except Exception as exc:
+                    emit(progress, f"ThePosterDB search page failed: {exc}")
+                    continue
+                page_batches[page_num] = batch
+
+    for page in sorted(page_batches):
+        batch = page_batches.get(page) or []
+        if not batch:
+            continue
+        for item in batch:
+            pid = str(item.get("id") or "")
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
+            titles.append(item)
+        if _batch_has_year_match(batch):
+            # Keep any already-fetched later pages that finished in parallel, but stop preferring more work.
+            break
+
+    if not _skip_resolve and (tmdb_id or imdb_id or tvdb_id or len(titles) > 1):
         resolved = resolve_posterdb_title_page(
             query=term,
             title=term,
-            year=year_hint,
+            year=year_val,
             tmdb_id=tmdb_id,
             imdb_id=imdb_id,
             tvdb_id=tvdb_id,
@@ -2011,7 +2145,32 @@ def search_posterdb_titles(
                 titles = [t for t in titles if str(t.get("id") or "") != rid]
                 titles.insert(0, resolved)
 
-    return {"ok": True, "provider": "posterdb", "phase": "titles", "query": term, "titles": titles, "sets": []}
+    # Keep year / exact matches even when they were found on later pages.
+    if want_key:
+        exact = [
+            item for item in titles
+            if _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key
+        ]
+        rest = [item for item in titles if item not in exact]
+        titles = exact + rest
+    elif year_val is not None and title_only:
+        exact = [
+            item for item in titles
+            if _posterdb_title_only_key(item.get("title") or "") == title_only
+            and item.get("year") == year_val
+        ]
+        rest = [item for item in titles if item not in exact]
+        titles = exact + rest
+
+    take = max(1, int(limit or 24))
+    return {
+        "ok": True,
+        "provider": "posterdb",
+        "phase": "titles",
+        "query": term,
+        "titles": titles[:take],
+        "sets": [],
+    }
 
 
 def list_posterdb_sets(
@@ -2026,6 +2185,7 @@ def list_posterdb_sets(
     title_hint: str = "",
     year_hint: int | None = None,
     media_type: str = "show",
+    _depth: int = 0,
 ) -> dict:
     url = str(title_url or "").strip()
     year_val = year_hint
@@ -2036,6 +2196,7 @@ def list_posterdb_sets(
             year_val = None
     target_tmdb = str(tmdb_id or "").strip() or None
     fallback_url = url
+    depth = max(0, int(_depth or 0))
 
     if url and target_tmdb:
         try:
@@ -2069,7 +2230,8 @@ def list_posterdb_sets(
         if resolved_url:
             url = resolved_url
 
-    if not url and fallback_url:
+    # Never fall back to a known-wrong TMDB title page when we have a target id.
+    if not url and fallback_url and not target_tmdb:
         url = fallback_url
 
     if not url or "theposterdb.com" not in url.lower() or "/posters/" not in url.lower():
@@ -2086,32 +2248,34 @@ def list_posterdb_sets(
 
     if not results:
         page_media_id, _ = _posterdb_page_media(soup)
-        resolved = resolve_posterdb_title_page(
-            query=title_hint or page_title,
-            title=title_hint or page_title,
-            year=year_val,
-            tmdb_id=target_tmdb or page_media_id,
-            imdb_id=imdb_id,
-            tvdb_id=tvdb_id,
-            media_type=media_type,
-            config=config,
-            progress=progress,
-        )
-        alt_url = str(resolved.get("url") or "").strip() if resolved else ""
-        if alt_url and alt_url.rstrip("/") != url.rstrip("/"):
-            emit(progress, f"Retrying ThePosterDB title page {alt_url}")
-            return list_posterdb_sets(
-                alt_url,
-                progress=progress,
-                limit=limit,
-                config=config,
+        if depth < 1:
+            resolved = resolve_posterdb_title_page(
+                query=title_hint or page_title,
+                title=title_hint or page_title,
+                year=year_val,
                 tmdb_id=target_tmdb or page_media_id,
                 imdb_id=imdb_id,
                 tvdb_id=tvdb_id,
-                title_hint=title_hint or page_title,
-                year_hint=year_val,
                 media_type=media_type,
+                config=config,
+                progress=progress,
             )
+            alt_url = str(resolved.get("url") or "").strip() if resolved else ""
+            if alt_url and alt_url.rstrip("/") != url.rstrip("/"):
+                emit(progress, f"Retrying ThePosterDB title page {alt_url}")
+                return list_posterdb_sets(
+                    alt_url,
+                    progress=progress,
+                    limit=limit,
+                    config=config,
+                    tmdb_id=target_tmdb or page_media_id,
+                    imdb_id=imdb_id,
+                    tvdb_id=tvdb_id,
+                    title_hint=title_hint or page_title,
+                    year_hint=year_val,
+                    media_type=media_type,
+                    _depth=depth + 1,
+                )
 
         poster_fallback = _collect_posterdb_show_posters(soup, limit=limit, page_title=page_title)
         if poster_fallback:

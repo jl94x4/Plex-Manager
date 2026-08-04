@@ -111,10 +111,24 @@ async function fetchBothSetsProgressive(
         yearHint: options.yearHint,
         mediaType: options.fallbackMedia,
     });
+    // Never let TPDb scrape hang the drawer spinner indefinitely.
+    const posterdbTimed = Promise.race([
+        posterdbP,
+        new Promise<PosterSetsSearchResult>((resolve) => {
+            window.setTimeout(() => {
+                resolve({
+                    ok: false,
+                    sets: [],
+                    titles: [],
+                    partialErrors: ['ThePosterDB search timed out — showing MediUX sets.'],
+                });
+            }, 25_000);
+        }),
+    ]);
     void mediuxP.then((partial) => {
         if ((partial.sets?.length || 0) > 0) options.onPartial?.(partial);
     });
-    const [mediuxSettled, posterdbSettled] = await Promise.allSettled([mediuxP, posterdbP]);
+    const [mediuxSettled, posterdbSettled] = await Promise.allSettled([mediuxP, posterdbTimed]);
     const mediuxResult: PosterSetsSearchResult = mediuxSettled.status === 'fulfilled'
         ? mediuxSettled.value
         : { ok: false, sets: [], titles: [] };
@@ -141,7 +155,9 @@ async function fetchBothSetsProgressive(
     }
     const sets = mergeSetsForDisplay([mediuxResult, posterdbResult], options.dupePreference);
     if ((posterdbResult.sets?.length || 0) === 0 && (mediuxResult.sets?.length || 0) > 0) {
-        partialErrors.push(TPDB_EMPTY_HINT);
+        if (!partialErrors.some((msg) => msg.includes('ThePosterDB'))) {
+            partialErrors.push(TPDB_EMPTY_HINT);
+        }
     }
     return {
         ok: true,

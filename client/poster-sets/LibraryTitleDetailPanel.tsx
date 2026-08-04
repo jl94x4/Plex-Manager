@@ -257,7 +257,8 @@ export function LibraryTitleDetailPanel({
             setSearchTitles([]);
             if (response.partialErrors?.length) {
                 const msg = response.partialErrors[0];
-                const soft = msg.includes('ThePosterDB returned no sets');
+                const soft = msg.includes('ThePosterDB returned no sets')
+                    || msg.includes('ThePosterDB search timed out');
                 toast(msg, soft ? undefined : 'error');
             }
         } catch (error) {
@@ -326,7 +327,8 @@ export function LibraryTitleDetailPanel({
             setSearchContext(response?.title || libraryItem.title);
             if (response?.partialErrors?.length) {
                 const msg = response.partialErrors[0];
-                const soft = msg.includes('ThePosterDB returned no sets');
+                const soft = msg.includes('ThePosterDB returned no sets')
+                    || msg.includes('ThePosterDB search timed out');
                 toast(msg, soft ? undefined : 'error');
             }
         } catch (error) {
