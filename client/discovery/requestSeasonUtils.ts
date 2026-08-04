@@ -145,27 +145,42 @@ export const isEndedShow = (details: any): boolean => {
 
 export const isMainSeasonNumber = (seasonNumber: number) => Number(seasonNumber) > 0;
 
+/** Sonarr episode rows confirm at least one episode has aired (or files on disk). */
+export const sonarrHasAiredEpisodes = (sonarr: any): boolean => {
+    if (!sonarr?.matched) return false;
+    if ((sonarr.seasons || []).some((season: any) => Number(season?.airedTotal) > 0)) return true;
+    const fileCount = Number(sonarr.fileCount ?? sonarr.episodeFileCount) || 0;
+    return fileCount > 0;
+};
+
 /** True when at least one episode has aired on this show. */
 export const hasAnyEpisodeAired = (details: any): boolean => {
     const last = details?.lastEpisodeToAir;
     const season = Number(last?.seasonNumber);
     const episode = Number(last?.episodeNumber);
-    if (!Number.isFinite(season) || season <= 0 || !Number.isFinite(episode) || episode <= 0) {
-        return false;
+    if (Number.isFinite(season) && season > 0 && Number.isFinite(episode) && episode > 0) {
+        const airDate = last?.airDate || last?.air_date;
+        if (airDate) {
+            const parsed = Date.parse(String(airDate));
+            if (!Number.isNaN(parsed) && parsed > Date.now()) return false;
+        }
+        return true;
     }
-    const airDate = last?.airDate || last?.air_date;
-    if (airDate) {
-        const parsed = Date.parse(String(airDate));
-        if (!Number.isNaN(parsed) && parsed > Date.now()) return false;
-    }
-    return true;
-};
 
-/** Sonarr episode rows confirm at least one episode has aired (or files on disk). */
-export const sonarrHasAiredEpisodes = (sonarr: any): boolean => {
-    if (!sonarr?.matched) return false;
-    if ((sonarr.seasons || []).some((season: any) => Number(season?.airedTotal) > 0)) return true;
-    return Number(sonarr.fileCount) > 0;
+    const sonarr = details?.sonarrLibraryStatus;
+    if (sonarr?.matched) {
+        if (sonarrHasAiredEpisodes(sonarr)) return true;
+        if (sonarr.showComplete) return true;
+    }
+
+    // Discover browse rows often omit lastEpisodeToAir — infer from premiere date.
+    const firstAir = String(details?.firstAirDate || details?.first_air_date || '').slice(0, 10);
+    if (firstAir) {
+        const parsed = Date.parse(firstAir);
+        if (!Number.isNaN(parsed) && parsed <= Date.now()) return true;
+    }
+
+    return false;
 };
 
 /** True when Sonarr confirms every aired main season is complete on disk. */
@@ -193,7 +208,7 @@ export const sonarrMainSeasonsFullyOnDisk = (details: any): boolean => {
 export const canMarkTvAsAvailable = (details: any): boolean => {
     if (!hasAnyEpisodeAired(details)) return false;
     const sonarr = details?.sonarrLibraryStatus;
-    if (sonarr?.matched && !sonarrHasAiredEpisodes(sonarr)) return false;
+    if (sonarr?.matched && !sonarrHasAiredEpisodes(sonarr) && !sonarr.showComplete) return false;
     return true;
 };
 
