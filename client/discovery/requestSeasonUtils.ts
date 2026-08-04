@@ -206,8 +206,13 @@ export const sonarrMainSeasonsFullyOnDisk = (details: any): boolean => {
 
 /** Never badge unreleased / pre-premiere shows as library-available. */
 export const canMarkTvAsAvailable = (details: any): boolean => {
-    if (!hasAnyEpisodeAired(details)) return false;
     const sonarr = details?.sonarrLibraryStatus;
+    const status = Number(details?.mediaInfo?.status);
+    if (sonarr?.matched) {
+        if (sonarrHasAiredEpisodes(sonarr) || sonarr.showComplete) return true;
+        if (status >= MEDIA_STATUS.PARTIAL && status <= MEDIA_STATUS.AVAILABLE) return true;
+    }
+    if (!hasAnyEpisodeAired(details)) return false;
     if (sonarr?.matched && !sonarrHasAiredEpisodes(sonarr) && !sonarr.showComplete) return false;
     return true;
 };
