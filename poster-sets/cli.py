@@ -126,7 +126,16 @@ def main() -> int:
             selected_ids = request.get("selectedIds")
             if not isinstance(selected_ids, list):
                 selected_ids = None
-            result = apply_url(url, config, progress=progress, selected_ids=selected_ids)
+            plex_hint = request.get("plexHint") or request.get("plex_hint")
+            if not isinstance(plex_hint, dict):
+                plex_hint = None
+            result = apply_url(
+                url,
+                config,
+                progress=progress,
+                selected_ids=selected_ids,
+                plex_hint=plex_hint,
+            )
             write_event("result", **result)
             return 0
 

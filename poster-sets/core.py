@@ -563,16 +563,106 @@ def _library_titles(libraries) -> str:
     return ", ".join(names) if names else "configured libraries"
 
 
-def find_in_library(library, poster):
+def _normalize_plex_title_key(title: str) -> str:
+    text = str(title or "").strip().lower()
+    text = re.sub(r"\(\s*(?:\d{4}|n/a)\s*\)\s*$", "", text, flags=re.I).strip()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _plex_titles_exactly_match(left: str, right: str) -> bool:
+    """Require the same work — 'Sisters' must not match 'Barbie & Her Sisters…'."""
+    left_key = _normalize_plex_title_key(left)
+    right_key = _normalize_plex_title_key(right)
+    if not left_key or not right_key:
+        return False
+    if left_key == right_key:
+        return True
+    articles = {"the", "a", "an"}
+    left_tokens = left_key.split()
+    right_tokens = right_key.split()
+    if left_tokens and left_tokens[0] in articles:
+        left_tokens = left_tokens[1:]
+    if right_tokens and right_tokens[0] in articles:
+        right_tokens = right_tokens[1:]
+    return bool(left_tokens) and left_tokens == right_tokens
+
+
+def _fetch_plex_item_by_rating_key(plex, rating_key: str):
+    key = str(rating_key or "").strip()
+    if not plex or not key:
+        return None
+    try:
+        return plex.fetchItem(int(key))
+    except Exception:
+        pass
+    try:
+        return plex.fetchItem(f"/library/metadata/{key}")
+    except Exception:
+        return None
+
+
+def find_in_library(library, poster, *, plex=None, rating_key: str | None = None):
+    """Locate Plex library items for a poster.
+
+    Plex Section.get()/search() are fuzzy — ``Sisters (2015)`` can return
+    ``Barbie & Her Sisters in the Great Puppy Adventure``. Always require an
+    exact normalized title match, and prefer an explicit ratingKey when given.
+    """
+    hint_key = str(rating_key or poster.get("_ratingKey") or "").strip() or None
+    plex_server = plex or poster.get("_plex")
+    want_title = str(poster.get("title") or "").strip()
+    if hint_key and plex_server is not None:
+        hit = _fetch_plex_item_by_rating_key(plex_server, hint_key)
+        if hit is not None:
+            hit_title = str(getattr(hit, "title", None) or "").strip()
+            # Only trust the pinned item when it is the same work as the poster title.
+            if not want_title or _plex_titles_exactly_match(want_title, hit_title):
+                return [hit]
+
+    if not want_title:
+        return None
+    want_year = poster.get("year")
+    try:
+        want_year_int = int(want_year) if want_year is not None else None
+    except Exception:
+        want_year_int = None
+
     items = []
-    for lib in library:
+    seen_keys: set[str] = set()
+    for lib in library or []:
         try:
-            if poster.get("year") is not None:
-                library_item = lib.get(poster["title"], year=poster["year"])
-            else:
-                library_item = lib.get(poster["title"])
-            if library_item:
-                items.append(library_item)
+            candidates = []
+            try:
+                if want_year_int is not None:
+                    candidates.extend(list(lib.search(title=want_title, year=want_year_int) or []))
+                else:
+                    candidates.extend(list(lib.search(title=want_title) or []))
+            except Exception:
+                pass
+            try:
+                got = lib.get(want_title, year=want_year_int) if want_year_int is not None else lib.get(want_title)
+                if got is not None:
+                    candidates.insert(0, got)
+            except Exception:
+                pass
+
+            for item in candidates:
+                item_key = str(getattr(item, "ratingKey", None) or id(item))
+                if item_key in seen_keys:
+                    continue
+                item_title = str(getattr(item, "title", None) or "").strip()
+                if not _plex_titles_exactly_match(want_title, item_title):
+                    continue
+                if want_year_int is not None:
+                    item_year = getattr(item, "year", None)
+                    try:
+                        if item_year is not None and int(item_year) != want_year_int:
+                            continue
+                    except Exception:
+                        pass
+                seen_keys.add(item_key)
+                items.append(item)
         except Exception:
             pass
     return items or None
@@ -580,10 +670,11 @@ def find_in_library(library, poster):
 
 def find_collection(library, poster):
     collections = []
+    want_title = str(poster.get("title") or "").strip()
     for lib in library:
         try:
             for plex_collection in lib.collections():
-                if plex_collection.title == poster["title"]:
+                if _plex_titles_exactly_match(want_title, str(getattr(plex_collection, "title", "") or "")):
                     collections.append(plex_collection)
         except Exception:
             pass
@@ -1541,6 +1632,7 @@ def apply_url(
     config: dict,
     progress: ProgressFn = None,
     selected_ids: Optional[Sequence[str]] = None,
+    plex_hint: Optional[dict] = None,
 ) -> dict:
     filters = normalize_library_list(config.get("mediux_filters")) or [
         "title_card",
@@ -1548,7 +1640,7 @@ def apply_url(
         "season_cover",
         "show_cover",
     ]
-    tv, movies, _plex = connect_plex(config, progress=progress)
+    tv, movies, plex = connect_plex(config, progress=progress)
     emit(progress, f"Scraping {url}")
     movieposters, showposters, collectionposters, page_meta = scrape(url, mediux_filters=filters, progress=progress)
     movieposters, showposters, collectionposters = filter_posters_by_ids(
@@ -1560,16 +1652,26 @@ def apply_url(
             f"Applying {len(movieposters) + len(showposters) + len(collectionposters)} selected asset(s)",
         )
 
+    hint = plex_hint if isinstance(plex_hint, dict) else {}
+    rating_key = str(hint.get("ratingKey") or hint.get("rating_key") or "").strip() or None
+    if rating_key:
+        emit(progress, f"Pinning apply to Plex ratingKey {rating_key}")
+
+    def _stamp(poster: dict) -> dict:
+        stamped = {**poster, "_config": config}
+        if rating_key:
+            stamped["_ratingKey"] = rating_key
+        if plex is not None:
+            stamped["_plex"] = plex
+        return stamped
+
     results = []
     for poster in collectionposters:
-        poster = {**poster, "_config": config}
-        results.append(upload_collection_poster(poster, movies, progress=progress))
+        results.append(upload_collection_poster(_stamp(poster), movies, progress=progress))
     for poster in movieposters:
-        poster = {**poster, "_config": config}
-        results.append(upload_movie_poster(poster, movies, progress=progress))
+        results.append(upload_movie_poster(_stamp(poster), movies, progress=progress))
     for poster in showposters:
-        poster = {**poster, "_config": config}
-        results.append(upload_tv_poster(poster, tv, progress=progress))
+        results.append(upload_tv_poster(_stamp(poster), tv, progress=progress))
     uploaded = sum(1 for item in results if item.get("ok"))
     set_meta = build_set_meta(url, movieposters, showposters, collectionposters, page_meta=page_meta)
     return {
