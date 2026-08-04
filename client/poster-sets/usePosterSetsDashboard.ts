@@ -1675,15 +1675,27 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
     const openSearchTitle = async (title: PosterSetsSearchTitle, libraryItem?: LibraryRecentItem) => {
         setBusy('search');
         setSearchSets([]);
+        setSearchSetsPage(1);
+        setSearchLoadingMore(false);
         setSelectedSearchTitle(title);
         setSelectedSearchSet(null);
         setPreview(null);
+        const hasLinkedTmdb = String(title.provider || '').toLowerCase() === 'mediux' && Boolean(title.id);
+        if (hasLinkedTmdb) setSearchLoadingMore(true);
         try {
             const response = await fetchPosterSetsForTitle(title, {
                 dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
                 mediaType: libraryItem?.mediaType,
                 libraryItem,
                 preferredCreators: configDraft.creatorWhitelist,
+                onPartial: (partial) => {
+                    if ((partial.sets?.length || 0) > 0) {
+                        setSearchSets(partial.sets || []);
+                        setSearchContext(partial.title || title.title);
+                        setSearchLoadingMore(true);
+                        setBusy((current) => (current === 'search' ? null : current));
+                    }
+                },
             });
             setSearchSets(response.sets || []);
             setSearchSetsPage(1);
@@ -1701,7 +1713,8 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
         } finally {
-            setBusy(null);
+            setBusy((current) => (current === 'search' ? null : current));
+            setSearchLoadingMore(false);
         }
     };
 

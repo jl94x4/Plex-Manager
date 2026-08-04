@@ -253,6 +253,9 @@ export function LibraryTitleDetailPanel({
                         setSearchContext(partial.title || title.title);
                         setLoading(false);
                         setLoadingMoreSets(true);
+                        // Unlock the UI as soon as MediUX results land so users can
+                        // preview/watch while ThePosterDB is still loading.
+                        setBusy((current) => (current === 'search' ? null : current));
                     }
                 },
             });
@@ -280,7 +283,8 @@ export function LibraryTitleDetailPanel({
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
         } finally {
-            setBusy(null);
+            // Don't clobber an in-flight preview/apply/watch started during TPDB wait.
+            setBusy((current) => (current === 'search' ? null : current));
             setLoadingMoreSets(false);
         }
     }, [dupePreference, preferredCreators, toast]);
@@ -635,6 +639,8 @@ export function LibraryTitleDetailPanel({
     }, [preview?.assets, selectedSet, titleCardsOnly, item?.mediaType]);
 
     const readyToApply = Boolean(preview && !busy);
+    // Background TPDB fetch uses busy='search' / loadingMoreSets — keep MediUX sets clickable.
+    const interactionLocked = busy !== null && busy !== 'search';
     const headerLabel = item
         ? (item.year ? `${item.title} (${item.year})` : item.title)
         : '';
@@ -749,7 +755,7 @@ export function LibraryTitleDetailPanel({
                                             : 'Apply a poster set first, then auto-queue new art for this title.'
                                     }
                                     checked={titleWatchEnabled}
-                                    disabled={busy !== null || ( !titleWatchEnabled && !titleWatchSetUrl )}
+                                    disabled={interactionLocked || ( !titleWatchEnabled && !titleWatchSetUrl )}
                                     onChange={(next) => { void toggleTitleWatch(next); }}
                                     border={false}
                                 />
@@ -788,7 +794,7 @@ export function LibraryTitleDetailPanel({
                                     <button
                                         type="button"
                                         className={`${buttonClass} w-full`}
-                                        disabled={busy !== null}
+                                        disabled={interactionLocked}
                                         onClick={() => void runResetArt()}
                                     >
                                         {busy === 'reset' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
@@ -831,7 +837,7 @@ export function LibraryTitleDetailPanel({
                                         key={`${title.provider}-${title.id}-${title.title}`}
                                         type="button"
                                         className={`${fieldClass} text-left transition hover:border-plex/40`}
-                                        disabled={busy !== null}
+                                        disabled={interactionLocked}
                                         onClick={() => void loadSetsForTitle(title, item)}
                                     >
                                         <span className="font-semibold text-text">{title.title}</span>
@@ -897,7 +903,7 @@ export function LibraryTitleDetailPanel({
                                                             <button
                                                                 type="button"
                                                                 className="text-left"
-                                                                disabled={busy !== null}
+                                                                disabled={interactionLocked}
                                                                 onClick={() => void runPreview(set)}
                                                             >
                                                                 <div className={`relative bg-black text-center ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
@@ -937,7 +943,7 @@ export function LibraryTitleDetailPanel({
                                                                 <button
                                                                     type="button"
                                                                     className={buttonClass}
-                                                                    disabled={busy !== null || watching}
+                                                                    disabled={interactionLocked || watching}
                                                                     title="Watch for updates"
                                                                     onClick={() => void addWatch(set)}
                                                                 >
@@ -957,7 +963,7 @@ export function LibraryTitleDetailPanel({
                                     <button
                                         type="button"
                                         className={buttonClass}
-                                        disabled={setsPage <= 1 || busy !== null}
+                                        disabled={setsPage <= 1 || interactionLocked}
                                         onClick={() => setSetsPage((page) => Math.max(1, page - 1))}
                                     >
                                         <ChevronLeft className="h-4 w-4" />
@@ -968,7 +974,7 @@ export function LibraryTitleDetailPanel({
                                     <button
                                         type="button"
                                         className={buttonClass}
-                                        disabled={setsPage >= setsPageCount || busy !== null}
+                                        disabled={setsPage >= setsPageCount || interactionLocked}
                                         onClick={() => setSetsPage((page) => Math.min(setsPageCount, page + 1))}
                                     >
                                         <ChevronLeft className="h-4 w-4 rotate-180" />
@@ -1056,7 +1062,7 @@ export function LibraryTitleDetailPanel({
                                 <button
                                     type="button"
                                     className={`${buttonClass} mt-3 w-full`}
-                                    disabled={busy !== null}
+                                    disabled={interactionLocked}
                                     onClick={() => void addWatch(selectedSet)}
                                 >
                                     <Eye className="h-4 w-4" />

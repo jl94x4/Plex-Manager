@@ -605,7 +605,7 @@ export const PosterSetsSearchView: React.FC = () => {
                                                 <button
                                                     type="button"
                                                     className="block w-full text-left"
-                                                    disabled={busy !== null && busy !== 'preview'}
+                                                    disabled={busy !== null && busy !== 'preview' && busy !== 'search'}
                                                     onClick={() => void pickSearchSet(set)}
                                                 >
                                                 <div className={`relative overflow-hidden bg-black text-center ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'}`}>
