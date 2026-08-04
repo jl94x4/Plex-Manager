@@ -432,13 +432,11 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
     const goToDiscoverView = useCallback((view: DiscoverView, options?: { rail?: string | null; mode?: 'push' | 'replace' }) => {
         const internal: TabId = view === 'browse'
             ? 'browse'
-            : view === 'watches'
-                ? 'watches'
-                : view === 'recent'
-                    ? 'recent'
-                    : view === 'history'
-                        ? 'history'
-                        : 'apply';
+            : view === 'recent'
+                ? 'recent'
+                : view === 'history'
+                    ? 'history'
+                    : 'apply';
         goToTab(internal, options);
     }, [goToTab]);
 

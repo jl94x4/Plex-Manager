@@ -1,5 +1,5 @@
 import React from 'react';
-import { Compass, Library, ListOrdered, RefreshCw, Settings2 } from 'lucide-react';
+import { Compass, Eye, Library, ListOrdered, RefreshCw, Settings2 } from 'lucide-react';
 import { ToastContainer } from '../../shared/toast';
 import { usePosterSetsDashboard } from '../PosterSetsDashboardContext';
 import { LibraryTitleDetailPanel } from '../LibraryTitleDetailPanel';
@@ -62,7 +62,7 @@ export const PosterSetsShell: React.FC = () => {
                             <h1 className="mt-1.5 text-xl font-bold tracking-tight text-text sm:mt-2 sm:text-3xl">Artwork from MediUX & ThePosterDB</h1>
                             <p className="mt-1.5 text-xs leading-relaxed text-muted sm:mt-2 sm:text-sm">
                                 Start from your library, pick a title, preview poster sets, and apply.
-                                Search creators and browse rails in Discover. Queue and settings stay one click away.
+                                Search creators and browse rails in Discover. Queue, Watching, and settings stay one click away.
                             </p>
                         </div>
                         <button type="button" className={`${buttonClass} shrink-0`} onClick={() => void load()} disabled={busy !== null}>
@@ -104,6 +104,7 @@ export const PosterSetsShell: React.FC = () => {
                         ['library', 'Library', Library],
                         ['discover', 'Discover', Compass],
                         ['queue', 'Queue', ListOrdered],
+                        ['watches', 'Watching', Eye],
                         ['settings', 'Settings', Settings2],
                     ] as const).map(([id, label, Icon]) => {
                         const active = id === 'discover'
@@ -129,11 +130,11 @@ export const PosterSetsShell: React.FC = () => {
                                     {queueStats.pending}
                                 </span>
                             ) : null}
-                            {id === 'discover' && (watchStatsState.errored || 0) > 0 ? (
+                            {id === 'watches' && (watchStatsState.errored || 0) > 0 ? (
                                 <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
                                     {watchStatsState.errored}
                                 </span>
-                            ) : id === 'discover' && (watchStatsState.enabled || 0) > 0 ? (
+                            ) : id === 'watches' && (watchStatsState.enabled || 0) > 0 ? (
                                 <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
                                     {watchStatsState.enabled}
                                 </span>

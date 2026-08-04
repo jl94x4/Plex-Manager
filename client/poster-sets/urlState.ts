@@ -1,9 +1,9 @@
 /** Hash routing for Poster Sets — library-first with Discover sub-views. */
 
-export const POSTER_SETS_PRIMARY_TABS = ['library', 'discover', 'queue', 'settings'] as const;
+export const POSTER_SETS_PRIMARY_TABS = ['library', 'discover', 'queue', 'watches', 'settings'] as const;
 export type PosterSetsPrimaryTab = (typeof POSTER_SETS_PRIMARY_TABS)[number];
 
-export const DISCOVER_VIEWS = ['search', 'browse', 'watches', 'recent', 'history'] as const;
+export const DISCOVER_VIEWS = ['search', 'browse', 'recent', 'history'] as const;
 export type DiscoverView = (typeof DISCOVER_VIEWS)[number];
 
 /** Internal tabs used by the dashboard render tree (legacy names preserved). */
@@ -67,12 +67,12 @@ const legacyTabToState = (legacy: PosterSetsInternalTab): Pick<PosterSetsUrlStat
             return { tab: 'library', discoverView: 'search' };
         case 'queue':
             return { tab: 'queue', discoverView: 'search' };
+        case 'watches':
+            return { tab: 'watches', discoverView: 'search' };
         case 'settings':
             return { tab: 'settings', discoverView: 'search' };
         case 'browse':
             return { tab: 'discover', discoverView: 'browse' };
-        case 'watches':
-            return { tab: 'discover', discoverView: 'watches' };
         case 'recent':
             return { tab: 'discover', discoverView: 'recent' };
         case 'history':
@@ -86,9 +86,9 @@ const legacyTabToState = (legacy: PosterSetsInternalTab): Pick<PosterSetsUrlStat
 export function internalTabFromUrl(state: PosterSetsUrlState): PosterSetsInternalTab {
     if (state.tab === 'library') return 'library';
     if (state.tab === 'queue') return 'queue';
+    if (state.tab === 'watches') return 'watches';
     if (state.tab === 'settings') return 'settings';
     if (state.discoverView === 'browse') return 'browse';
-    if (state.discoverView === 'watches') return 'watches';
     if (state.discoverView === 'recent') return 'recent';
     if (state.discoverView === 'history') return 'history';
     return 'apply';
@@ -171,9 +171,23 @@ export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window
         };
     }
 
-    const tab: PosterSetsPrimaryTab = isPrimaryTab(first) ? first : 'library';
+    const tabRaw: PosterSetsPrimaryTab = isPrimaryTab(first) ? first : 'library';
     let discoverView: DiscoverView = 'search';
     let rail: string | null = null;
+
+    // Legacy bookmark: #discover/watches → primary Watching tab
+    if (tabRaw === 'discover' && String(segments[1] || '').trim().toLowerCase() === 'watches') {
+        return {
+            tab: 'watches',
+            discoverView: 'search',
+            rail: null,
+            setUrl: null,
+            creator: null,
+            titleCardsOnly: false,
+        };
+    }
+
+    const tab = tabRaw;
 
     if (tab === 'discover') {
         const viewRaw = String(segments[1] || 'search').trim().toLowerCase();
