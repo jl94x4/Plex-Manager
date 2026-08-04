@@ -42,7 +42,7 @@ import {
 import type { LibraryDetailLayout } from './shared/posterSetsUi';
 
 const TITLE_CARD_ONLY_FILTERS = ['title_card'];
-const SETS_PAGE_SIZE_DRAWER = 12;
+const SETS_PAGE_SIZE_DRAWER = 16;
 const SETS_PAGE_SIZE_MODAL = 20;
 
 const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
@@ -657,17 +657,19 @@ export function LibraryTitleDetailPanel({
     const isModalLayout = layoutMode === 'modal';
     const setsGridClass = isModalLayout
         ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
-        : 'grid grid-cols-2 gap-3 sm:grid-cols-3';
+        : 'grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4';
     const setsGridClassLandscape = isModalLayout
         ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-        : 'grid grid-cols-1 gap-3 sm:grid-cols-2';
+        : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3';
     const panelShellClass = isModalLayout
         ? [
             'fixed z-[101] flex max-h-[100dvh] flex-col bg-card shadow-2xl',
+            // Mobile: keep the narrow sheet. Desktop modal uses the wide centered panel below.
             'inset-y-0 right-0 h-[100dvh] w-full max-w-[min(100%,520px)] border-l border-white/10 pt-[env(safe-area-inset-top,0px)]',
             'md:inset-auto md:left-1/2 md:top-1/2 md:h-auto md:w-[min(96vw,1320px)] md:max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-white/10 md:pt-0',
         ].join(' ')
-        : 'fixed inset-y-0 right-0 z-[101] flex h-[100dvh] max-h-[100dvh] w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card pt-[env(safe-area-inset-top,0px)] shadow-2xl';
+        // Drawer: 520px on mobile, ~2× on md+ (1040px).
+        : 'fixed inset-y-0 right-0 z-[101] flex h-[100dvh] max-h-[100dvh] w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card pt-[env(safe-area-inset-top,0px)] shadow-2xl md:max-w-[min(100%,1040px)]';
 
     return (
         <ModalPortal open>

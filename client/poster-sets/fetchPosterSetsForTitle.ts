@@ -1,5 +1,9 @@
 import { posterSetsApi } from './api';
-import { pickAutoMatchedTitle } from './autoMatchTitle';
+import {
+    catalogTitleMatchesWork,
+    filterSetsForWork,
+    pickAutoMatchedTitle,
+} from './autoMatchTitle';
 import type { LibraryRecentItem } from './libraryRecent';
 import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import type { PosterSetsSearchResult, PosterSetsSearchSet, PosterSetsSearchTitle } from './types';
@@ -63,6 +67,24 @@ const mediuxMediaType = (source: TitleSource, fallback: 'show' | 'movie') =>
 const TPDB_EMPTY_HINT = 'ThePosterDB returned no sets for this title; showing MediUX sets instead.';
 /** Hard wait — server title search allows ~120s; don't abandon TPDB at 25s. */
 const TPDB_HARD_MS = 90_000;
+
+const filterResultForWork = (
+    result: PosterSetsSearchResult,
+    workTitle: string,
+): PosterSetsSearchResult => {
+    const filtered = filterSetsForWork(result.sets || [], workTitle);
+    if (filtered.length === (result.sets || []).length) return result;
+    return {
+        ...result,
+        sets: filtered,
+        partialErrors: filtered.length
+            ? result.partialErrors
+            : [
+                ...(result.partialErrors || []),
+                `Dropped ${Math.max(0, (result.sets || []).length - filtered.length)} unrelated set(s) that did not match “${workTitle}”.`,
+            ],
+    };
+};
 
 const withTimeout = <T,>(
     promise: Promise<T>,
@@ -132,6 +154,7 @@ async function fetchBothSetsProgressive(
         onPartial?: (result: PosterSetsSearchResult) => void;
     },
 ): Promise<PosterSetsSearchResult> {
+    const workTitle = options.titleHint;
     const posterdbSource: TitleSource = {
         provider: 'posterdb',
         id: '',
@@ -146,14 +169,19 @@ async function fetchBothSetsProgressive(
         mediaType: options.fallbackMedia,
     });
 
-    // Paint MediUX as soon as it lands; keep waiting for TPDB (scrape is often 30–60s).
-    void mediuxP.then((partial) => {
-        if ((partial.sets?.length || 0) > 0) {
+    const emitPartial = (partial: PosterSetsSearchResult) => {
+        const filtered = filterResultForWork(partial, workTitle);
+        if ((filtered.sets?.length || 0) > 0) {
             options.onPartial?.({
-                ...partial,
-                sets: prioritizeSetsByFollowedCreators(partial.sets || [], options.preferredCreators),
+                ...filtered,
+                sets: prioritizeSetsByFollowedCreators(filtered.sets || [], options.preferredCreators),
             });
         }
+    };
+
+    // Paint MediUX as soon as it lands; keep waiting for TPDB (scrape is often 30–60s).
+    void mediuxP.then((partial) => {
+        if ((partial.sets?.length || 0) > 0) emitPartial(partial);
     });
 
     // If TPDB finishes after the hard deadline, still merge it into the drawer.
@@ -164,7 +192,7 @@ async function fetchBothSetsProgressive(
             sets: [],
             titles: [],
         } as PosterSetsSearchResult));
-        options.onPartial?.({
+        emitPartial({
             ok: true,
             sets: mergeSetsForDisplay([mediuxLate, late], options.dupePreference, options.preferredCreators),
             titles: [],
@@ -215,13 +243,13 @@ async function fetchBothSetsProgressive(
             partialErrors.push(TPDB_EMPTY_HINT);
         }
     }
-    return {
+    return filterResultForWork({
         ok: true,
         sets,
         titles: [],
         title: mediuxResult.title || posterdbResult.title,
         partialErrors: partialErrors.length ? partialErrors : undefined,
-    };
+    }, workTitle);
 }
 
 async function fetchMediuxSets(
@@ -284,11 +312,12 @@ async function fetchPosterdbSets(
 ): Promise<PosterSetsSearchResult> {
     const tmdbId = options.tmdbId || undefined;
     const titleHint = String(options.titleHint || '').trim();
+    const yearHint = options.yearHint ?? null;
     const basePayload = {
         provider: 'posterdb' as const,
         query: titleHint || undefined,
         titleHint: titleHint || undefined,
-        yearHint: options.yearHint ?? undefined,
+        yearHint: yearHint ?? undefined,
         mediaType: options.mediaType,
         limit: 40,
     };
@@ -298,16 +327,32 @@ async function fetchPosterdbSets(
         titleUrl: tmdbId ? undefined : (source.url || undefined),
         tmdbId,
     });
+    response = filterResultForWork(response, titleHint);
     if ((response.sets?.length || 0) > 0) return response;
 
-    const pickedUrl = String(response.titles?.[0]?.url || source.url || '').trim();
-    if (!pickedUrl) return response;
+    // Never open titles[0] from a fuzzy TPDB search (e.g. "Python Hunt" → "Monty Python").
+    const matchedTitle = (response.titles || []).find((candidate) => catalogTitleMatchesWork(
+        { title: titleHint, year: yearHint, mediaType: options.mediaType },
+        candidate,
+    ));
+    const pickedUrl = String(matchedTitle?.url || '').trim();
+    if (!pickedUrl) {
+        return {
+            ...response,
+            sets: [],
+            titles: (response.titles || []).filter((candidate) => catalogTitleMatchesWork(
+                { title: titleHint, year: yearHint, mediaType: options.mediaType },
+                candidate,
+                { yearRequired: false },
+            )),
+        };
+    }
 
     response = await posterSetsApi.search({
         ...basePayload,
         titleUrl: pickedUrl,
     });
-    return response;
+    return filterResultForWork(response, titleHint);
 }
 
 async function fetchMediuxSetsViaTmdbLookup(
@@ -449,10 +494,13 @@ export async function fetchPosterSetsForTitle(
         response = { ok: true, sets: [], titles: [] };
     }
 
-    const withPreferred = (result: PosterSetsSearchResult): PosterSetsSearchResult => ({
-        ...result,
-        sets: prioritizeSetsByFollowedCreators(result.sets || [], options.preferredCreators),
-    });
+    const withPreferred = (result: PosterSetsSearchResult): PosterSetsSearchResult => {
+        const filtered = filterResultForWork(result, titleHint || title.title);
+        return {
+            ...filtered,
+            sets: prioritizeSetsByFollowedCreators(filtered.sets || [], options.preferredCreators),
+        };
+    };
 
     if ((response.sets?.length || 0) > 0) return withPreferred(response);
 

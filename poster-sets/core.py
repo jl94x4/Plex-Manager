@@ -1760,7 +1760,11 @@ def _pick_posterdb_title_candidate(
     title_hint: str = "",
     year_hint: int | None = None,
 ) -> Optional[dict]:
-    """Pick the best TPDB /posters/ title page from text-search hits."""
+    """Pick the best TPDB /posters/ title page from text-search hits.
+
+    Title (+ year when known) must match — never fall through to titles[0]
+    from a fuzzy TPDB search (e.g. "The Python Hunt" → "Monty Python").
+    """
     if not titles:
         return None
     want_key = _posterdb_title_match_key(title_hint, year_hint)
@@ -1771,13 +1775,16 @@ def _pick_posterdb_title_candidate(
             if _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key:
                 return item
         # Year was requested but page-1 search missed it (common for "Sisters").
-        # Do not fall through to an unrelated same-name year.
+        # Do not fall through to an unrelated same-name / fuzzy hit.
         return None
     if title_only:
         for item in titles:
             if _posterdb_title_only_key(item.get("title") or "") == title_only:
                 return item
-    return titles[0]
+        # Have a real title hint but no exact title match — refuse fuzzy first hit.
+        return None
+    # No usable title hint: caller must not rely on an arbitrary first result.
+    return None
 
 
 def _parse_posterdb_title_links(soup, *, limit: int = 24, html: str = "") -> list[dict]:
@@ -2388,6 +2395,40 @@ def list_posterdb_sets(
     for item in results:
         if not item.get("title"):
             item["title"] = page_title or f"Set {item['setId']}"
+
+    # Last-line guard: if we somehow opened a fuzzy TPDB page, drop unrelated set cards.
+    hint = str(title_hint or "").strip()
+    if hint and results:
+        hint_tokens = [
+            tok
+            for tok in re.sub(r"[^a-z0-9]+", " ", hint.lower()).split()
+            if tok and tok not in {"the", "a", "an"}
+        ]
+        if hint_tokens:
+            filtered = []
+            for item in results:
+                blob = re.sub(
+                    r"[^a-z0-9]+",
+                    " ",
+                    str(item.get("title") or page_title or "").lower(),
+                )
+                blob_tokens = [tok for tok in blob.split() if tok]
+                if len(hint_tokens) == 1:
+                    ok = blob_tokens == hint_tokens
+                else:
+                    ok = any(
+                        blob_tokens[i : i + len(hint_tokens)] == hint_tokens
+                        for i in range(0, max(0, len(blob_tokens) - len(hint_tokens) + 1))
+                    )
+                if ok:
+                    filtered.append(item)
+            if len(filtered) != len(results):
+                emit(
+                    progress,
+                    f"Dropped {len(results) - len(filtered)} ThePosterDB set(s) that did not match “{hint}”.",
+                )
+                results = filtered
+
     return {
         "ok": True,
         "provider": "posterdb",

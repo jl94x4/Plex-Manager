@@ -32,6 +32,23 @@ const tokensWithoutLeadingArticle = (value: string): string[] => {
     return tokens;
 };
 
+/** Strip pack/collection noise so "Sugar (2024) Set" compares as "Sugar". */
+export const normalizeSetTitleForMatch = (value: string): string => (
+    normalizeTitleMatchKey(value)
+        .replace(/\b(19|20)\d{2}\b/g, ' ')
+        .replace(/\b(set|poster set|posters|collection|boxset|box set|pack|title cards?)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+);
+
+const tokensContainPhrase = (haystack: string[], needle: string[]): boolean => {
+    if (!needle.length || needle.length > haystack.length) return false;
+    for (let i = 0; i <= haystack.length - needle.length; i += 1) {
+        if (needle.every((token, index) => haystack[i + index] === token)) return true;
+    }
+    return false;
+};
+
 const mediaTypeMatches = (libraryItem: LibraryRecentItem, candidate: PosterSetsSearchTitle): boolean => {
     const candMedia = normalizeMediaType(candidate.mediaType);
     return !candMedia || candMedia === libraryItem.mediaType;
@@ -83,6 +100,49 @@ export const strictTitleMatches = (libraryTitle: string, candidateTitle: string)
     return false;
 };
 
+/**
+ * Poster set cards must belong to the library work.
+ * "The Python Hunt" must not accept "Monty Python Collection" just because "Python" overlaps.
+ */
+export const setTitleMatchesWork = (workTitle: string, setTitle: string): boolean => {
+    const workTokens = tokensWithoutLeadingArticle(workTitle);
+    const setTokens = tokensWithoutLeadingArticle(normalizeSetTitleForMatch(setTitle));
+    if (!workTokens.length || !setTokens.length) return false;
+    if (strictTitleMatches(workTitle, normalizeSetTitleForMatch(setTitle))) return true;
+    // Single-word works must be the whole set title after noise strip ("Python" ≠ "Monty Python").
+    if (workTokens.length === 1) {
+        return setTokens.length === 1 && setTokens[0] === workTokens[0];
+    }
+    // Multi-word: require the full work title as a contiguous phrase in the set title.
+    return tokensContainPhrase(setTokens, workTokens);
+};
+
+export const catalogTitleMatchesWork = (
+    work: { title: string; year?: number | null; mediaType?: string | null },
+    candidate: { title?: string | null; year?: number | null; mediaType?: string | null },
+    options?: { yearRequired?: boolean },
+): boolean => {
+    if (!candidate?.title) return false;
+    if (!strictTitleMatches(work.title, candidate.title)) return false;
+    const media = normalizeMediaType(candidate.mediaType);
+    const wantMedia = normalizeMediaType(work.mediaType);
+    if (media && wantMedia && media !== wantMedia) return false;
+    if (work.year == null) return true;
+    if (candidate.year == null) return options?.yearRequired === false;
+    return strictYearMatches(work.year, candidate.year, {
+        tolerance: yearMatchTolerance(work.mediaType),
+    });
+};
+
+export const filterSetsForWork = <T extends { title?: string | null }>(
+    sets: T[],
+    workTitle: string,
+): T[] => {
+    const list = Array.isArray(sets) ? sets : [];
+    if (!workTitle.trim()) return list;
+    return list.filter((set) => setTitleMatchesWork(workTitle, String(set?.title || '')));
+};
+
 const rankTitleCandidate = (
     libraryItem: LibraryRecentItem,
     candidate: PosterSetsSearchTitle,
@@ -131,13 +191,7 @@ export const catalogTitleMatchesLibraryItem = (
     catalogTitle?: Pick<PosterSetsSearchTitle, 'title' | 'year' | 'mediaType'> | null,
 ): boolean => {
     if (!catalogTitle?.title) return false;
-    const pseudo: LibraryRecentItem = {
-        id: '',
-        title: libraryItem.title,
-        year: libraryItem.year ?? null,
-        mediaType: libraryItem.mediaType,
-    };
-    return isStrictAutoMatch(pseudo, catalogTitle as PosterSetsSearchTitle);
+    return catalogTitleMatchesWork(libraryItem, catalogTitle);
 };
 
 /**
