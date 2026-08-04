@@ -6,7 +6,7 @@ export const discoveryTheme = {
     tabBar: 'w-full flex flex-wrap items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-border/80 backdrop-blur-md',
     tab: 'flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap text-muted hover:text-text hover:bg-white/5',
     tabActive: 'bg-plex/20 text-plex ring-1 ring-inset ring-plex/50 shadow-none hover:bg-plex/25 hover:text-plex',
-    tabSticky: 'sticky top-0 z-30 -mx-1 px-1 py-2 bg-background/85 backdrop-blur-md',
+    tabSticky: 'sticky top-0 z-30 page-bleed-x page-x py-2 bg-background/85 backdrop-blur-md md:mx-0 md:px-0',
     toolbarBtn: 'flex items-center gap-2 px-4 py-2 bg-white/5 border border-border hover:bg-white/10 rounded-lg text-text/80 hover:text-text font-bold transition-colors',
     mobileNavBtn: 'w-full flex items-center justify-between p-3 rounded-lg bg-white/5 border border-border text-text font-bold',
     mobileNavMenu: 'absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg overflow-hidden z-50',

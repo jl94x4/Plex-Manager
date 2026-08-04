@@ -1226,11 +1226,11 @@ html.branded-skeleton .skeleton-base::after {
   }
 }
 
-/* Portal page gutters — tight on mobile, comfortable on desktop */
+/* Portal page gutters — 4px on mobile, comfortable on desktop */
 @layer utilities {
   .page-x {
-    padding-left: max(1px, env(safe-area-inset-left, 0px));
-    padding-right: max(1px, env(safe-area-inset-right, 0px));
+    padding-left: max(4px, env(safe-area-inset-left, 0px));
+    padding-right: max(4px, env(safe-area-inset-right, 0px));
   }
 
   @media (min-width: 768px) {
@@ -1241,10 +1241,10 @@ html.branded-skeleton .skeleton-base::after {
   }
 
   .page-bleed-x {
-    margin-left: calc(-1 * max(1px, env(safe-area-inset-left, 0px)));
-    margin-right: calc(-1 * max(1px, env(safe-area-inset-right, 0px)));
+    margin-left: calc(-1 * max(4px, env(safe-area-inset-left, 0px)));
+    margin-right: calc(-1 * max(4px, env(safe-area-inset-right, 0px)));
     width: calc(
-      100% + max(1px, env(safe-area-inset-left, 0px)) + max(1px, env(safe-area-inset-right, 0px))
+      100% + max(4px, env(safe-area-inset-left, 0px)) + max(4px, env(safe-area-inset-right, 0px))
     );
   }
 

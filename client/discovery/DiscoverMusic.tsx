@@ -144,7 +144,7 @@ export const MusicGenreRail: React.FC<{
     if (!genres.length) return null;
     return (
         <section className="flex flex-col gap-2">
-            <h3 className={`${discoveryTheme.sectionTitle} px-2 pr-16`}>{title}</h3>
+            <h3 className={`${discoveryTheme.sectionTitle} pr-16`}>{title}</h3>
             <Carousel>
                 {genres.map((g) => (
                     <button
@@ -179,7 +179,7 @@ export const MusicChartRail: React.FC<{
     if (!items.length) return null;
     return (
         <section className="flex flex-col gap-2">
-            <h3 className={`${discoveryTheme.sectionTitle} px-2 pr-16`}>{title}</h3>
+            <h3 className={`${discoveryTheme.sectionTitle} pr-16`}>{title}</h3>
             <Carousel>
                 {items.map((item, idx) => {
                     const key = `${kind}-${item.deezerId ?? idx}`;
