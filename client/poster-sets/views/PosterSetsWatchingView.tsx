@@ -275,6 +275,8 @@ export const PosterSetsWatchingView: React.FC = () => {
         watchGroups,
         watchesPageCount,
         pagedWatchGroups,
+        pagedWatchGroupsByCategory,
+        promoteWatchArtKind,
         readyToApply,
         inspectorOpen,
         matchedThumbStrip,
@@ -307,7 +309,7 @@ export const PosterSetsWatchingView: React.FC = () => {
                             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-plex">Pinned artwork</p>
                             <h2 className="mt-1 text-xl font-bold tracking-tight text-text sm:text-2xl">Watching</h2>
                             <p className={sectionBodyClass}>
-                                Keep MediUX and ThePosterDB sets in view. New art — including title cards — queues automatically.
+                                Keep MediUX and ThePosterDB sets in view, grouped by posters and title cards. New art queues automatically.
                             </p>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 <MetaPill className="border-plex/35 bg-plex/15 text-plex" truncate={false}>
@@ -452,9 +454,24 @@ export const PosterSetsWatchingView: React.FC = () => {
                             No sets match "{watchesFilter.trim()}".
                         </div>
                     ) : (
-                        <div className="min-w-0 space-y-4">
-                            <div className={posterGridClass} style={posterGridStyle}>
-                                {pagedWatchGroups.map((group) => {
+                        <div className="min-w-0 space-y-6">
+                            {RECENT_CATEGORY_ORDER.map((category) => {
+                                const items = pagedWatchGroupsByCategory[category.id];
+                                if (!items.length) return null;
+                                const landscape = category.landscape;
+                                return (
+                                    <div key={category.id} className="space-y-3">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 className="text-sm font-bold text-text sm:text-base">{category.title}</h3>
+                                            <span className="text-[11px] text-muted">
+                                                {watchGroups.filter((group) => group.category === category.id).length}
+                                            </span>
+                                        </div>
+                                        <div
+                                            className={posterGridClass}
+                                            style={landscape ? titleCardGridStyle : posterGridStyle}
+                                        >
+                                            {items.map((group) => {
                                     const multi = group.watches.length > 1;
                                     const anyPaused = group.watches.every((watch) => watch.enabled === false);
                                     const thumbSrc = group.thumbUrl
@@ -471,12 +488,23 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                     : 'border-white/10 hover:border-plex/40'
                                             }`}
                                         >
-                                            <div className={`relative aspect-[2/3] overflow-hidden bg-black text-center ${anyPaused ? 'opacity-55' : ''}`}>
+                                            <div className={`relative overflow-hidden bg-black text-center ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'} ${anyPaused ? 'opacity-55' : ''}`}>
                                                 <PosterThumb
                                                     src={thumbSrc}
                                                     alt={group.title}
                                                     className="absolute inset-0 h-full w-full"
                                                     imgClassName="absolute inset-0 h-full w-full object-contain object-center transition duration-300 group-hover:scale-[1.02]"
+                                                    onLoad={(event) => {
+                                                        if (landscape || category.id !== 'posters') return;
+                                                        const img = event.currentTarget;
+                                                        if (!img.naturalWidth || !img.naturalHeight) return;
+                                                        const ratio = img.naturalWidth / img.naturalHeight;
+                                                        if (ratio < 1.2) return;
+                                                        const kind = ratio < 1.6 ? 'backgrounds' : 'title_cards';
+                                                        for (const watch of group.watches) {
+                                                            promoteWatchArtKind(watch.id, kind);
+                                                        }
+                                                    }}
                                                 />
                                             </div>
         
@@ -541,7 +569,9 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                                     {watchThumbSrc ? (
                                                                         <PosterThumb
                                                                             src={watchThumbSrc}
-                                                                            className="h-14 w-10 shrink-0 overflow-hidden rounded border border-white/10 bg-black"
+                                                                            className={`shrink-0 overflow-hidden rounded border border-white/10 bg-black ${
+                                                                                landscape ? 'h-10 w-16' : 'h-14 w-10'
+                                                                            }`}
                                                                             imgClassName="h-full w-full object-contain"
                                                                         />
                                                                     ) : null}
@@ -708,8 +738,11 @@ export const PosterSetsWatchingView: React.FC = () => {
                                             </div>
                                         </article>
                                     );
-                                })}
-                            </div>
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                             {watchesPageCount > 1 ? (
                                 <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                                     <button

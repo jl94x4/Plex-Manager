@@ -1,4 +1,9 @@
 import type { PosterSetsWatch } from './types';
+import {
+    classifyRecentSet,
+    RECENT_CATEGORY_ORDER,
+    type RecentSetCategory,
+} from './shared/posterSetsRecent';
 
 export type PosterSetsWatchGroup = {
     key: string;
@@ -7,6 +12,58 @@ export type PosterSetsWatchGroup = {
     watches: PosterSetsWatch[];
     errored: boolean;
     lastCheckedAt: string | null;
+};
+
+export type CategorizedPosterSetsWatchGroup = PosterSetsWatchGroup & {
+    category: RecentSetCategory;
+    landscape: boolean;
+};
+
+export const WATCHING_CATEGORY_ORDER = RECENT_CATEGORY_ORDER;
+
+/** Classify a watch for Watching Posters / Title cards / Backgrounds sections. */
+export const classifyWatchArt = (
+    watch: PosterSetsWatch,
+    overrides?: Record<string, RecentSetCategory> | null,
+): RecentSetCategory => {
+    const forced = overrides?.[watch.id];
+    if (forced) return forced;
+    return classifyRecentSet({
+        title: watch.title,
+        setKind: watch.setKind,
+        mediuxFilters: watch.mediuxFilters,
+    });
+};
+
+/**
+ * Partition watches by art type, then group within each category so poster +
+ * title-card pins for the same show can appear in separate sections.
+ */
+export const groupPosterSetsWatchesByCategory = (
+    watches: PosterSetsWatch[],
+    overrides?: Record<string, RecentSetCategory> | null,
+): CategorizedPosterSetsWatchGroup[] => {
+    const byCategory: Record<RecentSetCategory, PosterSetsWatch[]> = {
+        posters: [],
+        backgrounds: [],
+        title_cards: [],
+    };
+    for (const watch of watches) {
+        byCategory[classifyWatchArt(watch, overrides)].push(watch);
+    }
+    const out: CategorizedPosterSetsWatchGroup[] = [];
+    for (const category of WATCHING_CATEGORY_ORDER) {
+        const groups = groupPosterSetsWatches(byCategory[category.id]);
+        for (const group of groups) {
+            out.push({
+                ...group,
+                key: `${category.id}:${group.key}`,
+                category: category.id,
+                landscape: category.landscape,
+            });
+        }
+    }
+    return out;
 };
 
 /** Normalize show/movie titles for Watching merge (years, pack words, punctuation). */

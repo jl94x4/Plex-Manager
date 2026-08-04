@@ -240,6 +240,7 @@ export const posterSetsApi = {
         title?: string;
         user?: string;
         thumbUrl?: string;
+        setKind?: string | null;
     }) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
