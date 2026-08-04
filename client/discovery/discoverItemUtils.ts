@@ -134,18 +134,29 @@ export const enrichDiscoveryItems = async (items: any[]): Promise<any[]> => {
             const details = await apiFetch(`/api/discovery/proxy/${mediaType}/${tmdbId}`);
             const priorInfo = item.mediaInfo && typeof item.mediaInfo === 'object' ? item.mediaInfo : null;
             const nextInfo = details?.mediaInfo && typeof details.mediaInfo === 'object' ? details.mediaInfo : null;
+            const priorStatus = Number(priorInfo?.status);
+            const nextStatus = Number(nextInfo?.status);
+            // Keep a stronger list/cache stamp when detail enrich returns empty/unknown status.
+            const mergedStatus = (Number.isFinite(nextStatus) && nextStatus > 1)
+                ? nextStatus
+                : (Number.isFinite(priorStatus) && priorStatus > 1 ? priorStatus : (nextInfo?.status ?? priorInfo?.status ?? null));
+            const priorSonarr = item.sonarrLibraryStatus;
+            const nextSonarr = details?.sonarrLibraryStatus;
+            const priorRadarr = item.radarrLibraryStatus;
+            const nextRadarr = details?.radarrLibraryStatus;
             return {
                 ...item,
                 ...details,
                 mediaInfo: {
                     ...(priorInfo || {}),
                     ...(nextInfo || {}),
-                    // Prefer library stamp from enrich when present; keep the member's request rows.
-                    status: nextInfo?.status ?? priorInfo?.status ?? null,
+                    status: mergedStatus,
                     requests: Array.isArray(priorInfo?.requests) && priorInfo.requests.length
                         ? priorInfo.requests
                         : (Array.isArray(nextInfo?.requests) ? nextInfo.requests : []),
                 },
+                sonarrLibraryStatus: nextSonarr?.matched ? nextSonarr : (priorSonarr || nextSonarr || null),
+                radarrLibraryStatus: nextRadarr?.matched ? nextRadarr : (priorRadarr || nextRadarr || null),
                 mediaType,
                 tmdbId,
             };

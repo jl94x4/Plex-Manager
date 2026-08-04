@@ -208,12 +208,20 @@ export const sonarrMainSeasonsFullyOnDisk = (details: any): boolean => {
 export const canMarkTvAsAvailable = (details: any): boolean => {
     const sonarr = details?.sonarrLibraryStatus;
     const status = Number(details?.mediaInfo?.status);
+    const hasLibraryStamp = status >= MEDIA_STATUS.PARTIAL && status <= MEDIA_STATUS.AVAILABLE;
+    const fileCount = Number(sonarr?.fileCount ?? sonarr?.episodeFileCount) || 0;
+
+    // Discover browse / watchlist rows often omit lastEpisodeToAir + seasons[].
     if (sonarr?.matched) {
         if (sonarrHasAiredEpisodes(sonarr) || sonarr.showComplete) return true;
-        if (status >= MEDIA_STATUS.PARTIAL && status <= MEDIA_STATUS.AVAILABLE) return true;
+        // Catalog PARTIAL/AVAILABLE is file-backed; prefer fileCount when present.
+        if (fileCount > 0 && hasLibraryStamp) return true;
+        // Older cache rows omit fileCount — allow only after premiere (blocks Seerr pre-premiere AVAILABLE).
+        if (hasLibraryStamp && hasAnyEpisodeAired({ ...details, sonarrLibraryStatus: null })) return true;
+        return false;
     }
+
     if (!hasAnyEpisodeAired(details)) return false;
-    if (sonarr?.matched && !sonarrHasAiredEpisodes(sonarr) && !sonarr.showComplete) return false;
     return true;
 };
 
