@@ -664,9 +664,9 @@ export function LibraryTitleDetailPanel({
     const panelShellClass = isModalLayout
         ? [
             'fixed z-[101] flex max-h-[100dvh] flex-col bg-card shadow-2xl',
-            // Mobile: keep the narrow sheet. Desktop modal uses the wide centered panel below.
+            // Mobile: narrow sheet. Desktop: wide centered modal — must override max-w (width alone can't beat 520px).
             'inset-y-0 right-0 h-[100dvh] w-full max-w-[min(100%,520px)] border-l border-white/10 pt-[env(safe-area-inset-top,0px)]',
-            'md:inset-auto md:left-1/2 md:top-1/2 md:h-auto md:w-[min(96vw,1320px)] md:max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-white/10 md:pt-0',
+            'md:inset-auto md:left-1/2 md:top-1/2 md:h-auto md:w-[min(96vw,1320px)] md:max-w-[min(96vw,1320px)] md:max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-white/10 md:pt-0',
         ].join(' ')
         // Drawer: 520px on mobile, ~2× on md+ (1040px).
         : 'fixed inset-y-0 right-0 z-[101] flex h-[100dvh] max-h-[100dvh] w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card pt-[env(safe-area-inset-top,0px)] shadow-2xl md:max-w-[min(100%,1040px)]';
