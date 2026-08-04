@@ -15,7 +15,7 @@ import { askConfirm } from '../shared/confirm';
 import { ModalPortal } from '../shared/ModalPortal';
 import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
-import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem } from './autoMatchTitle';
+import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem, catalogTitleMatchesLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
 import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import { previewAssetEpisodeLabel } from './previewGroups';
@@ -258,7 +258,18 @@ export function LibraryTitleDetailPanel({
             });
             setSearchSets(response.sets || []);
             setSetsPage(1);
-            setSearchContext(response.title || title.title);
+            if (libraryItem && !catalogTitleMatchesLibraryItem(libraryItem, title)) {
+                setSearchSets([]);
+                setSelectedTitle(null);
+                setSearchContext('');
+                toast(`Couldn't confirm a match for "${libraryItem.title}" — pick the correct title.`, 'error');
+                return;
+            }
+            const responseLooksRight = catalogTitleMatchesLibraryItem(
+                libraryItem || { title: title.title, mediaType: (title.mediaType as 'movie' | 'show') || 'movie' },
+                { title: response.title || title.title, year: title.year, mediaType: title.mediaType },
+            );
+            setSearchContext(responseLooksRight ? (response.title || title.title) : title.title);
             setSearchTitles([]);
             if (response.partialErrors?.length) {
                 const msg = response.partialErrors[0];
@@ -286,11 +297,28 @@ export function LibraryTitleDetailPanel({
         setPreview(null);
         setSetsPage(1);
 
-        const queries = libraryItem.year != null
-            ? [`${libraryItem.title} ${libraryItem.year}`, libraryItem.title]
-            : [libraryItem.title];
+        const queries = [libraryItem.title];
 
         try {
+            const tmdbId = String(libraryItem.tmdbId || '').trim();
+            if (tmdbId) {
+                const directTitle: PosterSetsSearchTitle = {
+                    id: tmdbId,
+                    title: libraryItem.title,
+                    year: libraryItem.year ?? null,
+                    url: libraryItem.mediaType === 'show'
+                        ? `https://mediux.pro/shows/${tmdbId}`
+                        : `https://mediux.pro/movies/${tmdbId}`,
+                    mediaType: libraryItem.mediaType,
+                    provider: 'mediux',
+                    thumbUrl: '',
+                };
+                setLoading(false);
+                setLoadingMoreSets(true);
+                await loadSetsForTitle(directTitle, libraryItem);
+                return;
+            }
+
             const responses = await Promise.all(queries.map((query) => posterSetsApi.search({
                 provider: 'mediux',
                 query,
@@ -996,6 +1024,8 @@ export function LibraryTitleDetailPanel({
                                     <SetInspectorThumbStrip
                                         thumbs={matchedThumbStrip}
                                         layout={selectedSetUsesLandscape ? 'landscape' : 'poster'}
+                                        setUrl={selectedSet.url}
+                                        provider={selectedSet.provider}
                                     />
                                 )}
                                 gallery={showAssets && preview ? (

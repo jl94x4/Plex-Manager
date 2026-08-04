@@ -5,6 +5,8 @@ export type LibraryRecentItem = {
     title: string;
     year?: number | null;
     mediaType: 'show' | 'movie';
+    /** Plex/Jellyfin TMDB id when known — skip fuzzy title search. */
+    tmdbId?: string | null;
     thumb?: string | null;
     thumbUrl?: string | null;
     posterFallbackUrl?: string | null;
@@ -30,6 +32,7 @@ const mapMovie = (item: Record<string, unknown>): LibraryRecentItem | null => {
         title,
         year: Number(item.year) || null,
         mediaType: 'movie',
+        tmdbId: item.tmdbId != null ? String(item.tmdbId) : null,
         thumb: item.thumb ? String(item.thumb) : null,
         thumbUrl: item.thumbUrl ? String(item.thumbUrl) : null,
         posterFallbackUrl: item.posterFallbackUrl ? String(item.posterFallbackUrl) : null,
@@ -46,6 +49,7 @@ export const normalizePlexShows = (shows: Record<string, unknown>[] = []): Libra
             title,
             year: Number(item.year) || null,
             mediaType: 'show' as const,
+            tmdbId: item.tmdbId != null ? String(item.tmdbId) : null,
             thumb: item.thumb ? String(item.thumb) : null,
             thumbUrl: item.thumbUrl ? String(item.thumbUrl) : null,
             addedAt: Number(item.addedAt) || 0,
@@ -90,6 +94,7 @@ export const normalizeLibraryItems = (items: Record<string, unknown>[] = []): Li
             title,
             year: Number(item.year) || null,
             mediaType,
+            tmdbId: item.tmdbId != null ? String(item.tmdbId) : null,
             thumb: item.thumb ? String(item.thumb) : null,
             thumbUrl: item.thumbUrl ? String(item.thumbUrl) : null,
             posterFallbackUrl: item.posterFallbackUrl ? String(item.posterFallbackUrl) : null,

@@ -61,6 +61,35 @@ const mediuxMediaType = (source: TitleSource, fallback: 'show' | 'movie') =>
     normalizePosterSetsMediaType(source.mediaType) || fallback;
 
 const TPDB_EMPTY_HINT = 'ThePosterDB returned no sets for this title; showing MediUX sets instead.';
+/** Hard wait — server title search allows ~120s; don't abandon TPDB at 25s. */
+const TPDB_HARD_MS = 90_000;
+
+const withTimeout = <T,>(
+    promise: Promise<T>,
+    ms: number,
+    onTimeout: () => T,
+): Promise<T> => new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        resolve(onTimeout());
+    }, ms);
+    promise.then(
+        (value) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            resolve(value);
+        },
+        (error) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            reject(error);
+        },
+    );
+});
 
 const mergeSetsForDisplay = (
     parts: PosterSetsSearchResult[],
@@ -116,20 +145,8 @@ async function fetchBothSetsProgressive(
         yearHint: options.yearHint,
         mediaType: options.fallbackMedia,
     });
-    // Never let TPDb scrape hang the drawer spinner indefinitely.
-    const posterdbTimed = Promise.race([
-        posterdbP,
-        new Promise<PosterSetsSearchResult>((resolve) => {
-            window.setTimeout(() => {
-                resolve({
-                    ok: false,
-                    sets: [],
-                    titles: [],
-                    partialErrors: ['ThePosterDB search timed out — showing MediUX sets.'],
-                });
-            }, 25_000);
-        }),
-    ]);
+
+    // Paint MediUX as soon as it lands; keep waiting for TPDB (scrape is often 30–60s).
     void mediuxP.then((partial) => {
         if ((partial.sets?.length || 0) > 0) {
             options.onPartial?.({
@@ -138,7 +155,32 @@ async function fetchBothSetsProgressive(
             });
         }
     });
-    const [mediuxSettled, posterdbSettled] = await Promise.allSettled([mediuxP, posterdbTimed]);
+
+    // If TPDB finishes after the hard deadline, still merge it into the drawer.
+    void posterdbP.then(async (late) => {
+        if ((late.sets?.length || 0) === 0) return;
+        const mediuxLate = await mediuxP.catch(() => ({
+            ok: false,
+            sets: [],
+            titles: [],
+        } as PosterSetsSearchResult));
+        options.onPartial?.({
+            ok: true,
+            sets: mergeSetsForDisplay([mediuxLate, late], options.dupePreference, options.preferredCreators),
+            titles: [],
+            title: mediuxLate.title || late.title,
+        });
+    }).catch(() => undefined);
+
+    const [mediuxSettled, posterdbSettled] = await Promise.allSettled([
+        mediuxP,
+        withTimeout(posterdbP, TPDB_HARD_MS, () => ({
+            ok: false,
+            sets: [],
+            titles: [],
+            partialErrors: ['ThePosterDB search timed out — showing MediUX sets.'],
+        })),
+    ]);
     const mediuxResult: PosterSetsSearchResult = mediuxSettled.status === 'fulfilled'
         ? mediuxSettled.value
         : { ok: false, sets: [], titles: [] };

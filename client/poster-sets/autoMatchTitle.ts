@@ -37,14 +37,20 @@ const mediaTypeMatches = (libraryItem: LibraryRecentItem, candidate: PosterSetsS
     return !candMedia || candMedia === libraryItem.mediaType;
 };
 
-/** Auto-match requires an exact year when the library item has one. */
+/** Auto-match requires an exact year when the library item has one.
+ *  Allow ±1 for festival vs theatrical year mismatches (e.g. Rose of Nevada TMDB 2025 / Plex 2026).
+ */
 export const strictYearMatches = (
     libraryYear: number | null | undefined,
     candidateYear: number | null | undefined,
+    options?: { tolerance?: number },
 ): boolean => {
     if (libraryYear == null) return true;
     if (candidateYear == null) return false;
-    return libraryYear === candidateYear;
+    const tolerance = Number.isFinite(Number(options?.tolerance))
+        ? Math.max(0, Number(options?.tolerance))
+        : 1;
+    return Math.abs(libraryYear - candidateYear) <= tolerance;
 };
 
 /**
@@ -75,7 +81,14 @@ const rankTitleCandidate = (
 ): number => {
     let score = 0;
     if (strictTitleMatches(libraryItem.title, candidate.title)) score += 100;
-    if (strictYearMatches(libraryItem.year, candidate.year ?? null)) score += 50;
+    if (libraryItem.year != null && candidate.year != null) {
+        const delta = Math.abs(libraryItem.year - candidate.year);
+        if (delta === 0) score += 50;
+        else if (delta === 1) score += 35;
+        else score -= 40;
+    } else if (strictYearMatches(libraryItem.year, candidate.year ?? null)) {
+        score += 50;
+    }
 
     const candMedia = normalizeMediaType(candidate.mediaType);
     if (candMedia) score += candMedia === libraryItem.mediaType ? 20 : -100;
@@ -92,12 +105,27 @@ const isStrictAutoMatch = (
 ): boolean => (
     mediaTypeMatches(libraryItem, candidate)
     && strictTitleMatches(libraryItem.title, candidate.title)
-    && strictYearMatches(libraryItem.year, candidate.year ?? null)
+    && strictYearMatches(libraryItem.year, candidate.year ?? null, { tolerance: 1 })
 );
+
+/** True when a loaded catalog title still looks like the library item (guards wrong TMDB hits). */
+export const catalogTitleMatchesLibraryItem = (
+    libraryItem: Pick<LibraryRecentItem, 'title' | 'year' | 'mediaType'>,
+    catalogTitle?: Pick<PosterSetsSearchTitle, 'title' | 'year' | 'mediaType'> | null,
+): boolean => {
+    if (!catalogTitle?.title) return false;
+    const pseudo: LibraryRecentItem = {
+        id: '',
+        title: libraryItem.title,
+        year: libraryItem.year ?? null,
+        mediaType: libraryItem.mediaType,
+    };
+    return isStrictAutoMatch(pseudo, catalogTitle as PosterSetsSearchTitle);
+};
 
 /**
  * Pick a single catalog title from search results using library name, year, and media type.
- * Returns null when matches are ambiguous or no exact title+year hit exists.
+ * Returns null when matches are ambiguous or no exact title(+year) hit exists.
  */
 export const pickAutoMatchedTitle = (
     libraryItem: LibraryRecentItem,
@@ -108,9 +136,29 @@ export const pickAutoMatchedTitle = (
     const viable = titles.filter((title) => mediaTypeMatches(libraryItem, title));
     const pool = viable.length ? viable : titles;
 
-    const strictMatches = pool.filter((title) => isStrictAutoMatch(libraryItem, title));
-    if (strictMatches.length === 1) return strictMatches[0];
-    if (strictMatches.length > 1) return null;
+    // Prefer exact year, then ±1 theatrical/festival drift, for a unique title match.
+    const exactYear = pool.filter((title) => (
+        mediaTypeMatches(libraryItem, title)
+        && strictTitleMatches(libraryItem.title, title.title)
+        && strictYearMatches(libraryItem.year, title.year ?? null, { tolerance: 0 })
+    ));
+    if (exactYear.length === 1) return exactYear[0];
+    if (exactYear.length > 1) return null;
+
+    const nearYear = pool.filter((title) => (
+        mediaTypeMatches(libraryItem, title)
+        && strictTitleMatches(libraryItem.title, title.title)
+        && strictYearMatches(libraryItem.year, title.year ?? null, { tolerance: 1 })
+    ));
+    if (nearYear.length === 1) return nearYear[0];
+    if (nearYear.length > 1) {
+        // Prefer closest year when multiple festival/theatrical variants exist.
+        return [...nearYear].sort((a, b) => {
+            const aDelta = Math.abs(Number(a.year) - Number(libraryItem.year));
+            const bDelta = Math.abs(Number(b.year) - Number(libraryItem.year));
+            return aDelta - bDelta;
+        })[0] || null;
+    }
 
     // When the library item has no year, allow a unique exact title match.
     if (libraryItem.year == null) {

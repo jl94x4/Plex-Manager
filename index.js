@@ -11702,7 +11702,7 @@ const fetchJellyfinItems = async (config, includeItemTypes, limit) => {
         SortBy: 'DateCreated',
         SortOrder: 'Descending',
         Limit: String(limit),
-        Fields: 'DateCreated,PrimaryImageAspectRatio,ProductionYear,SeriesName,Album,ParentId,SeriesId,AlbumId,ImageTags,BackdropImageTags,ParentThumbItemId,PrimaryImageItemId,MediaSources,MediaStreams',
+        Fields: 'DateCreated,PrimaryImageAspectRatio,ProductionYear,SeriesName,Album,ParentId,SeriesId,AlbumId,ImageTags,BackdropImageTags,ParentThumbItemId,PrimaryImageItemId,MediaSources,MediaStreams,ProviderIds',
         ImageTypeLimit: '1',
         EnableImageTypes: 'Primary,Thumb,Backdrop',
     });

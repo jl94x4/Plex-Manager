@@ -1717,11 +1717,27 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         setPreview(null);
 
         const dupePreference = configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb';
-        const queries = item.year != null
-            ? [`${item.title} ${item.year}`, item.title]
-            : [item.title];
+        const queries = [item.title];
 
         try {
+            const tmdbId = String(item.tmdbId || '').trim();
+            if (tmdbId) {
+                const directTitle: PosterSetsSearchTitle = {
+                    id: tmdbId,
+                    title: item.title,
+                    year: item.year ?? null,
+                    url: item.mediaType === 'show'
+                        ? `https://mediux.pro/shows/${tmdbId}`
+                        : `https://mediux.pro/movies/${tmdbId}`,
+                    mediaType: item.mediaType,
+                    provider: 'mediux',
+                    thumbUrl: '',
+                };
+                toast(`Matched ${item.title} via library ID — loading sets…`);
+                await openSearchTitle(directTitle, item);
+                return;
+            }
+
             let response: Awaited<ReturnType<typeof posterSetsApi.search>> | null = null;
             let titles: PosterSetsSearchTitle[] = [];
             let autoMatch: PosterSetsSearchTitle | null = null;
@@ -1733,6 +1749,9 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                     mode: 'title',
                     dupePreference,
                     limit: 24,
+                    mediaType: item.mediaType,
+                    titleHint: item.title,
+                    yearHint: item.year ?? undefined,
                 });
                 titles = response.titles || [];
                 autoMatch = pickAutoMatchedTitle(item, titles);

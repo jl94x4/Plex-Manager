@@ -391,7 +391,14 @@ export const PosterSetsBrowseView: React.FC = () => {
                                         onSelectAll={() => selectPreviewAssets('all')}
                                         onClearSelection={() => selectPreviewAssets('none')}
                                         onClose={() => collapseSetInspector({ scrollToSets: false })}
-                                        thumbStrip={<SetInspectorThumbStrip thumbs={matchedThumbStrip} />}
+                                        thumbStrip={(
+                                            <SetInspectorThumbStrip
+                                                thumbs={matchedThumbStrip}
+                                                layout={titleCardsOnly || isTitleCardSet(selectedSearchSet) ? 'landscape' : 'poster'}
+                                                setUrl={selectedSearchSet?.url}
+                                                provider={selectedSearchSet?.provider}
+                                            />
+                                        )}
                                         gallery={(
                                             <PreviewAssetGallery
                                                 sections={previewSections}
@@ -551,7 +558,14 @@ export const PosterSetsBrowseView: React.FC = () => {
                                         onSelectAll={() => selectPreviewAssets('all')}
                                         onClearSelection={() => selectPreviewAssets('none')}
                                         onClose={() => collapseSetInspector({ scrollToSets: false })}
-                                        thumbStrip={<SetInspectorThumbStrip thumbs={matchedThumbStrip} />}
+                                        thumbStrip={(
+                                            <SetInspectorThumbStrip
+                                                thumbs={matchedThumbStrip}
+                                                layout={titleCardsOnly || isTitleCardSet(selectedSearchSet) ? 'landscape' : 'poster'}
+                                                setUrl={selectedSearchSet?.url}
+                                                provider={selectedSearchSet?.provider}
+                                            />
+                                        )}
                                         gallery={(
                                             <PreviewAssetGallery
                                                 sections={previewSections}

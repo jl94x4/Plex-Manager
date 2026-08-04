@@ -1,14 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     CheckCircle2,
     ChevronDown,
     ChevronLeft,
     ChevronUp,
+    Expand,
     Loader2,
     X,
 } from 'lucide-react';
 import type { PosterSetsSearchSet } from './types';
-import { PreviewAssetStrip } from './shared/posterSetsPreview';
+import { PosterImageLightbox } from './shared/posterSetsCards';
 import { ProviderPill } from './shared/posterSetsPills';
 
 const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
@@ -106,21 +107,34 @@ export function SetInspector({
 
             {ready ? (
                 <>
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-xs font-bold uppercase tracking-wide text-plex">Selected set</p>
-                                {set ? <ProviderPill provider={set.provider} compact /> : null}
+                    <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,11rem)_minmax(0,1fr)] lg:items-start xl:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
+                        {thumbStrip ? (
+                            <div className="min-w-0">{thumbStrip}</div>
+                        ) : null}
+
+                        <div className={`min-w-0 space-y-3 ${thumbStrip ? '' : 'lg:col-span-2'}`}>
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-xs font-bold uppercase tracking-wide text-plex">Selected set</p>
+                                        {set ? <ProviderPill provider={set.provider} compact /> : null}
+                                    </div>
+                                    <h3 className="mt-1 truncate text-lg font-bold text-text" title={headerLabel}>
+                                        {headerLabel}
+                                    </h3>
+                                    {set?.user ? (
+                                        <p className="mt-0.5 truncate text-sm text-muted">
+                                            @{String(set.user).trim().replace(/^@+/, '')}
+                                        </p>
+                                    ) : null}
+                                </div>
+                                <button type="button" className={buttonClass} onClick={onClose}>
+                                    {dismissIcon}
+                                    <span className="hidden sm:inline">{closeLabel}</span>
+                                </button>
                             </div>
-                            <h3 className="mt-1 truncate text-lg font-bold text-text" title={headerLabel}>
-                                {headerLabel}
-                            </h3>
-                            {set?.user ? (
-                                <p className="mt-0.5 truncate text-sm text-muted">
-                                    @{String(set.user).trim().replace(/^@+/, '')}
-                                </p>
-                            ) : null}
-                            <p className="mt-1 text-sm text-muted">
+
+                            <p className="text-sm text-muted">
                                 <span className="text-emerald-300">{matchedCount} matched</span>
                                 {' · '}
                                 <span className="text-amber-200">{unmatchedCount} missing</span>
@@ -129,23 +143,22 @@ export function SetInspector({
                                 {' · '}
                                 {selectedCount} selected
                             </p>
-                            <p className="mt-1 text-xs text-muted">
+                            <p className="text-xs text-muted">
                                 {titleCardsOnly
                                     ? 'Title-card pack — only episode title cards from this set.'
-                                    : 'Matched art is ready to queue. Open assets only if you want to pick specific pieces.'}
+                                    : 'Matched art is ready to queue. Click art to enlarge, or open assets to pick pieces.'}
                             </p>
-                        </div>
-                        <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-                            <button
-                                type="button"
-                                className={`${primaryButtonClass} sm:min-w-[220px]`}
-                                disabled={busy !== null || (matchedCount < 1 && !selectedCount)}
-                                onClick={onQueueMatched}
-                            >
-                                {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                                {queueMatchedLabel}
-                            </button>
-                            <div className="flex flex-wrap gap-2 sm:justify-end">
+
+                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                <button
+                                    type="button"
+                                    className={`${primaryButtonClass} sm:min-w-[11rem]`}
+                                    disabled={busy !== null || (matchedCount < 1 && !selectedCount)}
+                                    onClick={onQueueMatched}
+                                >
+                                    {busy === 'apply' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                                    {queueMatchedLabel}
+                                </button>
                                 <button
                                     type="button"
                                     className={buttonClass}
@@ -154,56 +167,44 @@ export function SetInspector({
                                 >
                                     Queue entire set
                                 </button>
-                                <button type="button" className={buttonClass} onClick={onClose}>
-                                    {dismissIcon}
-                                    {closeLabel}
+                                <button type="button" className={buttonClass} onClick={onToggleShowAssets}>
+                                    {showAssets ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                    {showAssets ? 'Hide assets' : 'Show all assets'}
                                 </button>
                             </div>
-                        </div>
-                    </div>
 
-                    {thumbStrip ? (
-                        <div className="border-t border-white/10 pt-3">
-                            {thumbStrip}
+                            {showAssets ? (
+                                <div className="flex flex-wrap gap-2 border-t border-white/10 pt-3">
+                                    <button type="button" className={buttonClass} onClick={onSelectMatched}>Matched only</button>
+                                    <button type="button" className={buttonClass} onClick={onSelectAll}>Select all</button>
+                                    <button type="button" className={buttonClass} onClick={onClearSelection}>Clear selection</button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null || !selectedCount}
+                                        onClick={onQueueSelected}
+                                    >
+                                        Queue selected ({selectedCount})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null}
+                                        onClick={onQueueUnmatched}
+                                    >
+                                        Queue unmatched
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null}
+                                        onClick={onQueueNewSinceWatch}
+                                    >
+                                        Queue new since watch
+                                    </button>
+                                </div>
+                            ) : null}
                         </div>
-                    ) : null}
-
-                    <div className="flex flex-wrap gap-2 border-t border-white/10 pt-3">
-                        <button type="button" className={buttonClass} onClick={onToggleShowAssets}>
-                            {showAssets ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            {showAssets ? 'Hide assets' : 'Show all assets'}
-                        </button>
-                        {showAssets ? (
-                            <>
-                                <button type="button" className={buttonClass} onClick={onSelectMatched}>Matched only</button>
-                                <button type="button" className={buttonClass} onClick={onSelectAll}>Select all</button>
-                                <button type="button" className={buttonClass} onClick={onClearSelection}>Clear selection</button>
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null || !selectedCount}
-                                    onClick={onQueueSelected}
-                                >
-                                    Queue selected ({selectedCount})
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null}
-                                    onClick={onQueueUnmatched}
-                                >
-                                    Queue unmatched
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null}
-                                    onClick={onQueueNewSinceWatch}
-                                >
-                                    Queue new since watch
-                                </button>
-                            </>
-                        ) : null}
                     </div>
 
                     {showAssets && gallery ? (
@@ -219,38 +220,92 @@ export function SetInspector({
     );
 }
 
-/** Compact matched-poster strip shown before expanding the full gallery. */
+type ThumbPreview = {
+    id: string;
+    thumbUrl?: string;
+    title: string;
+};
+
+/** Featured matched-art preview — click any thumb to enlarge. */
 export function SetInspectorThumbStrip({
     thumbs,
     layout = 'poster',
+    setUrl,
+    provider,
 }: {
-    thumbs: Array<{ id: string; thumbUrl?: string; title: string }>;
+    thumbs: Array<ThumbPreview>;
     layout?: 'poster' | 'landscape';
+    setUrl?: string | null;
+    provider?: string | null;
 }) {
+    const [lightbox, setLightbox] = useState<ThumbPreview | null>(null);
     if (!thumbs.length) return null;
-    const thumbClass = layout === 'landscape'
-        ? 'aspect-[16/9] w-40 sm:w-48'
-        : 'aspect-[2/3] w-[5.75rem] sm:w-28';
+
+    const landscape = layout === 'landscape';
+    const single = thumbs.length === 1;
+    const featuredClass = landscape
+        ? (single ? 'aspect-[16/9] w-full max-w-md' : 'aspect-[16/9] w-40 sm:w-48')
+        : (single ? 'aspect-[2/3] w-full max-w-[11rem] xl:max-w-[13rem]' : 'aspect-[2/3] w-[5.75rem] sm:w-28');
+
     return (
-        <PreviewAssetStrip title="Matched preview" count={thumbs.length}>
-            {thumbs.map((thumb) => (
-                <div
-                    key={thumb.id}
-                    className={`${thumbClass} shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40 shadow-sm`}
-                    title={thumb.title}
-                >
-                    {thumb.thumbUrl ? (
-                        <img
-                            src={thumb.thumbUrl}
-                            alt=""
-                            className="h-full w-full object-contain object-center"
-                            loading="lazy"
-                        />
-                    ) : (
-                        <div className="h-full w-full bg-white/5" />
-                    )}
-                </div>
-            ))}
-        </PreviewAssetStrip>
+        <div className="space-y-2">
+            <PosterImageLightbox
+                open={Boolean(lightbox)}
+                src={lightbox?.thumbUrl || ''}
+                title={lightbox?.title}
+                setUrl={setUrl}
+                provider={provider}
+                onClose={() => setLightbox(null)}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                    Matched preview
+                    <span className="ml-1.5 font-semibold normal-case tracking-normal text-muted/80">{thumbs.length}</span>
+                </p>
+                <p className="inline-flex items-center gap-1 text-[10px] text-muted">
+                    <Expand className="h-3 w-3" />
+                    Click to enlarge
+                </p>
+            </div>
+            <div className={`flex ${single ? 'justify-start' : 'flex-wrap gap-2'}`}>
+                {thumbs.map((thumb) => {
+                    const canPreview = Boolean(String(thumb.thumbUrl || '').trim());
+                    return (
+                        <button
+                            key={thumb.id}
+                            type="button"
+                            disabled={!canPreview}
+                            className={`group relative ${featuredClass} shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black/40 text-left shadow-sm transition ${
+                                canPreview
+                                    ? 'cursor-zoom-in hover:border-plex/50 hover:ring-1 hover:ring-plex/30'
+                                    : 'cursor-default opacity-60'
+                            }`}
+                            title={canPreview ? `Enlarge ${thumb.title}` : thumb.title}
+                            aria-label={canPreview ? `Enlarge ${thumb.title}` : thumb.title}
+                            onClick={() => {
+                                if (!canPreview) return;
+                                setLightbox(thumb);
+                            }}
+                        >
+                            {thumb.thumbUrl ? (
+                                <img
+                                    src={thumb.thumbUrl}
+                                    alt={thumb.title}
+                                    className="h-full w-full object-contain object-center transition duration-300 group-hover:scale-[1.02]"
+                                    loading="lazy"
+                                />
+                            ) : (
+                                <div className="h-full w-full bg-white/5" />
+                            )}
+                            {canPreview ? (
+                                <span className="pointer-events-none absolute bottom-1.5 right-1.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/65 text-text opacity-0 transition group-hover:opacity-100">
+                                    <Expand className="h-3.5 w-3.5" />
+                                </span>
+                            ) : null}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
     );
 }
