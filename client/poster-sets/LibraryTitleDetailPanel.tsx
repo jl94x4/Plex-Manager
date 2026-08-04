@@ -18,7 +18,7 @@ import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem, catalogTitleMatchesLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
 import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
-import { previewAssetEpisodeLabel } from './previewGroups';
+import { classifyPreviewAsset, previewAssetEpisodeLabel } from './previewGroups';
 import { libraryItemPosterSrc, type LibraryRecentItem } from './libraryRecent';
 import { SetInspector, SetInspectorThumbStrip } from './SetInspector';
 import { PreviewAssetStrip } from './shared/posterSetsPreview';
@@ -610,13 +610,20 @@ export function LibraryTitleDetailPanel({
     );
 
     const matchedThumbStrip = useMemo(() => {
-        const assets = (preview?.assets || []).filter((asset) => asset.matched === true);
+        let assets = (preview?.assets || []).filter((asset) => asset.matched === true);
+        // Title-card packs often still include a show poster first in scrape order —
+        // surface episode title cards at the front of the matched strip.
+        if (titleCardsOnly || isTitleCardSet(selectedSet, { mediaType: item?.mediaType })) {
+            const titleCards = assets.filter((asset) => classifyPreviewAsset(asset) === 'title_card');
+            const rest = assets.filter((asset) => classifyPreviewAsset(asset) !== 'title_card');
+            assets = titleCardsOnly && titleCards.length ? titleCards : [...titleCards, ...rest];
+        }
         return assets.map((asset) => ({
             id: asset.id,
             title: asset.title,
             thumbUrl: asset.thumbUrl ? posterSetsApi.imageUrl(asset.thumbUrl) : '',
         }));
-    }, [preview]);
+    }, [preview, titleCardsOnly, selectedSet, item?.mediaType]);
 
     const setsByCategory = useMemo(
         () => partitionSetsByCategory(

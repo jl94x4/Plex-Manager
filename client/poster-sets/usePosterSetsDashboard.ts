@@ -39,7 +39,7 @@ import {
 import { groupPosterSetsWatchesByCategory } from './watchGroups';
 import type { RecentSetCategory } from './shared/posterSetsRecent';
 import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
-import { groupPreviewAssets } from './previewGroups';
+import { classifyPreviewAsset, groupPreviewAssets } from './previewGroups';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
 import {
@@ -1968,13 +1968,18 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         || (busy === 'preview' && Boolean(String(url || '').trim())),
     );
     const matchedThumbStrip = useMemo(() => {
-        const assets = (preview?.assets || []).filter((asset) => asset.matched === true);
+        let assets = (preview?.assets || []).filter((asset) => asset.matched === true);
+        if (titleCardsOnly || isTitleCardSet(selectedSearchSet)) {
+            const titleCards = assets.filter((asset) => classifyPreviewAsset(asset) === 'title_card');
+            const rest = assets.filter((asset) => classifyPreviewAsset(asset) !== 'title_card');
+            assets = titleCardsOnly && titleCards.length ? titleCards : [...titleCards, ...rest];
+        }
         return assets.map((asset) => ({
             id: asset.id,
             title: asset.title,
             thumbUrl: asset.thumbUrl ? posterSetsApi.imageUrl(asset.thumbUrl) : '',
         }));
-    }, [preview]);
+    }, [preview, titleCardsOnly, selectedSearchSet]);
 
     const queueEntireWithConfirm = async () => {
         const ok = await askConfirm('Queue the entire set, including posters not matched in your libraries?', {

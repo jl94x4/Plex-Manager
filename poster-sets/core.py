@@ -2573,15 +2573,17 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
             continue
         set_id = match.group(1)
         title = _clean_mediux_set_title(anchor.get_text(" ", strip=True))
-        thumb = ""
-        img = anchor.find("img")
-        if img:
-            thumb = _decode_next_image_url(img.get("src") or "")
-            if not thumb:
-                thumb = img.get("src") or ""
-                if thumb.startswith("/"):
-                    # Keep api.mediux asset URLs only when decoded; skip next/image paths.
-                    thumb = ""
+        card = _mediux_card_row(anchor)
+        thumb = _pick_mediux_set_thumb(card or anchor, fallback="")
+        if not thumb:
+            img = anchor.find("img")
+            if img:
+                thumb = _decode_next_image_url(img.get("src") or "")
+                if not thumb:
+                    thumb = img.get("src") or ""
+                    if thumb.startswith("/"):
+                        # Keep api.mediux asset URLs only when decoded; skip next/image paths.
+                        thumb = ""
         entry = sets.get(set_id) or {
             "setId": set_id,
             "url": f"https://mediux.pro/sets/{set_id}",
@@ -2594,9 +2596,16 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
         }
         if title and (not entry["title"] or entry["title"].startswith("Set ")):
             entry["title"] = title
-        if thumb and not entry["thumbUrl"]:
-            entry["thumbUrl"] = thumb
         _enrich_mediux_set_entry(anchor, entry, media_type=kind)
+        preferred = _pick_mediux_set_thumb(
+            card or anchor,
+            set_kind=entry.get("setKind"),
+            fallback=entry.get("thumbUrl") or thumb,
+        )
+        if preferred:
+            entry["thumbUrl"] = preferred
+        elif thumb and not entry["thumbUrl"]:
+            entry["thumbUrl"] = thumb
         sets[set_id] = entry
         if len(sets) >= max(1, int(limit or 40)):
             break
@@ -2753,6 +2762,56 @@ def _mediux_thumb_from_img(img) -> str:
     return ""
 
 
+def _mediux_img_aspect_kind(img) -> str:
+    """Return 'video' (16:9 title cards/backdrops) or 'poster' (2:3) from nearest shell."""
+    node = img
+    for _ in range(8):
+        if node is None:
+            break
+        classes = " ".join(node.get("class") or [])
+        if "aspect-video" in classes:
+            return "video"
+        if "aspect-2/3" in classes or "aspect-[2/3]" in classes:
+            return "poster"
+        node = getattr(node, "parent", None)
+    return ""
+
+
+def _mediux_thumbs_from_node(node) -> list[tuple[str, str]]:
+    """Collect (aspect, url) pairs for images under a MediUX card/anchor."""
+    if node is None or not hasattr(node, "find_all"):
+        return []
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for img in node.find_all("img"):
+        url = _mediux_thumb_from_img(img)
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        out.append((_mediux_img_aspect_kind(img), url))
+    return out
+
+
+def _pick_mediux_set_thumb(
+    node,
+    *,
+    set_kind: str | None = None,
+    fallback: str = "",
+) -> str:
+    """Prefer landscape thumbs for title-card / backdrop packs (posters often come first in HTML)."""
+    thumbs = _mediux_thumbs_from_node(node)
+    kind = str(set_kind or "").strip().lower().replace("-", "_")
+    prefer_video = kind in {"title_cards", "titlecard", "backgrounds", "background", "backdrop", "backdrops"}
+    if prefer_video:
+        for aspect, url in thumbs:
+            if aspect == "video" and url:
+                return url
+    for _aspect, url in thumbs:
+        if url:
+            return url
+    return str(fallback or "").strip()
+
+
 def _collect_mediux_set_cards(soup, *, sets: dict, default_user: str | None = None) -> int:
     """Collect MediUX set cards from one page. Returns newly discovered count."""
     added = 0
@@ -2763,16 +2822,14 @@ def _collect_mediux_set_cards(soup, *, sets: dict, default_user: str | None = No
             continue
         set_id = match.group(1)
         title = _clean_mediux_set_title(anchor.get_text(" ", strip=True))
-        thumb = _mediux_thumb_from_img(anchor.find("img"))
+        card = _mediux_card_row(anchor)
+        thumb = _pick_mediux_set_thumb(card or anchor, fallback=_mediux_thumb_from_img(anchor.find("img")))
         if not thumb:
             parent = anchor.parent
             for _ in range(6):
                 if parent is None:
                     break
-                for img in parent.find_all("img") if hasattr(parent, "find_all") else []:
-                    thumb = _mediux_thumb_from_img(img)
-                    if thumb:
-                        break
+                thumb = _pick_mediux_set_thumb(parent)
                 if thumb:
                     break
                 if not title:
@@ -2785,9 +2842,14 @@ def _collect_mediux_set_cards(soup, *, sets: dict, default_user: str | None = No
         if existing:
             if title and (not existing.get("title") or existing["title"].startswith("Set ")):
                 existing["title"] = title
-            if thumb and not existing.get("thumbUrl"):
-                existing["thumbUrl"] = thumb
             _enrich_mediux_set_entry(anchor, existing)
+            preferred = _pick_mediux_set_thumb(
+                card or anchor,
+                set_kind=existing.get("setKind"),
+                fallback=existing.get("thumbUrl") or thumb,
+            )
+            if preferred:
+                existing["thumbUrl"] = preferred
             if default_user and not existing.get("user"):
                 existing["user"] = default_user
             continue
@@ -2805,6 +2867,13 @@ def _collect_mediux_set_cards(soup, *, sets: dict, default_user: str | None = No
         _enrich_mediux_set_entry(anchor, entry)
         if not entry.get("setKind"):
             entry["setKind"] = _infer_set_kind(title=str(entry.get("title") or ""))
+        preferred = _pick_mediux_set_thumb(
+            card or anchor,
+            set_kind=entry.get("setKind"),
+            fallback=entry.get("thumbUrl") or thumb,
+        )
+        if preferred:
+            entry["thumbUrl"] = preferred
         sets[set_id] = entry
         added += 1
     return added
