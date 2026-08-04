@@ -73,7 +73,7 @@ export interface ArrInstance {
 
 export interface DownloadClientConfig {
     id: string;
-    type: 'qbittorrent' | 'transmission' | 'bittorrent' | 'deluge' | 'sabnzbd';
+    type: 'qbittorrent' | 'transmission' | 'bittorrent' | 'deluge' | 'sabnzbd' | 'nzbget';
     name: string;
     url: string;
     username?: string;
@@ -115,8 +115,11 @@ export interface AppSettings {
     downloadClients?: DownloadClientConfig[];
     tautulliUrl?: string;
     tautulliApiKey?: string;
+    jellyfinAnalyticsProvider?: 'jellystat' | 'jellyglance';
     jellystatUrl?: string;
     jellystatApiKey?: string;
+    jellyglanceUrl?: string;
+    jellyglanceApiKey?: string;
     primaryColor?: string;
     customLogoUrl?: string;
     sidebarIdentityPosition?: 'top' | 'bottom';

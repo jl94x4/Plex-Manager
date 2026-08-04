@@ -12,7 +12,7 @@ The **Calendar** nav item (`/mediastack`) surfaces Sonarr, Radarr, Lidarr, Bazar
 | Month Navigation | Browse releases across months |
 | ID Matching | Map content through IMDb, TMDB, and TVDB IDs |
 | Bazarr Tools | Subtitle widgets and multi-instance subtitle actions |
-| Download Status | qBittorrent, Transmission, BitTorrent, Deluge, and SABnzbd with source filters |
+| Download Status | qBittorrent, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet with source filters |
 
 ## Downloads page
 

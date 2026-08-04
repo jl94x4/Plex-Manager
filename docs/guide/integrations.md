@@ -61,7 +61,7 @@ Most integrations are configured in **Settings → Media Stack**. Branding, aler
   </div>
   <div class="integration-card">
     <img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/qbittorrent.svg" alt="" />
-    <div><strong>Download Clients</strong><span>qBittorrent, Transmission, BitTorrent, Deluge, and SABnzbd merged into one Download Status page.</span></div>
+    <div><strong>Download Clients</strong><span>qBittorrent, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet merged into one Download Status page.</span></div>
   </div>
 </div>
 
@@ -153,6 +153,11 @@ Most integrations are configured in **Settings → Media Stack**. Branding, aler
     </tr>
     <tr>
       <td><img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/sabnzbd.svg" alt="" /> SABnzbd</td>
+      <td>Download client</td>
+      <td>Download Status page, status checks, NZB queue progress, speed display, and ARR source matching</td>
+    </tr>
+    <tr>
+      <td><img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/nzbget.svg" alt="" /> NZBGet</td>
       <td>Download client</td>
       <td>Download Status page, status checks, NZB queue progress, speed display, and ARR source matching</td>
     </tr>

@@ -81,3 +81,10 @@ static/release-notes.json
 __pycache__/
 *.py[cod]
 
+# Local uploaded branding assets
+static/background.*
+static/logo.png
+
+# Accidental local config dumps
+config.backup-*/
+

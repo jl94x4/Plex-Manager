@@ -100,7 +100,7 @@ const normalizeArrInstancesFromSettings = (settings: Record<string, any> = {}): 
 const createEmptyDownloadClient = (type: DownloadClientConfig['type'] = 'qbittorrent'): DownloadClientConfig => ({
     id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${type}-${Date.now()}`,
     type,
-    name: type === 'transmission' ? 'Transmission' : type === 'bittorrent' ? 'BitTorrent' : type === 'deluge' ? 'Deluge' : type === 'sabnzbd' ? 'SABnzbd' : 'qBittorrent',
+    name: type === 'transmission' ? 'Transmission' : type === 'bittorrent' ? 'BitTorrent' : type === 'deluge' ? 'Deluge' : type === 'sabnzbd' ? 'SABnzbd' : type === 'nzbget' ? 'NZBGet' : 'qBittorrent',
     url: '',
     username: '',
     password: '',
@@ -147,7 +147,9 @@ const APP_ICONS: Record<string, string> = {
     bittorrent: `${SIMPLE_ICON_BASE}/bittorrent`,
     deluge: `${SELFHST_ICON_BASE}/deluge.svg`,
     sabnzbd: `${SELFHST_ICON_BASE}/sabnzbd.svg`,
+    nzbget: `${SELFHST_ICON_BASE}/nzbget.svg`,
     jellystat: 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/jellystat.png',
+    jellyglance: '/static/logos/jellyglance.png',
     tmdb: `${SELFHST_ICON_BASE}/tmdb.svg`,
 };
 
@@ -212,6 +214,9 @@ const IntegrationHeading: React.FC<{ app: string; title: string; subtitle?: stri
 
 const JELLYFIN_BRAND_LOGO_URL = '/api/jellyfin/branding/icon';
 const JELLYFIN_BRAND_BACKGROUND_URL = '/api/jellyfin/branding/splash';
+const isJellyfinBrandingAsset = (value: string | null | undefined) => (
+    [JELLYFIN_BRAND_LOGO_URL, JELLYFIN_BRAND_BACKGROUND_URL].includes(String(value || '').trim())
+);
 
 const getUploadedBrandingImagePath = (file: File, assetName: 'logo' | 'background') => {
     const name = file.name.toLowerCase();
@@ -435,8 +440,11 @@ export const SettingsDashboard: React.FC = () => {
     const [downloadClients, setDownloadClients] = useState<DownloadClientConfig[]>([]);
     const [tautulliUrl, setTautulliUrl] = useState('');
     const [tautulliApiKey, setTautulliApiKey] = useState('');
+    const [jellyfinAnalyticsProvider, setJellyfinAnalyticsProvider] = useState('jellyglance');
     const [jellystatUrl, setJellystatUrl] = useState('');
     const [jellystatApiKey, setJellystatApiKey] = useState('');
+    const [jellyglanceUrl, setJellyglanceUrl] = useState('');
+    const [jellyglanceApiKey, setJellyglanceApiKey] = useState('');
     const [requestAppType, setRequestAppType] = useState('none');
     const [requestAppUrl, setRequestAppUrl] = useState('');
     const [requestAppFetchUrl, setRequestAppFetchUrl] = useState('');
@@ -807,7 +815,7 @@ export const SettingsDashboard: React.FC = () => {
 
     const trackedIntegrationKeys = useMemo(() => {
         const mediaKey = mediaServerType !== 'plex' ? 'jellyfinConfigured' : 'plexConfigured';
-        const analyticsKey = mediaServerType !== 'plex' ? 'jellystatConfigured' : 'tautulliConfigured';
+        const analyticsKey = mediaServerType !== 'plex' ? 'jellyfinAnalyticsConfigured' : 'tautulliConfigured';
         return [mediaKey, 'sonarrConfigured', 'radarrConfigured', 'lidarrConfigured', 'bazarrConfigured', analyticsKey, 'requestAppConfigured'];
     }, [mediaServerType]);
     const integrationLabels: Record<string, string> = {
@@ -819,6 +827,8 @@ export const SettingsDashboard: React.FC = () => {
         bazarrConfigured: 'Bazarr',
         tautulliConfigured: 'Tautulli',
         jellystatConfigured: 'Jellystat',
+        jellyglanceConfigured: 'JellyGlance',
+        jellyfinAnalyticsConfigured: jellyfinAnalyticsProvider === 'jellyglance' ? 'JellyGlance' : 'Jellystat',
         requestAppConfigured: 'Request App',
     };
 
@@ -1061,8 +1071,11 @@ export const SettingsDashboard: React.FC = () => {
             setDownloadClients(Array.isArray(initialSettings.downloadClients) ? initialSettings.downloadClients : []);
             setTautulliUrl(initialSettings.tautulliUrl || '');
             setTautulliApiKey(initialSettings.tautulliApiKey || '');
+            setJellyfinAnalyticsProvider(initialSettings.jellyfinAnalyticsProvider === 'jellystat' ? 'jellystat' : 'jellyglance');
             setJellystatUrl(initialSettings.jellystatUrl || '');
             setJellystatApiKey(initialSettings.jellystatApiKey || '');
+            setJellyglanceUrl(initialSettings.jellyglanceUrl || '');
+            setJellyglanceApiKey(initialSettings.jellyglanceApiKey || '');
             setRequestAppType(
                 initialSettings.requestAppType === 'overseerr'
                     ? 'seerr'
@@ -1099,10 +1112,10 @@ export const SettingsDashboard: React.FC = () => {
             setTvdbApiKey(initialSettings.tvdbApiKey || '');
             const savedBrandingTheme = localStorage.getItem('portal-theme') || initialSettings.brandingTheme || 'plex';
             setBrandingTheme(savedBrandingTheme === 'light' ? 'plex' : savedBrandingTheme);
-            setCustomLogoUrl(initialSettings.customLogoUrl || '');
+            setCustomLogoUrl(initialSettings.mediaServerType === 'emby' && isJellyfinBrandingAsset(initialSettings.customLogoUrl) ? '' : (initialSettings.customLogoUrl || ''));
             setSidebarIdentityPosition(initialSettings.sidebarIdentityPosition === 'top' ? 'top' : 'bottom');
             setPwaIconSource(initialSettings.pwaIconSource === 'application' ? 'application' : 'server');
-            setBackgroundImageUrl(initialSettings.backgroundImageUrl || '');
+            setBackgroundImageUrl(initialSettings.mediaServerType === 'emby' && isJellyfinBrandingAsset(initialSettings.backgroundImageUrl) ? '' : (initialSettings.backgroundImageUrl || ''));
             setUseScrollRevealAnimations(!!initialSettings.useScrollRevealAnimations);
             setUseCinematicLoading(!!initialSettings.useCinematicLoading);
             setUseBrandedSkeleton(initialSettings.useBrandedSkeleton !== false);
@@ -1366,12 +1379,16 @@ export const SettingsDashboard: React.FC = () => {
             return;
         }
         if (mediaServerType !== 'plex' && (!jellyfinUrl || !hasIntegrationCredentials(jellyfinUrl, jellyfinApiKey, initialSettings.jellyfinUrl, initialSettings.jellyfinApiKey))) {
-            addToast('Jellyfin URL and API key must be set.', 'error');
+            addToast(`${mediaServerLabel} URL and API key must be set.`, 'error');
             return;
         }
 
         let savedCustomLogoUrl = logoFile ? getUploadedBrandingImagePath(logoFile, 'logo') : customLogoUrl;
         let savedBackgroundImageUrl = backgroundImageUrl;
+        if (mediaServerType === 'emby') {
+            if (isJellyfinBrandingAsset(savedCustomLogoUrl)) savedCustomLogoUrl = '';
+            if (isJellyfinBrandingAsset(savedBackgroundImageUrl)) savedBackgroundImageUrl = '';
+        }
 
         if (logoFile) {
             try {
@@ -1467,8 +1484,11 @@ export const SettingsDashboard: React.FC = () => {
             downloadClients,
             tautulliUrl,
             tautulliApiKey,
+            jellyfinAnalyticsProvider,
             jellystatUrl,
             jellystatApiKey,
+            jellyglanceUrl,
+            jellyglanceApiKey,
             requestAppType,
             requestAppUrl,
             requestAppFetchUrl,
@@ -2356,7 +2376,7 @@ export const SettingsDashboard: React.FC = () => {
                             </div>
 
                             <div id={getSettingsSectionElementId('download-clients')} className="scroll-mt-24">
-                            <IntegrationHeading app="download" title="Download Clients" subtitle="qBittorrent, Transmission, BitTorrent, Deluge, and SABnzbd status sources" className="mt-10" />
+                            <IntegrationHeading app="download" title="Download Clients" subtitle="qBittorrent, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet status sources" className="mt-10" />
                             <div className="flex items-center justify-between gap-3 mb-4">
                                 <p className="text-sm text-muted">These clients feed the Download Status page.</p>
                                 <button
@@ -2373,7 +2393,7 @@ export const SettingsDashboard: React.FC = () => {
                             ) : (
                                 <div className="space-y-4">
                                     {downloadClients.map((client) => {
-                                        const clientLabel = client.type === 'transmission' ? 'Transmission' : client.type === 'bittorrent' ? 'BitTorrent' : client.type === 'deluge' ? 'Deluge' : client.type === 'sabnzbd' ? 'SABnzbd' : 'qBittorrent';
+                                        const clientLabel = client.type === 'transmission' ? 'Transmission' : client.type === 'bittorrent' ? 'BitTorrent' : client.type === 'deluge' ? 'Deluge' : client.type === 'sabnzbd' ? 'SABnzbd' : client.type === 'nzbget' ? 'NZBGet' : 'qBittorrent';
                                         return (
                                         <div key={client.id} className="rounded-xl border border-border bg-background/40 p-4">
                                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 pb-3 border-b border-border/50">
@@ -2409,6 +2429,7 @@ export const SettingsDashboard: React.FC = () => {
                                                         { label: 'BitTorrent', value: 'bittorrent' },
                                                         { label: 'Deluge', value: 'deluge' },
                                                         { label: 'SABnzbd', value: 'sabnzbd' },
+                                                        { label: 'NZBGet', value: 'nzbget' },
                                                     ]}
                                                 />
                                             </div>
@@ -2418,7 +2439,7 @@ export const SettingsDashboard: React.FC = () => {
                                             </div>
                                             <div className="md:col-span-2">
                                                 <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">URL</label>
-                                                <input className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm" value={client.url} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, url: e.target.value } : entry))} placeholder={client.type === 'transmission' ? 'http://localhost:9091' : client.type === 'deluge' ? 'http://localhost:8112' : 'http://localhost:8080'} />
+                                                <input className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm" value={client.url} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, url: e.target.value } : entry))} placeholder={client.type === 'transmission' ? 'http://localhost:9091' : client.type === 'deluge' ? 'http://localhost:8112' : client.type === 'nzbget' ? 'http://localhost:6789' : 'http://localhost:8080'} />
                                             </div>
                                             <div>
                                                 <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{client.type === 'sabnzbd' ? 'Username (Optional)' : 'Username'}</label>
@@ -2500,7 +2521,49 @@ export const SettingsDashboard: React.FC = () => {
 
                             {mediaServerType !== 'plex' && (
                                 <div id={getSettingsSectionElementId('jellystat')} className="scroll-mt-24">
-                                <IntegrationHeading app="jellystat" title="Jellystat Integration" subtitle="Jellyfin activity and analytics" className="mt-8" />
+                                <IntegrationHeading app={jellyfinAnalyticsProvider === 'jellyglance' ? 'jellyglance' : 'jellystat'} title="Jellyfin Analytics" subtitle="Jellystat or JellyGlance activity analytics" className="mt-8" />
+                                <div className="mb-4">
+                                    <SettingFieldLabel
+                                        htmlFor="jellyfinAnalyticsProvider"
+                                        hint={<SettingHint>Choose which Jellyfin analytics companion powers activity charts, wrap-ups, and heatmaps.</SettingHint>}
+                                    >
+                                        Analytics Provider
+                                    </SettingFieldLabel>
+                                    <CustomSelect
+                                        id="jellyfinAnalyticsProvider"
+                                        value={jellyfinAnalyticsProvider}
+                                        onChange={setJellyfinAnalyticsProvider}
+                                        options={[
+                                            { label: 'Jellystat', value: 'jellystat' },
+                                            { label: 'JellyGlance', value: 'jellyglance' },
+                                        ]}
+                                    />
+                                </div>
+                                {jellyfinAnalyticsProvider === 'jellyglance' ? (
+                                    <>
+                                        <div className="mb-4">
+                                            <SettingFieldLabel
+                                                htmlFor="jellyglanceUrl"
+                                                hint={<SettingHint>The URL to your JellyGlance instance. JellyGlance exposes Jellyfin statistics through its API using a JellyGlance API key.</SettingHint>}
+                                            >
+                                                JellyGlance URL
+                                            </SettingFieldLabel>
+                                            <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyglanceUrl" type="text" value={jellyglanceUrl} onChange={(e) => setJellyglanceUrl(e.target.value)} placeholder="http://localhost:3000" />
+                                        </div>
+                                        <div className="mb-8">
+                                            <label htmlFor="jellyglanceApiKey">JellyGlance API Key</label>
+                                            <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyglanceApiKey" type="password" value={jellyglanceApiKey} onChange={(e) => setJellyglanceApiKey(e.target.value)} placeholder="API key from JellyGlance Settings" />
+                                        </div>
+                                        <IntegrationTestButton
+                                            type="jellyglance"
+                                            payload={{ jellyglanceUrl, jellyglanceApiKey }}
+                                            disabled={!hasIntegrationCredentials(jellyglanceUrl, jellyglanceApiKey, initialSettings.jellyglanceUrl, initialSettings.jellyglanceApiKey)}
+                                            className="mb-6"
+                                            onMessage={(msg, ok) => addToast(msg, ok ? 'success' : 'error')}
+                                        />
+                                    </>
+                                ) : (
+                                    <>
                                 <div className="mb-4">
                                     <SettingFieldLabel
                                         htmlFor="jellystatUrl"
@@ -2521,6 +2584,8 @@ export const SettingsDashboard: React.FC = () => {
                                     className="mb-6"
                                     onMessage={(msg, ok) => addToast(msg, ok ? 'success' : 'error')}
                                 />
+                                    </>
+                                )}
                                 </div>
                             )}
 
@@ -3104,7 +3169,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 <p className="text-xs text-muted mt-1">Branding, theme, logo, and splash preview.</p>
                                             </div>
                                             <div className="flex-1 grid grid-cols-1 gap-4 min-w-0">
-                                                {mediaServerType !== 'plex' && (
+                                                {mediaServerType === 'jellyfin' && (
                                                     <div className="rounded-xl border border-plex/30 bg-plex/10 p-4">
                                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                                             <div className="flex items-center gap-3 min-w-0">
@@ -3127,7 +3192,7 @@ export const SettingsDashboard: React.FC = () => {
                                                     </div>
                                                 )}
                                                 <div>
-                                                    <SettingFieldLabel hint={<SettingHint>Provide a URL or upload a file. Max 5MB. Use this when Jellyfin branding is not applied.</SettingHint>}>
+                                                    <SettingFieldLabel hint={<SettingHint>Provide a URL or upload a file. Max 5MB.</SettingHint>}>
                                                         Custom Logo
                                                     </SettingFieldLabel>
                                                     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_14rem] gap-3 mt-1">
@@ -3186,6 +3251,7 @@ export const SettingsDashboard: React.FC = () => {
                                                             { label: 'Sleek Slate', value: 'slate' },
                                                             { label: 'Nordic Frost', value: 'nordic' },
                                                             { label: 'Jellyfin Purple', value: 'jellyfin' },
+                                                            { label: 'Emby Green', value: 'emby' },
                                                             { label: 'Emerald Green', value: 'emerald' },
                                                             { label: 'Neon Midnight', value: 'midnight' },
                                                             { label: 'Crimson Red', value: 'crimson' },
@@ -3969,7 +4035,7 @@ export const SettingsDashboard: React.FC = () => {
                                         <div><strong>Node:</strong> {diagnostics?.app?.nodeVersion || 'n/a'}</div>
                                         <div><strong>Memory:</strong> {diagnostics?.app?.memoryRssMB || 0} MB</div>
                                         <div className="flex items-center justify-between gap-2">
-                                            <strong>Media Player ({mediaServerType !== 'plex' ? 'Jellyfin' : 'Plex'})</strong>
+                                            <strong>Media Player ({mediaServerLabel})</strong>
                                             {renderConfigPill(mediaServerType !== 'plex' ? !!diagnostics?.integrations?.jellyfinConfigured : !!diagnostics?.integrations?.plexConfigured)}
                                         </div>
                                         <div className="flex items-center justify-between gap-2"><strong>SMTP</strong>{renderOptionalIntegrationPill(!!diagnostics?.integrations?.smtpConfigured)}</div>
@@ -4003,7 +4069,10 @@ export const SettingsDashboard: React.FC = () => {
                                             )}
                                         </div>
                                         {mediaServerType !== 'plex' ? (
+                                            <>
                                             <div className="flex items-center justify-between gap-2"><strong>Jellystat</strong>{renderConfigPill(!!diagnostics?.integrations?.jellystatConfigured)}</div>
+                                            <div className="flex items-center justify-between gap-2"><strong>JellyGlance</strong>{renderConfigPill(!!diagnostics?.integrations?.jellyglanceConfigured)}</div>
+                                            </>
                                         ) : (
                                             <div className="flex items-center justify-between gap-2"><strong>Tautulli</strong>{renderConfigPill(!!diagnostics?.integrations?.tautulliConfigured)}</div>
                                         )}

@@ -1052,6 +1052,14 @@ const SPEED_TEST_STREAM_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 /** Per-request upload cap for duration tests (client aborts sooner; needs room for multi-gig). */
 const SPEED_TEST_MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024;
 
+const normalizeJellyfinAnalyticsProvider = (value, config = {}) => {
+    const raw = String(value || '').toLowerCase();
+    if (raw === 'jellystat' || raw === 'jellyglance') return raw;
+    const hasJellystat = !!(config.jellystatUrl && config.jellystatApiKey);
+    const hasJellyGlance = !!(config.jellyglanceUrl && config.jellyglanceApiKey);
+    return hasJellystat && !hasJellyGlance ? 'jellystat' : 'jellyglance';
+};
+
 const createDefaultStatusConfig = (config = {}) => {
     const groups = [
         { id: 'core', name: 'Core Infrastructure', order: 0 },
@@ -1072,7 +1080,16 @@ const createDefaultStatusConfig = (config = {}) => {
     if (mediaServerType !== 'plex') {
         const mediaLabel = mediaServerType === 'emby' ? 'Emby' : 'Jellyfin';
         addService(mediaServerType, mediaLabel, config.jellyfinUrl, 'media', `${mediaLabel} media server`);
-        if (mediaServerType === 'jellyfin') addService('jellystat', 'Jellystat', config.jellystatUrl, 'media', 'Jellyfin analytics');
+        if (mediaServerType === 'jellyfin') {
+            const analyticsProvider = normalizeJellyfinAnalyticsProvider(config.jellyfinAnalyticsProvider, config);
+            addService(
+                analyticsProvider,
+                analyticsProvider === 'jellyglance' ? 'JellyGlance' : 'Jellystat',
+                analyticsProvider === 'jellyglance' ? config.jellyglanceUrl : config.jellystatUrl,
+                'media',
+                'Jellyfin analytics'
+            );
+        }
     } else {
         addService('plex', 'Plex', config.plexServerUrl || publicDomain, 'media', 'Plex Media Server');
         addService('tautulli', 'Tautulli', config.tautulliUrl, 'media', 'Plex analytics');
@@ -1777,7 +1794,8 @@ const blockIfImpersonating = (req, res) => {
 };
 
 const buildImpersonationSessionUser = (actor, targetUser, config = {}) => {
-    const isJellyfin = String(config?.mediaServerType || '').toLowerCase() === 'jellyfin';
+    const mediaServerType = String(config?.mediaServerType || '').toLowerCase();
+    const isEmbyLike = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
     return {
         id: targetUser.id,
         plexId: targetUser.plexId || targetUser.id,
@@ -1785,7 +1803,7 @@ const buildImpersonationSessionUser = (actor, targetUser, config = {}) => {
         email: targetUser.email || '',
         username: targetUser.username,
         thumb: targetUser.thumb || null,
-        authProvider: isJellyfin ? 'jellyfin' : actor.authProvider,
+        authProvider: isEmbyLike ? 'jellyfin' : actor.authProvider,
         isAdmin: false,
         actor: {
             id: actor.id,
@@ -1816,7 +1834,8 @@ const buildAdminSessionFromActor = (actor) => ({
 
 const resolveCurrentAdmin = async (sessionUser, config = null) => {
     const loadedConfig = config || await loadFile(CONFIG_PATH, {});
-    if (String(loadedConfig?.mediaServerType || '').toLowerCase() === 'jellyfin') {
+    const mediaServerType = String(loadedConfig?.mediaServerType || '').toLowerCase();
+    if (mediaServerType === 'jellyfin' || mediaServerType === 'emby') {
         if (sessionUser?.authProvider !== 'jellyfin' || !sessionUser?.jellyfinId) return false;
         if (loadedConfig?.jellyfinUrl && loadedConfig?.jellyfinApiKey) {
             try {
@@ -1832,7 +1851,7 @@ const resolveCurrentAdmin = async (sessionUser, config = null) => {
                 log(`Jellyfin admin policy check HTTP ${userRes.status} for ${sessionUser.username || sessionUser.jellyfinId}`);
                 return false;
             } catch (e) {
-                log(`Jellyfin admin policy check failed for ${sessionUser.username || sessionUser.jellyfinId}: ${e.message}`);
+                log(`${mediaServerType === 'emby' ? 'Emby' : 'Jellyfin'} admin policy check failed for ${sessionUser.username || sessionUser.jellyfinId}: ${e.message}`);
                 // Fail closed when Jellyfin is unreachable — do not elevate from cookie flags.
                 return false;
             }
@@ -1856,6 +1875,13 @@ const arePublicLibraryStatsVisible = (config = {}) => config.showPublicLibrarySt
 const normalizePwaIconSource = (value, fallback = 'server') => {
     const normalized = String(value || '').trim().toLowerCase();
     return normalized === 'application' || normalized === 'server' ? normalized : fallback;
+};
+const isJellyfinBrandingAssetPath = (value = '') => (
+    ['/api/jellyfin/branding/icon', '/api/jellyfin/branding/splash'].includes(String(value || '').trim())
+);
+const normalizeBrandingAssetForMediaServer = (value = '', mediaServerType = 'plex') => {
+    const normalizedType = String(mediaServerType || 'plex').toLowerCase();
+    return normalizedType === 'emby' && isJellyfinBrandingAssetPath(value) ? '' : (value || '');
 };
 
 const requireAuth = (req, res, next) => {
@@ -2028,9 +2054,11 @@ const syncUsers = async (config) => {
 };
 
 const syncJellyfinUsers = async (config) => {
-    log('Starting user sync from Jellyfin...');
+    const mediaServerType = String(config?.mediaServerType || 'jellyfin').toLowerCase();
+    const providerLabel = mediaServerType === 'emby' ? 'Emby' : 'Jellyfin';
+    log(`Starting user sync from ${providerLabel}...`);
     if (!isJellyfinConfigured(config)) {
-        throw new Error('Jellyfin is not configured.');
+        throw new Error(`${providerLabel} is not configured.`);
     }
 
     const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
@@ -2039,8 +2067,8 @@ const syncJellyfinUsers = async (config) => {
     }, 15000);
     if (!response.ok) {
         const detail = await response.text().catch(() => '');
-        log(`Error fetching Jellyfin users. Status: ${response.status}. Response: ${detail}`);
-        throw new Error(`Failed to fetch Jellyfin users. Status: ${response.status}`);
+        log(`Error fetching ${providerLabel} users. Status: ${response.status}. Response: ${detail}`);
+        throw new Error(`Failed to fetch ${providerLabel} users. Status: ${response.status}`);
     }
 
     const jellyfinUsers = (await response.json())
@@ -2066,7 +2094,7 @@ const syncJellyfinUsers = async (config) => {
     const syncedUsers = jellyfinUsers.map((jUser) => {
         const deletedLookup = { id: jUser.id, jellyfinId: jUser.jellyfinId, username: jUser.username, email: jUser.email };
         if (isDeletedUser(deletedUsers, deletedLookup)) {
-            log(`Skipping deleted Jellyfin user during sync: ${jUser.username}`);
+            log(`Skipping deleted ${providerLabel} user during sync: ${jUser.username}`);
             return null;
         }
 
@@ -2090,7 +2118,7 @@ const syncJellyfinUsers = async (config) => {
             };
         }
 
-        log(`New Jellyfin user found: ${jUser.username}. Setting default 1-day expiry.`);
+        log(`New ${providerLabel} user found: ${jUser.username}. Setting default 1-day expiry.`);
         newUserCount++;
         appendAuditLog('jellyfin_sync_new_user_added', null, jUser).catch(() => { });
         return {
@@ -2122,7 +2150,7 @@ const syncJellyfinUsers = async (config) => {
     }
 
     await saveFile(USERS_PATH, syncedUsers);
-    const message = `Sync complete. Synced ${jellyfinUsers.length} Jellyfin users.`;
+    const message = `Sync complete. Synced ${jellyfinUsers.length} ${providerLabel} users.`;
     log(message);
     return { message, count: jellyfinUsers.length, newUserCount };
 };
@@ -2831,8 +2859,9 @@ app.post('/api/auth/jellyfin/login', authRateLimit, async (req, res) => {
 
     try {
         const config = await loadFile(CONFIG_PATH, {});
+        const mediaServerLabel = String(config.mediaServerType || '').toLowerCase() === 'emby' ? 'Emby' : 'Jellyfin';
         if (!isJellyfinConfigured(config)) {
-            return res.status(400).json({ error: 'Jellyfin authentication is not configured' });
+            return res.status(400).json({ error: `${mediaServerLabel} authentication is not configured` });
         }
 
         const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
@@ -2844,14 +2873,14 @@ app.post('/api/auth/jellyfin/login', authRateLimit, async (req, res) => {
 
         if (!response.ok) {
             const detail = await response.text().catch(() => '');
-            log(`Jellyfin login failed for ${username}: ${response.status} ${detail.slice(0, 120)}`);
-            return res.status(401).json({ error: 'Invalid Jellyfin username or password' });
+            log(`${mediaServerLabel} login failed for ${username}: ${response.status} ${detail.slice(0, 120)}`);
+            return res.status(401).json({ error: `Invalid ${mediaServerLabel} username or password` });
         }
 
         return completeJellyfinPortalLogin(req, res, config, await response.json(), 'password');
     } catch (err) {
-        log('Error in jellyfin login: ' + err.message);
-        res.status(500).json({ error: 'Failed to authenticate with Jellyfin' });
+        log('Error in media server login: ' + err.message);
+        res.status(500).json({ error: 'Failed to authenticate with media server' });
     }
 });
 
@@ -3237,8 +3266,10 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         return res.status(403).json({ error: 'Your portal session has expired. Please contact the admin for access.' });
     }
 
-    const isJellyfinPortal = String(config?.mediaServerType || '').toLowerCase() === 'jellyfin';
-    let serverName = isJellyfinPortal ? 'Jellyfin Server' : 'Plex Server';
+    const mediaServerType = String(config?.mediaServerType || 'plex').toLowerCase();
+    const mediaServerLabel = mediaServerType === 'emby' ? 'Emby' : mediaServerType === 'jellyfin' ? 'Jellyfin' : 'Plex';
+    const isJellyfinPortal = ['jellyfin', 'emby'].includes(mediaServerType);
+    let serverName = isJellyfinPortal ? `${mediaServerLabel} Server` : 'Plex Server';
     let adminThumb = null;
     let sessionThumb = req.user.thumb || null;
     let requestUrl = config.requestUrl || 'https://yourdomain.com';
@@ -3271,7 +3302,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
     try {
         if (isJellyfinPortal && config?.jellyfinUrl && config?.jellyfinApiKey) {
             const profile = await getAdminProfile(config);
-            serverName = profile.serverName || 'Jellyfin Server';
+            serverName = profile.serverName || `${mediaServerLabel} Server`;
         } else if (config && config.plexToken && config.serverIdentifier) {
             const profile = await getAdminProfile(config);
             serverName = profile.serverName || 'Plex Server';
@@ -3369,7 +3400,7 @@ app.post('/api/admin/impersonate/:userId', requireAdmin, async (req, res) => {
         const targetIsAdmin = await resolveCurrentAdmin({
             plexId: targetUser.plexId || targetUser.id,
             jellyfinId: targetUser.jellyfinId,
-            authProvider: String(config?.mediaServerType || '').toLowerCase() === 'jellyfin' ? 'jellyfin' : undefined,
+            authProvider: ['jellyfin', 'emby'].includes(String(config?.mediaServerType || '').toLowerCase()) ? 'jellyfin' : undefined,
             username: targetUser.username,
         }, config);
         if (targetIsAdmin) {
@@ -3439,13 +3470,14 @@ const DASHBOARD_RECENTLY_ADDED_WIDGETS = ['recentMovies', 'recentShows', 'recent
 const DASHBOARD_WIDGETS = [...DASHBOARD_MAIN_GRID_WIDGETS, ...DASHBOARD_RECENTLY_ADDED_WIDGETS];
 const DASHBOARD_WIDGET_SIZES = ['compact', 'normal', 'wide', 'full'];
 
-const DOWNLOAD_CLIENT_TYPES = ['qbittorrent', 'transmission', 'bittorrent', 'deluge', 'sabnzbd'];
+const DOWNLOAD_CLIENT_TYPES = ['qbittorrent', 'transmission', 'bittorrent', 'deluge', 'sabnzbd', 'nzbget'];
 const downloadClientLabel = (type) => ({
     qbittorrent: 'qBittorrent',
     transmission: 'Transmission',
     bittorrent: 'BitTorrent',
     deluge: 'Deluge',
     sabnzbd: 'SABnzbd',
+    nzbget: 'NZBGet',
 }[type] || 'Download Client');
 
 const normalizeDownloadClients = (incoming, existing = [], { resolveSecret = (v) => v, resolveConfigIntegrationUrl = (v) => String(v || '').trim(), secretMask = SECRET_MASK } = {}) => {
@@ -3651,8 +3683,11 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 downloadClients: maskDownloadClientsForApi(config.downloadClients, SECRET_MASK),
                 tautulliUrl: config.tautulliUrl || '',
                 tautulliApiKey: config.tautulliApiKey ? SECRET_MASK : '',
+                jellyfinAnalyticsProvider: normalizeJellyfinAnalyticsProvider(config.jellyfinAnalyticsProvider, config),
                 jellystatUrl: config.jellystatUrl || '',
                 jellystatApiKey: config.jellystatApiKey ? SECRET_MASK : '',
+                jellyglanceUrl: config.jellyglanceUrl || '',
+                jellyglanceApiKey: config.jellyglanceApiKey ? SECRET_MASK : '',
                 requestAppType: config.requestAppType === 'overseerr' ? 'seerr' : (config.requestAppType || 'none'),
                 requestAppUrl: config.requestAppUrl || '',
                 requestAppFetchUrl: config.requestAppFetchUrl || '',
@@ -3669,11 +3704,11 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 autoApproveTv: !!config.autoApproveTv,
                 ...portalRequestDefaultsForClient(config, { secretMask: SECRET_MASK }),
                 primaryColor: config.primaryColor || '#F7C600',
-                customLogoUrl: config.customLogoUrl || '',
+                customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
                 brandingTheme: config.brandingTheme || 'plex',
                 sidebarIdentityPosition: ['top', 'bottom'].includes(String(config.sidebarIdentityPosition || '').toLowerCase()) ? String(config.sidebarIdentityPosition).toLowerCase() : 'bottom',
                 pwaIconSource: normalizePwaIconSource(config.pwaIconSource),
-                backgroundImageUrl: config.backgroundImageUrl || '',
+                backgroundImageUrl: normalizeBrandingAssetForMediaServer(config.backgroundImageUrl, config.mediaServerType),
                 useScrollRevealAnimations: !!config.useScrollRevealAnimations,
                 useCinematicLoading: !!config.useCinematicLoading,
                 useBrandedSkeleton: config.useBrandedSkeleton !== false,
@@ -3771,8 +3806,11 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 downloadClients: [],
                 tautulliUrl: '',
                 tautulliApiKey: '',
+                jellyfinAnalyticsProvider: 'jellyglance',
                 jellystatUrl: '',
                 jellystatApiKey: '',
+                jellyglanceUrl: '',
+                jellyglanceApiKey: '',
                 requestAppType: 'none',
                 requestAppUrl: '',
                 requestAppApiKey: '',
@@ -3857,7 +3895,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, smtpSecure, emailDaysBefore,
         gotifyEnabled, gotifyUrl, gotifyToken, gotifyPriority, alertRules,
         newsletterFrequency, newsletterDay, publicDomain, requestUrl, contactUrl, contactWhatsApp, contactEmail,
-        sonarrUrl, sonarrApiKey, radarrUrl, radarrApiKey, arrInstances, downloadClients, tautulliUrl, tautulliApiKey, jellystatUrl, jellystatApiKey,
+        sonarrUrl, sonarrApiKey, radarrUrl, radarrApiKey, arrInstances, downloadClients, tautulliUrl, tautulliApiKey, jellyfinAnalyticsProvider, jellystatUrl, jellystatApiKey, jellyglanceUrl, jellyglanceApiKey,
         requestAppType, requestAppUrl, requestAppFetchUrl, requestAppApiKey,
         requestDiscoverRegion, requestDiscoverLanguage, requestHideAvailableMedia, discoverySource, requestEngine,
         requestQuotaLimit, requestQuotaDays, requestQuotaLimit4k, autoApproveMovies, autoApproveTv,
@@ -3924,6 +3962,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     let safeRadarrUrl = '';
     let safeTautulliUrl = '';
     let safeJellystatUrl = '';
+    let safeJellyglanceUrl = '';
     let safeRequestAppUrl = '';
     let safeRequestAppFetchUrl = '';
     let safeJellyfinUrl = '';
@@ -3945,6 +3984,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         safeRadarrUrl = resolveConfigIntegrationUrl(radarrUrl, existingConfig.radarrUrl || '');
         safeTautulliUrl = resolveConfigIntegrationUrl(tautulliUrl, existingConfig.tautulliUrl || '');
         safeJellystatUrl = resolveConfigIntegrationUrl(jellystatUrl, existingConfig.jellystatUrl || '');
+        safeJellyglanceUrl = resolveConfigIntegrationUrl(jellyglanceUrl, existingConfig.jellyglanceUrl || '');
         safeRequestAppUrl = resolveConfigIntegrationUrl(requestAppUrl, existingConfig.requestAppUrl || '');
         safeRequestAppFetchUrl = resolveConfigIntegrationUrl(requestAppFetchUrl, existingConfig.requestAppFetchUrl || '');
         safeJellyfinUrl = resolveConfigIntegrationUrl(jellyfinUrl, existingConfig.jellyfinUrl || '');
@@ -4117,8 +4157,11 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         downloadClients: nextDownloadClients,
         tautulliUrl: safeTautulliUrl,
         tautulliApiKey: resolveSecret(tautulliApiKey, existingConfig.tautulliApiKey),
+        jellyfinAnalyticsProvider: normalizeJellyfinAnalyticsProvider(jellyfinAnalyticsProvider || existingConfig.jellyfinAnalyticsProvider, existingConfig),
         jellystatUrl: safeJellystatUrl,
         jellystatApiKey: resolveSecret(jellystatApiKey, existingConfig.jellystatApiKey),
+        jellyglanceUrl: safeJellyglanceUrl,
+        jellyglanceApiKey: resolveSecret(jellyglanceApiKey, existingConfig.jellyglanceApiKey),
         requestAppType: ['none', 'seerr', 'overseerr', 'jellyseerr', 'ombi'].includes(String(requestAppType || '').toLowerCase()) ? (String(requestAppType).toLowerCase() === 'overseerr' ? 'seerr' : String(requestAppType).toLowerCase()) : (existingConfig.requestAppType || 'none'),
         requestAppUrl: safeRequestAppUrl,
         requestAppFetchUrl: safeRequestAppFetchUrl,
@@ -4170,11 +4213,11 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         }, existingConfig),
         tvdbApiKey: resolveSecret(tvdbApiKey, existingConfig.tvdbApiKey),
         primaryColor: primaryColor || '#F7C600',
-        customLogoUrl: customLogoUrl || '',
-        brandingTheme: ['dynamic', 'plex', 'slate', 'nordic', 'jellyfin', 'emerald', 'midnight', 'crimson', 'amethyst', 'sunset', 'ocean', 'rose', 'royal', 'graphite', 'cyberlime', 'aurora'].includes(String(brandingTheme || '').toLowerCase()) ? String(brandingTheme).toLowerCase() : (existingConfig.brandingTheme || 'plex'),
+        customLogoUrl: normalizeBrandingAssetForMediaServer(customLogoUrl, normalizedMediaServerType),
+        brandingTheme: ['dynamic', 'plex', 'slate', 'nordic', 'jellyfin', 'emby', 'emerald', 'midnight', 'crimson', 'amethyst', 'sunset', 'ocean', 'rose', 'royal', 'graphite', 'cyberlime', 'aurora'].includes(String(brandingTheme || '').toLowerCase()) ? String(brandingTheme).toLowerCase() : (existingConfig.brandingTheme || 'plex'),
         sidebarIdentityPosition: ['top', 'bottom'].includes(String(sidebarIdentityPosition || '').toLowerCase()) ? String(sidebarIdentityPosition).toLowerCase() : (existingConfig.sidebarIdentityPosition || 'bottom'),
         pwaIconSource: normalizePwaIconSource(pwaIconSource, normalizePwaIconSource(existingConfig.pwaIconSource)),
-        backgroundImageUrl: backgroundImageUrl || '',
+        backgroundImageUrl: normalizeBrandingAssetForMediaServer(backgroundImageUrl, normalizedMediaServerType),
         useScrollRevealAnimations: !!useScrollRevealAnimations,
         useCinematicLoading: !!useCinematicLoading,
         useBrandedSkeleton: useBrandedSkeleton !== false,
@@ -4444,12 +4487,13 @@ app.get('/api/config/public', async (req, res) => {
         const config = (await loadFile(CONFIG_PATH, {})) || {};
         res.json({
             mediaServerType: config.mediaServerType || 'plex',
+            jellyfinAnalyticsProvider: normalizeJellyfinAnalyticsProvider(config.jellyfinAnalyticsProvider, config),
             primaryColor: config.primaryColor || '#F7C600',
-            customLogoUrl: config.customLogoUrl || '',
+            customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
             brandingTheme: config.brandingTheme || 'plex',
             sidebarIdentityPosition: ['top', 'bottom'].includes(String(config.sidebarIdentityPosition || '').toLowerCase()) ? String(config.sidebarIdentityPosition).toLowerCase() : 'bottom',
             pwaIconSource: normalizePwaIconSource(config.pwaIconSource),
-            backgroundImageUrl: config.backgroundImageUrl || '',
+            backgroundImageUrl: normalizeBrandingAssetForMediaServer(config.backgroundImageUrl, config.mediaServerType),
             useScrollRevealAnimations: !!config.useScrollRevealAnimations,
             useCinematicLoading: !!config.useCinematicLoading,
             useBrandedSkeleton: config.useBrandedSkeleton !== false,
@@ -4806,7 +4850,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
         bazarrUrl, bazarrApiKey,
         downloadClientId, downloadClientType, downloadClientUrl, downloadClientUsername, downloadClientPassword,
         tautulliUrl, tautulliApiKey,
-        jellystatUrl, jellystatApiKey,
+        jellystatUrl, jellystatApiKey, jellyglanceUrl, jellyglanceApiKey,
         requestAppType, requestAppUrl, requestAppFetchUrl, requestAppApiKey,
         tmdbApiKey,
     } = req.body || {};
@@ -4938,11 +4982,23 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
             const apiKey = resolveTestCredential(jellystatApiKey, stored.jellystatApiKey);
             if (!url || !apiKey) return res.status(400).json({ error: 'Jellystat URL and API key are required.' });
             const statsRes = await fetchWithTimeout(`${url}/stats/getViewsByLibraryType?days=30`, {
-                headers: { Accept: 'application/json', 'X-API-Token': apiKey },
+                headers: { Accept: 'application/json', 'x-api-token': apiKey },
             }, 12000);
             if (!statsRes.ok) throw new Error(`Jellystat returned HTTP ${statsRes.status}`);
             const data = await statsRes.json().catch(() => null);
             return res.json({ ok: true, message: 'Jellystat connected', details: { sample: data ? true : false } });
+        }
+
+        if (type === 'jellyglance') {
+            const url = resolveIntegrationUrlForTest(jellyglanceUrl, stored.jellyglanceUrl);
+            const apiKey = resolveTestCredential(jellyglanceApiKey, stored.jellyglanceApiKey);
+            if (!url || !apiKey) return res.status(400).json({ error: 'JellyGlance URL and API key are required.' });
+            const statsRes = await fetchWithTimeout(`${url}/stats/getViewsByLibraryType?days=30`, {
+                headers: { Accept: 'application/json', 'x-api-token': apiKey },
+            }, 12000);
+            if (!statsRes.ok) throw new Error(`JellyGlance returned HTTP ${statsRes.status}`);
+            const data = await statsRes.json().catch(() => null);
+            return res.json({ ok: true, message: 'JellyGlance connected', details: { sample: data ? true : false } });
         }
 
         if (type === 'requestApp') {
@@ -6280,14 +6336,16 @@ app.post('/api/plex/servers', setupRateLimit, async (req, res) => {
 app.post('/api/sync', requireAdmin, async (req, res) => {
     const config = await loadFile(CONFIG_PATH, null);
     if (!config) return res.status(400).json({ error: 'App not configured.' });
-    const isJellyfinPortal = String(config.mediaServerType || '').toLowerCase() === 'jellyfin';
+    const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
+    const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
+    const providerLabel = mediaServerType === 'emby' ? 'Emby' : mediaServerType === 'jellyfin' ? 'Jellyfin' : 'Plex';
     try {
         const result = isJellyfinPortal ? await syncJellyfinUsers(config) : await syncUsers(config);
         await appendAuditLog(isJellyfinPortal ? 'jellyfin_sync_completed' : 'plex_sync_completed', req.user || null, null, { count: result.count });
         if (result.newUserCount > 0 && alertRuleEnabled(config, 'newUserSynced')) {
             await sendGotifyAlert(
                 config,
-                `${isJellyfinPortal ? 'Jellyfin' : 'Plex'} sync found new users`,
+                `${providerLabel} sync found new users`,
                 `${result.newUserCount} new user${result.newUserCount === 1 ? '' : 's'} added during sync.`,
                 5,
             ).catch((e) => log(`Failed to send Gotify new-user sync alert: ${e.message}`));
@@ -6295,7 +6353,7 @@ app.post('/api/sync', requireAdmin, async (req, res) => {
         if (alertRuleEnabled(config, 'syncSuccess')) {
             await sendGotifyAlert(
                 config,
-                `${isJellyfinPortal ? 'Jellyfin' : 'Plex'} sync completed`,
+                `${providerLabel} sync completed`,
                 result.message || `Synced ${result.count} users.`,
                 2,
             ).catch((e) => log(`Failed to send Gotify sync success alert: ${e.message}`));
@@ -6306,7 +6364,7 @@ app.post('/api/sync', requireAdmin, async (req, res) => {
         if (alertRuleEnabled(config, 'syncFailure')) {
             await sendGotifyAlert(
                 config,
-                `${isJellyfinPortal ? 'Jellyfin' : 'Plex'} sync failed`,
+                `${providerLabel} sync failed`,
                 error.message || 'Sync failed.',
                 8,
             ).catch((e) => log(`Failed to send Gotify sync failure alert: ${e.message}`));
@@ -9567,7 +9625,7 @@ app.get('/api/invites/:code/info', publicReadRateLimit, async (req, res) => {
     res.json({
         durationDays: invite.durationDays,
         serverName: adminProfile.serverName || 'Our Server',
-        customLogoUrl: config.customLogoUrl,
+        customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
         thumb: adminProfile.thumb,
         showPublicLibraryStats: arePublicLibraryStatsVisible(config)
     });
@@ -9694,8 +9752,9 @@ const decorateTaskForConfig = (task, config = {}) => {
     const next = { ...task };
     if (next.id === 'syncPlexUsers') {
         if (mediaServerType !== 'plex') {
-            next.name = 'Sync Jellyfin Users';
-            next.description = 'Fetches latest user data and profile images from Jellyfin.';
+            const mediaLabel = mediaServerType === 'emby' ? 'Emby' : 'Jellyfin';
+            next.name = `Sync ${mediaLabel} Users`;
+            next.description = `Fetches latest user data and profile images from ${mediaLabel}.`;
         } else {
             next.name = 'Sync Plex Users';
             next.description = 'Fetches latest user data from Plex.';
@@ -9774,7 +9833,11 @@ app.post('/api/tasks/run/:taskId', requireAdmin, async (req, res) => {
             if (kind === 'scheduled') {
                 try {
                     switch (taskId) {
-                        case 'syncPlexUsers': await syncUsers(currentConfig); break;
+                        case 'syncPlexUsers': {
+                            const mediaServerType = String(currentConfig.mediaServerType || 'plex').toLowerCase();
+                            await (mediaServerType === 'jellyfin' || mediaServerType === 'emby' ? syncJellyfinUsers(currentConfig) : syncUsers(currentConfig));
+                            break;
+                        }
                         case 'checkAndSendNotifications': await checkAndSendNotifications(currentConfig); break;
                         case 'checkAndRevoke': await checkAndRevoke(currentConfig); break;
                         case 'checkAndSendNewsletter': await checkAndSendNewsletter(currentConfig, true); break;
@@ -9866,6 +9929,11 @@ app.get('/api/admin/diagnostics', requireAdmin, async (req, res) => {
                 arrInstanceCounts: getArrInstanceCounts(config),
                 tautulliConfigured: !!(config.tautulliUrl && config.tautulliApiKey),
                 jellystatConfigured: !!(config.jellystatUrl && config.jellystatApiKey),
+                jellyglanceConfigured: !!(config.jellyglanceUrl && config.jellyglanceApiKey),
+                jellyfinAnalyticsProvider: normalizeJellyfinAnalyticsProvider(config.jellyfinAnalyticsProvider, config),
+                jellyfinAnalyticsConfigured: normalizeJellyfinAnalyticsProvider(config.jellyfinAnalyticsProvider, config) === 'jellystat'
+                    ? !!(config.jellystatUrl && config.jellystatApiKey)
+                    : !!(config.jellyglanceUrl && config.jellyglanceApiKey),
                 requestAppEnabled: !!(config.requestAppType && config.requestAppType !== 'none'),
                 requestAppConfigured: !!(config.requestAppType && config.requestAppType !== 'none' && config.requestAppUrl && config.requestAppApiKey)
             },
@@ -10569,8 +10637,10 @@ let cachedAdminProfile = null;
 let lastAdminProfileFetch = 0;
 
 async function getAdminProfile(config) {
-    if (String(config?.mediaServerType || '').toLowerCase() === 'jellyfin') {
-        let serverName = 'Jellyfin Server';
+    const mediaServerType = String(config?.mediaServerType || '').toLowerCase();
+    if (mediaServerType === 'jellyfin' || mediaServerType === 'emby') {
+        const mediaLabel = mediaServerType === 'emby' ? 'Emby' : 'Jellyfin';
+        let serverName = `${mediaLabel} Server`;
         try {
             if (config?.jellyfinUrl && config?.jellyfinApiKey) {
                 const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
@@ -10583,7 +10653,7 @@ async function getAdminProfile(config) {
                 }
             }
         } catch (e) {
-            log(`Failed to fetch Jellyfin server info: ${e.message}`);
+            log(`Failed to fetch ${mediaLabel} server info: ${e.message}`);
         }
         return { thumb: null, serverName };
     }
@@ -10893,7 +10963,7 @@ app.get('/api/public/info', publicReadRateLimit, async (req, res) => {
         if ((requestUrl === 'https://yourdomain.com' || !requestUrl) && config.requestAppUrl) {
             requestUrl = config.requestAppUrl;
         }
-        res.json({ ...profile, isConfigured, mediaServerType: config.mediaServerType || 'plex', requestUrl, contactWhatsApp, contactEmail });
+        res.json({ ...profile, customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType), isConfigured, mediaServerType: config.mediaServerType || 'plex', requestUrl, contactWhatsApp, contactEmail });
     } catch (e) {
         try {
             const config = await loadFile(CONFIG_PATH, {});
@@ -10904,6 +10974,7 @@ app.get('/api/public/info', publicReadRateLimit, async (req, res) => {
             }
             return res.json({
                 thumb: null,
+                customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
                 serverName: 'Server Portal',
                 isConfigured,
                 mediaServerType: config.mediaServerType || 'plex',
@@ -10912,7 +10983,7 @@ app.get('/api/public/info', publicReadRateLimit, async (req, res) => {
                 contactEmail: config.contactEmail || '',
             });
         } catch {
-            res.json({ thumb: null, serverName: 'Server Portal', isConfigured: false, mediaServerType: 'plex', requestUrl: 'https://yourdomain.com' });
+            res.json({ thumb: null, customLogoUrl: '', serverName: 'Server Portal', isConfigured: false, mediaServerType: 'plex', requestUrl: 'https://yourdomain.com' });
         }
     }
 });
@@ -11662,10 +11733,21 @@ const jellyfinItemUrl = (config, itemId) => {
     return baseUrl && itemId ? `${baseUrl}/web/#/details?id=${encodeURIComponent(itemId)}` : baseUrl;
 };
 
+const hasJellyfinPrimaryImage = (item = {}) => !!(
+    item?.ImageTags?.Primary
+    || item?.PrimaryImageTag
+    || item?.PrimaryImageItemId
+);
+
+const jellyfinImageUrlForItem = (itemId, width = 300, height = 450) => (
+    itemId ? withBasePath(`/api/jellyfin/image?itemId=${encodeURIComponent(itemId)}&width=${width}&height=${height}`) : ''
+);
+
 const mapJellyfinItemForDiscover = (config, item = {}, type = '') => {
     const id = item.Id || '';
     const isEpisode = String(type || item.Type || '').toLowerCase() === 'episode';
-    const posterId = isEpisode ? (item.SeriesId || item.ParentId || id) : id;
+    const canUsePrimaryImage = hasJellyfinPrimaryImage(item);
+    const posterId = canUsePrimaryImage ? (isEpisode ? (item.PrimaryImageItemId || item.SeriesId || item.ParentId || id) : (item.PrimaryImageItemId || id)) : '';
     const title = type === 'episode'
         ? (item.SeriesName ? `${item.SeriesName} - ${item.Name}` : item.Name)
         : (item.Name || 'Untitled');
@@ -11686,8 +11768,8 @@ const mapJellyfinItemForDiscover = (config, item = {}, type = '') => {
         type: item.Type,
         year: item.ProductionYear,
         thumb: posterId,
-        thumbUrl: posterId ? withBasePath(`/api/jellyfin/image?itemId=${encodeURIComponent(posterId)}&width=300&height=${type === 'music' ? 300 : 450}`) : '',
-        posterFallbackUrl: isEpisode && id && id !== posterId ? withBasePath(`/api/jellyfin/image?itemId=${encodeURIComponent(id)}&width=300&height=450`) : '',
+        thumbUrl: posterId ? jellyfinImageUrlForItem(posterId, 300, type === 'music' ? 300 : 450) : '',
+        posterFallbackUrl: isEpisode && canUsePrimaryImage && id && id !== posterId ? jellyfinImageUrlForItem(id, 300, 450) : '',
         addedAt: item.DateCreated ? Date.parse(item.DateCreated) / 1000 : 0,
         tags: [...new Set(tags)].slice(0, 4),
         plexUrl: jellyfinItemUrl(config, id),
@@ -11727,7 +11809,10 @@ app.get('/api/jellyfin/image', requireAuth, requireMember, async (req, res) => {
         const response = await fetchWithTimeout(imageUrl, {
             headers: jellyfinHeaders(config.jellyfinApiKey),
         }, 15000);
-        if (!response.ok) throw new Error(`image HTTP ${response.status}`);
+        if (!response.ok) {
+            log(`Jellyfin image ${itemId} returned HTTP ${response.status}`);
+            return res.status(404).send('');
+        }
         const buffer = Buffer.from(await response.arrayBuffer());
         res.setHeader('Content-Type', response.headers.get('content-type') || 'image/jpeg');
         res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -11837,11 +11922,11 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
                     type: item.Type,
                     grandparentTitle: item.SeriesName || item.Album || null,
                     year: item.ProductionYear,
-                    thumb: item.Type === 'Episode' ? (item.SeriesId || item.ParentId || item.Id) : item.Id,
-                    thumbUrl: (item.Type === 'Episode' ? (item.SeriesId || item.ParentId || item.Id) : item.Id)
-                        ? withBasePath(`/api/jellyfin/image?itemId=${encodeURIComponent(item.Type === 'Episode' ? (item.SeriesId || item.ParentId || item.Id) : item.Id)}&width=300&height=450`)
+                    thumb: hasJellyfinPrimaryImage(item) ? (item.Type === 'Episode' ? (item.PrimaryImageItemId || item.SeriesId || item.ParentId || item.Id) : (item.PrimaryImageItemId || item.Id)) : '',
+                    thumbUrl: hasJellyfinPrimaryImage(item)
+                        ? jellyfinImageUrlForItem(item.Type === 'Episode' ? (item.PrimaryImageItemId || item.SeriesId || item.ParentId || item.Id) : (item.PrimaryImageItemId || item.Id), 300, 450)
                         : '',
-                    posterFallbackUrl: item.Type === 'Episode' && item.Id ? withBasePath(`/api/jellyfin/image?itemId=${encodeURIComponent(item.Id)}&width=300&height=450`) : '',
+                    posterFallbackUrl: item.Type === 'Episode' && hasJellyfinPrimaryImage(item) && item.Id ? jellyfinImageUrlForItem(item.Id, 300, 450) : '',
                     user: (isHidden && hideConfig === 'hidden') ? null : (isHidden ? 'Anonymous' : (session.UserName || 'Unknown User')),
                     userThumb: (!isHidden && session.UserId) ? withBasePath(`/api/jellyfin/user-image?userId=${encodeURIComponent(session.UserId)}`) : null,
                     playerProduct: session.Client || 'Jellyfin',
@@ -12384,24 +12469,39 @@ const normalizeAnalyticsDaysForJellystat = (days) => {
     return Math.min(Math.max(parseInt(days, 10) || 30, 1), 36500);
 };
 
+const jellyfinAnalyticsProviderLabel = (provider) => (
+    String(provider || '').toLowerCase() === 'jellyglance' ? 'JellyGlance' : 'Jellystat'
+);
+
+const resolveJellyfinAnalyticsProviderConfig = (config = {}) => {
+    const provider = normalizeJellyfinAnalyticsProvider(config.jellyfinAnalyticsProvider, config);
+    return {
+        provider,
+        label: jellyfinAnalyticsProviderLabel(provider),
+        url: provider === 'jellyglance' ? config.jellyglanceUrl : config.jellystatUrl,
+        apiKey: provider === 'jellyglance' ? config.jellyglanceApiKey : config.jellystatApiKey,
+    };
+};
+
 const jellystatHeaders = (apiKey) => ({
     Accept: 'application/json',
     'Content-Type': 'application/json',
-    'X-API-Token': apiKey,
+    'x-api-token': apiKey,
 });
 
 const fetchJellystatJson = async (config, endpoint, { method = 'GET', body = null, query = null } = {}) => {
-    if (!config?.jellystatUrl || !config?.jellystatApiKey) {
-        throw new Error('Jellystat is not configured');
+    const analytics = resolveJellyfinAnalyticsProviderConfig(config);
+    if (!analytics.url || !analytics.apiKey) {
+        throw new Error(`${analytics.label} is not configured`);
     }
-    const baseUrl = resolveIntegrationUrlForFetch(config.jellystatUrl);
+    const baseUrl = resolveIntegrationUrlForFetch(analytics.url);
     const params = query ? `?${new URLSearchParams(query).toString()}` : '';
     const response = await fetchWithTimeout(`${baseUrl}${endpoint}${params}`, {
         method,
-        headers: jellystatHeaders(config.jellystatApiKey),
+        headers: jellystatHeaders(analytics.apiKey),
         ...(body ? { body: JSON.stringify(body) } : {}),
     }, 15000);
-    if (!response.ok) throw new Error(`Jellystat returned HTTP ${response.status} for ${endpoint}`);
+    if (!response.ok) throw new Error(`${analytics.label} returned HTTP ${response.status} for ${endpoint}`);
     return response.json().catch(() => null);
 };
 
@@ -12477,8 +12577,8 @@ const mapJellystatContent = (config, items = [], type = 'movie') => (Array.isArr
     key: item.Id || item.Name,
     title: item.Name || 'Untitled',
     type,
-    thumb: item.Id || null,
-    thumbUrl: item.Id ? withBasePath(`/api/jellyfin/image?itemId=${encodeURIComponent(item.Id)}&width=300&height=450`) : '',
+    thumb: hasJellyfinPrimaryImage(item) ? (item.PrimaryImageItemId || item.Id || null) : null,
+    thumbUrl: hasJellyfinPrimaryImage(item) && item.Id ? jellyfinImageUrlForItem(item.PrimaryImageItemId || item.Id, 300, 450) : '',
     plays: toNumber(item.Plays ?? item.times_played ?? item.unique_viewers, 0),
     plexUrl: jellyfinItemUrl(config, item.Id),
 }));
@@ -12704,8 +12804,9 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
         if (!isJellyfinConfigured(config)) {
             return res.status(503).json({ error: 'Jellyfin not configured' });
         }
-        if (!config.jellystatUrl || !config.jellystatApiKey) {
-            return res.status(503).json({ error: 'Jellystat is not configured' });
+        const analyticsProvider = resolveJellyfinAnalyticsProviderConfig(config);
+        if (!analyticsProvider.url || !analyticsProvider.apiKey) {
+            return res.status(503).json({ error: `${analyticsProvider.label} is not configured` });
         }
 
         const requestedDays = req.query.days || 30;
@@ -12810,7 +12911,7 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
             requestedPeriodDays: requestedDays,
             cachePeriodDays: requestedDays,
             cacheFallback: false,
-            source: 'jellystat',
+            source: analyticsProvider.provider,
             jellystatInsights: {
                 activeStreams,
                 streamsRecord: null,
@@ -12826,8 +12927,8 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
             },
         });
     } catch (e) {
-        log(`Jellystat analytics error: ${e.message}`);
-        res.status(500).json({ error: 'Failed to fetch Jellystat analytics' });
+        log(`Jellyfin analytics error: ${e.message}`);
+        res.status(500).json({ error: 'Failed to fetch Jellyfin analytics' });
     }
 });
 
@@ -14445,7 +14546,12 @@ const startBackgroundService = async () => {
             }
         };
 
-        await runManagedTask('syncPlexUsers', () => syncUsers(currentConfig), 'sync');
+        await runManagedTask('syncPlexUsers', () => {
+            const mediaServerType = String(currentConfig.mediaServerType || 'plex').toLowerCase();
+            return mediaServerType === 'jellyfin' || mediaServerType === 'emby'
+                ? syncJellyfinUsers(currentConfig)
+                : syncUsers(currentConfig);
+        }, 'sync');
         await runManagedTask('checkAndSendNotifications', () => checkAndSendNotifications(currentConfig), 'notifications');
         await runManagedTask('checkAndRevoke', () => checkAndRevoke(currentConfig), 'revoke');
         await runManagedTask('checkAndSendNewsletter', () => checkAndSendNewsletter(currentConfig), 'newsletter');
@@ -15784,8 +15890,99 @@ const controlSabnzbdDownload = async (client, action, id) => {
     if (data?.status === false) throw new Error(`SABnzbd ${action} failed`);
 };
 
+const nzbgetAuthHeaders = (client) => {
+    const username = String(client.username || '').trim();
+    const password = String(client.password || '');
+    const auth = username ? `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}` : '';
+    return { Accept: 'application/json', 'Content-Type': 'application/json', ...(auth ? { Authorization: auth } : {}) };
+};
+
+const nzbgetRpc = async (client, method, params = []) => {
+    const base = resolveIntegrationUrlForFetch(client.url).replace(/\/+$/, '');
+    const response = await fetchWithTimeout(`${base}/jsonrpc`, {
+        method: 'POST',
+        headers: nzbgetAuthHeaders(client),
+        body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
+    }, 12000);
+    if (!response.ok) throw new Error(`NZBGet ${method} HTTP ${response.status}`);
+    const data = await response.json().catch(() => ({}));
+    if (data?.error) {
+        const message = data.error.message || data.error.code || 'RPC error';
+        throw new Error(`NZBGet ${method} failed: ${message}`);
+    }
+    return data?.result;
+};
+
+const nzbgetMbToBytes = (value) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number * 1024 * 1024 : 0;
+};
+
+const fetchNzbgetDownloads = async (client) => {
+    const [groups, status] = await Promise.all([
+        nzbgetRpc(client, 'listgroups', [0]),
+        nzbgetRpc(client, 'status', []).catch(() => ({})),
+    ]);
+    const downloadRate = Number(status?.DownloadRate || status?.DownloadLimit || 0) || 0;
+    return (Array.isArray(groups) ? groups : []).map((entry) => {
+        const size = nzbgetMbToBytes(entry.FileSizeMB);
+        const remaining = nzbgetMbToBytes(entry.RemainingSizeMB);
+        const downloaded = Math.max(0, size - remaining);
+        const progress = size > 0 ? (downloaded / size) * 100 : Number(entry.Progress || 0);
+        const statusText = String(entry.Status || '').toLowerCase();
+        return normalizeTorrentItem(client, {
+            id: entry.NZBID,
+            downloadId: entry.NZBID,
+            name: entry.NZBName || entry.NZBFilename || `NZB ${entry.NZBID}`,
+            size,
+            downloaded,
+            progress,
+            downloadSpeed: statusText === 'downloading' ? downloadRate : 0,
+            eta: Number(entry.RemainingTimeSec ?? entry.DownloadTimeSec ?? -1) || -1,
+            status: entry.Status || '',
+            category: entry.Category || '',
+            savePath: entry.DestDir || entry.FinalDir || '',
+            addedDate: entry.MinPostTime || null,
+        });
+    });
+};
+
+const controlNzbgetDownload = async (client, action, id) => {
+    const nzbId = Number(id);
+    if (!Number.isFinite(nzbId) || nzbId <= 0) throw new Error('NZBGet download id must be a positive number');
+    const command = action === 'pause'
+        ? 'GroupPause'
+        : action === 'resume'
+            ? 'GroupResume'
+            : 'GroupDelete';
+    const result = await nzbgetRpc(client, 'editqueue', [command, '', [nzbId]]);
+    if (result !== true) throw new Error(`NZBGet ${action} failed`);
+};
+
+const addNzbgetDownload = async (client, { url = '', fileBuffer = null, filename = 'upload.nzb', category = '' } = {}) => {
+    const normalizedCategory = normalizeDownloadCategory(category);
+    const content = fileBuffer ? Buffer.from(fileBuffer).toString('base64') : String(url || '').trim();
+    const nzbFilename = fileBuffer ? (filename || 'upload.nzb') : '';
+    if (!content) throw new Error('NZB URL or NZB file is required.');
+    const result = await nzbgetRpc(client, 'append', [
+        nzbFilename,
+        content,
+        normalizedCategory,
+        0,
+        false,
+        false,
+        '',
+        0,
+        'SCORE',
+        true,
+        [],
+    ]);
+    if (!(Number(result) > 0)) throw new Error('NZBGet append failed');
+};
+
 const fetchDownloadClientTorrents = async (client) => {
     if (client.type === 'sabnzbd') return fetchSabnzbdDownloads(client);
+    if (client.type === 'nzbget') return fetchNzbgetDownloads(client);
     if (client.type === 'transmission') return fetchTransmissionTorrents(client);
     if (client.type === 'bittorrent') return fetchBitTorrentTorrents(client);
     if (client.type === 'deluge') return fetchDelugeTorrents(client);
@@ -15797,6 +15994,7 @@ const controlDownloadClientItem = async (client, action, id) => {
     const downloadId = String(id || '').trim();
     if (!downloadId) throw new Error('Download id is required');
     if (client.type === 'sabnzbd') return controlSabnzbdDownload(client, action, downloadId);
+    if (client.type === 'nzbget') return controlNzbgetDownload(client, action, downloadId);
     if (client.type === 'transmission') return controlTransmissionTorrent(client, action, downloadId);
     if (client.type === 'bittorrent') return controlBitTorrent(client, action, downloadId);
     if (client.type === 'deluge') return controlDelugeTorrent(client, action, downloadId);
@@ -15805,6 +16003,7 @@ const controlDownloadClientItem = async (client, action, id) => {
 
 const addDownloadClientItem = async (client, payload = {}) => {
     if (client.type === 'sabnzbd') throw new Error('SABnzbd accepts NZB files, not torrent uploads.');
+    if (client.type === 'nzbget') return addNzbgetDownload(client, payload);
     if (client.type === 'transmission') return addTransmissionDownload(client, payload);
     if (client.type === 'bittorrent') return addBitTorrentDownload(client, payload);
     if (client.type === 'deluge') return addDelugeDownload(client, payload);
@@ -15820,30 +16019,30 @@ const getConfiguredDownloadClient = async (clientId) => {
 app.post('/api/downloads/add-url', requireAdmin, async (req, res) => {
     try {
         const { clientId, url, category } = req.body || {};
-        const torrentUrl = String(url || '').trim();
-        if (!torrentUrl) return res.status(400).json({ error: 'Torrent URL or magnet link is required.' });
+        const downloadUrl = String(url || '').trim();
+        if (!downloadUrl) return res.status(400).json({ error: 'Download URL or magnet link is required.' });
         const client = await getConfiguredDownloadClient(clientId);
         if (!client) return res.status(404).json({ error: 'Download client not found.' });
-        await addDownloadClientItem(client, { url: torrentUrl, category });
-        return res.json({ ok: true, message: `Sent torrent URL to ${client.name || downloadClientLabel(client.type)}.` });
+        await addDownloadClientItem(client, { url: downloadUrl, category });
+        return res.json({ ok: true, message: `Sent download URL to ${client.name || downloadClientLabel(client.type)}.` });
     } catch (e) {
-        res.status(500).json({ error: e.message || 'Failed to add torrent URL.' });
+        res.status(500).json({ error: e.message || 'Failed to add download URL.' });
     }
 });
 
-app.post('/api/downloads/add-file', requireAdmin, express.raw({ type: ['application/x-bittorrent', 'application/octet-stream'], limit: '5mb' }), async (req, res) => {
+app.post('/api/downloads/add-file', requireAdmin, express.raw({ type: ['application/x-bittorrent', 'application/x-nzb', 'application/octet-stream'], limit: '5mb' }), async (req, res) => {
     try {
         const clientId = req.query.clientId || req.headers['x-download-client-id'];
-        const filename = String(req.query.filename || req.headers['x-filename'] || 'upload.torrent').replace(/[^\w.\- ()]/g, '').slice(0, 180) || 'upload.torrent';
+        const filename = String(req.query.filename || req.headers['x-filename'] || 'upload.download').replace(/[^\w.\- ()]/g, '').slice(0, 180) || 'upload.download';
         const category = req.query.category || req.headers['x-download-category'] || '';
         const fileBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || []);
-        if (!fileBuffer.length) return res.status(400).json({ error: 'Torrent file is required.' });
+        if (!fileBuffer.length) return res.status(400).json({ error: 'Download file is required.' });
         const client = await getConfiguredDownloadClient(clientId);
         if (!client) return res.status(404).json({ error: 'Download client not found.' });
         await addDownloadClientItem(client, { fileBuffer, filename, category });
-        return res.json({ ok: true, message: `Sent torrent file to ${client.name || downloadClientLabel(client.type)}.` });
+        return res.json({ ok: true, message: `Sent download file to ${client.name || downloadClientLabel(client.type)}.` });
     } catch (e) {
-        res.status(500).json({ error: e.message || 'Failed to add torrent file.' });
+        res.status(500).json({ error: e.message || 'Failed to add download file.' });
     }
 });
 
@@ -16701,8 +16900,8 @@ const mapJellyfinEntryToMaintenanceItem = (config, entry = {}, mediaType = 'movi
     return {
         ratingKey: itemId,
         title: entry.Name || 'Unknown',
-        thumb: itemId,
-        thumbUrl: itemId ? withBasePath(`/api/jellyfin/image?itemId=${encodeURIComponent(itemId)}&width=300&height=450`) : '',
+        thumb: hasJellyfinPrimaryImage(entry) ? (entry.PrimaryImageItemId || itemId) : '',
+        thumbUrl: hasJellyfinPrimaryImage(entry) ? jellyfinImageUrlForItem(entry.PrimaryImageItemId || itemId, 300, 450) : '',
         mediaType,
         libraryId: 'jellyfin',
         libraryTitle: 'Jellyfin Library',
@@ -16844,8 +17043,8 @@ const fetchJellyfinShowEpisodes = async (config, showItem = {}) => {
             showTitle: showItem.title || entry.SeriesName || '',
             seasonNumber: entry.ParentIndexNumber != null ? Number(entry.ParentIndexNumber) : null,
             episodeNumber: entry.IndexNumber != null ? Number(entry.IndexNumber) : null,
-            thumb: String(entry.Id || ''),
-            thumbUrl: entry.Id ? withBasePath(`/api/jellyfin/image?itemId=${encodeURIComponent(entry.Id)}&width=300&height=200`) : '',
+            thumb: hasJellyfinPrimaryImage(entry) ? String(entry.PrimaryImageItemId || entry.Id || '') : '',
+            thumbUrl: hasJellyfinPrimaryImage(entry) ? jellyfinImageUrlForItem(entry.PrimaryImageItemId || entry.Id, 300, 200) : '',
             mediaType: 'episode',
             videoCodec,
             videoResolution: width >= 3800 || height >= 2000 ? '4k' : height >= 1000 ? '1080' : '720',
