@@ -1,12 +1,15 @@
 import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle } from './autoMatchTitle';
 import type { LibraryRecentItem } from './libraryRecent';
+import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import type { PosterSetsSearchResult, PosterSetsSearchSet, PosterSetsSearchTitle } from './types';
 
 export type FetchPosterSetsOptions = {
     dupePreference: 'mediux' | 'posterdb';
     mediaType?: 'show' | 'movie' | null;
     libraryItem?: Pick<LibraryRecentItem, 'title' | 'year' | 'mediaType'>;
+    /** Followed creators — title search floats these sets first. */
+    preferredCreators?: string[] | null;
     /** Called with MediUX sets as soon as they are ready (TPDB may still be loading). */
     onPartial?: (result: PosterSetsSearchResult) => void;
 };
@@ -62,6 +65,7 @@ const TPDB_EMPTY_HINT = 'ThePosterDB returned no sets for this title; showing Me
 const mergeSetsForDisplay = (
     parts: PosterSetsSearchResult[],
     dupePreference: 'mediux' | 'posterdb',
+    preferredCreators?: string[] | null,
 ): PosterSetsSearchSet[] => {
     const preferMediux = dupePreference === 'mediux';
     const buckets: { mediux: PosterSetsSearchSet[]; posterdb: PosterSetsSearchSet[] } = {
@@ -85,13 +89,14 @@ const mergeSetsForDisplay = (
             out.push(set);
         }
     }
-    return out;
+    return prioritizeSetsByFollowedCreators(out, preferredCreators);
 };
 
 async function fetchBothSetsProgressive(
     linkedTmdbId: string,
     options: {
         dupePreference: 'mediux' | 'posterdb';
+        preferredCreators?: string[] | null;
         fallbackMedia: 'show' | 'movie';
         titleHint: string;
         yearHint: number | null;
@@ -126,7 +131,12 @@ async function fetchBothSetsProgressive(
         }),
     ]);
     void mediuxP.then((partial) => {
-        if ((partial.sets?.length || 0) > 0) options.onPartial?.(partial);
+        if ((partial.sets?.length || 0) > 0) {
+            options.onPartial?.({
+                ...partial,
+                sets: prioritizeSetsByFollowedCreators(partial.sets || [], options.preferredCreators),
+            });
+        }
     });
     const [mediuxSettled, posterdbSettled] = await Promise.allSettled([mediuxP, posterdbTimed]);
     const mediuxResult: PosterSetsSearchResult = mediuxSettled.status === 'fulfilled'
@@ -153,7 +163,11 @@ async function fetchBothSetsProgressive(
                 : 'ThePosterDB search failed',
         );
     }
-    const sets = mergeSetsForDisplay([mediuxResult, posterdbResult], options.dupePreference);
+    const sets = mergeSetsForDisplay(
+        [mediuxResult, posterdbResult],
+        options.dupePreference,
+        options.preferredCreators,
+    );
     if ((posterdbResult.sets?.length || 0) === 0 && (mediuxResult.sets?.length || 0) > 0) {
         if (!partialErrors.some((msg) => msg.includes('ThePosterDB'))) {
             partialErrors.push(TPDB_EMPTY_HINT);
@@ -349,6 +363,7 @@ export async function fetchPosterSetsForTitle(
     if (useProgressive && linkedTmdbId) {
         response = await fetchBothSetsProgressive(linkedTmdbId, {
             dupePreference,
+            preferredCreators: options.preferredCreators,
             fallbackMedia,
             titleHint: titleHint || title.title,
             yearHint,
@@ -392,7 +407,12 @@ export async function fetchPosterSetsForTitle(
         response = { ok: true, sets: [], titles: [] };
     }
 
-    if ((response.sets?.length || 0) > 0) return response;
+    const withPreferred = (result: PosterSetsSearchResult): PosterSetsSearchResult => ({
+        ...result,
+        sets: prioritizeSetsByFollowedCreators(result.sets || [], options.preferredCreators),
+    });
+
+    if ((response.sets?.length || 0) > 0) return withPreferred(response);
 
     const fallback = await tryMediuxFallback(
         sources,
@@ -400,5 +420,5 @@ export async function fetchPosterSetsForTitle(
         options.libraryItem,
         response.partialErrors || [],
     );
-    return fallback || response;
+    return withPreferred(fallback || response);
 }

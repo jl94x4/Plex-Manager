@@ -38,6 +38,7 @@ import {
 } from './types';
 import { groupPosterSetsWatchesByCategory } from './watchGroups';
 import type { RecentSetCategory } from './shared/posterSetsRecent';
+import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import { groupPreviewAssets } from './previewGroups';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
@@ -1681,6 +1682,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
                 mediaType: libraryItem?.mediaType,
                 libraryItem,
+                preferredCreators: configDraft.creatorWhitelist,
             });
             setSearchSets(response.sets || []);
             setSearchSetsPage(1);
@@ -1814,11 +1816,15 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
     );
 
     const searchSetsPageCount = Math.max(1, Math.ceil(searchSets.length / SEARCH_SETS_PAGE_SIZE));
+    const rankedSearchSets = useMemo(
+        () => prioritizeSetsByFollowedCreators(searchSets, configDraft.creatorWhitelist),
+        [searchSets, configDraft.creatorWhitelist],
+    );
     const pagedSearchSets = useMemo(() => {
         const page = Math.min(Math.max(1, searchSetsPage), searchSetsPageCount);
         const start = (page - 1) * SEARCH_SETS_PAGE_SIZE;
-        return searchSets.slice(start, start + SEARCH_SETS_PAGE_SIZE);
-    }, [searchSets, searchSetsPage, searchSetsPageCount]);
+        return rankedSearchSets.slice(start, start + SEARCH_SETS_PAGE_SIZE);
+    }, [rankedSearchSets, searchSetsPage, searchSetsPageCount]);
 
     const searchResultsLoading = busy === 'search';
     const searchHasResults = searchTitles.length > 0 || searchSets.length > 0 || !!preview || !!selectedSearchSet;

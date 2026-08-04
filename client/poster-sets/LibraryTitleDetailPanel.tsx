@@ -17,6 +17,7 @@ import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
+import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import { previewAssetEpisodeLabel } from './previewGroups';
 import { libraryItemPosterSrc, type LibraryRecentItem } from './libraryRecent';
 import { SetInspector, SetInspectorThumbStrip } from './SetInspector';
@@ -135,6 +136,8 @@ export type LibraryTitleDetailPanelProps = {
     item: LibraryRecentItem | null;
     onClose: () => void;
     dupePreference: 'mediux' | 'posterdb';
+    /** Followed creators — their sets appear first in title search. */
+    preferredCreators?: string[];
     queuePaused: boolean;
     watches: PosterSetsWatch[];
     serverType?: string;
@@ -150,6 +153,7 @@ export function LibraryTitleDetailPanel({
     item,
     onClose,
     dupePreference,
+    preferredCreators = [],
     queuePaused,
     watches,
     toast,
@@ -242,6 +246,7 @@ export function LibraryTitleDetailPanel({
                 dupePreference,
                 mediaType: libraryItem?.mediaType,
                 libraryItem: libraryItem || undefined,
+                preferredCreators,
                 onPartial: (partial) => {
                     if ((partial.sets?.length || 0) > 0) {
                         setSearchSets(partial.sets || []);
@@ -267,7 +272,7 @@ export function LibraryTitleDetailPanel({
             setBusy(null);
             setLoadingMoreSets(false);
         }
-    }, [dupePreference, toast]);
+    }, [dupePreference, preferredCreators, toast]);
 
     const runSearch = useCallback(async (libraryItem: LibraryRecentItem) => {
         const generation = ++loadGenRef.current;
@@ -581,7 +586,10 @@ export function LibraryTitleDetailPanel({
         }));
     }, [preview]);
 
-    const setsByCategory = useMemo(() => partitionSetsByCategory(searchSets), [searchSets]);
+    const setsByCategory = useMemo(
+        () => partitionSetsByCategory(prioritizeSetsByFollowedCreators(searchSets, preferredCreators)),
+        [searchSets, preferredCreators],
+    );
     const setsPageSize = layoutMode === 'modal' ? SETS_PAGE_SIZE_MODAL : SETS_PAGE_SIZE_DRAWER;
     const setsPageCount = Math.max(1, Math.ceil(setsByCategory.posters.length / setsPageSize));
     const paginatedPosters = useMemo(() => {

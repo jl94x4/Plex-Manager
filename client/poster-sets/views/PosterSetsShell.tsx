@@ -175,6 +175,7 @@ export const PosterSetsShell: React.FC = () => {
                     item={libraryDetailItem}
                     onClose={() => setLibraryDetailItem(null)}
                     dupePreference={configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb'}
+                    preferredCreators={configDraft.creatorWhitelist || []}
                     queuePaused={queuePaused}
                     watches={watches}
                     serverType={status?.mediaServerLabel?.toLowerCase() === 'jellyfin' ? 'jellyfin' : 'plex'}

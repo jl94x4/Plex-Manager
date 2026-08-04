@@ -68,7 +68,7 @@ export function PosterSetsCreatorsPanel({
             <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-muted">Creators you follow</p>
                 <p className="mt-1 text-sm text-muted">
-                    Pin MediUX and ThePosterDB creators for a dedicated Browse rail. Click a name to open their catalog.
+                    Pin MediUX and ThePosterDB creators for a Browse Following rail. When you search a title, their sets show first.
                 </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
