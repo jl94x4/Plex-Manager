@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Image as ImageIcon, Loader2 } from 'lucide-react';
+import { ExternalLink, Image as ImageIcon, Loader2, X } from 'lucide-react';
+import { ModalPortal } from '../../shared/ModalPortal';
 import { posterSetsApi } from '../api';
 import { libraryItemPosterSrc, type LibraryRecentItem } from '../libraryRecent';
 import { type PosterSetsSearchSet } from '../types';
 import { posterMediaRadiusClass, previewStripClass } from './posterSetsUi';
 import { isTitleCardSet } from './posterSetsRecent';
 import { CreatorPill, ProviderCornerBadge, ProviderPill, SetKindPill } from './posterSetsPills';
+import { providerLabel } from './posterSetsFormat';
 
 /** Proxied poster thumb with retry + graceful fallback when TPDB rate-limits. */
 export const PosterThumb: React.FC<{
@@ -49,6 +51,83 @@ export const PosterThumb: React.FC<{
                 }}
             />
         </div>
+    );
+};
+
+/** Full-screen poster/title-card preview with optional link to the source set. */
+export const PosterImageLightbox: React.FC<{
+    open: boolean;
+    src: string;
+    title?: string | null;
+    setUrl?: string | null;
+    provider?: string | null;
+    onClose: () => void;
+}> = ({ open, src, title, setUrl, provider, onClose }) => {
+    const resolved = String(src || '').trim();
+    const link = String(setUrl || '').trim();
+    const label = providerLabel(provider) || 'source site';
+
+    useEffect(() => {
+        if (!open) return undefined;
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', onKey);
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            window.removeEventListener('keydown', onKey);
+            document.body.style.overflow = prev;
+        };
+    }, [open, onClose]);
+
+    return (
+        <ModalPortal open={open && Boolean(resolved)}>
+            <div
+                className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/85 p-3 backdrop-blur-sm sm:p-6"
+                role="dialog"
+                aria-modal="true"
+                aria-label={title ? `Preview ${title}` : 'Poster preview'}
+                onClick={onClose}
+            >
+                <button
+                    type="button"
+                    className="absolute right-3 top-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-black/60 text-text transition hover:border-white/30 hover:bg-black/80 sm:right-5 sm:top-5"
+                    aria-label="Close preview"
+                    onClick={onClose}
+                >
+                    <X className="h-5 w-5" />
+                </button>
+                <div
+                    className="flex max-h-full w-full max-w-5xl flex-col gap-3"
+                    onClick={(event) => event.stopPropagation()}
+                >
+                    <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                        <img
+                            src={resolved}
+                            alt={title || 'Poster preview'}
+                            className="max-h-[min(82vh,900px)] max-w-full object-contain"
+                        />
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+                        <p className="min-w-0 truncate text-sm font-semibold text-text" title={title || undefined}>
+                            {title || 'Poster preview'}
+                        </p>
+                        {link ? (
+                            <a
+                                href={link}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-plex/40 bg-plex/15 px-3 py-1.5 text-xs font-semibold text-plex no-underline transition hover:bg-plex/25"
+                            >
+                                Open on {label}
+                                <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                        ) : null}
+                    </div>
+                </div>
+            </div>
+        </ModalPortal>
     );
 };
 

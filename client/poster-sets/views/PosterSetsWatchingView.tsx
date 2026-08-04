@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     CheckCircle2,
     ChevronDown,
@@ -40,6 +40,7 @@ import {
     LibraryMediaCard,
     MetaPill,
     POSTER_SETS_GRID_OPTIONS,
+    PosterImageLightbox,
     PosterThumb,
     PreviewAssetGallery,
     ProviderPill,
@@ -69,6 +70,13 @@ import {
     upsertRecentSet,
 } from '../shared';
 import { usePosterSetsDashboard } from '../PosterSetsDashboardContext';
+
+type WatchImagePreview = {
+    src: string;
+    title: string;
+    setUrl: string;
+    provider: string;
+};
 
 export const PosterSetsWatchingView: React.FC = () => {
     const {
@@ -298,12 +306,21 @@ export const PosterSetsWatchingView: React.FC = () => {
         initialUrlState,
         initialLocation,
     } = usePosterSetsDashboard();
+    const [imagePreview, setImagePreview] = useState<WatchImagePreview | null>(null);
     if (tab !== 'watches') return null;
     return (
 
 
 
         <section className={`${cardClass} min-w-0 space-y-5 overflow-hidden p-4 sm:p-5`}>
+                    <PosterImageLightbox
+                        open={Boolean(imagePreview)}
+                        src={imagePreview?.src || ''}
+                        title={imagePreview?.title}
+                        setUrl={imagePreview?.setUrl}
+                        provider={imagePreview?.provider}
+                        onClose={() => setImagePreview(null)}
+                    />
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 max-w-3xl">
                             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-plex">Pinned artwork</p>
@@ -488,11 +505,28 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                     : 'border-white/10 hover:border-plex/40'
                                             }`}
                                         >
-                                            <div className={`relative overflow-hidden bg-black text-center ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'} ${anyPaused ? 'opacity-55' : ''}`}>
+                                            <button
+                                                type="button"
+                                                className={`relative block w-full overflow-hidden bg-black text-center ${landscape ? 'aspect-[16/9]' : 'aspect-[2/3]'} ${anyPaused ? 'opacity-55' : ''} ${thumbSrc ? 'cursor-zoom-in' : 'cursor-default'}`}
+                                                disabled={!thumbSrc}
+                                                aria-label={`Preview ${group.title}`}
+                                                title={thumbSrc ? 'Click to expand preview' : undefined}
+                                                onClick={() => {
+                                                    if (!thumbSrc) return;
+                                                    const primary = group.watches.find((watch) => String(watch.url || '').trim())
+                                                        || group.watches[0];
+                                                    setImagePreview({
+                                                        src: thumbSrc,
+                                                        title: group.title,
+                                                        setUrl: String(primary?.url || '').trim(),
+                                                        provider: String(primary?.provider || ''),
+                                                    });
+                                                }}
+                                            >
                                                 <PosterThumb
                                                     src={thumbSrc}
                                                     alt={group.title}
-                                                    className="absolute inset-0 h-full w-full"
+                                                    className="absolute inset-0 h-full w-full pointer-events-none"
                                                     imgClassName="absolute inset-0 h-full w-full object-contain object-center transition duration-300 group-hover:scale-[1.02]"
                                                     onLoad={(event) => {
                                                         if (landscape || category.id !== 'posters') return;
@@ -506,7 +540,7 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                         }
                                                     }}
                                                 />
-                                            </div>
+                                            </button>
         
                                             <div className="flex min-w-0 flex-1 flex-col gap-2 p-2 text-left sm:p-2.5">
                                                 <div className="flex flex-wrap items-center gap-1.5">
@@ -567,13 +601,28 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                             {multi ? (
                                                                 <div className="flex min-w-0 items-start gap-2">
                                                                     {watchThumbSrc ? (
-                                                                        <PosterThumb
-                                                                            src={watchThumbSrc}
-                                                                            className={`shrink-0 overflow-hidden rounded border border-white/10 bg-black ${
+                                                                        <button
+                                                                            type="button"
+                                                                            className={`shrink-0 overflow-hidden rounded border border-white/10 bg-black cursor-zoom-in ${
                                                                                 landscape ? 'h-10 w-16' : 'h-14 w-10'
                                                                             }`}
-                                                                            imgClassName="h-full w-full object-contain"
-                                                                        />
+                                                                            aria-label={`Preview ${group.title}`}
+                                                                            title="Click to expand preview"
+                                                                            onClick={() => {
+                                                                                setImagePreview({
+                                                                                    src: watchThumbSrc,
+                                                                                    title: group.title,
+                                                                                    setUrl: String(watch.url || '').trim(),
+                                                                                    provider,
+                                                                                });
+                                                                            }}
+                                                                        >
+                                                                            <PosterThumb
+                                                                                src={watchThumbSrc}
+                                                                                className="h-full w-full pointer-events-none"
+                                                                                imgClassName="h-full w-full object-contain"
+                                                                            />
+                                                                        </button>
                                                                     ) : null}
                                                                     <div className="min-w-0 flex-1">
                                                                         <div className="flex flex-wrap items-center gap-1">
@@ -704,6 +753,18 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                                 >
                                                                     <RefreshCw className="h-3.5 w-3.5" />
                                                                 </button>
+                                                                {String(watch.url || '').trim() ? (
+                                                                    <a
+                                                                        href={String(watch.url || '').trim()}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        className={iconBtnClass}
+                                                                        aria-label={`Open on ${providerLabel(provider)}`}
+                                                                        title={`Open on ${providerLabel(provider)}`}
+                                                                    >
+                                                                        <ExternalLink className="h-3.5 w-3.5" />
+                                                                    </a>
+                                                                ) : null}
                                                                 <button
                                                                     type="button"
                                                                     className={`${iconBtnClass} text-red-200 hover:border-red-400/40`}

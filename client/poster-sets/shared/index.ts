@@ -78,6 +78,7 @@ export {
 export {
     BrowseSetCard,
     LibraryMediaCard,
+    PosterImageLightbox,
     PosterThumb,
     RelatedSetsRail,
     bulkEntryFromSet,
