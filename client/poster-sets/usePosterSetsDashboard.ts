@@ -1449,16 +1449,17 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
     };
 
     const useFindId = async (andPreview: boolean) => {
-        const built = buildSetUrl(findProvider, findId);
+        const rawId = findId.trim();
+        const built = buildSetUrl(findProvider, rawId);
         if (!built) {
             toast(findProvider === 'mediux'
                 ? 'Enter a MediUX set ID (numbers only).'
-                : 'Enter a ThePosterDB set ID or username.', 'error');
+                : 'Enter a ThePosterDB set ID, poster ID, or username.', 'error');
             return;
         }
         setSelectedSearchSet({
-            setId: findId.trim(),
-            title: `Set ${findId.trim()}`,
+            setId: rawId,
+            title: `Set ${rawId}`,
             url: built,
             provider: findProvider,
         });
@@ -1466,7 +1467,24 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         if (andPreview) {
             setShowInspectorAssets(false);
             pushPosterLocation({ tab: 'apply', rail: null, setUrl: built, creator: null, titleCardsOnly: false }, 'push');
-            await runPreview(built, { titleCardsOnly: false, keepSearch: true });
+            let response = await runPreview(built, { titleCardsOnly: false, keepSearch: true });
+            // Numeric TPDb ids are often poster ids (/poster/N), not set ids — retry when /set/N fails.
+            if (
+                !response
+                && findProvider === 'posterdb'
+                && /^\d+$/.test(rawId)
+            ) {
+                const posterUrl = buildSetUrl('posterdb', rawId, 'poster');
+                setSelectedSearchSet({
+                    setId: rawId,
+                    title: `Poster ${rawId}`,
+                    url: posterUrl,
+                    provider: 'posterdb',
+                });
+                setUrl(posterUrl);
+                pushPosterLocation({ tab: 'apply', rail: null, setUrl: posterUrl, creator: null, titleCardsOnly: false }, 'replace');
+                response = await runPreview(posterUrl, { titleCardsOnly: false, keepSearch: true });
+            }
         } else toast('Set URL filled — preview or apply when ready.');
     };
 

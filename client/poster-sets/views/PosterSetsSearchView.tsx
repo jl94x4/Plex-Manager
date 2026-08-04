@@ -771,7 +771,7 @@ export const PosterSetsSearchView: React.FC = () => {
                                                             void useFindId(true);
                                                         }
                                                     }}
-                                                    placeholder={findProvider === 'mediux' ? 'Set ID e.g. 24522' : 'Set ID e.g. 11318 or username'}
+                                                    placeholder={findProvider === 'mediux' ? 'Set ID e.g. 24522' : 'Set/poster ID e.g. 362735 or username'}
                                                 />
                                                 <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void useFindId(true)}>
                                                     Load set
@@ -779,7 +779,7 @@ export const PosterSetsSearchView: React.FC = () => {
                                             </div>
                                             <input
                                                 className={fieldClass}
-                                                placeholder="https://mediux.pro/sets/… or https://theposterdb.com/set/…"
+                                                placeholder="https://mediux.pro/sets/… or https://theposterdb.com/set/… or /poster/…"
                                                 value={url}
                                                 onChange={(event) => setUrl(event.target.value)}
                                             />

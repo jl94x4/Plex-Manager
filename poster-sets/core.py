@@ -664,10 +664,109 @@ def upload_collection_poster(poster, movies, progress: ProgressFn = None) -> dic
 
 
 def scrape_posterdb_set_link(soup) -> Optional[str]:
-    try:
-        return soup.find("a", class_="rounded view_all")["href"]
-    except Exception:
+    """Resolve a TPDb /poster/{id} page to its parent /set/{id} URL.
+
+    Live TPDb markup uses a “View Set” button (often btn-outline-info).
+    Older pages used a.rounded.view_all — keep that as a fallback.
+    """
+    if not soup:
         return None
+
+    def _set_href(href: str) -> Optional[str]:
+        value = str(href or "").strip()
+        if not re.search(r"/set/\d+", value, re.I):
+            return None
+        return _absolute_url("https://theposterdb.com", value.split("?")[0])
+
+    for anchor in soup.find_all("a", href=True):
+        text = anchor.get_text(" ", strip=True).lower()
+        if "view set" not in text:
+            continue
+        resolved = _set_href(anchor.get("href"))
+        if resolved:
+            return resolved
+
+    legacy = soup.find("a", class_=re.compile(r"\bview_all\b"), href=True)
+    if legacy:
+        resolved = _set_href(legacy.get("href"))
+        if resolved:
+            return resolved
+
+    for anchor in soup.find_all("a", href=True):
+        classes = " ".join(anchor.get("class") or []).lower()
+        text = anchor.get_text(" ", strip=True).lower()
+        if "btn-outline-info" not in classes and "view" not in text:
+            continue
+        resolved = _set_href(anchor.get("href"))
+        if resolved:
+            return resolved
+
+    return None
+
+
+def scrape_posterdb_single_poster(soup, poster_url: str = "") -> Tuple[list, list, list, dict]:
+    """Fallback when a /poster/ page has no parent set link — treat as a 1-asset set."""
+    movieposters: list = []
+    showposters: list = []
+    collectionposters: list = []
+    page_meta: dict = {"user": extract_creator_from_soup(soup) if soup else None}
+
+    poster_id = None
+    match = re.search(r"/poster/(\d+)", str(poster_url or ""), re.I)
+    if match:
+        poster_id = match.group(1)
+    if not poster_id and soup:
+        node = soup.find(attrs={"data-poster-id": True})
+        if node:
+            poster_id = str(node.get("data-poster-id") or "").strip() or None
+    if not poster_id:
+        return movieposters, showposters, collectionposters, page_meta
+
+    asset_url = f"https://theposterdb.com/api/assets/{poster_id}"
+    title = None
+    year = None
+    media_type = "Movie"
+    if soup:
+        heading = soup.find(["h1", "h2", "h3"])
+        if heading:
+            title_text = heading.get_text(" ", strip=True)
+            title_text = re.sub(r"\s+Poster\s*$", "", title_text, flags=re.I).strip()
+            year_match = re.search(r"\((\d{4}|N/A)\)\s*$", title_text)
+            if year_match and year_match.group(1).isdigit():
+                year = int(year_match.group(1))
+                title = re.sub(r"\s*\((?:\d{4}|N/A)\)\s*$", "", title_text).strip() or title_text
+            else:
+                title = title_text or None
+        tip = soup.find("a", attrs={"data-toggle": "tooltip", "title": True})
+        if tip:
+            tip_title = str(tip.get("title") or "").strip()
+            if tip_title in {"Movie", "Show", "Collection"}:
+                media_type = tip_title
+        og = soup.find("meta", attrs={"property": "og:title"})
+        if not title and og and og.get("content"):
+            title = re.sub(r"\s*\|\s*TPDb.*$", "", str(og.get("content")), flags=re.I).strip() or None
+
+    entry = {
+        "title": title or f"Poster {poster_id}",
+        "url": asset_url,
+        "year": year,
+        "source": "posterdb",
+    }
+    if media_type == "Show":
+        entry["season"] = "Cover"
+        entry["episode"] = None
+        showposters.append(entry)
+    elif media_type == "Collection":
+        collectionposters.append(entry)
+    else:
+        movieposters.append(entry)
+
+    page_meta.update({
+        "title": title,
+        "mediaType": "show" if showposters else ("movie" if movieposters else None),
+        "resolvedUrl": str(poster_url or "").strip() or None,
+    })
+    return movieposters, showposters, collectionposters, page_meta
 
 
 def scrape_posterd_user_info(soup) -> Optional[int]:
@@ -1027,7 +1126,8 @@ def scrape(url: str, mediux_filters: Optional[Sequence[str]] = None, progress: P
             soup = cook_soup(url)
             set_url = scrape_posterdb_set_link(soup)
             if set_url is None:
-                raise RuntimeError("Poster set not found. Check the link you are inputting.")
+                # Some uploads are standalone — still allow preview/apply of the single asset.
+                return scrape_posterdb_single_poster(soup, poster_url=url)
             set_soup = cook_soup(set_url)
             movieposters, showposters, collectionposters = scrape_posterdb(set_soup)
             title = None
@@ -1043,6 +1143,8 @@ def scrape(url: str, mediux_filters: Optional[Sequence[str]] = None, progress: P
                 "user": extract_creator_from_soup(set_soup),
                 "title": title,
                 "mediaType": media_type,
+                # Store the parent set so Recents reopen /set/… not the poster page.
+                "resolvedUrl": set_url,
             }
         raise RuntimeError("Poster set not found. Check the link you are inputting.")
     if "mediux.pro" in url and "sets" in url:
@@ -1073,21 +1175,30 @@ def parse_set_ref(url: str) -> dict:
     lower = value.lower()
     provider = None
     set_id = None
+    kind = None
     if "mediux.pro" in lower:
         provider = "mediux"
         match = re.search(r"/sets?/(\d+)", value, re.I)
         if match:
             set_id = match.group(1)
+            kind = "set"
     elif "theposterdb.com" in lower:
         provider = "posterdb"
-        match = re.search(r"/(?:set|poster)/(\d+)", value, re.I)
+        match = re.search(r"/poster/(\d+)", value, re.I)
         if match:
             set_id = match.group(1)
-        elif "/user/" in lower:
-            match = re.search(r"/user/([^/?#]+)", value, re.I)
+            kind = "poster"
+        else:
+            match = re.search(r"/set/(\d+)", value, re.I)
             if match:
                 set_id = match.group(1)
-    return {"provider": provider, "setId": set_id, "url": value}
+                kind = "set"
+            elif "/user/" in lower:
+                match = re.search(r"/user/([^/?#]+)", value, re.I)
+                if match:
+                    set_id = match.group(1)
+                    kind = "user"
+    return {"provider": provider, "setId": set_id, "kind": kind, "url": value}
 
 
 def build_set_meta(
@@ -1098,8 +1209,10 @@ def build_set_meta(
     page_meta: Optional[dict] = None,
 ) -> dict:
     """Compact set summary: show/movie name + creator (not season pack labels)."""
-    ref = parse_set_ref(url)
     meta = page_meta if isinstance(page_meta, dict) else {}
+    resolved = str(meta.get("resolvedUrl") or meta.get("resolved_url") or "").strip()
+    canonical_url = resolved or str(url or "").strip()
+    ref = parse_set_ref(canonical_url)
     title = str(meta.get("title") or "").strip() or None
     user = _pick_creator_username(meta.get("user"))
     thumb = ""
@@ -1133,7 +1246,7 @@ def build_set_meta(
     return {
         "provider": ref.get("provider"),
         "setId": ref.get("setId"),
-        "url": ref.get("url") or str(url or "").strip(),
+        "url": canonical_url or ref.get("url") or str(url or "").strip(),
         "title": title,
         "user": user,
         "tmdbId": _pick_id(meta.get("tmdbId") or meta.get("tmdb_id")),
@@ -1307,9 +1420,10 @@ def list_assets(url: str, config: dict | None = None, progress: ProgressFn = Non
     movieposters, showposters, collectionposters, page_meta = scrape(url, mediux_filters=filters, progress=progress)
     assets = build_preview_assets(movieposters, showposters, collectionposters, tv=None, movies=None)
     set_meta = build_set_meta(url, movieposters, showposters, collectionposters, page_meta=page_meta)
+    canonical = str(set_meta.get("url") or url or "").strip() or url
     return {
         "ok": True,
-        "url": url,
+        "url": canonical,
         "setMeta": set_meta,
         "assets": [
             {
@@ -1355,9 +1469,10 @@ def preview_url(url: str, config: dict, progress: ProgressFn = None) -> dict:
     matched = sum(1 for asset in assets if asset.get("matched") is True)
     unmatched = sum(1 for asset in assets if asset.get("matched") is False)
     set_meta = build_set_meta(url, movieposters, showposters, collectionposters, page_meta=page_meta)
+    canonical = str(set_meta.get("url") or url or "").strip() or url
     return {
         "ok": True,
-        "url": url,
+        "url": canonical,
         **summary,
         "assets": assets,
         "matched": matched,
@@ -1494,10 +1609,14 @@ def _pick_posterdb_title_candidate(
         return None
     want_key = _posterdb_title_match_key(title_hint, year_hint)
     title_only = _posterdb_title_only_key(title_hint)
-    if want_key.split("|", 1)[1]:
+    year_part = want_key.split("|", 1)[1] if "|" in want_key else ""
+    if year_part:
         for item in titles:
             if _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key:
                 return item
+        # Year was requested but page-1 search missed it (common for "Sisters").
+        # Do not fall through to an unrelated same-name year.
+        return None
     if title_only:
         for item in titles:
             if _posterdb_title_only_key(item.get("title") or "") == title_only:

@@ -115,26 +115,43 @@ export const SEARCH_SET_CATEGORY_ORDER: Array<{ id: RecentSetCategory; title: st
     { id: 'backgrounds', title: 'Backgrounds', landscape: true },
 ];
 
-export const parseSetRef = (rawUrl: string): { provider: SetProvider | null; setId: string | null; url: string } => {
+export const parseSetRef = (rawUrl: string): {
+    provider: SetProvider | null;
+    setId: string | null;
+    kind: 'set' | 'poster' | 'user' | null;
+    url: string;
+} => {
     const url = String(rawUrl || '').trim();
     const lower = url.toLowerCase();
     if (lower.includes('mediux.pro')) {
         const match = url.match(/\/sets?\/(\d+)/i);
-        return { provider: 'mediux', setId: match?.[1] || null, url };
+        return { provider: 'mediux', setId: match?.[1] || null, kind: match ? 'set' : null, url };
     }
     if (lower.includes('theposterdb.com')) {
-        const match = url.match(/\/(?:set|poster)\/(\d+)/i) || url.match(/\/user\/([^/?#]+)/i);
-        return { provider: 'posterdb', setId: match?.[1] || null, url };
+        const posterMatch = url.match(/\/poster\/(\d+)/i);
+        if (posterMatch) {
+            return { provider: 'posterdb', setId: posterMatch[1], kind: 'poster', url };
+        }
+        const setMatch = url.match(/\/set\/(\d+)/i);
+        if (setMatch) {
+            return { provider: 'posterdb', setId: setMatch[1], kind: 'set', url };
+        }
+        const userMatch = url.match(/\/user\/([^/?#]+)/i);
+        if (userMatch) {
+            return { provider: 'posterdb', setId: userMatch[1], kind: 'user', url };
+        }
+        return { provider: 'posterdb', setId: null, kind: null, url };
     }
-    return { provider: null, setId: null, url };
+    return { provider: null, setId: null, kind: null, url };
 };
 
-export const buildSetUrl = (provider: SetProvider, rawId: string) => {
+export const buildSetUrl = (provider: SetProvider, rawId: string, kind: 'set' | 'poster' | 'user' = 'set') => {
     const id = String(rawId || '').trim().replace(/^#/, '');
     if (!id) return '';
     if (provider === 'mediux') return `https://mediux.pro/sets/${encodeURIComponent(id)}`;
-    if (/^\d+$/.test(id)) return `https://theposterdb.com/set/${id}`;
-    return `https://theposterdb.com/user/${encodeURIComponent(id)}`;
+    if (kind === 'poster' && /^\d+$/.test(id)) return `https://theposterdb.com/poster/${id}`;
+    if (kind === 'user' || !/^\d+$/.test(id)) return `https://theposterdb.com/user/${encodeURIComponent(id)}`;
+    return `https://theposterdb.com/set/${id}`;
 };
 
 const normalizeRecentChip = (raw: any): RecentSetChip | null => {
