@@ -604,7 +604,7 @@ const ConfigPage: React.FC = () => {
             )}
 
             {/* Tabs - Make scrollable on mobile */}
-            <div className="border-b border-border flex overflow-x-auto no-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+            <div className="border-b border-border flex overflow-x-auto no-scrollbar page-bleed-x page-x md:mx-0 md:px-0 md:w-full">
                 {(['general', 'libraries', 'exclusions', 'specials', 'categories', 'integrations'] as const).map(t => {
                     const n = conflictsForTab(conflicts, t).length;
                     return (

@@ -82,7 +82,7 @@ export const PersonDetailsPage: React.FC<{
     const { first: bioFirst, rest: bioRest, hasMore: bioHasMore } = splitBiography(biography);
 
     return (
-        <div className="w-full flex flex-col gap-8 pb-12 animate-fade-in relative z-10 px-4 sm:px-8 mt-4">
+        <div className="w-full flex flex-col gap-8 pb-12 animate-fade-in relative z-10 mt-4">
             <button 
                 onClick={onBack}
                 className="flex items-center gap-2 text-muted hover:text-text font-medium transition-colors w-fit"

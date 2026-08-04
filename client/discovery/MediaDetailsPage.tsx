@@ -527,7 +527,7 @@ export const MediaDetailsPage: React.FC<{
 
     return (
         <>
-        <div className="w-[calc(100%+2rem)] -mx-4 md:mx-0 md:w-full flex flex-col min-h-screen bg-card animate-fade-in pb-24 md:pb-16 rounded-none md:rounded-2xl lg:rounded-3xl overflow-x-hidden border-0 md:border border-white/5 shadow-2xl">
+        <div className="page-bleed-x md:w-full flex flex-col min-h-screen bg-card animate-fade-in pb-24 md:pb-16 rounded-none md:rounded-2xl lg:rounded-3xl overflow-x-hidden border-0 md:border border-white/5 shadow-2xl">
             <div className="relative isolate">
                 <div
                     className="media-details-hero-backdrop absolute inset-x-0 top-0 h-[34rem] max-h-[72vh] sm:h-[36rem] md:h-[min(72vh,52rem)] md:max-h-none overflow-hidden pointer-events-none"
@@ -558,7 +558,7 @@ export const MediaDetailsPage: React.FC<{
                     <div className="media-details-hero-scrim-left absolute inset-0 hidden md:block bg-gradient-to-r from-card from-0% via-card/70 via-[32%] to-transparent to-[78%]" />
                 </div>
 
-                <div className="relative z-10 w-full max-w-[1600px] mx-auto px-4 sm:px-8 xl:px-12 pt-4 sm:pt-5 pb-8">
+                <div className="relative z-10 w-full max-w-[1600px] mx-auto page-x sm:px-8 xl:px-12 pt-4 sm:pt-5 pb-8">
                     <button
                         type="button"
                         onClick={onBack}
@@ -883,7 +883,7 @@ export const MediaDetailsPage: React.FC<{
             </div>
 
             {/* Cast / seasons / recommendations stay on the same page card */}
-            <div className="relative z-10 w-full max-w-[1600px] mx-auto px-4 sm:px-8 xl:px-12 mt-2 md:mt-4 flex flex-col gap-8 md:gap-10 bg-card">
+            <div className="relative z-10 w-full max-w-[1600px] mx-auto page-x sm:px-8 xl:px-12 mt-2 md:mt-4 flex flex-col gap-8 md:gap-10 bg-card">
                 {details.credits?.cast?.length > 0 && (
                     <section className="border-t border-border pt-8">
                         <SectionHeading>{t('media.topCast')}</SectionHeading>

@@ -1962,7 +1962,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                                 <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 md:gap-5 pb-4">
                                     {Object.entries(groupedCalendar).map(([dateStr, items]: [string, typeof filteredCalendar]) => (
                                         <div key={dateStr} className="flex flex-col gap-2 md:gap-3 min-w-0">
-                                            <div className="sticky top-[64px] md:top-0 bg-card z-20 py-1 md:py-3 border-b border-white/10 md:mb-2 -mx-4 px-4 md:mx-0 md:px-0 shadow-[0_10px_20px_-10px_rgba(0,0,0,0.5)]">
+                                            <div className="sticky top-[64px] md:top-0 bg-card z-20 py-1 md:py-3 border-b border-white/10 md:mb-2 page-bleed-x page-x md:mx-0 md:px-0 md:w-full shadow-[0_10px_20px_-10px_rgba(0,0,0,0.5)]">
                                                 <h3 className="text-sm md:text-base xl:text-lg font-black text-plex md:text-text tracking-tight uppercase truncate" title={dateStr}>{dateStr}</h3>
                                             </div>
                                             {items.map(item => (
@@ -10823,7 +10823,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
             {/* Mobile Top Nav — height grows with safe-area so content clears the iOS status bar in PWA */}
             <div className="md:hidden fixed top-0 left-0 right-0 z-50 nav-shell border-b shadow-lg pt-[env(safe-area-inset-top,0px)]">
-                <div className="h-16 flex items-center justify-between px-4">
+                <div className="h-16 flex items-center justify-between page-x">
                 <div className="flex items-center gap-3 min-w-0">
                     <img
                         src={serverIcon}
@@ -11144,7 +11144,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     </>
                 );
                 const navInner = (
-                    <div className="flex items-center justify-between w-full h-16 px-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
+                    <div className="flex items-center justify-between w-full h-16 page-x">
                         {navButtons}
                     </div>
                 );

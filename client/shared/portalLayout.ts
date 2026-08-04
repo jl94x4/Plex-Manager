@@ -51,7 +51,7 @@ export const estimatePortalContentWidth = (): number => {
     if (typeof window === 'undefined') return 1200;
     const isDesktop = window.matchMedia('(min-width: 768px)').matches;
     const sidebar = isDesktop ? 288 : 0;
-    const padding = isDesktop ? 64 : 32;
+    const padding = isDesktop ? 64 : 4;
     return Math.max(320, window.innerWidth - sidebar - padding);
 };
 
