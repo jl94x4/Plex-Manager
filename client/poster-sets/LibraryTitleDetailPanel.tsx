@@ -476,7 +476,7 @@ export function LibraryTitleDetailPanel({
             user: previewMeta?.user || selectedSet?.user || null,
             thumbUrl: selectedSet?.thumbUrl || previewMeta?.thumbUrl || '',
             assetCount: selectedSet?.posterCount ?? preview?.total ?? previewMeta?.assetCount ?? null,
-            setKind: isTitleCardSet(selectedSet) ? 'title_cards' : null,
+            setKind: isTitleCardSet(selectedSet, { mediaType: item?.mediaType }) ? 'title_cards' : null,
         };
     };
 
@@ -521,7 +521,7 @@ export function LibraryTitleDetailPanel({
             toast('This set is missing a URL.', 'error');
             return;
         }
-        const restrictTitleCards = isTitleCardSet(set);
+        const restrictTitleCards = isTitleCardSet(set, { mediaType: item?.mediaType });
         setSelectedSet(set);
         setTitleCardsOnly(restrictTitleCards);
         setShowAssets(false);
@@ -615,8 +615,11 @@ export function LibraryTitleDetailPanel({
     }, [preview]);
 
     const setsByCategory = useMemo(
-        () => partitionSetsByCategory(prioritizeSetsByFollowedCreators(searchSets, preferredCreators)),
-        [searchSets, preferredCreators],
+        () => partitionSetsByCategory(
+            prioritizeSetsByFollowedCreators(searchSets, preferredCreators),
+            { mediaType: item?.mediaType },
+        ),
+        [searchSets, preferredCreators, item?.mediaType],
     );
     const setsPageSize = layoutMode === 'modal' ? SETS_PAGE_SIZE_MODAL : SETS_PAGE_SIZE_DRAWER;
     const setsPageCount = Math.max(1, Math.ceil(setsByCategory.posters.length / setsPageSize));
@@ -627,9 +630,9 @@ export function LibraryTitleDetailPanel({
     }, [setsByCategory.posters, setsPage, setsPageCount, setsPageSize]);
 
     const selectedSetUsesLandscape = useMemo(() => {
-        if (titleCardsOnly || isTitleCardSet(selectedSet)) return true;
+        if (titleCardsOnly || isTitleCardSet(selectedSet, { mediaType: item?.mediaType })) return true;
         return inferRecentSetKindFromAssets(preview?.assets) === 'title_cards';
-    }, [preview?.assets, selectedSet, titleCardsOnly]);
+    }, [preview?.assets, selectedSet, titleCardsOnly, item?.mediaType]);
 
     const readyToApply = Boolean(preview && !busy);
     const headerLabel = item

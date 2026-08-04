@@ -2404,15 +2404,30 @@ def _infer_set_kind(*, title: str = "", card_text: str = "") -> Optional[str]:
         return None
     if "boxset" in blob or "box set" in blob:
         return "boxset"
+    if re.search(r"\b(backdrops?|backgrounds?)\b", blob, re.I):
+        return "backgrounds"
     if re.search(r"(title\s*cards?|episode\s*cards?|cover\s*style|episode\s*titles?)", blob, re.I):
         return "title_cards"
     return None
 
 
-def _infer_mediux_set_kind_from_card(card) -> Optional[str]:
-    """MediUX show pages use aspect-video shells for title-card carousels."""
+def _infer_mediux_set_kind_from_card(card, *, media_type: str | None = None) -> Optional[str]:
+    """Infer kind from MediUX card chrome.
+
+    Show pages use aspect-video shells for episode title-card carousels, but the same
+    shell is also used for boxset backdrop rails — prefer explicit card text, and never
+    treat movie landscape rails as title cards (movies have no episode title cards).
+    """
     if card is None or not hasattr(card, "find_all"):
         return None
+    try:
+        card_text = str(card.get_text(" ", strip=True) or "").lower()
+    except Exception:
+        card_text = ""
+    if "boxset" in card_text or "box set" in card_text:
+        return "boxset"
+    if re.search(r"\b(backdrops?|backgrounds?)\b", card_text):
+        return "backgrounds"
     video = 0
     poster = 0
     for node in card.find_all(True):
@@ -2422,8 +2437,26 @@ def _infer_mediux_set_kind_from_card(card) -> Optional[str]:
         elif "aspect-2/3" in classes:
             poster += 1
     if video > poster:
+        kind = str(media_type or "").strip().lower()
+        if kind in {"movie", "movies"}:
+            return "backgrounds"
         return "title_cards"
     return None
+
+
+def _resolve_mediux_set_kind(
+    *,
+    title: str = "",
+    card_text: str = "",
+    card=None,
+    media_type: str | None = None,
+) -> Optional[str]:
+    """Prefer explicit text labels over aspect-ratio heuristics."""
+    text_kind = _infer_set_kind(title=title, card_text=card_text)
+    if text_kind in {"boxset", "backgrounds", "title_cards"}:
+        return text_kind
+    section_kind = _infer_mediux_set_kind_from_card(card, media_type=media_type)
+    return section_kind or text_kind
 
 
 def _mediux_card_row(node):
@@ -2472,7 +2505,7 @@ def _title_from_mediux_card_text(card_text: str, user: str | None = None) -> str
     return _clean_mediux_set_title(text)
 
 
-def _enrich_mediux_set_entry(anchor, entry: dict) -> None:
+def _enrich_mediux_set_entry(anchor, entry: dict, *, media_type: str | None = None) -> None:
     """Fill creator / title / setKind from the surrounding MediUX card row."""
     card = _mediux_card_row(anchor)
     card_text = card.get_text(" ", strip=True) if card is not None else ""
@@ -2493,10 +2526,20 @@ def _enrich_mediux_set_entry(anchor, entry: dict) -> None:
             title = _title_from_mediux_card_text(card_text, entry.get("user") or user)
         if title:
             entry["title"] = title
-    section_kind = _infer_mediux_set_kind_from_card(card)
-    kind = section_kind or _infer_set_kind(title=str(entry.get("title") or ""), card_text=card_text)
-    existing_kind = str(entry.get("setKind") or "").strip()
-    if kind == "title_cards" or kind == "boxset" or (kind and not existing_kind):
+    kind = _resolve_mediux_set_kind(
+        title=str(entry.get("title") or ""),
+        card_text=card_text,
+        card=card,
+        media_type=media_type or entry.get("mediaType"),
+    )
+    existing_kind = str(entry.get("setKind") or "").strip().lower()
+    # Prefer definitive labels (boxset/backgrounds) over a prior aspect-video title_cards guess.
+    if kind and (
+        not existing_kind
+        or kind == existing_kind
+        or kind in {"boxset", "backgrounds"}
+        or (kind == "title_cards" and existing_kind not in {"boxset", "backgrounds"})
+    ):
         entry["setKind"] = kind
     elif not existing_kind:
         inferred = _infer_set_kind(title=str(entry.get("title") or ""))
@@ -2552,7 +2595,7 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
             entry["title"] = title
         if thumb and not entry["thumbUrl"]:
             entry["thumbUrl"] = thumb
-        _enrich_mediux_set_entry(anchor, entry)
+        _enrich_mediux_set_entry(anchor, entry, media_type=kind)
         sets[set_id] = entry
         if len(sets) >= max(1, int(limit or 40)):
             break
@@ -2562,6 +2605,15 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
             item["title"] = page_title or f"Set {item['setId']}"
         if not item.get("setKind"):
             item["setKind"] = _infer_set_kind(title=str(item.get("title") or ""))
+        # Movies never ship episode title-card packs; demote aspect-video false positives.
+        if kind == "movie" and str(item.get("setKind") or "").strip().lower() in {
+            "title_cards",
+            "title-cards",
+            "titlecard",
+        }:
+            title_blob = str(item.get("title") or "")
+            if not re.search(r"(title\s*cards?|episode\s*cards?)", title_blob, re.I):
+                item["setKind"] = "backgrounds"
     return {
         "ok": True,
         "provider": "mediux",

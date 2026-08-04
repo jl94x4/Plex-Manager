@@ -20,10 +20,24 @@ export type RecentSetChip = {
     at: string;
 };
 
-export const isTitleCardSet = (set?: { title?: string | null; setKind?: string | null } | null) => {
+export const isTitleCardSet = (
+    set?: { title?: string | null; setKind?: string | null } | null,
+    options?: { mediaType?: string | null },
+) => {
+    const title = String(set?.title || '');
+    const media = String(options?.mediaType || '').trim().toLowerCase();
+    const titleSaysTitleCard = /(title\s*cards?|episode\s*cards?)/i.test(title);
+    // Movies have no episode title-card packs — ignore aspect-video / setKind false positives
+    // (MediUX boxset backdrop rails reuse the same landscape card chrome).
+    if (media === 'movie' || media === 'movies') {
+        return titleSaysTitleCard;
+    }
     const kind = String(set?.setKind || '').trim().toLowerCase();
+    if (kind === 'boxset' || kind === 'backgrounds' || kind === 'background' || kind === 'backdrop' || kind === 'backdrops') {
+        return false;
+    }
     if (kind === 'title_cards' || kind === 'title-cards' || kind === 'titlecard') return true;
-    return /(title\s*cards?|episode\s*cards?|cover\s*style)/i.test(String(set?.title || ''));
+    return titleSaysTitleCard || /cover\s*style/i.test(title);
 };
 
 export const isTitleCardRail = (rail?: PosterSetsBrowseRail | null) => {
@@ -97,12 +111,15 @@ export const RECENT_CATEGORY_ORDER: Array<{ id: RecentSetCategory; title: string
 ];
 
 /** Split search/browse results so title-card packs use landscape rows. */
-export const partitionSetsByCategory = (sets: Array<{ title?: string | null; setKind?: string | null }>) => {
+export const partitionSetsByCategory = (
+    sets: Array<{ title?: string | null; setKind?: string | null }>,
+    options?: { mediaType?: string | null },
+) => {
     const titleCards: typeof sets = [];
     const backgrounds: typeof sets = [];
     const posters: typeof sets = [];
     for (const set of sets) {
-        if (isTitleCardSet(set)) titleCards.push(set);
+        if (isTitleCardSet(set, options)) titleCards.push(set);
         else if (isBackgroundSet(set)) backgrounds.push(set);
         else posters.push(set);
     }
