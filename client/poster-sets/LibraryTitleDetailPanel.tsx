@@ -659,13 +659,13 @@ export function LibraryTitleDetailPanel({
         ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
         : 'grid grid-cols-2 gap-3 sm:grid-cols-3';
     const setsGridClassLandscape = isModalLayout
-        ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
+        ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
         : 'grid grid-cols-1 gap-3 sm:grid-cols-2';
     const panelShellClass = isModalLayout
         ? [
             'fixed z-[101] flex max-h-[100dvh] flex-col bg-card shadow-2xl',
             'inset-y-0 right-0 h-[100dvh] w-full max-w-[min(100%,520px)] border-l border-white/10 pt-[env(safe-area-inset-top,0px)]',
-            'md:inset-auto md:left-1/2 md:top-1/2 md:h-auto md:w-[min(96vw,960px)] md:max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-white/10 md:pt-0',
+            'md:inset-auto md:left-1/2 md:top-1/2 md:h-auto md:w-[min(96vw,1320px)] md:max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-white/10 md:pt-0',
         ].join(' ')
         : 'fixed inset-y-0 right-0 z-[101] flex h-[100dvh] max-h-[100dvh] w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card pt-[env(safe-area-inset-top,0px)] shadow-2xl';
 
