@@ -181,6 +181,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
     const [watchesPage, setWatchesPage] = useState(1);
     const [watchesPageSize, setWatchesPageSize] = useState(12);
     const [watchesFilter, setWatchesFilter] = useState('');
+    const [watchesCategoryFilter, setWatchesCategoryFilter] = useState<'all' | RecentSetCategory>('all');
     const [watchArtKindOverrides, setWatchArtKindOverrides] = useState<Record<string, RecentSetCategory>>({});
     const [selectedBulkSets, setSelectedBulkSets] = useState<Record<string, BulkSetSelection>>({});
     const [browseRails, setBrowseRails] = useState<PosterSetsBrowseRail[]>(() => browseRailsCache.rails);
@@ -1877,6 +1878,24 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         [filteredWatches, watchArtKindOverrides],
     );
 
+    const watchGroupsByCategory = useMemo(() => {
+        const buckets: Record<RecentSetCategory, typeof watchGroups> = {
+            posters: [],
+            backgrounds: [],
+            title_cards: [],
+        };
+        for (const group of watchGroups) {
+            buckets[group.category].push(group);
+        }
+        return buckets;
+    }, [watchGroups]);
+
+    const categoryFilteredWatchGroups = useMemo(() => (
+        watchesCategoryFilter === 'all'
+            ? watchGroups
+            : watchGroups.filter((group) => group.category === watchesCategoryFilter)
+    ), [watchGroups, watchesCategoryFilter]);
+
     const promoteWatchArtKind = useCallback((watchId: string, kind: RecentSetCategory) => {
         const id = String(watchId || '').trim();
         if (!id) return;
@@ -1884,12 +1903,15 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         void posterSetsApi.patchWatch(id, { setKind: kind }).catch(() => undefined);
     }, []);
 
-    const watchesPageCount = Math.max(1, Math.ceil(watchGroups.length / Math.max(1, watchesPageSize)));
+    const watchesPageCount = watchesCategoryFilter === 'all'
+        ? 1
+        : Math.max(1, Math.ceil(categoryFilteredWatchGroups.length / Math.max(1, watchesPageSize)));
     const pagedWatchGroups = useMemo(() => {
+        if (watchesCategoryFilter === 'all') return categoryFilteredWatchGroups;
         const page = Math.min(Math.max(1, watchesPage), watchesPageCount);
         const start = (page - 1) * watchesPageSize;
-        return watchGroups.slice(start, start + watchesPageSize);
-    }, [watchGroups, watchesPage, watchesPageCount, watchesPageSize]);
+        return categoryFilteredWatchGroups.slice(start, start + watchesPageSize);
+    }, [categoryFilteredWatchGroups, watchesCategoryFilter, watchesPage, watchesPageCount, watchesPageSize]);
 
     const pagedWatchGroupsByCategory = useMemo(() => {
         const buckets: Record<RecentSetCategory, typeof pagedWatchGroups> = {
@@ -2150,6 +2172,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         watchesPage, setWatchesPage,
         watchesPageSize, setWatchesPageSize,
         watchesFilter, setWatchesFilter,
+        watchesCategoryFilter, setWatchesCategoryFilter,
         selectedBulkSets, setSelectedBulkSets,
         browseRails, setBrowseRails,
         browseRailsRef,
@@ -2231,6 +2254,10 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         isSetWatched,
         filteredWatches,
         watchGroups,
+        watchGroupsByCategory,
+        watchesCategoryFilter,
+        setWatchesCategoryFilter,
+        categoryFilteredWatchGroups,
         watchesPageCount,
         pagedWatchGroups,
         pagedWatchGroupsByCategory,

@@ -281,6 +281,10 @@ export const PosterSetsWatchingView: React.FC = () => {
         isSetWatched,
         filteredWatches,
         watchGroups,
+        watchGroupsByCategory,
+        watchesCategoryFilter,
+        setWatchesCategoryFilter,
+        categoryFilteredWatchGroups,
         watchesPageCount,
         pagedWatchGroups,
         pagedWatchGroupsByCategory,
@@ -417,42 +421,85 @@ export const PosterSetsWatchingView: React.FC = () => {
                     </form>
         
                     {watches.length ? (
-                        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                            <input
-                                className={`${fieldClass} sm:max-w-sm`}
-                                placeholder="Filter by title, creator, URL…"
-                                value={watchesFilter}
-                                onChange={(event) => {
-                                    setWatchesFilter(event.target.value);
-                                    setWatchesPage(1);
-                                }}
-                            />
-                            <div className="flex flex-wrap items-center gap-2">
-                                <CustomSelect
-                                    value={gridSize === 'list' ? 'medium' : gridSize}
-                                    onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
-                                    options={POSTER_SETS_GRID_OPTIONS}
-                                    className="w-full min-w-[140px] sm:w-auto"
-                                    compact
-                                />
-                                <CustomSelect
-                                    value={String(watchesPageSize)}
-                                    onChange={(value) => {
-                                        const next = Number(value) || 12;
-                                        setWatchesPageSize(next);
+                        <div className="space-y-3">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                                <input
+                                    className={`${fieldClass} sm:max-w-sm`}
+                                    placeholder="Filter by title, creator, URL…"
+                                    value={watchesFilter}
+                                    onChange={(event) => {
+                                        setWatchesFilter(event.target.value);
                                         setWatchesPage(1);
                                     }}
-                                    options={[...WATCHES_PAGE_SIZE_OPTIONS]}
-                                    className="w-full min-w-[140px] sm:w-auto"
-                                    compact
                                 />
-                                <span className="text-xs text-muted">
-                                    {watchGroups.length} title{watchGroups.length === 1 ? '' : 's'}
-                                    {filteredWatches.length !== watchGroups.length
-                                        ? ` · ${filteredWatches.length} sets`
-                                        : ''}
-                                    {watchesFilter.trim() ? ` (of ${watches.length})` : ''}
-                                </span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <CustomSelect
+                                        value={gridSize === 'list' ? 'medium' : gridSize}
+                                        onChange={(value) => setGridSize(normalizeUpgraderGridSize(value))}
+                                        options={POSTER_SETS_GRID_OPTIONS}
+                                        className="w-full min-w-[140px] sm:w-auto"
+                                        compact
+                                    />
+                                    {watchesCategoryFilter !== 'all' ? (
+                                        <CustomSelect
+                                            value={String(watchesPageSize)}
+                                            onChange={(value) => {
+                                                const next = Number(value) || 12;
+                                                setWatchesPageSize(next);
+                                                setWatchesPage(1);
+                                            }}
+                                            options={[...WATCHES_PAGE_SIZE_OPTIONS]}
+                                            className="w-full min-w-[140px] sm:w-auto"
+                                            compact
+                                        />
+                                    ) : null}
+                                    <span className="text-xs text-muted">
+                                        {watchGroups.length} title{watchGroups.length === 1 ? '' : 's'}
+                                        {filteredWatches.length !== watches.length
+                                            ? ` · ${filteredWatches.length} sets`
+                                            : ''}
+                                        {watchesFilter.trim() ? ` (of ${watches.length})` : ''}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex min-w-0 flex-wrap gap-1 sm:gap-1.5">
+                                <button
+                                    type="button"
+                                    className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition sm:px-3 sm:text-xs ${
+                                        watchesCategoryFilter === 'all'
+                                            ? 'border-plex/40 bg-plex/15 text-plex'
+                                            : 'border-white/10 bg-black/20 text-muted hover:border-plex/30 hover:text-text'
+                                    }`}
+                                    onClick={() => {
+                                        setWatchesCategoryFilter('all');
+                                        setWatchesPage(1);
+                                    }}
+                                >
+                                    All
+                                    <span className="ml-1 opacity-70">{watchGroups.length}</span>
+                                </button>
+                                {RECENT_CATEGORY_ORDER.map((category) => {
+                                    const count = watchGroupsByCategory[category.id].length;
+                                    if (!count) return null;
+                                    return (
+                                        <button
+                                            key={category.id}
+                                            type="button"
+                                            className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition sm:px-3 sm:text-xs ${
+                                                watchesCategoryFilter === category.id
+                                                    ? 'border-plex/40 bg-plex/15 text-plex'
+                                                    : 'border-white/10 bg-black/20 text-muted hover:border-plex/30 hover:text-text'
+                                            }`}
+                                            onClick={() => {
+                                                setWatchesCategoryFilter(category.id);
+                                                setWatchesPage(1);
+                                            }}
+                                        >
+                                            {category.title}
+                                            <span className="ml-1 opacity-70">{count}</span>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     ) : null}
@@ -470,20 +517,29 @@ export const PosterSetsWatchingView: React.FC = () => {
                         <div className="rounded-xl border border-dashed border-white/15 bg-black/20 px-5 py-10 text-center text-sm text-muted">
                             No sets match "{watchesFilter.trim()}".
                         </div>
+                    ) : watchesCategoryFilter !== 'all' && !categoryFilteredWatchGroups.length ? (
+                        <div className="rounded-xl border border-dashed border-white/15 bg-black/20 px-5 py-10 text-center text-sm text-muted">
+                            No {RECENT_CATEGORY_ORDER.find((category) => category.id === watchesCategoryFilter)?.title.toLowerCase() || 'items'} match your filters.
+                        </div>
                     ) : (
                         <div className="min-w-0 space-y-6">
-                            {RECENT_CATEGORY_ORDER.map((category) => {
+                            {(watchesCategoryFilter === 'all'
+                                ? RECENT_CATEGORY_ORDER
+                                : RECENT_CATEGORY_ORDER.filter((category) => category.id === watchesCategoryFilter)
+                            ).map((category) => {
                                 const items = pagedWatchGroupsByCategory[category.id];
                                 if (!items.length) return null;
                                 const landscape = category.landscape;
                                 return (
                                     <div key={category.id} className="space-y-3">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <h3 className="text-sm font-bold text-text sm:text-base">{category.title}</h3>
-                                            <span className="text-[11px] text-muted">
-                                                {watchGroups.filter((group) => group.category === category.id).length}
-                                            </span>
-                                        </div>
+                                        {watchesCategoryFilter === 'all' ? (
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <h3 className="text-sm font-bold text-text sm:text-base">{category.title}</h3>
+                                                <span className="text-[11px] text-muted">
+                                                    {watchGroupsByCategory[category.id].length}
+                                                </span>
+                                            </div>
+                                        ) : null}
                                         <div
                                             className={posterGridClass}
                                             style={landscape ? titleCardGridStyle : posterGridStyle}
@@ -804,7 +860,7 @@ export const PosterSetsWatchingView: React.FC = () => {
                                     </div>
                                 );
                             })}
-                            {watchesPageCount > 1 ? (
+                            {watchesCategoryFilter !== 'all' && watchesPageCount > 1 ? (
                                 <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
                                     <button
                                         type="button"
