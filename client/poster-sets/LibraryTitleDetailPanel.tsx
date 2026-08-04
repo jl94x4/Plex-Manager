@@ -655,12 +655,9 @@ export function LibraryTitleDetailPanel({
     if (!item) return null;
 
     const isModalLayout = layoutMode === 'modal';
-    const setsGridClass = isModalLayout
-        ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
-        : 'grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4';
-    const setsGridClassLandscape = isModalLayout
-        ? 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-        : 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3';
+    // Cap card width so wide drawer/modal don't blow posters up when few sets match.
+    const setsGridClass = 'grid grid-cols-[repeat(auto-fill,minmax(7.5rem,9.5rem))] justify-start gap-2.5';
+    const setsGridClassLandscape = 'grid grid-cols-[repeat(auto-fill,minmax(10rem,13rem))] justify-start gap-2.5';
     const panelShellClass = isModalLayout
         ? [
             'fixed z-[101] flex max-h-[100dvh] flex-col bg-card shadow-2xl',
