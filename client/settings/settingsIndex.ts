@@ -37,13 +37,13 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'plex/analytics-usernames', tabId: 'plex', sectionId: 'analytics-usernames', label: 'Show Usernames in Analytics', group: 'Media Stack', keywords: ['analytics', 'usernames', 'viewer', 'privacy'] },
     { id: 'plex/libraries', tabId: 'plex', sectionId: 'libraries', label: 'Default Libraries', group: 'Media Stack', keywords: ['libraries', 'share', 'temporary', 'access'] },
 
-    { id: 'mediastack', tabId: 'mediastack', label: 'Integrations', group: 'Media Stack', keywords: ['integrations', 'arr', 'sonarr', 'radarr', 'lidarr', 'bazarr', 'downloads', 'qbittorrent', 'transmission', 'deluge', 'sabnzbd', 'nzb'] },
+    { id: 'mediastack', tabId: 'mediastack', label: 'Integrations', group: 'Media Stack', keywords: ['integrations', 'arr', 'sonarr', 'radarr', 'lidarr', 'bazarr', 'downloads', 'qbittorrent', 'transmission', 'deluge', 'sabnzbd', 'nzbget', 'nzb'] },
     { id: 'mediastack/arr', tabId: 'mediastack', sectionId: 'arr', label: 'Sonarr & Radarr Instances', group: 'Media Stack', keywords: ['sonarr', 'radarr', 'arr', 'instances'] },
     { id: 'mediastack/lidarr', tabId: 'mediastack', sectionId: 'lidarr', label: 'Lidarr Instances', group: 'Media Stack', keywords: ['lidarr', 'music', 'artists', 'albums', 'instances'] },
     { id: 'mediastack/bazarr', tabId: 'mediastack', sectionId: 'bazarr', label: 'Bazarr Instances', group: 'Media Stack', keywords: ['bazarr', 'subtitles', 'subtitle', 'instances'] },
-    { id: 'mediastack/download-clients', tabId: 'mediastack', sectionId: 'download-clients', label: 'Download Clients', group: 'Media Stack', keywords: ['downloads', 'qbittorrent', 'transmission', 'bittorrent', 'deluge', 'sabnzbd', 'nzb', 'torrents'] },
+    { id: 'mediastack/download-clients', tabId: 'mediastack', sectionId: 'download-clients', label: 'Download Clients', group: 'Media Stack', keywords: ['downloads', 'qbittorrent', 'transmission', 'bittorrent', 'deluge', 'sabnzbd', 'nzbget', 'nzb', 'torrents'] },
     { id: 'mediastack/tautulli', tabId: 'mediastack', sectionId: 'tautulli', label: 'Tautulli Integration', group: 'Media Stack', keywords: ['tautulli', 'analytics', 'plex'] },
-    { id: 'mediastack/jellystat', tabId: 'mediastack', sectionId: 'jellystat', label: 'Jellystat Integration', group: 'Media Stack', keywords: ['jellystat', 'jellyfin', 'analytics'] },
+    { id: 'mediastack/jellystat', tabId: 'mediastack', sectionId: 'jellystat', label: 'Jellyfin Analytics', group: 'Media Stack', keywords: ['jellystat', 'jellyglance', 'jellyfin', 'analytics'] },
     { id: 'mediastack/seerr', tabId: 'mediastack', sectionId: 'seerr', label: 'Request App (Seerr/Ombi)', group: 'Media Stack', keywords: ['seerr', 'overseerr', 'jellyseerr', 'ombi', 'request'] },
     { id: 'mediastack/tmdb', tabId: 'mediastack', sectionId: 'tmdb', label: 'TMDB API Key', group: 'Media Stack', keywords: ['tmdb', 'api', 'trending', 'metadata'] },
 

@@ -54,7 +54,7 @@ Public-facing routes include the landing/login page, invite claim page, and stat
 
 ## Integrations
 
-Server Portal connects to the surrounding media stack: Plex, Jellyfin, Emby, Tautulli, Jellystat, Sonarr, Radarr, Lidarr, Bazarr, qBittorrent, Transmission, BitTorrent, Deluge, SABnzbd, Gotify, TMDB, and SMTP.
+Server Portal connects to the surrounding media stack: Plex, Jellyfin, Emby, Tautulli, Jellystat, Sonarr, Radarr, Lidarr, Bazarr, qBittorrent, Transmission, BitTorrent, Deluge, SABnzbd, NZBGet, Gotify, TMDB, and SMTP.
 
 **Discover & Request is built in by default.** Seerr / Jellyseerr is optional as a request engine or history import — see [Discover & Request](/features/discover-request).
 

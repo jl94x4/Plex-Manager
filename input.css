@@ -57,6 +57,16 @@
     --color-plex-hover: 99 102 241;
   }
 
+  [data-theme="emby"] {
+    --color-bg: 8 18 16;
+    --color-card: 15 29 25;
+    --color-border: 36 68 56;
+    --color-text: 232 244 238;
+    --color-muted: 145 170 160;
+    --color-plex: 82 181 75;
+    --color-plex-hover: 107 211 98;
+  }
+
   [data-theme="emerald"] {
     --color-bg: 10 15 12;
     --color-card: 18 26 22;

@@ -93,7 +93,13 @@ const APP_ICONS: Record<string, string> = {
     ombi: `${SELFHST_ICON_BASE}/ombi.svg`,
     tmdb: `${SELFHST_ICON_BASE}/themoviedb.svg`,
     jellystat: 'https://cdn.jsdelivr.net/gh/selfhst/icons@main/png/jellystat.png',
+    jellyglance: '/static/logos/jellyglance.png',
 };
+
+const JELLYFIN_ANALYTICS_OPTIONS = [
+    { label: 'Jellystat', value: 'jellystat' },
+    { label: 'JellyGlance', value: 'jellyglance' },
+];
 
 const getUploadedLogoPath = (file: File) => {
     const name = file.name.toLowerCase();
@@ -146,6 +152,7 @@ const BRAND_THEME_OPTIONS = [
 const BRAND_THEME_COLORS: Record<string, string> = {
     plex: '#F7C600',
     jellyfin: '#00A4DC',
+    emby: '#52B54B',
     ocean: '#14B8A6',
     rose: '#F472B6',
     royal: '#60A5FA',
@@ -185,8 +192,11 @@ const readStoredSetupPlex = () => {
             arrInstances?: ArrInstance[];
             tautulliUrl?: string;
             tautulliApiKey?: string;
+            jellyfinAnalyticsProvider?: string;
             jellystatUrl?: string;
             jellystatApiKey?: string;
+            jellyglanceUrl?: string;
+            jellyglanceApiKey?: string;
             requestAppType?: string;
             requestAppUrl?: string;
             requestAppApiKey?: string;
@@ -243,8 +253,11 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
     const [plexLibrariesError, setPlexLibrariesError] = useState('');
     const [tautulliUrl, setTautulliUrl] = useState(storedPlex?.tautulliUrl ?? '');
     const [tautulliApiKey, setTautulliApiKey] = useState(storedPlex?.tautulliApiKey ?? '');
+    const [jellyfinAnalyticsProvider, setJellyfinAnalyticsProvider] = useState(storedPlex?.jellyfinAnalyticsProvider === 'jellystat' ? 'jellystat' : 'jellyglance');
     const [jellystatUrl, setJellystatUrl] = useState(storedPlex?.jellystatUrl ?? '');
     const [jellystatApiKey, setJellystatApiKey] = useState(storedPlex?.jellystatApiKey ?? '');
+    const [jellyglanceUrl, setJellyglanceUrl] = useState(storedPlex?.jellyglanceUrl ?? '');
+    const [jellyglanceApiKey, setJellyglanceApiKey] = useState(storedPlex?.jellyglanceApiKey ?? '');
     const [tmdbApiKey, setTmdbApiKey] = useState(storedPlex?.tmdbApiKey ?? '');
     const [requestSetupMode, setRequestSetupMode] = useState<RequestSetupMode>(
         storedPlex?.requestSetupMode === 'seerr' ? 'seerr' : 'portal',
@@ -276,7 +289,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
     const applyMediaServerType = (type: string) => {
         const nextType = type === 'emby' ? 'emby' : type === 'jellyfin' ? 'jellyfin' : 'plex';
         setMediaServerType(nextType);
-        if (brandTheme === 'plex' || brandTheme === 'jellyfin') {
+        if (brandTheme === 'plex' || brandTheme === 'jellyfin' || brandTheme === 'emby') {
             applyBrandTheme(nextType);
         }
         if (requestSetupMode === 'seerr' || migrateFromSeerr) {
@@ -354,8 +367,11 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
             arrInstances,
             tautulliUrl,
             tautulliApiKey,
+            jellyfinAnalyticsProvider,
             jellystatUrl,
             jellystatApiKey,
+            jellyglanceUrl,
+            jellyglanceApiKey,
             tmdbApiKey,
             requestSetupMode,
             migrateFromSeerr,
@@ -523,8 +539,11 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                     arrInstances,
                     tautulliUrl,
                     tautulliApiKey,
+                    jellyfinAnalyticsProvider,
                     jellystatUrl,
                     jellystatApiKey,
+                    jellyglanceUrl,
+                    jellyglanceApiKey,
                     tmdbApiKey: requestSetupMode === 'portal' ? tmdbApiKey : (tmdbApiKey || ''),
                     requestEngine: requestSetupMode === 'seerr' ? 'seerr' : 'portal',
                     discoverySource: requestSetupMode === 'seerr' ? 'seerr' : 'tmdb',
@@ -750,7 +769,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                                                 <span className="min-w-0">
                                                     <span className={`block text-sm font-black ${selected ? 'text-plex' : 'text-text'}`}>{option.label}</span>
                                                     <span className="block text-xs text-muted mt-1">
-                                                        {option.value === 'plex' ? 'Connect through Plex OAuth' : 'Connect with Jellyfin API key'}
+                                                        {option.value === 'plex' ? 'Connect through Plex OAuth' : `Connect with ${option.label} API key`}
                                                     </span>
                                                 </span>
                                                 {selected && <Check className="w-5 h-5 text-plex ml-auto shrink-0" />}
@@ -761,14 +780,14 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                                 {mediaServerType !== 'plex' && (
                                     <>
                                         <div className="flex flex-col gap-2.5">
-                                            <label className={labelClass}>Jellyfin URL</label>
+                                            <label className={labelClass}>{mediaServerType === 'emby' ? 'Emby' : 'Jellyfin'} URL</label>
                                             <input type="url" className={inputClass} value={jellyfinUrl} onChange={(e) => setJellyfinUrl(e.target.value)} placeholder="http://192.168.1.6:8096" />
                                         </div>
                                         <div className="flex flex-col gap-2.5">
-                                            <label className={labelClass}>Jellyfin API Key</label>
-                                            <input type="password" className={inputClass} value={jellyfinApiKey} onChange={(e) => setJellyfinApiKey(e.target.value)} placeholder="API key from Jellyfin dashboard" />
+                                            <label className={labelClass}>{mediaServerType === 'emby' ? 'Emby' : 'Jellyfin'} API Key</label>
+                                            <input type="password" className={inputClass} value={jellyfinApiKey} onChange={(e) => setJellyfinApiKey(e.target.value)} placeholder={`API key from ${mediaServerType === 'emby' ? 'Emby' : 'Jellyfin'} dashboard`} />
                                         </div>
-                                        <IntegrationTestButton type="jellyfin" payload={{ jellyfinUrl, jellyfinApiKey }} disabled={!jellyfinUrl || !jellyfinApiKey} />
+                                        <IntegrationTestButton type={mediaServerType === 'emby' ? 'emby' : 'jellyfin'} payload={{ jellyfinUrl, jellyfinApiKey }} disabled={!jellyfinUrl || !jellyfinApiKey} />
                                     </>
                                 )}
                             </div>
@@ -1007,7 +1026,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                                 {[
                                     { id: 'arr' as const, label: 'Arr Apps' },
                                     { id: 'requests' as const, label: 'Requests' },
-                                    { id: 'analytics' as const, label: mediaServerType !== 'plex' ? 'Jellystat' : 'Tautulli' },
+                                    { id: 'analytics' as const, label: mediaServerType !== 'plex' ? 'Analytics' : 'Tautulli' },
                                 ].map((tab) => (
                                     <button
                                         key={tab.id}
@@ -1330,15 +1349,26 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                                     {mediaServerType !== 'plex' ? (
                                         <>
                                             <div className="flex items-center gap-3">
-                                                <ProgramIcon app="jellystat" label="Jellystat" />
+                                                <ProgramIcon app={jellyfinAnalyticsProvider} label={jellyfinAnalyticsProvider === 'jellyglance' ? 'JellyGlance' : 'Jellystat'} />
                                                 <div>
-                                                    <h3 className="font-bold text-text text-base leading-tight">Jellystat</h3>
+                                                    <h3 className="font-bold text-text text-base leading-tight">{jellyfinAnalyticsProvider === 'jellyglance' ? 'JellyGlance' : 'Jellystat'}</h3>
                                                     <p className="text-xs text-muted mt-0.5">Jellyfin activity and analytics.</p>
                                                 </div>
                                             </div>
-                                            <input type="text" className={inputClass} value={jellystatUrl} onChange={(e) => setJellystatUrl(e.target.value)} placeholder="http://localhost:3000" />
-                                            <input type="password" className={inputClass} value={jellystatApiKey} onChange={(e) => setJellystatApiKey(e.target.value)} placeholder="API Key" />
-                                            <IntegrationTestButton type="jellystat" payload={{ jellystatUrl, jellystatApiKey }} disabled={!jellystatUrl || !jellystatApiKey} />
+                                            <CustomSelect value={jellyfinAnalyticsProvider} onChange={setJellyfinAnalyticsProvider} options={JELLYFIN_ANALYTICS_OPTIONS} />
+                                            {jellyfinAnalyticsProvider === 'jellyglance' ? (
+                                                <>
+                                                    <input type="text" className={inputClass} value={jellyglanceUrl} onChange={(e) => setJellyglanceUrl(e.target.value)} placeholder="http://localhost:3000" />
+                                                    <input type="password" className={inputClass} value={jellyglanceApiKey} onChange={(e) => setJellyglanceApiKey(e.target.value)} placeholder="API Key" />
+                                                    <IntegrationTestButton type="jellyglance" payload={{ jellyglanceUrl, jellyglanceApiKey }} disabled={!jellyglanceUrl || !jellyglanceApiKey} />
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <input type="text" className={inputClass} value={jellystatUrl} onChange={(e) => setJellystatUrl(e.target.value)} placeholder="http://localhost:3000" />
+                                                    <input type="password" className={inputClass} value={jellystatApiKey} onChange={(e) => setJellystatApiKey(e.target.value)} placeholder="API Key" />
+                                                    <IntegrationTestButton type="jellystat" payload={{ jellystatUrl, jellystatApiKey }} disabled={!jellystatUrl || !jellystatApiKey} />
+                                                </>
+                                            )}
                                         </>
                                     ) : (
                                         <>
@@ -1367,7 +1397,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                             <p className={labelClass + ' mb-3'}>Step {stepIndex + 1}</p>
                             <h2 className="text-3xl sm:text-4xl font-black text-text tracking-tight mb-4">Ready to launch</h2>
                             <p className="text-muted text-base leading-relaxed mb-8">
-                                Your {mediaServerType !== 'plex' ? 'Jellyfin' : 'Plex'} server{arrInstances.some((entry) => entry.type === 'sonarr' && entry.url) ? ', Sonarr' : ''}{arrInstances.some((entry) => entry.type === 'radarr' && entry.url) ? ', Radarr' : ''}{arrInstances.some((entry) => entry.type === 'lidarr' && entry.url) ? ', Lidarr' : ''}{arrInstances.some((entry) => entry.type === 'bazarr' && entry.url) ? ', Bazarr' : ''}{tautulliUrl ? ', Tautulli' : ''}{jellystatUrl ? ', Jellystat' : ''} will be saved.
+                                Your {mediaServerType !== 'plex' ? 'Jellyfin' : 'Plex'} server{arrInstances.some((entry) => entry.type === 'sonarr' && entry.url) ? ', Sonarr' : ''}{arrInstances.some((entry) => entry.type === 'radarr' && entry.url) ? ', Radarr' : ''}{arrInstances.some((entry) => entry.type === 'lidarr' && entry.url) ? ', Lidarr' : ''}{arrInstances.some((entry) => entry.type === 'bazarr' && entry.url) ? ', Bazarr' : ''}{tautulliUrl ? ', Tautulli' : ''}{jellystatUrl ? ', Jellystat' : ''}{jellyglanceUrl ? ', JellyGlance' : ''} will be saved.
                                 {smtpHost ? ' Email notifications enabled.' : ' You can add email later in Settings.'}
                             </p>
                             <div className={`${sectionCardClass} text-left text-sm space-y-3`}>

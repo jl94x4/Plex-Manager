@@ -68,6 +68,7 @@ import {
 } from './shared/dashboardLayout';
 
 const JELLYFIN_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/jellyfin.svg';
+const EMBY_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/emby.svg';
 const STATUS_ICON_BASE = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg';
 const SIMPLE_STATUS_ICON_BASE = 'https://cdn.simpleicons.org';
 const STATUS_SERVICE_ICONS: Record<string, string> = {
@@ -85,6 +86,7 @@ const STATUS_SERVICE_ICONS: Record<string, string> = {
     bittorrent: `${SIMPLE_STATUS_ICON_BASE}/bittorrent`,
     deluge: `${STATUS_ICON_BASE}/deluge.svg`,
     sabnzbd: `${STATUS_ICON_BASE}/sabnzbd.svg`,
+    nzbget: `${STATUS_ICON_BASE}/nzbget.svg`,
     seerr: `${STATUS_ICON_BASE}/seerr.svg`,
     overseerr: `${STATUS_ICON_BASE}/seerr.svg`,
     jellyseerr: `${STATUS_ICON_BASE}/jellyseerr.svg`,
@@ -1872,7 +1874,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
 
     const torrentClients = useMemo(() => (
         (Array.isArray(data?.clients) ? data.clients : [])
-            .filter((entry: any) => entry?.client?.type !== 'sabnzbd')
+            .filter((entry: any) => !['sabnzbd', 'nzbget'].includes(String(entry?.client?.type || '').toLowerCase()))
             .map((entry: any) => entry.client)
     ), [data]);
 
@@ -1918,11 +1920,12 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
         bittorrent: 'BitTorrent',
         deluge: 'Deluge',
         sabnzbd: 'SABnzbd',
+        nzbget: 'NZBGet',
     }[String(type || '').toLowerCase()] || 'Download Client');
     const downloadClientIcon = (type: string) => {
         const normalized = String(type || '').toLowerCase();
         if (normalized === 'bittorrent') return 'https://cdn.simpleicons.org/bittorrent';
-        if (['qbittorrent', 'transmission', 'deluge', 'sabnzbd'].includes(normalized)) return `${STATUS_ICON_BASE}/${normalized}.svg`;
+        if (['qbittorrent', 'transmission', 'deluge', 'sabnzbd', 'nzbget'].includes(normalized)) return `${STATUS_ICON_BASE}/${normalized}.svg`;
         return `${STATUS_ICON_BASE}/qbittorrent.svg`;
     };
     const isPausedDownload = (item: any) => {
@@ -3063,8 +3066,8 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
     const viewersPerPage = 10;
     const [viewTab, setViewTab] = useState<'overview' | 'graphs'>('overview');
     const mediaServerType = String(sessionInfo?.mediaServerType || 'plex').toLowerCase();
-    const isJellyfinPortal = mediaServerType === 'jellyfin';
-    const analyticsSourceLabel = isJellyfinPortal ? 'Jellystat' : 'Tautulli';
+    const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
+    const analyticsSourceLabel = isJellyfinPortal ? (mediaServerType === 'emby' ? 'Emby Analytics' : 'Jellystat') : 'Tautulli';
     const libraryDeltas = (analyticsData?.libraryHealth as any)?.deltas || {};
 
     const resolveUserAvatar = (thumb: string | null | undefined, width = 80, height = 80) => {
@@ -4056,7 +4059,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'trial' | 'expiring' | 'expired' | 'revoked'>('all');
     const [sortBy, setSortBy] = useState<'username-asc' | 'username-desc' | 'expiry-asc' | 'expiry-desc' | 'joined-desc'>('username-asc');
     const mediaServerType = String(configSettings.mediaServerType || 'plex').toLowerCase();
-    const mediaServerLabel = mediaServerType === 'jellyfin' ? 'Jellyfin' : 'Plex';
+    const mediaServerLabel = mediaServerType === 'emby' ? 'Emby' : mediaServerType === 'jellyfin' ? 'Jellyfin' : 'Plex';
 
     const addToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts(t => pushToast(t, message, type));
@@ -4623,7 +4626,7 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
     const [showJellyfinPassword, setShowJellyfinPassword] = useState(false);
     const [quickConnect, setQuickConnect] = useState<{ sessionId: string, code: string, jellyfinUrl: string } | null>(null);
     const quickConnectPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const [publicInfo, setPublicInfo] = useState<{ thumb: string | null, serverName: string, isConfigured: boolean | null, mediaServerType?: string }>({ thumb: null, serverName: 'Server Portal', isConfigured: null, mediaServerType: 'plex' });
+    const [publicInfo, setPublicInfo] = useState<{ thumb: string | null, customLogoUrl?: string | null, serverName: string, isConfigured: boolean | null, mediaServerType?: string }>({ thumb: null, customLogoUrl: null, serverName: 'Server Portal', isConfigured: null, mediaServerType: 'plex' });
     const [publicInfoLoading, setPublicInfoLoading] = useState(true);
     const [publicInfoLoadFailed, setPublicInfoLoadFailed] = useState(false);
 
@@ -4634,11 +4637,12 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
             if (data) {
                 setPublicInfo({
                     thumb: data.thumb || null,
+                    customLogoUrl: data.customLogoUrl || null,
                     serverName: data.serverName || 'Server Portal',
                     isConfigured: data.isConfigured !== false,
                     mediaServerType: data.mediaServerType || 'plex'
                 });
-                if (data.thumb) updateFavicon(data.thumb);
+                if (data.customLogoUrl || data.thumb) updateFavicon(data.customLogoUrl || data.thumb);
                 if (data.serverName) document.title = `${data.serverName} Portal`;
             }
         }).catch(() => {
@@ -4791,10 +4795,17 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
 
     const mediaServerType = String(publicInfo.mediaServerType || publicConfig?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinAuth = mediaServerType === 'jellyfin';
-    const showTrialAccess = !isJellyfinAuth && publicConfig?.allowTemporaryAccess !== false;
+    const isEmbyAuth = mediaServerType === 'emby';
+    const isEmbyLikeAuth = isJellyfinAuth || isEmbyAuth;
+    const mediaServerLabel = isEmbyAuth ? 'Emby' : 'Jellyfin';
+    const mediaServerIconUrl = isEmbyAuth ? EMBY_ICON_URL : JELLYFIN_ICON_URL;
+    const showMediaServerPasswordLogin = isEmbyAuth || showJellyfinPassword;
+    const showTrialAccess = !isEmbyLikeAuth && publicConfig?.allowTemporaryAccess !== false;
     const logoSrc = publicConfig?.customLogoUrl
         ? resolvePortalAssetUrl(publicConfig.customLogoUrl)
-        : (publicInfo.thumb ? resolvePortalAssetUrl(publicInfo.thumb) : '');
+        : (publicInfo.customLogoUrl
+            ? resolvePortalAssetUrl(publicInfo.customLogoUrl)
+            : (publicInfo.thumb ? resolvePortalAssetUrl(publicInfo.thumb) : ''));
     const splashBackgroundUrl = publicConfig?.backgroundImageUrl ? resolvePortalAssetUrl(publicConfig.backgroundImageUrl) : undefined;
 
     return (
@@ -4858,8 +4869,8 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
                                     {publicInfo.serverName}
                                 </h1>
                                 <p className="text-muted text-sm sm:text-base leading-relaxed mb-8 max-w-sm">
-                                    {isJellyfinAuth
-                                        ? 'Sign in with your Jellyfin account to access your portal and manage your subscription.'
+                                    {isEmbyLikeAuth
+                                        ? `Sign in with your ${mediaServerLabel} account to access your portal and manage your subscription.`
                                         : 'Sign in with Plex to access your portal and manage your subscription.'}
                                 </p>
                             </>
@@ -4875,14 +4886,16 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
                             </>
                         )}
 
-                        {isJellyfinAuth ? (
+                        {isEmbyLikeAuth ? (
                             <div className="w-full max-w-sm flex flex-col gap-4 text-left">
-                                <button type="button" className={loginSecondaryBtnClass} onClick={handleJellyfinQuickConnect} disabled={isLoading}>
-                                    <img src={JELLYFIN_ICON_URL} alt="" className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                                    Login with Jellyfin
-                                </button>
+                                {isJellyfinAuth && (
+                                    <button type="button" className={loginSecondaryBtnClass} onClick={handleJellyfinQuickConnect} disabled={isLoading}>
+                                        <img src={mediaServerIconUrl} alt="" className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                        Login with Jellyfin
+                                    </button>
+                                )}
 
-                                {quickConnect && (
+                                {isJellyfinAuth && quickConnect && (
                                     <div className="w-full rounded-xl border border-plex/30 bg-plex/10 p-4 text-center">
                                         <p className="text-[10px] font-bold text-muted uppercase tracking-[0.14em] mb-2">Quick Connect code</p>
                                         <div className="font-black text-3xl tracking-[0.18em] text-text tabular-nums mb-3">{quickConnect.code}</div>
@@ -4901,18 +4914,20 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
                                     </div>
                                 )}
 
-                                <button
-                                    type="button"
-                                    className="self-center text-xs font-bold text-muted hover:text-text transition"
-                                    onClick={() => setShowJellyfinPassword((value) => !value)}
-                                >
-                                    {showJellyfinPassword ? 'Hide password login' : 'Use password instead'}
-                                </button>
+                                {isJellyfinAuth && (
+                                    <button
+                                        type="button"
+                                        className="self-center text-xs font-bold text-muted hover:text-text transition"
+                                        onClick={() => setShowJellyfinPassword((value) => !value)}
+                                    >
+                                        {showJellyfinPassword ? 'Hide password login' : 'Use password instead'}
+                                    </button>
+                                )}
 
-                                {showJellyfinPassword && (
+                                {showMediaServerPasswordLogin && (
                                     <form onSubmit={handleJellyfinLogin} className="w-full flex flex-col gap-3 text-left">
                                         <label className="flex flex-col gap-1.5">
-                                            <span className="text-[10px] font-bold text-muted uppercase tracking-[0.14em]">Jellyfin username</span>
+                                            <span className="text-[10px] font-bold text-muted uppercase tracking-[0.14em]">{mediaServerLabel} username</span>
                                             <input
                                                 value={jellyfinUsername}
                                                 onChange={(e) => setJellyfinUsername(e.target.value)}
@@ -4937,8 +4952,8 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
                                             />
                                         </label>
                                         <button type="submit" className={loginSecondaryBtnClass} disabled={isLoading || !jellyfinUsername.trim() || !jellyfinPassword}>
-                                            <img src={JELLYFIN_ICON_URL} alt="" className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                                            Login with password
+                                            <img src={mediaServerIconUrl} alt="" className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                            Login with {mediaServerLabel}
                                         </button>
                                     </form>
                                 )}
@@ -4950,7 +4965,7 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
                             </button>
                         )}
 
-                        {!showTrialAccess && !isJellyfinAuth && publicConfig?.showPublicLibraryStats !== false && (
+                        {!showTrialAccess && !isEmbyLikeAuth && publicConfig?.showPublicLibraryStats !== false && (
                             <div className="w-full mt-10 pt-8 border-t border-white/10">
                                 <LivePlexStats />
                             </div>
@@ -7869,7 +7884,9 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
     const [gridSize, setGridSize] = useDiscoverGridSize();
     const [selectedSession, setSelectedSession] = useState<any | null>(null);
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
-    const isJellyfinPortal = String(publicConfig?.mediaServerType || mediaServerType || 'plex').toLowerCase() === 'jellyfin';
+    const libraryMediaServerType = String(publicConfig?.mediaServerType || mediaServerType || 'plex').toLowerCase();
+    const isJellyfinPortal = libraryMediaServerType === 'jellyfin' || libraryMediaServerType === 'emby';
+    const libraryProviderLabel = libraryMediaServerType === 'emby' ? 'Emby' : libraryMediaServerType === 'jellyfin' ? 'Jellyfin' : 'Plex';
     const hasLoadedDashboard = useRef(false);
     const hasLoadedTrending = useRef(false);
 
@@ -8355,7 +8372,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
             </main>
 
             {/* Stream Details Modal */}
-            {selectedSession && <StreamDetailsModal session={selectedSession} onClose={() => setSelectedSession(null)} isAdmin={isAdmin} onKilled={fetchData} providerLabel={isJellyfinPortal ? 'Jellyfin' : 'Plex'} />}
+            {selectedSession && <StreamDetailsModal session={selectedSession} onClose={() => setSelectedSession(null)} isAdmin={isAdmin} onKilled={fetchData} providerLabel={libraryProviderLabel} />}
         </div>
     );
 };

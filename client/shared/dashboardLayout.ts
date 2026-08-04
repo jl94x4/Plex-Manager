@@ -188,7 +188,10 @@ export const isMainGridWidgetAvailable = (id: MainGridWidgetId, ctx: DashboardLa
     if (meta.adminOnly && !ctx.isAdmin) return false;
     if (meta.userOnly && ctx.isAdmin) return false;
     if (id === 'referral' && !ctx.referralEnabled) return false;
-    if (id === 'tempAccessSetup' && (ctx.isAdmin || ctx.hasUser)) return false;
+    if (id === 'tempAccessSetup') {
+        if (ctx.isAdmin || ctx.hasUser) return false;
+        if (String(ctx.mediaServerType || 'plex').toLowerCase() !== 'plex') return false;
+    }
     if (id === 'accessStatus' && (ctx.isAdmin || !ctx.hasUser)) return false;
     if (id === 'adminBadge' && !ctx.isAdmin) return false;
     if (id === 'quickActions' && !ctx.isAdmin) return false;
@@ -198,8 +201,7 @@ export const isMainGridWidgetAvailable = (id: MainGridWidgetId, ctx: DashboardLa
         if (String(ctx.mediaServerType || 'plex').toLowerCase() !== 'plex') return false;
     }
     if (id === 'analytics') {
-        const isJellyfin = String(ctx.mediaServerType || '').toLowerCase() === 'jellyfin';
-        if (!isJellyfin) return false;
+        if (!['jellyfin', 'emby'].includes(String(ctx.mediaServerType || '').toLowerCase())) return false;
     }
     return true;
 };

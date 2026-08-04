@@ -231,7 +231,10 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
     } = deps;
 
     const analyticsDaysOptions = ANALYTICS_PERIOD_OPTIONS;
-    const isJellyfinPortal = String(publicConfig?.mediaServerType || 'plex').toLowerCase() === 'jellyfin';
+    const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();
+    const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
+    const mediaServerLabel = mediaServerType === 'emby' ? 'Emby' : 'Jellyfin';
+    const analyticsProviderLabel = publicConfig?.jellyfinAnalyticsProvider === 'jellyglance' ? 'JellyGlance' : 'Jellystat';
     const isExpired = daysLeft !== null && daysLeft < 0;
 
     return (id: MainGridWidgetId): React.ReactNode => {
@@ -273,8 +276,8 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                 </div>
                             </div>
                             {isRevoked && daysLeft !== null && daysLeft >= 0 && (
-                                <button className="w-full mt-2 px-6 py-2.5 bg-plex text-background rounded-xl font-bold hover:bg-plex-hover transition-colors shadow-lg" onClick={handleRelink}>
-                                    Re-link Plex Account
+                            <button className="w-full mt-2 px-6 py-2.5 bg-plex text-background rounded-xl font-bold hover:bg-plex-hover transition-colors shadow-lg" onClick={handleRelink}>
+                                    Re-link Account
                                 </button>
                             )}
                             {daysLeft !== null && (
@@ -432,14 +435,14 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                     return (
                         <div className="glass-card p-4 md:p-5 shadow-xl w-full self-start">
                             <div className="flex items-center justify-between mb-3 md:mb-4">
-                                <p className="text-muted text-sm uppercase tracking-widest font-semibold">Jellyfin Library</p>
+                                <p className="text-muted text-sm uppercase tracking-widest font-semibold">{mediaServerLabel} Library</p>
                             </div>
                             {serverDataLoading && !serverStats ? (
                                 <LibraryStatsSkeleton />
                             ) : serverStats ? (
                                 <LibraryStatsContent serverStats={serverStats} variant="jellyfin" />
                             ) : (
-                                <div className="text-muted text-sm bg-background/50 p-4 rounded-xl border border-white/5">Could not load Jellyfin library statistics at this time.</div>
+                                <div className="text-muted text-sm bg-background/50 p-4 rounded-xl border border-white/5">Could not load {mediaServerLabel} library statistics at this time.</div>
                             )}
                         </div>
                     );
@@ -473,7 +476,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                         <div className="glass-card p-3 md:p-4 shadow-xl flex flex-col flex-1 min-h-0">
                         <div className="flex items-center justify-between flex-shrink-0">
                             <h2 className="text-lg md:text-xl font-bold text-text flex items-center gap-2">
-                                <Activity className="w-5 h-5 text-plex" /> Jellystat Activity
+                                <Activity className="w-5 h-5 text-plex" /> {analyticsProviderLabel} Activity
                             </h2>
                             <PeriodDropdown
                                 value={analyticsDays}
@@ -487,7 +490,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                         {analyticsLoading ? (
                             <div className="flex items-center gap-3 text-muted mt-4">
                                 <div className="w-5 h-5 rounded-full border-2 border-plex border-t-transparent animate-spin" />
-                                Loading Jellystat activity...
+                                Loading {analyticsProviderLabel} activity...
                             </div>
                         ) : analytics && analytics.totalPlays > 0 ? (
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mt-4">
@@ -513,8 +516,8 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                 <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 shadow-inner">
                                     <Clapperboard className="w-6 h-6 text-muted" />
                                 </div>
-                                <h3 className="font-bold text-text mb-1">No Jellystat activity yet</h3>
-                                <p className="text-muted text-sm max-w-sm">Once Jellystat records playback activity, your server activity summary will appear right here.</p>
+                                <h3 className="font-bold text-text mb-1">No {analyticsProviderLabel} activity yet</h3>
+                                <p className="text-muted text-sm max-w-sm">Once {analyticsProviderLabel} records playback activity, your server activity summary will appear right here.</p>
                             </div>
                         )}
                     </div>

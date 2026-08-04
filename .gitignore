@@ -77,3 +77,7 @@ static/*Dashboard-*.js
 static/RequestsAdminPanel-*.js
 static/tailwind.css
 static/release-notes.json
+
+# Local uploaded branding assets
+static/background.*
+static/logo.png
