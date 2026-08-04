@@ -38,8 +38,16 @@ const mediaTypeMatches = (libraryItem: LibraryRecentItem, candidate: PosterSetsS
 };
 
 /** Auto-match requires an exact year when the library item has one.
- *  Allow ±1 for festival vs theatrical year mismatches (e.g. Rose of Nevada TMDB 2025 / Plex 2026).
+ *  Movies: ±1 for festival vs theatrical.
+ *  Shows: wider window — Plex often stores the latest season year while catalogs use premiere year
+ *  (e.g. Sugar S2 → library 2026, MediUX/TPDB "Sugar (2024)").
  */
+export const yearMatchTolerance = (mediaType?: string | null): number => {
+    const raw = String(mediaType || '').toLowerCase();
+    if (raw === 'show' || raw === 'tv' || raw === 'series') return 5;
+    return 1;
+};
+
 export const strictYearMatches = (
     libraryYear: number | null | undefined,
     candidateYear: number | null | undefined,
@@ -83,10 +91,15 @@ const rankTitleCandidate = (
     if (strictTitleMatches(libraryItem.title, candidate.title)) score += 100;
     if (libraryItem.year != null && candidate.year != null) {
         const delta = Math.abs(libraryItem.year - candidate.year);
+        const slack = yearMatchTolerance(libraryItem.mediaType);
         if (delta === 0) score += 50;
-        else if (delta === 1) score += 35;
+        else if (delta <= slack) score += Math.max(10, 40 - delta * 6);
         else score -= 40;
-    } else if (strictYearMatches(libraryItem.year, candidate.year ?? null)) {
+    } else if (strictYearMatches(
+        libraryItem.year,
+        candidate.year ?? null,
+        { tolerance: yearMatchTolerance(libraryItem.mediaType) },
+    )) {
         score += 50;
     }
 
@@ -105,7 +118,11 @@ const isStrictAutoMatch = (
 ): boolean => (
     mediaTypeMatches(libraryItem, candidate)
     && strictTitleMatches(libraryItem.title, candidate.title)
-    && strictYearMatches(libraryItem.year, candidate.year ?? null, { tolerance: 1 })
+    && strictYearMatches(
+        libraryItem.year,
+        candidate.year ?? null,
+        { tolerance: yearMatchTolerance(libraryItem.mediaType) },
+    )
 );
 
 /** True when a loaded catalog title still looks like the library item (guards wrong TMDB hits). */
@@ -135,8 +152,9 @@ export const pickAutoMatchedTitle = (
 
     const viable = titles.filter((title) => mediaTypeMatches(libraryItem, title));
     const pool = viable.length ? viable : titles;
+    const showDrift = yearMatchTolerance(libraryItem.mediaType);
 
-    // Prefer exact year, then ±1 theatrical/festival drift, for a unique title match.
+    // Prefer exact year, then near drift, for a unique title match.
     const exactYear = pool.filter((title) => (
         mediaTypeMatches(libraryItem, title)
         && strictTitleMatches(libraryItem.title, title.title)
@@ -158,6 +176,27 @@ export const pickAutoMatchedTitle = (
             const bDelta = Math.abs(Number(b.year) - Number(libraryItem.year));
             return aDelta - bDelta;
         })[0] || null;
+    }
+
+    // Returning series: Plex year trails the premiere year by more than ±1.
+    if (showDrift > 1) {
+        const drifted = pool.filter((title) => (
+            mediaTypeMatches(libraryItem, title)
+            && strictTitleMatches(libraryItem.title, title.title)
+            && strictYearMatches(libraryItem.year, title.year ?? null, { tolerance: showDrift })
+        ));
+        if (drifted.length === 1) return drifted[0];
+        if (drifted.length > 1 && libraryItem.year != null) {
+            // Prefer premiere-or-earlier years (candidate <= library), then closest.
+            return [...drifted].sort((a, b) => {
+                const aYear = Number(a.year);
+                const bYear = Number(b.year);
+                const aFuture = aYear > Number(libraryItem.year) ? 1 : 0;
+                const bFuture = bYear > Number(libraryItem.year) ? 1 : 0;
+                if (aFuture !== bFuture) return aFuture - bFuture;
+                return Math.abs(aYear - Number(libraryItem.year)) - Math.abs(bYear - Number(libraryItem.year));
+            })[0] || null;
+        }
     }
 
     // When the library item has no year, allow a unique exact title match.

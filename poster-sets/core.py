@@ -2034,8 +2034,9 @@ def resolve_posterdb_title_page(
                 if accepted:
                     return _finish(accepted)
 
-    # No year hint (or year path missed) — one page of bare text search, then probe.
-    if not candidates and bare_title:
+    # Bare title search — always merge when resolving by TMDB so a wrong Plex season-year
+    # (Sugar library 2026 vs catalog 2024) cannot strand us on year-mismatched candidates only.
+    if bare_title and (not candidates or target_tmdb):
         text = search_posterdb_titles(
             bare_title,
             progress=progress,
@@ -2043,7 +2044,7 @@ def resolve_posterdb_title_page(
             config=config,
             media_type=media_type,
             _skip_resolve=True,
-            max_pages=1,
+            max_pages=3 if target_tmdb else 1,
         )
         for item in text.get("titles") or []:
             pid = str(item.get("id") or "")
