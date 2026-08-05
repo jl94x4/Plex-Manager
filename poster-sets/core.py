@@ -719,7 +719,15 @@ def find_collection(library, poster):
 
 
 def upload_tv_poster(poster, tv, progress: ProgressFn = None) -> dict:
-    result = {"title": poster.get("title"), "kind": "show", "ok": False, "message": ""}
+    result = {
+        "title": poster.get("title"),
+        "kind": "show",
+        "ok": False,
+        "message": "",
+        "id": poster.get("_assetId") or asset_id("show", poster),
+        "season": poster.get("season"),
+        "episode": poster.get("episode"),
+    }
     tv_show_items = find_in_library(tv, poster)
     if not tv_show_items:
         result["message"] = f"{poster['title']} not found in any library."
@@ -796,7 +804,13 @@ def upload_tv_poster(poster, tv, progress: ProgressFn = None) -> dict:
 
 
 def upload_movie_poster(poster, movies, progress: ProgressFn = None) -> dict:
-    result = {"title": poster.get("title"), "kind": "movie", "ok": False, "message": ""}
+    result = {
+        "title": poster.get("title"),
+        "kind": "movie",
+        "ok": False,
+        "message": "",
+        "id": poster.get("_assetId") or asset_id("movie", poster),
+    }
     movie_items = find_in_library(movies, poster)
     if not movie_items:
         result["message"] = f"{poster['title']} not found in any library."
@@ -821,7 +835,13 @@ def upload_movie_poster(poster, movies, progress: ProgressFn = None) -> dict:
 
 
 def upload_collection_poster(poster, movies, progress: ProgressFn = None) -> dict:
-    result = {"title": poster.get("title"), "kind": "collection", "ok": False, "message": ""}
+    result = {
+        "title": poster.get("title"),
+        "kind": "collection",
+        "ok": False,
+        "message": "",
+        "id": poster.get("_assetId") or asset_id("collection", poster),
+    }
     collection_items = find_collection(movies, poster)
     if not collection_items:
         result["message"] = f'{poster["title"]} collection not found in any library.'
@@ -1590,7 +1610,11 @@ def filter_posters_by_ids(
 
 
 def list_assets(url: str, config: dict | None = None, progress: ProgressFn = None) -> dict:
-    """Scrape a set URL and return asset fingerprints without connecting to Plex."""
+    """Scrape a set URL and return asset fingerprints.
+
+    When Plex credentials exist, also mark each asset matched against the library
+    so watchers can apply season covers that become available later.
+    """
     cfg = config if isinstance(config, dict) else {}
     filters = normalize_library_list(cfg.get("mediux_filters")) or [
         "title_card",
@@ -1600,7 +1624,17 @@ def list_assets(url: str, config: dict | None = None, progress: ProgressFn = Non
     ]
     emit(progress, f"Listing assets from {url}")
     movieposters, showposters, collectionposters, page_meta = scrape(url, mediux_filters=filters, progress=progress)
-    assets = build_preview_assets(movieposters, showposters, collectionposters, tv=None, movies=None)
+
+    tv = movies = None
+    if cfg.get("base_url") and cfg.get("token"):
+        try:
+            emit(progress, "Checking library matches for watched assets…")
+            tv, movies, _plex = connect_plex(cfg, progress=progress)
+        except Exception as exc:
+            emit(progress, f"Match check skipped: {exc}")
+            tv = movies = None
+
+    assets = build_preview_assets(movieposters, showposters, collectionposters, tv=tv, movies=movies)
     set_meta = build_set_meta(url, movieposters, showposters, collectionposters, page_meta=page_meta)
     canonical = str(set_meta.get("url") or url or "").strip() or url
     return {
@@ -1618,11 +1652,15 @@ def list_assets(url: str, config: dict | None = None, progress: ProgressFn = Non
                 "label": asset.get("label"),
                 "source": asset.get("source"),
                 "fileType": asset.get("fileType") or asset.get("file_type"),
+                "matched": asset.get("matched"),
+                "matchDetail": asset.get("matchDetail"),
             }
             for asset in assets
             if asset.get("id")
         ],
         "total": len(assets),
+        "matched": sum(1 for asset in assets if asset.get("matched") is True),
+        "unmatched": sum(1 for asset in assets if asset.get("matched") is False),
     }
 
 
