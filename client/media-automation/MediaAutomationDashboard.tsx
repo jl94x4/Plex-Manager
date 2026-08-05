@@ -1205,7 +1205,6 @@ export const MediaAutomationDashboard: React.FC = () => {
             setTab('libraries');
             writeMediaAutomationTabHash('libraries');
             if (match) setLibraryDraft({ ...emptyLibrary(), ...match });
-
             params.delete('editLibrary');
             params.delete('libraryId');
             const qs = params.toString();
