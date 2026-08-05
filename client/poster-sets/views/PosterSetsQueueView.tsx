@@ -478,6 +478,51 @@ export const PosterSetsQueueView: React.FC = () => {
                                                         <X className="h-4 w-4" /> Cancel
                                                     </button>
                                                 ) : null}
+                                                {state === 'running' ? (
+                                                    <button
+                                                        type="button"
+                                                        className={primaryButtonClass}
+                                                        disabled={busy !== null}
+                                                        onClick={async (event) => {
+                                                            event.stopPropagation();
+                                                            if (!window.confirm('Stop this running apply? You can Retry it afterward.')) return;
+                                                            setBusy('queue');
+                                                            try {
+                                                                await posterSetsApi.stopQueueJob(job.id);
+                                                                await loadQueue();
+                                                                toast('Stopped running apply.');
+                                                            } catch (error) {
+                                                                toast(error instanceof Error ? error.message : 'Stop failed', 'error');
+                                                            } finally {
+                                                                setBusy(null);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <X className="h-4 w-4" /> Stop
+                                                    </button>
+                                                ) : null}
+                                                {(state === 'failed' || state === 'cancelled') ? (
+                                                    <button
+                                                        type="button"
+                                                        className={primaryButtonClass}
+                                                        disabled={busy !== null}
+                                                        onClick={async (event) => {
+                                                            event.stopPropagation();
+                                                            setBusy('queue');
+                                                            try {
+                                                                await posterSetsApi.retryQueueJob(job.id);
+                                                                await loadQueue();
+                                                                toast('Re-queued apply.');
+                                                            } catch (error) {
+                                                                toast(error instanceof Error ? error.message : 'Retry failed', 'error');
+                                                            } finally {
+                                                                setBusy(null);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <RotateCcw className="h-4 w-4" /> Retry
+                                                    </button>
+                                                ) : null}
                                                 {state === 'failed' && (job.input?.url || meta?.url) ? (
                                                     <button
                                                         type="button"

@@ -129,12 +129,16 @@ def main() -> int:
             plex_hint = request.get("plexHint") or request.get("plex_hint")
             if not isinstance(plex_hint, dict):
                 plex_hint = None
+            selected_assets = request.get("selectedAssets") or request.get("selected_assets")
+            if not isinstance(selected_assets, list):
+                selected_assets = None
             result = apply_url(
                 url,
                 config,
                 progress=progress,
                 selected_ids=selected_ids,
                 plex_hint=plex_hint,
+                selected_assets=selected_assets,
             )
             write_event("result", **result)
             return 0 if result.get("ok") else 1

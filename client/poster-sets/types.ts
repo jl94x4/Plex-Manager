@@ -105,6 +105,18 @@ export type PosterSetsJobInput = {
     lineCount?: number;
     selectedCount?: number;
     selectedIds?: string[] | null;
+    selectedAssets?: Array<{
+        id?: string;
+        kind?: string;
+        title?: string;
+        year?: number | null;
+        season?: string | number | null;
+        episode?: string | number | null;
+        url?: string;
+        thumbUrl?: string;
+        source?: string;
+        fileType?: string | null;
+    }> | null;
     setMeta?: PosterSetsSetMeta | null;
     watchId?: string | null;
     mediuxFilters?: string[];

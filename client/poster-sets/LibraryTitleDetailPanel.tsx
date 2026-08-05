@@ -519,6 +519,27 @@ export function LibraryTitleDetailPanel({
         return filters.length ? filters : undefined;
     };
 
+    const selectedAssetsForIds = (ids: string[]) => {
+        if (!ids.length) return undefined;
+        const byId = new Map((preview?.assets || []).map((asset) => [asset.id, asset]));
+        const assets = ids
+            .map((id) => byId.get(id))
+            .filter((asset): asset is PosterSetsPreviewAsset => Boolean(asset?.thumbUrl));
+        if (!assets.length) return undefined;
+        return assets.map((asset) => ({
+            id: asset.id,
+            kind: asset.kind,
+            title: asset.title,
+            year: asset.year ?? null,
+            season: asset.season ?? null,
+            episode: asset.episode ?? null,
+            url: asset.thumbUrl,
+            thumbUrl: asset.thumbUrl,
+            source: asset.source,
+            fileType: asset.fileType ?? null,
+        }));
+    };
+
     const runPreview = async (set: PosterSetsSearchSet) => {
         const target = String(set.url || '').trim();
         if (!target) {
@@ -570,6 +591,7 @@ export function LibraryTitleDetailPanel({
                     title: item.title,
                     mediaType: item.mediaType,
                 },
+                selectedAssetsForIds(ids),
             );
             toast(queuePaused
                 ? `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'} (queue paused).`

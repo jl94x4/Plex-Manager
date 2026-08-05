@@ -787,10 +787,6 @@ def upload_tv_poster(poster, tv, progress: ProgressFn = None) -> dict:
 
             apply_poster_or_art(upload_target, poster, art=(poster["season"] == "Backdrop"), progress=progress)
             clear_kometa_overlay(upload_target, config=poster.get("_config"), progress=progress)
-            if poster.get("source") == "posterdb":
-                time.sleep(6)
-            elif poster.get("source") == "mediux":
-                time.sleep(1)
             result["ok"] = True
             result["message"] = msg
             emit(progress, msg)
@@ -820,10 +816,6 @@ def upload_movie_poster(poster, movies, progress: ProgressFn = None) -> dict:
         try:
             apply_poster_or_art(movie_item, poster, progress=progress)
             clear_kometa_overlay(movie_item, config=poster.get("_config"), progress=progress)
-            if poster.get("source") == "posterdb":
-                time.sleep(6)
-            elif poster.get("source") == "mediux":
-                time.sleep(1)
             msg = f'Uploaded art for {poster["title"]} in {movie_item.librarySectionTitle}.'
             result["ok"] = True
             result["message"] = msg
@@ -851,10 +843,6 @@ def upload_collection_poster(poster, movies, progress: ProgressFn = None) -> dic
         try:
             apply_poster_or_art(collection, poster, progress=progress)
             clear_kometa_overlay(collection, config=poster.get("_config"), progress=progress)
-            if poster.get("source") == "posterdb":
-                time.sleep(6)
-            elif poster.get("source") == "mediux":
-                time.sleep(1)
             msg = f'Uploaded art for {poster["title"]} in {collection.librarySectionTitle}.'
             result["ok"] = True
             result["message"] = msg
@@ -1603,9 +1591,68 @@ def filter_posters_by_ids(
     wanted: Set[str] = {str(item) for item in selected_ids if str(item).strip()}
     if not wanted:
         return movieposters, showposters, collectionposters
-    movies = [p for p in movieposters if asset_id("movie", p) in wanted]
-    shows = [p for p in showposters if asset_id("show", p) in wanted]
-    collections = [p for p in collectionposters if asset_id("collection", p) in wanted]
+    movies = [p for p in movieposters if asset_id("movie", p) in wanted or str(p.get("_assetId") or "") in wanted]
+    shows = [p for p in showposters if asset_id("show", p) in wanted or str(p.get("_assetId") or "") in wanted]
+    collections = [p for p in collectionposters if asset_id("collection", p) in wanted or str(p.get("_assetId") or "") in wanted]
+    return movies, shows, collections
+
+
+def _infer_source_from_url(url: str) -> str:
+    lower = str(url or "").lower()
+    if "theposterdb.com" in lower:
+        return "posterdb"
+    if "mediux" in lower:
+        return "mediux"
+    return "mediux"
+
+
+def _normalize_season_value(value: Any) -> Any:
+    if value is None or value == "":
+        return None
+    if value in ("Cover", "Backdrop"):
+        return value
+    try:
+        return int(value)
+    except Exception:
+        return value
+
+
+def poster_row_from_selected_asset(asset: dict) -> Tuple[str, dict]:
+    kind = str(asset.get("kind") or "show").strip().lower()
+    if kind not in {"movie", "show", "collection"}:
+        kind = "show"
+    url = str(asset.get("url") or asset.get("thumbUrl") or "").strip()
+    poster = {
+        "title": asset.get("title") or "Untitled",
+        "year": asset.get("year"),
+        "season": _normalize_season_value(asset.get("season")),
+        "episode": asset.get("episode") if asset.get("episode") not in ("", None) else None,
+        "url": url,
+        "source": str(asset.get("source") or _infer_source_from_url(url)).strip().lower() or "mediux",
+        "file_type": asset.get("fileType") or asset.get("file_type"),
+    }
+    asset_id_value = str(asset.get("id") or "").strip()
+    poster["_assetId"] = asset_id_value or asset_id(kind, poster)
+    return kind, poster
+
+
+def posters_from_selected_assets(selected_assets: Optional[Sequence[dict]]) -> Tuple[list, list, list]:
+    """Build poster rows from preview/inspect metadata — avoids a full set scrape on apply."""
+    movies: list = []
+    shows: list = []
+    collections: list = []
+    for raw in selected_assets or []:
+        if not isinstance(raw, dict):
+            continue
+        kind, poster = poster_row_from_selected_asset(raw)
+        if not poster.get("url"):
+            continue
+        if kind == "movie":
+            movies.append(poster)
+        elif kind == "collection":
+            collections.append(poster)
+        else:
+            shows.append(poster)
     return movies, shows, collections
 
 
@@ -1708,6 +1755,7 @@ def apply_url(
     progress: ProgressFn = None,
     selected_ids: Optional[Sequence[str]] = None,
     plex_hint: Optional[dict] = None,
+    selected_assets: Optional[Sequence[dict]] = None,
 ) -> dict:
     filters = normalize_library_list(config.get("mediux_filters")) or [
         "title_card",
@@ -1716,11 +1764,19 @@ def apply_url(
         "show_cover",
     ]
     tv, movies, plex = connect_plex(config, progress=progress)
-    emit(progress, f"Scraping {url}")
-    movieposters, showposters, collectionposters, page_meta = scrape(url, mediux_filters=filters, progress=progress)
-    movieposters, showposters, collectionposters = filter_posters_by_ids(
-        movieposters, showposters, collectionposters, selected_ids
-    )
+    page_meta = None
+    if selected_ids and selected_assets:
+        emit(progress, f"Applying {len(selected_ids)} selected asset(s) from preview (skipping re-scrape)")
+        movieposters, showposters, collectionposters = posters_from_selected_assets(selected_assets)
+        movieposters, showposters, collectionposters = filter_posters_by_ids(
+            movieposters, showposters, collectionposters, selected_ids
+        )
+    else:
+        emit(progress, f"Scraping {url}")
+        movieposters, showposters, collectionposters, page_meta = scrape(url, mediux_filters=filters, progress=progress)
+        movieposters, showposters, collectionposters = filter_posters_by_ids(
+            movieposters, showposters, collectionposters, selected_ids
+        )
     selected_count = len(selected_ids) if selected_ids else None
     asset_count = len(movieposters) + len(showposters) + len(collectionposters)
     if selected_ids and asset_count == 0:

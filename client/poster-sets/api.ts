@@ -5,6 +5,7 @@ import type {
     PosterSetsBrowseResponse,
     PosterSetsConfig,
     PosterSetsJob,
+    PosterSetsJobInput,
     PosterSetsPreview,
     PosterSetsQueueResponse,
     PosterSetsQueueStats,
@@ -182,6 +183,7 @@ export const posterSetsApi = {
         source?: 'manual' | 'bulk' | 'watch',
         mediuxFilters?: string[],
         plexHint?: { ratingKey?: string; title?: string; mediaType?: string } | null,
+        selectedAssets?: PosterSetsJobInput['selectedAssets'],
     ) => (
         apiFetch(`${ROOT}/apply`, json({
             url,
@@ -190,6 +192,7 @@ export const posterSetsApi = {
             ...(source ? { source } : {}),
             ...(mediuxFilters?.length ? { mediuxFilters } : {}),
             ...(plexHint ? { plexHint } : {}),
+            ...(selectedAssets?.length ? { selectedAssets } : {}),
         })) as Promise<{ ok: boolean; jobId: string; job: PosterSetsJob; queued?: boolean }>
     ),
     imageUrl: (thumbUrl: string) => `${ROOT}/image?url=${encodeURIComponent(thumbUrl)}`,
@@ -205,6 +208,14 @@ export const posterSetsApi = {
         stats: PosterSetsQueueStats;
     }>,
     cancelQueueJob: (id: string) => apiFetch(`${ROOT}/queue/cancel/${encodeURIComponent(id)}`, json({})) as Promise<{
+        ok: boolean;
+        job: PosterSetsJob;
+    }>,
+    stopQueueJob: (id: string) => apiFetch(`${ROOT}/queue/stop/${encodeURIComponent(id)}`, json({})) as Promise<{
+        ok: boolean;
+        job: PosterSetsJob;
+    }>,
+    retryQueueJob: (id: string) => apiFetch(`${ROOT}/queue/retry/${encodeURIComponent(id)}`, json({})) as Promise<{
         ok: boolean;
         job: PosterSetsJob;
     }>,

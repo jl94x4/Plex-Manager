@@ -1151,6 +1151,27 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         return filters.length ? filters : undefined;
     };
 
+    const selectedAssetsForIds = (ids: string[]) => {
+        if (!ids.length) return undefined;
+        const byId = new Map((preview?.assets || []).map((asset) => [asset.id, asset]));
+        const assets = ids
+            .map((id) => byId.get(id))
+            .filter((asset): asset is PosterSetsPreviewAsset => Boolean(asset?.thumbUrl));
+        if (!assets.length) return undefined;
+        return assets.map((asset) => ({
+            id: asset.id,
+            kind: asset.kind,
+            title: asset.title,
+            year: asset.year ?? null,
+            season: asset.season ?? null,
+            episode: asset.episode ?? null,
+            url: asset.thumbUrl,
+            thumbUrl: asset.thumbUrl,
+            source: asset.source,
+            fileType: asset.fileType ?? null,
+        }));
+    };
+
     const runApply = async (selectedOnly = false, overrideUrl?: string) => {
         const target = String(overrideUrl ?? url).trim();
         if (!target) {
@@ -1173,6 +1194,8 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 selected
                     ? filtersForSelectedIds(selected)
                     : (titleCardsOnly ? TITLE_CARD_ONLY_FILTERS : undefined),
+                undefined,
+                selected ? selectedAssetsForIds(selected) : undefined,
             );
             setActiveJob(response.job);
             rememberRecentFromContext(jobSetMeta(response.job) || currentSetMeta(), target, {
@@ -1213,6 +1236,8 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 currentSetMeta(),
                 undefined,
                 filtersForSelectedIds(ids),
+                undefined,
+                selectedAssetsForIds(ids),
             );
             setActiveJob(response.job);
             rememberRecentFromContext(jobSetMeta(response.job) || currentSetMeta(), target, {
@@ -1257,6 +1282,8 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 currentSetMeta(),
                 undefined,
                 filtersForSelectedIds(unmatchedIds),
+                undefined,
+                selectedAssetsForIds(unmatchedIds),
             );
             setActiveJob(response.job);
             rememberRecentFromContext(jobSetMeta(response.job) || currentSetMeta(), target, {
@@ -1332,6 +1359,8 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                 currentSetMeta(),
                 undefined,
                 filtersForSelectedIds(newIds),
+                undefined,
+                selectedAssetsForIds(newIds),
             );
             setActiveJob(response.job);
             rememberRecentFromContext(jobSetMeta(response.job) || currentSetMeta(), target, {
