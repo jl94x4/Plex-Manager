@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     CheckCircle2,
     ChevronDown,
@@ -20,6 +20,7 @@ import {
     Search,
     Sparkles,
     Trash2,
+    Unlock,
     User,
     X,
 } from 'lucide-react';
@@ -27,7 +28,7 @@ import { CustomSelect, SettingsToggleRow } from '../../shared/ui';
 import { askConfirm } from '../../shared/confirm';
 import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
 import { posterSetsApi } from '../api';
-import { MEDIUX_FILTER_OPTIONS } from '../types';
+import { MEDIUX_FILTER_OPTIONS, type PosterSetsWatcherPassStatus } from '../types';
 import { PosterSetsSetupChecklist } from '../PosterSetsSetupChecklist';
 import { PosterSetsLibraryBrowse } from '../PosterSetsLibraryBrowse';
 import { PosterSetsCreatorsPanel } from '../PosterSetsCreatorsPanel';
@@ -295,7 +296,34 @@ export const PosterSetsHistoryView: React.FC = () => {
         initialUrlState,
         initialLocation,
     } = usePosterSetsDashboard();
+
+    const [watcherPass, setWatcherPass] = useState<PosterSetsWatcherPassStatus | null>(null);
+    const [unlockingWatcher, setUnlockingWatcher] = useState(false);
+
+    useEffect(() => {
+        if (tab !== 'history') return undefined;
+        let cancelled = false;
+        const poll = async () => {
+            try {
+                const result = await posterSetsApi.watchesRunStatus();
+                if (!cancelled) setWatcherPass(result.status || null);
+            } catch {
+                if (!cancelled) setWatcherPass(null);
+            }
+        };
+        void poll();
+        const timer = window.setInterval(() => {
+            void poll();
+            if (historyFilter === 'audit') void loadAudit();
+        }, 5000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+        };
+    }, [tab, historyFilter, loadAudit]);
+
     if (tab !== 'history') return null;
+    const watcherBusy = Boolean(watcherPass?.busy || watcherPass?.running);
     return (
 
 
@@ -343,6 +371,76 @@ export const PosterSetsHistoryView: React.FC = () => {
                             ? 'Search title, source, job id…'
                             : 'Search URL, job id, type…'}
                     />
+
+                    {watcherBusy || watcherPass?.stale ? (
+                        <div className={`rounded-xl border px-3 py-3 text-sm sm:px-4 ${
+                            watcherPass?.stale
+                                ? 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+                                : 'border-plex/40 bg-plex/10 text-text'
+                        }`}>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0 space-y-1">
+                                    <p className="font-semibold">
+                                        {watcherPass?.stale
+                                            ? 'Check all looks stuck'
+                                            : 'Check all is running in the background'}
+                                    </p>
+                                    <p className="text-xs text-muted">
+                                        {watcherPass?.checked != null
+                                            ? `Progress ${watcherPass.checked}/${watcherPass.total || '?'}`
+                                                + (watcherPass.currentTitle ? ` — ${watcherPass.currentTitle}` : '')
+                                                + `. This is not a queue job — open Audit log below.`
+                                            : 'Progress appears under Audit log (not the Running jobs filter).'}
+                                    </p>
+                                </div>
+                                <div className="flex shrink-0 flex-wrap gap-2">
+                                    {historyFilter !== 'audit' ? (
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            onClick={() => {
+                                                setHistoryFilter('audit');
+                                                void loadAudit();
+                                            }}
+                                        >
+                                            Open Audit log
+                                        </button>
+                                    ) : null}
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={unlockingWatcher}
+                                        onClick={() => {
+                                            void (async () => {
+                                                const ok = await askConfirm(
+                                                    'Only unlock if Check all progress has stopped for a long time. A hung scrape may still finish in the background.',
+                                                    { title: 'Unlock Check all?', confirmLabel: 'Unlock' },
+                                                );
+                                                if (!ok) return;
+                                                setUnlockingWatcher(true);
+                                                try {
+                                                    await posterSetsApi.unlockWatchesRun();
+                                                    const result = await posterSetsApi.watchesRunStatus();
+                                                    setWatcherPass(result.status || null);
+                                                    void loadAudit();
+                                                    toast('Watcher lock cleared — you can run Check all again.');
+                                                } catch (error) {
+                                                    toast(error instanceof Error ? error.message : 'Unlock failed', 'error');
+                                                } finally {
+                                                    setUnlockingWatcher(false);
+                                                }
+                                            })();
+                                        }}
+                                    >
+                                        {unlockingWatcher
+                                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                                            : <Unlock className="h-4 w-4" />}
+                                        Unlock check
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
         
                     {historyFilter === 'audit' ? (
                         <div className="space-y-2">

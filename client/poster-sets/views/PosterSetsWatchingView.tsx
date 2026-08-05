@@ -373,7 +373,8 @@ export const PosterSetsWatchingView: React.FC = () => {
                                         void loadAudit();
                                         if (result.started || result.running) {
                                             toast(result.message
-                                                || 'Check all started in the background — open Logs for progress.');
+                                                || 'Check all started in the background — open Logs → Audit log.');
+                                            setHistoryFilter('audit');
                                             goToPrimaryTab('logs');
                                             return;
                                         }
@@ -383,7 +384,7 @@ export const PosterSetsWatchingView: React.FC = () => {
                                         const errors = Array.isArray(result.errors) ? result.errors.length : 0;
                                         toast(
                                             queued
-                                                ? `Checked ${checked}; queued ${queued} watch(es) / ${assets} asset(s). See Logs.`
+                                                ? `Checked ${checked}; queued ${queued} watch(es) / ${assets} asset(s). See Logs → Audit.`
                                                 : errors
                                                     ? `Checked ${checked}; ${errors} error(s). See Logs → Audit.`
                                                     : `Checked ${checked}; nothing to apply. See Logs → Audit for the run.`,
@@ -391,10 +392,10 @@ export const PosterSetsWatchingView: React.FC = () => {
                                         );
                                     } catch (error) {
                                         const message = error instanceof Error ? error.message : 'Watcher run failed';
-                                        toast(/409|already running/i.test(message)
-                                            ? 'A check is already running — open Logs shortly.'
-                                            : message, 'error');
+                                        toast(message, 'error');
+                                        setHistoryFilter('audit');
                                         void loadAudit();
+                                        goToPrimaryTab('logs');
                                     } finally {
                                         setBusy(null);
                                     }

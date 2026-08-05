@@ -13,6 +13,7 @@ import type {
     PosterSetsStatus,
     PosterSetsTitleStatus,
     PosterSetsWatch,
+    PosterSetsWatcherPassStatus,
     PosterSetsWatchStats,
 } from './types';
 
@@ -272,6 +273,18 @@ export const posterSetsApi = {
         assetsQueued?: number;
         errors?: Array<{ id: string; error: string }>;
         error?: string;
+        status?: PosterSetsWatcherPassStatus;
+    }>,
+    watchesRunStatus: () => apiFetch(`${ROOT}/watches/run-status`) as Promise<{
+        ok: boolean;
+        kickInFlight?: boolean;
+        status: PosterSetsWatcherPassStatus;
+    }>,
+    unlockWatchesRun: () => apiFetch(`${ROOT}/watches/run-unlock`, json({})) as Promise<{
+        ok: boolean;
+        wasBusy?: boolean;
+        kickInFlight?: boolean;
+        status: PosterSetsWatcherPassStatus;
     }>,
     deleteWatch: (id: string) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}`, {
         method: 'DELETE',

@@ -61,6 +61,23 @@ export type PosterSetsWatchStats = {
     errored?: number;
 };
 
+export type PosterSetsWatcherPassStatus = {
+    running?: boolean;
+    busy?: boolean;
+    stale?: boolean;
+    ageMs?: number | null;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+    lastProgressAt?: string | null;
+    total?: number;
+    checked?: number;
+    queued?: number;
+    assetsQueued?: number;
+    currentTitle?: string | null;
+    lastError?: string | null;
+    forceAll?: boolean;
+};
+
 export type PosterSetsSetMeta = {
     provider?: string | null;
     setId?: string | null;
