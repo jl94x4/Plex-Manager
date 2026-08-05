@@ -21,6 +21,8 @@ import {
     Sparkles,
     Trash2,
     User,
+    UserCheck,
+    UserPlus,
     X,
 } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../../shared/ui';
@@ -530,13 +532,47 @@ export const PosterSetsSearchView: React.FC = () => {
                             {searchSets.length ? (
                                 <div className="mt-4 space-y-2">
                                     <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <p className="text-xs font-bold uppercase tracking-wide text-muted">
-                                            Poster sets{searchContext ? ` · ${searchContext}` : ''}
-                                            {searchSets.length > SEARCH_SETS_PAGE_SIZE
-                                                ? ` · ${searchSets.length} sets`
-                                                : ''}
-                                            {searchLoadingMore ? ' · loading more…' : ''}
-                                        </p>
+                                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                            <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                                                Poster sets{searchContext ? ` · ${searchContext}` : ''}
+                                                {searchSets.length > SEARCH_SETS_PAGE_SIZE
+                                                    ? ` · ${searchSets.length} sets`
+                                                    : ''}
+                                                {searchLoadingMore ? ' · loading more…' : ''}
+                                            </p>
+                                            {searchMode === 'creator' && searchQuery.trim() ? (() => {
+                                                const handle = searchQuery.trim().replace(/^@+/, '');
+                                                const whitelist = (configDraft.creatorWhitelist || [])
+                                                    .map((entry) => String(entry).replace(/^@+/, ''))
+                                                    .filter(Boolean);
+                                                const followed = whitelist.some(
+                                                    (entry) => entry.toLowerCase() === handle.toLowerCase(),
+                                                );
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        className={`${buttonClass} ${followed ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
+                                                        disabled={busy === 'save'}
+                                                        onClick={async () => {
+                                                            const next = followed
+                                                                ? whitelist.filter((entry) => entry.toLowerCase() !== handle.toLowerCase())
+                                                                : [...whitelist, handle];
+                                                            try {
+                                                                await saveCreatorsConfig({ creatorWhitelist: next });
+                                                                toast(followed
+                                                                    ? `Unfollowed @${handle}.`
+                                                                    : `Following @${handle} — their sets appear in Browse → Following and rank first in searches.`);
+                                                            } catch {
+                                                                /* saveCreatorsConfig already toasts the failure */
+                                                            }
+                                                        }}
+                                                    >
+                                                        {followed ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                                                        {followed ? 'Following' : 'Follow'}
+                                                    </button>
+                                                );
+                                            })() : null}
+                                        </div>
                                         {searchSetsPageCount > 1 ? (
                                             <div className="flex items-center gap-2">
                                                 <button
