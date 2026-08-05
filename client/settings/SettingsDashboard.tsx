@@ -3039,7 +3039,7 @@ export const SettingsDashboard: React.FC = () => {
                                 <button
                                     type="button"
                                     className="btn-secondary px-4 py-2 text-sm font-bold whitespace-nowrap disabled:opacity-50"
-                                    disabled={refreshingDiscoveryCache || loading || discoveryAvailabilityTask?.running}
+                                    disabled={refreshingDiscoveryCache || discoveryAvailabilityTask?.running}
                                     onClick={() => void refreshDiscoveryAvailabilityCache()}
                                 >
                                     {refreshingDiscoveryCache || discoveryAvailabilityTask?.running
