@@ -191,6 +191,14 @@
   [data-theme="light"] input[type="month"] {
     color-scheme: light;
   }
+
+  /* iOS Safari zooms the whole page when a focused input is under 16px.
+     -webkit-touch-callout only exists on iOS, so this targets iPhones/iPads only. */
+  @supports (-webkit-touch-callout: none) {
+    input, select, textarea {
+      font-size: max(1rem, 1em);
+    }
+  }
 }
 
 /*

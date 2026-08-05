@@ -19,7 +19,8 @@ export const discoveryTheme = {
     emptyState: 'rounded-xl border border-border bg-white/[0.03] px-6 py-12 text-center',
     emptyTitle: 'text-text/80 font-semibold',
     emptyBody: 'text-sm text-muted mt-2',
-    searchInput: 'w-full bg-background/90 border-2 border-border/80 focus:border-plex focus:bg-background rounded-xl py-2.5 sm:py-3 pl-11 sm:pl-12 pr-11 text-sm sm:text-base text-text font-medium outline-none transition-all placeholder:text-muted/55',
+    // text-base (16px) everywhere: iOS Safari zooms the page when focusing inputs below 16px.
+    searchInput: 'w-full bg-background/90 border-2 border-border/80 focus:border-plex focus:bg-background rounded-xl py-2.5 sm:py-3 pl-11 sm:pl-12 pr-11 text-base text-text font-medium outline-none transition-all placeholder:text-muted/55',
     searchDropdown: 'max-h-[min(420px,50vh)] overflow-y-auto custom-scrollbar rounded-xl border border-border bg-card',
     searchResultBtn: 'w-full flex items-center gap-4 p-3 hover:bg-white/[0.06] border-b border-border last:border-0 text-left transition-colors bg-card',
     heroShell: 'relative w-full rounded-2xl border border-border min-h-[220px] sm:min-h-[280px] overflow-visible',
