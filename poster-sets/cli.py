@@ -137,7 +137,7 @@ def main() -> int:
                 plex_hint=plex_hint,
             )
             write_event("result", **result)
-            return 0
+            return 0 if result.get("ok") else 1
 
         if args.command == "bulk":
             urls = request.get("urls")
@@ -150,7 +150,7 @@ def main() -> int:
                 raise ValueError("No URLs provided for bulk apply")
             result = apply_bulk(parsed, config, progress=progress)
             write_event("result", **result)
-            return 0
+            return 0 if result.get("ok") else 1
 
         write_event("error", message=f"Unknown command: {args.command}")
         return 1

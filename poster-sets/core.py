@@ -144,15 +144,33 @@ def _looks_like_image(data: bytes) -> bool:
     return False
 
 
-def download_image(url: str, progress: ProgressFn = None) -> Optional[str]:
+def download_image(url: str, progress: ProgressFn = None, *, config: dict | None = None) -> Optional[str]:
     """Download an image to a temp file. Returns path or None."""
+    target = str(url or "").strip()
+    if not target:
+        return None
+    headers = dict(IMAGE_HEADERS)
+    lower = target.lower()
+    if "theposterdb.com" in lower:
+        headers["Referer"] = "https://theposterdb.com/"
+    elif "mediux.pro" in lower:
+        headers["Referer"] = "https://mediux.pro/"
     try:
-        response = requests.get(url, headers=IMAGE_HEADERS, timeout=60)
+        session = None
+        if "theposterdb.com" in lower and config:
+            try:
+                session = _posterdb_http_client(config)
+            except Exception:
+                session = None
+        if isinstance(session, requests.Session):
+            response = session.get(target, headers=headers, timeout=60)
+        else:
+            response = requests.get(target, headers=headers, timeout=60)
         response.raise_for_status()
         if not _looks_like_image(response.content):
-            emit(progress, f"Downloaded non-image payload from {url[:80]}… ({len(response.content)} bytes)")
+            emit(progress, f"Downloaded non-image payload from {target[:80]}… ({len(response.content)} bytes)")
             return None
-        suffix = _image_suffix(response.headers.get("content-type", ""), url)
+        suffix = _image_suffix(response.headers.get("content-type", ""), target)
         handle = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
         handle.write(response.content)
         handle.close()
@@ -176,18 +194,29 @@ def cleanup_temp_file(path: Optional[str]) -> None:
 def apply_poster_or_art(upload_target, poster: dict, *, art: bool = False, progress: ProgressFn = None) -> None:
     """
     Upload artwork to Plex and/or write beside media on disk when local mode is enabled.
+    Always download MediUX/TPDB bytes first so "ok" means we had a real image.
     """
     config = poster.get("_config") if isinstance(poster.get("_config"), dict) else {}
     url = poster.get("url") or ""
-    source = poster.get("source")
+    source = str(poster.get("source") or "").strip().lower()
     path = None
-    if source == "mediux" or "api.mediux.pro/assets/" in url:
-        path = download_image(url, progress=progress)
+    needs_download = (
+        source in {"mediux", "posterdb"}
+        or "api.mediux.pro/assets/" in url
+        or "theposterdb.com" in url.lower()
+    )
+    if needs_download:
+        path = download_image(url, progress=progress, config=config)
         if not path:
-            raise RuntimeError(f"Could not download MediUX image: {url}")
+            raise RuntimeError(f"Could not download image: {url}")
     try:
         if should_write_local(config):
-            write_local_art(upload_target, poster, path=path, art=art, progress=progress)
+            try:
+                write_local_art(upload_target, poster, path=path, art=art, progress=progress)
+            except Exception as exc:
+                if not should_upload_plex(config):
+                    raise
+                emit(progress, f"Local art failed (continuing with Plex): {exc}")
         if should_upload_plex(config):
             if path:
                 if art:
@@ -273,14 +302,14 @@ def local_art_path(upload_target, poster: dict, *, art: bool = False) -> Optiona
 def write_local_art(upload_target, poster: dict, *, path: Optional[str] = None, art: bool = False, progress: ProgressFn = None) -> None:
     dest_path = local_art_path(upload_target, poster, art=art)
     if not dest_path:
-        emit(progress, "Local art skipped: could not resolve media folder")
-        return
+        raise RuntimeError("Local art failed: could not resolve media folder")
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     temp_path = path
     owned_temp = False
     if not temp_path:
         url = poster.get("url") or ""
-        temp_path = download_image(url, progress=progress)
+        config = poster.get("_config") if isinstance(poster.get("_config"), dict) else {}
+        temp_path = download_image(url, progress=progress, config=config)
         owned_temp = True
         if not temp_path:
             raise RuntimeError(f"Could not download image for local art: {url}")
@@ -612,16 +641,24 @@ def find_in_library(library, poster, *, plex=None, rating_key: str | None = None
     hint_key = str(rating_key or poster.get("_ratingKey") or "").strip() or None
     plex_server = plex or poster.get("_plex")
     want_title = str(poster.get("title") or "").strip()
+    # Library applies stamp the Plex item title — prefer that over scraped set titles.
+    hint_title = str(poster.get("_plexHintTitle") or "").strip()
+    pin_title = hint_title or want_title
     if hint_key and plex_server is not None:
         hit = _fetch_plex_item_by_rating_key(plex_server, hint_key)
         if hit is not None:
             hit_title = str(getattr(hit, "title", None) or "").strip()
-            # Only trust the pinned item when it is the same work as the poster title.
-            if not want_title or _plex_titles_exactly_match(want_title, hit_title):
+            # Trust the pinned library item when it matches the library title (or poster title).
+            if not pin_title or _plex_titles_exactly_match(pin_title, hit_title):
+                return [hit]
+            # Still trust an explicit library pin when the hint title matches the Plex item,
+            # even if the scraped poster title differs (common for TPDB set naming).
+            if hint_title and _plex_titles_exactly_match(hint_title, hit_title):
                 return [hit]
 
-    if not want_title:
+    if not want_title and not hint_title:
         return None
+    search_title = want_title or hint_title
     want_year = poster.get("year")
     try:
         want_year_int = int(want_year) if want_year is not None else None
@@ -635,13 +672,13 @@ def find_in_library(library, poster, *, plex=None, rating_key: str | None = None
             candidates = []
             try:
                 if want_year_int is not None:
-                    candidates.extend(list(lib.search(title=want_title, year=want_year_int) or []))
+                    candidates.extend(list(lib.search(title=search_title, year=want_year_int) or []))
                 else:
-                    candidates.extend(list(lib.search(title=want_title) or []))
+                    candidates.extend(list(lib.search(title=search_title) or []))
             except Exception:
                 pass
             try:
-                got = lib.get(want_title, year=want_year_int) if want_year_int is not None else lib.get(want_title)
+                got = lib.get(search_title, year=want_year_int) if want_year_int is not None else lib.get(search_title)
                 if got is not None:
                     candidates.insert(0, got)
             except Exception:
@@ -652,7 +689,7 @@ def find_in_library(library, poster, *, plex=None, rating_key: str | None = None
                 if item_key in seen_keys:
                     continue
                 item_title = str(getattr(item, "title", None) or "").strip()
-                if not _plex_titles_exactly_match(want_title, item_title):
+                if not _plex_titles_exactly_match(search_title, item_title):
                     continue
                 if want_year_int is not None:
                     item_year = getattr(item, "year", None)
@@ -1646,14 +1683,28 @@ def apply_url(
     movieposters, showposters, collectionposters = filter_posters_by_ids(
         movieposters, showposters, collectionposters, selected_ids
     )
+    selected_count = len(selected_ids) if selected_ids else None
+    asset_count = len(movieposters) + len(showposters) + len(collectionposters)
+    if selected_ids and asset_count == 0:
+        set_meta = build_set_meta(url, [], [], [], page_meta=page_meta)
+        return {
+            "ok": False,
+            "url": url,
+            "uploaded": 0,
+            "attempted": 0,
+            "selected": selected_count,
+            "error": "None of the selected assets were found when re-scraping the set — nothing was applied.",
+            "resetOverlay": should_reset_overlay(config),
+            "counts": {"movies": 0, "shows": 0, "collections": 0},
+            "results": [],
+            "setMeta": set_meta,
+        }
     if selected_ids:
-        emit(
-            progress,
-            f"Applying {len(movieposters) + len(showposters) + len(collectionposters)} selected asset(s)",
-        )
+        emit(progress, f"Applying {asset_count} selected asset(s)")
 
     hint = plex_hint if isinstance(plex_hint, dict) else {}
     rating_key = str(hint.get("ratingKey") or hint.get("rating_key") or "").strip() or None
+    hint_title = str(hint.get("title") or "").strip() or None
     if rating_key:
         emit(progress, f"Pinning apply to Plex ratingKey {rating_key}")
 
@@ -1661,6 +1712,8 @@ def apply_url(
         stamped = {**poster, "_config": config}
         if rating_key:
             stamped["_ratingKey"] = rating_key
+        if hint_title:
+            stamped["_plexHintTitle"] = hint_title
         if plex is not None:
             stamped["_plex"] = plex
         return stamped
@@ -1673,13 +1726,28 @@ def apply_url(
     for poster in showposters:
         results.append(upload_tv_poster(_stamp(poster), tv, progress=progress))
     uploaded = sum(1 for item in results if item.get("ok"))
+    attempted = len(results)
     set_meta = build_set_meta(url, movieposters, showposters, collectionposters, page_meta=page_meta)
+    ok = uploaded > 0
+    error = None
+    if not ok:
+        if attempted == 0:
+            error = "No posters were found to apply from this set."
+        else:
+            failed_msgs = [
+                str(item.get("message") or "").strip()
+                for item in results
+                if not item.get("ok") and str(item.get("message") or "").strip()
+            ]
+            error = failed_msgs[0] if failed_msgs else f"Applied 0 of {attempted} poster(s) — nothing changed on Plex."
+        emit(progress, error)
     return {
-        "ok": True,
+        "ok": ok,
         "url": url,
         "uploaded": uploaded,
-        "attempted": len(results),
-        "selected": len(selected_ids) if selected_ids else None,
+        "attempted": attempted,
+        "selected": selected_count,
+        "error": error,
         "resetOverlay": should_reset_overlay(config),
         "counts": {
             "movies": len(movieposters),
@@ -3364,9 +3432,10 @@ def apply_bulk(urls: Sequence[str], config: dict, progress: ProgressFn = None) -
         else:
             outcomes.append(apply_url(url, config, progress=progress))
     return {
-        "ok": True,
+        "ok": sum(int(item.get("uploaded") or 0) for item in outcomes) > 0,
         "urls": len(urls),
         "jobs": len(outcomes),
         "uploaded": sum(int(item.get("uploaded") or 0) for item in outcomes),
         "outcomes": outcomes,
+        "error": None if sum(int(item.get("uploaded") or 0) for item in outcomes) > 0 else "Bulk apply uploaded 0 posters.",
     }
