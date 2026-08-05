@@ -370,11 +370,31 @@ export const PosterSetsWatchingView: React.FC = () => {
                                         const result = await posterSetsApi.runWatches();
                                         await loadWatches();
                                         await loadQueue();
-                                        toast(result.queued
-                                            ? `Checked ${result.checked || 0} watch(es); queued ${result.queued}.`
-                                            : `Checked ${result.checked || 0} watch(es); no new art.`);
+                                        void loadAudit();
+                                        if (result.started || result.running) {
+                                            toast(result.message
+                                                || 'Check all started in the background — open Logs for progress.');
+                                            goToPrimaryTab('logs');
+                                            return;
+                                        }
+                                        const checked = result.checked || 0;
+                                        const queued = result.queued || 0;
+                                        const assets = result.assetsQueued || 0;
+                                        const errors = Array.isArray(result.errors) ? result.errors.length : 0;
+                                        toast(
+                                            queued
+                                                ? `Checked ${checked}; queued ${queued} watch(es) / ${assets} asset(s). See Logs.`
+                                                : errors
+                                                    ? `Checked ${checked}; ${errors} error(s). See Logs → Audit.`
+                                                    : `Checked ${checked}; nothing to apply. See Logs → Audit for the run.`,
+                                            errors && !queued ? 'error' : undefined,
+                                        );
                                     } catch (error) {
-                                        toast(error instanceof Error ? error.message : 'Watcher run failed', 'error');
+                                        const message = error instanceof Error ? error.message : 'Watcher run failed';
+                                        toast(/409|already running/i.test(message)
+                                            ? 'A check is already running — open Logs shortly.'
+                                            : message, 'error');
+                                        void loadAudit();
                                     } finally {
                                         setBusy(null);
                                     }

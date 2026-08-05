@@ -212,6 +212,12 @@ export const posterSetsApi = {
         stats: PosterSetsQueueStats;
         jobs: PosterSetsJob[];
     }>,
+    clearQueuedJobs: () => apiFetch(`${ROOT}/queue/clear-queued`, json({})) as Promise<{
+        ok: boolean;
+        cancelled?: number;
+        stats: PosterSetsQueueStats;
+        jobs: PosterSetsJob[];
+    }>,
     watches: () => apiFetch(`${ROOT}/watches`) as Promise<{
         ok?: boolean;
         watches: PosterSetsWatch[];
@@ -258,10 +264,14 @@ export const posterSetsApi = {
     }>,
     runWatches: () => apiFetch(`${ROOT}/watches/run`, json({})) as Promise<{
         ok: boolean;
+        started?: boolean;
+        running?: boolean;
+        message?: string;
         checked?: number;
         queued?: number;
         assetsQueued?: number;
         errors?: Array<{ id: string; error: string }>;
+        error?: string;
     }>,
     deleteWatch: (id: string) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}`, {
         method: 'DELETE',

@@ -274,7 +274,7 @@ export type PosterSetsAuditEntry = {
     id: string;
     at?: string;
     action?: string;
-    source?: 'manual' | 'watch' | 'bulk' | string;
+    source?: 'manual' | 'watch' | 'bulk' | 'watcher' | string;
     url?: string | null;
     title?: string | null;
     user?: string | null;
@@ -283,8 +283,12 @@ export type PosterSetsAuditEntry = {
     uploaded?: number | null;
     attempted?: number | null;
     selectedCount?: number | null;
+    checked?: number | null;
+    queued?: number | null;
+    assetsQueued?: number | null;
     state?: string | null;
     error?: string | null;
+    detail?: string | null;
 };
 
 export type PosterSetsTitleStatus = {

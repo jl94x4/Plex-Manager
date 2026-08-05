@@ -304,12 +304,12 @@ export const PosterSetsHistoryView: React.FC = () => {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 max-w-3xl">
                             <h2 className="text-lg font-bold text-text">
-                                {historyFilter === 'audit' ? 'Audit log' : 'Job history'}
+                                {historyFilter === 'audit' ? 'Audit log' : 'Logs'}
                             </h2>
                             <p className="mt-1 text-sm text-muted">
                                 {historyFilter === 'audit'
-                                    ? 'Manual, watch, and bulk apply events with upload counts.'
-                                    : 'Apply and bulk runs with logs. Recent jobs survive restarts.'}
+                                    ? 'Manual, watch, and bulk apply events with upload counts. Watcher “Check all” runs land here too.'
+                                    : 'Apply jobs, watcher checks, and bulk runs with detail logs.'}
                             </p>
                         </div>
                         <div className="flex shrink-0 flex-wrap gap-2">
@@ -363,7 +363,7 @@ export const PosterSetsHistoryView: React.FC = () => {
                                             <div className="min-w-0 flex-1 space-y-1 overflow-hidden">
                                                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                                                     <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                                                        source === 'watch'
+                                                        source === 'watch' || source === 'watcher'
                                                             ? 'border-plex/40 bg-plex/15 text-plex'
                                                             : source === 'bulk'
                                                                 ? 'border-sky-500/40 bg-sky-500/15 text-sky-200'
@@ -374,6 +374,9 @@ export const PosterSetsHistoryView: React.FC = () => {
                                                     {entry.state ? <StatusPill value={entry.state} /> : null}
                                                 </div>
                                                 <p className="break-words text-sm font-semibold text-text [overflow-wrap:anywhere]" title={label}>{label}</p>
+                                                {entry.detail ? (
+                                                    <p className="text-xs text-muted">{entry.detail}</p>
+                                                ) : null}
                                                 {entry.jobId ? (
                                                     <p className="font-mono text-xs text-muted">job #{entry.jobId.slice(0, 8)}</p>
                                                 ) : null}
@@ -383,6 +386,15 @@ export const PosterSetsHistoryView: React.FC = () => {
                                             </time>
                                         </div>
                                         <div className="flex flex-wrap gap-2 text-[11px] text-muted">
+                                            {typeof entry.checked === 'number' ? (
+                                                <span>Checked {entry.checked}</span>
+                                            ) : null}
+                                            {typeof entry.queued === 'number' ? (
+                                                <span>Queued {entry.queued}</span>
+                                            ) : null}
+                                            {typeof entry.assetsQueued === 'number' ? (
+                                                <span>{entry.assetsQueued} asset(s)</span>
+                                            ) : null}
                                             {typeof entry.uploaded === 'number' ? (
                                                 <span className="text-emerald-300">
                                                     Uploaded {entry.uploaded}

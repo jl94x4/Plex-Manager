@@ -353,6 +353,27 @@ export const PosterSetsQueueView: React.FC = () => {
                             <button
                                 type="button"
                                 className={buttonClass}
+                                disabled={busy !== null || !(queueStats.pending || queueStats.queued)}
+                                onClick={async () => {
+                                    if (!window.confirm('Cancel all waiting queue items? Running jobs stay active.')) return;
+                                    setBusy('queue');
+                                    try {
+                                        const response = await posterSetsApi.clearQueuedJobs();
+                                        setQueueStats(response.stats || {});
+                                        await loadQueue();
+                                        toast(`Cancelled ${response.cancelled || 0} queued job(s).`);
+                                    } catch (error) {
+                                        toast(error instanceof Error ? error.message : 'Failed to clear queued jobs', 'error');
+                                    } finally {
+                                        setBusy(null);
+                                    }
+                                }}
+                            >
+                                Clear queued
+                            </button>
+                            <button
+                                type="button"
+                                className={buttonClass}
                                 disabled={busy !== null}
                                 onClick={async () => {
                                     setBusy('queue');

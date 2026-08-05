@@ -1,5 +1,5 @@
 import React from 'react';
-import { Compass, Eye, Library, ListOrdered, RefreshCw, Settings2 } from 'lucide-react';
+import { Compass, Eye, Library, ListOrdered, RefreshCw, ScrollText, Settings2 } from 'lucide-react';
 import { ToastContainer } from '../../shared/toast';
 import { usePosterSetsDashboard } from '../PosterSetsDashboardContext';
 import { LibraryTitleDetailPanel } from '../LibraryTitleDetailPanel';
@@ -62,7 +62,7 @@ export const PosterSetsShell: React.FC = () => {
                             <h1 className="mt-1.5 text-xl font-bold tracking-tight text-text sm:mt-2 sm:text-3xl">Artwork from MediUX & ThePosterDB</h1>
                             <p className="mt-1.5 text-xs leading-relaxed text-muted sm:mt-2 sm:text-sm">
                                 Start from your library, pick a title, preview poster sets, and apply.
-                                Search creators and browse rails in Discover. Queue, Watching, and settings stay one click away.
+                                Search creators and browse rails in Discover. Queue, Watching, Logs, and settings stay one click away.
                             </p>
                         </div>
                         <button type="button" className={`${buttonClass} shrink-0`} onClick={() => void load()} disabled={busy !== null}>
@@ -105,6 +105,7 @@ export const PosterSetsShell: React.FC = () => {
                         ['discover', 'Discover', Compass],
                         ['queue', 'Queue', ListOrdered],
                         ['watches', 'Watching', Eye],
+                        ['logs', 'Logs', ScrollText],
                         ['settings', 'Settings', Settings2],
                     ] as const).map(([id, label, Icon]) => {
                         const active = id === 'discover'

@@ -415,17 +415,22 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         }, options?.mode || 'push');
         if (id === 'history') {
             void loadHistory();
-            if (historyFilter === 'audit') void loadAudit();
+            void loadAudit();
+            if (historyFilter !== 'audit') setHistoryFilter('audit');
         }
         if (id === 'queue') void loadQueue();
         if (id === 'watches') void loadWatches();
         if (id === 'browse') void loadBrowse({ silent: browseRailsRef.current.length > 0 });
         if (id === 'library') void loadLibraryRecent({ silent: libraryShows.length > 0 || libraryMovies.length > 0 });
-    }, [historyFilter, loadAudit, loadBrowse, loadHistory, loadLibraryRecent, loadQueue, loadWatches, libraryMovies.length, libraryShows.length, pushPosterLocation]);
+    }, [historyFilter, loadAudit, loadBrowse, loadHistory, loadLibraryRecent, loadQueue, loadWatches, libraryMovies.length, libraryShows.length, pushPosterLocation, setHistoryFilter]);
 
     const goToPrimaryTab = useCallback((id: PrimaryTabId, options?: { mode?: 'push' | 'replace' }) => {
         if (id === 'discover') {
             goToTab('apply', options);
+            return;
+        }
+        if (id === 'logs') {
+            goToTab('history', options);
             return;
         }
         goToTab(id, options);
@@ -436,9 +441,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
             ? 'browse'
             : view === 'recent'
                 ? 'recent'
-                : view === 'history'
-                    ? 'history'
-                    : 'apply';
+                : 'apply';
         goToTab(internal, options);
     }, [goToTab]);
 
@@ -2143,6 +2146,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
             entry.source,
             entry.state,
             entry.error,
+            entry.detail,
             entry.jobId,
             entry.url,
             formatSetLabel(entry),
