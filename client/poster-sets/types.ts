@@ -42,6 +42,7 @@ export type PosterSetsWatch = {
     mediuxFilters?: string[];
     knownAssetIds?: string[];
     appliedAssetIds?: string[];
+    lastMatchedAssetIds?: string[];
     assetTrackingVersion?: number;
     lastCheckedAt?: string | null;
     lastAppliedAt?: string | null;
