@@ -38,10 +38,11 @@ export type PosterSetsWatch = {
     tmdbId?: string | null;
     tvdbId?: string | null;
     thumbUrl?: string;
-    /** Dominant art type when known (title_cards, backgrounds, posters). */
     setKind?: string | null;
     mediuxFilters?: string[];
     knownAssetIds?: string[];
+    appliedAssetIds?: string[];
+    assetTrackingVersion?: number;
     lastCheckedAt?: string | null;
     lastAppliedAt?: string | null;
     lastError?: string | null;
