@@ -67,6 +67,11 @@ const mediuxMediaType = (source: TitleSource, fallback: 'show' | 'movie') =>
 const TPDB_EMPTY_HINT = 'ThePosterDB returned no sets for this title; showing MediUX sets instead.';
 /** Hard wait — server title search allows ~120s; don't abandon TPDB at 25s. */
 const TPDB_HARD_MS = 90_000;
+const TPDB_RETRY_DELAY_MS = 2500;
+
+const sleep = (ms: number) => new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+});
 
 const filterResultForWork = (
     result: PosterSetsSearchResult,
@@ -239,7 +244,8 @@ async function fetchBothSetsProgressive(
         options.preferredCreators,
     );
     if ((posterdbResult.sets?.length || 0) === 0 && (mediuxResult.sets?.length || 0) > 0) {
-        if (!partialErrors.some((msg) => msg.includes('ThePosterDB'))) {
+        const tpdbFailedSoftly = partialErrors.some((msg) => msg.includes('ThePosterDB'));
+        if (!tpdbFailedSoftly) {
             partialErrors.push(TPDB_EMPTY_HINT);
         }
     }
@@ -321,38 +327,67 @@ async function fetchPosterdbSets(
         mediaType: options.mediaType,
         limit: 40,
     };
-    let response = await posterSetsApi.search({
+
+    const runSearch = (extra: {
+        tmdbId?: string;
+        titleUrl?: string;
+    } = {}) => posterSetsApi.search({
         ...basePayload,
-        // When TMDB is known, resolve the canonical TPDB page instead of a stale text-search URL.
+        titleUrl: extra.titleUrl,
+        tmdbId: extra.tmdbId,
+    });
+
+    const finalize = (response: PosterSetsSearchResult) => filterResultForWork(response, titleHint);
+
+    let response = finalize(await runSearch({
         titleUrl: tmdbId ? undefined : (source.url || undefined),
         tmdbId,
-    });
-    response = filterResultForWork(response, titleHint);
+    }));
     if ((response.sets?.length || 0) > 0) return response;
+
+    // TMDB resolve can fail transiently — fall back to text search without TMDB pin.
+    if (tmdbId && titleHint) {
+        const fallback = finalize(await runSearch({
+            tmdbId: undefined,
+            titleUrl: source.url || undefined,
+        }));
+        if ((fallback.sets?.length || 0) > 0) return fallback;
+        response = fallback;
+    }
 
     // Never open titles[0] from a fuzzy TPDB search (e.g. "Python Hunt" → "Monty Python").
     const matchedTitle = (response.titles || []).find((candidate) => catalogTitleMatchesWork(
         { title: titleHint, year: yearHint, mediaType: options.mediaType },
         candidate,
     ));
-    const pickedUrl = String(matchedTitle?.url || '').trim();
-    if (!pickedUrl) {
-        return {
-            ...response,
-            sets: [],
-            titles: (response.titles || []).filter((candidate) => catalogTitleMatchesWork(
-                { title: titleHint, year: yearHint, mediaType: options.mediaType },
-                candidate,
-                { yearRequired: false },
-            )),
-        };
+    let pickedUrl = String(matchedTitle?.url || '').trim();
+    if (pickedUrl) {
+        response = finalize(await runSearch({ titleUrl: pickedUrl, tmdbId: undefined }));
+        if ((response.sets?.length || 0) > 0) return response;
     }
 
-    response = await posterSetsApi.search({
-        ...basePayload,
-        titleUrl: pickedUrl,
-    });
-    return filterResultForWork(response, titleHint);
+    // One delayed retry — TPDB search pages often flake on first load.
+    if (titleHint) {
+        await sleep(TPDB_RETRY_DELAY_MS);
+        response = finalize(await runSearch({
+            titleUrl: pickedUrl || (tmdbId ? undefined : (source.url || undefined)),
+            tmdbId: pickedUrl ? undefined : tmdbId,
+        }));
+        if ((response.sets?.length || 0) > 0) return response;
+
+        if (!pickedUrl) {
+            const retryTitle = (response.titles || []).find((candidate) => catalogTitleMatchesWork(
+                { title: titleHint, year: yearHint, mediaType: options.mediaType },
+                candidate,
+            ));
+            pickedUrl = String(retryTitle?.url || '').trim();
+            if (pickedUrl) {
+                response = finalize(await runSearch({ titleUrl: pickedUrl, tmdbId: undefined }));
+            }
+        }
+    }
+
+    return response;
 }
 
 async function fetchMediuxSetsViaTmdbLookup(

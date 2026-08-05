@@ -504,27 +504,51 @@ def test_posterdb_login(config: dict | None = None) -> dict:
     return {"ok": True, "configured": True, "username": user, "sampleTitle": matched.get("title")}
 
 
-def cook_soup(url: str, *, config: dict | None = None, timeout: float | None = None) -> BeautifulSoup:
+def cook_soup(
+    url: str,
+    *,
+    config: dict | None = None,
+    timeout: float | None = None,
+    retries: int = 3,
+) -> BeautifulSoup:
     headers = {
         "User-Agent": _POSTERDB_UA,
         "Sec-Ch-Ua-Mobile": "?0",
         "Sec-Ch-Ua-Platform": "Windows",
     }
-    wait = 15 if timeout is None and "theposterdb.com/search" in str(url or "").lower() else timeout
+    wait = 20 if timeout is None and "theposterdb.com/search" in str(url or "").lower() else timeout
     if wait is None:
         wait = 60
-    client = _posterdb_http_client(config) if "theposterdb.com" in str(url or "").lower() else requests
-    if isinstance(client, requests.Session):
-        response = client.get(url, headers=headers, timeout=wait)
-    else:
-        response = requests.get(url, headers=headers, timeout=wait)
-    if response.status_code == 200 or (response.status_code == 500 and "mediux.pro" in url):
-        return BeautifulSoup(response.text, "html.parser")
-    raise RuntimeError(f"Failed to retrieve the page. Status code: {response.status_code}")
+    is_tpdb = "theposterdb.com" in str(url or "").lower()
+    client = _posterdb_http_client(config) if is_tpdb else requests
+    attempts = max(1, int(retries or 1))
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            if isinstance(client, requests.Session):
+                response = client.get(url, headers=headers, timeout=wait)
+            else:
+                response = requests.get(url, headers=headers, timeout=wait)
+            if response.status_code == 200 or (response.status_code == 500 and "mediux.pro" in url):
+                return BeautifulSoup(response.text, "html.parser")
+            if response.status_code in {429, 502, 503, 504} and attempt + 1 < attempts:
+                time.sleep(1.25 * (attempt + 1))
+                continue
+            raise RuntimeError(f"Failed to retrieve the page. Status code: {response.status_code}")
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                time.sleep(1.0 * (attempt + 1))
+                continue
+            break
+    if last_error:
+        raise RuntimeError(f"Failed to retrieve the page: {last_error}") from last_error
+    raise RuntimeError("Failed to retrieve the page.")
 
 
 _POSTERDB_RESOLVE_CACHE: dict[str, tuple[float, Optional[dict]]] = {}
 _POSTERDB_RESOLVE_CACHE_TTL_S = 10 * 60
+_POSTERDB_RESOLVE_NEGATIVE_TTL_S = 90
 
 
 def _posterdb_resolve_cache_key(
@@ -551,7 +575,8 @@ def _posterdb_resolve_cache_get(key: str) -> tuple[bool, Optional[dict]]:
     if not hit:
         return False, None
     at, value = hit
-    if (time.time() - at) > _POSTERDB_RESOLVE_CACHE_TTL_S:
+    ttl = _POSTERDB_RESOLVE_NEGATIVE_TTL_S if value is None else _POSTERDB_RESOLVE_CACHE_TTL_S
+    if (time.time() - at) > ttl:
         _POSTERDB_RESOLVE_CACHE.pop(key, None)
         return False, None
     return True, value
@@ -1916,11 +1941,54 @@ def _posterdb_title_only_key(title: str) -> str:
     return _posterdb_title_match_key(title, None).split("|", 1)[0]
 
 
+def _posterdb_year_tolerance(media_type: str = "show") -> int:
+    raw = str(media_type or "show").strip().lower()
+    if raw in {"movie", "movies", "film"}:
+        return 1
+    return 5
+
+
+def _posterdb_years_compatible(
+    left: int | None,
+    right: int | None,
+    *,
+    media_type: str = "show",
+) -> bool:
+    if left is None or right is None:
+        return True
+    try:
+        left_val = int(left)
+        right_val = int(right)
+    except Exception:
+        return True
+    return abs(left_val - right_val) <= _posterdb_year_tolerance(media_type)
+
+
+def _posterdb_title_matches_hint(
+    item_title: str,
+    item_year: int | None,
+    *,
+    title_hint: str,
+    year_hint: int | None,
+    media_type: str = "show",
+) -> bool:
+    if _posterdb_title_only_key(item_title) != _posterdb_title_only_key(title_hint):
+        return False
+    if year_hint is None:
+        return True
+    if item_year is None:
+        return True
+    if _posterdb_title_match_key(item_title, item_year) == _posterdb_title_match_key(title_hint, year_hint):
+        return True
+    return _posterdb_years_compatible(year_hint, item_year, media_type=media_type)
+
+
 def _pick_posterdb_title_candidate(
     titles: list[dict],
     *,
     title_hint: str = "",
     year_hint: int | None = None,
+    media_type: str = "show",
 ) -> Optional[dict]:
     """Pick the best TPDB /posters/ title page from text-search hits.
 
@@ -1935,6 +2003,15 @@ def _pick_posterdb_title_candidate(
     if year_part:
         for item in titles:
             if _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key:
+                return item
+        for item in titles:
+            if _posterdb_title_matches_hint(
+                item.get("title") or "",
+                item.get("year"),
+                title_hint=title_hint,
+                year_hint=year_hint,
+                media_type=media_type,
+            ):
                 return item
         # Year was requested but page-1 search missed it (common for "Sisters").
         # Do not fall through to an unrelated same-name / fuzzy hit.
@@ -2202,6 +2279,16 @@ def resolve_posterdb_title_page(
                 accepted = _accept_year_hit(item)
                 if accepted:
                     return _finish(accepted)
+            if _posterdb_title_matches_hint(
+                item.get("title") or "",
+                item.get("year"),
+                title_hint=bare_title or clean_title or clean_query,
+                year_hint=year,
+                media_type=media_type,
+            ):
+                accepted = _accept_year_hit(item)
+                if accepted:
+                    return _finish(accepted)
 
     # Bare title search — always merge when resolving by TMDB so a wrong Plex season-year
     # (Sugar library 2026 vs catalog 2024) cannot strand us on year-mismatched candidates only.
@@ -2234,6 +2321,19 @@ def resolve_posterdb_title_page(
         exact = [item for item in ordered if _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key]
         if exact:
             ordered = exact + [item for item in ordered if item not in exact]
+        elif year is not None:
+            tolerant = [
+                item for item in ordered
+                if _posterdb_title_matches_hint(
+                    item.get("title") or "",
+                    item.get("year"),
+                    title_hint=bare_title or clean_title or clean_query,
+                    year_hint=year,
+                    media_type=media_type,
+                )
+            ]
+            if tolerant:
+                ordered = tolerant + [item for item in ordered if item not in tolerant]
 
     for idx, item in enumerate(ordered[:max_probes]):
         url = str(item.get("url") or "").strip()
@@ -2248,11 +2348,22 @@ def resolve_posterdb_title_page(
         tmdb_match = 1 if target_tmdb and str(media_id or "") == target_tmdb else 0
         title_key = _posterdb_title_match_key(item.get("title") or "", item.get("year"))
         title_match = 1 if want_key and title_key == want_key else 0
+        title_compatible = _posterdb_title_matches_hint(
+            item.get("title") or "",
+            item.get("year"),
+            title_hint=bare_title or clean_title or clean_query,
+            year_hint=year,
+            media_type=media_type,
+        )
         if target_tmdb and not tmdb_match:
+            if media_id and str(media_id) != target_tmdb:
+                continue
+            if not title_compatible:
+                continue
+        elif want_key and not want_key.startswith("|") and not title_match and not title_compatible:
             continue
-        if want_key and not want_key.startswith("|") and not title_match and not target_tmdb:
-            continue
-        score = (tmdb_match, title_match, set_count, -idx)
+        relaxed_title_match = 1 if title_compatible else 0
+        score = (tmdb_match, title_match or relaxed_title_match, set_count, -idx)
         if score > best_score:
             best_score = score
             best_item = {
@@ -2268,6 +2379,17 @@ def resolve_posterdb_title_page(
     if best_item is None and not target_tmdb and year is not None and want_key:
         for item in ordered:
             if _posterdb_title_match_key(item.get("title") or "", item.get("year")) == want_key:
+                url = str(item.get("url") or "").strip()
+                if url:
+                    return _finish({**item, "url": url, "setCount": int(item.get("setCount") or 0)})
+        for item in ordered:
+            if _posterdb_title_matches_hint(
+                item.get("title") or "",
+                item.get("year"),
+                title_hint=bare_title or clean_title or clean_query,
+                year_hint=year,
+                media_type=media_type,
+            ):
                 url = str(item.get("url") or "").strip()
                 if url:
                     return _finish({**item, "url": url, "setCount": int(item.get("setCount") or 0)})
@@ -2351,7 +2473,7 @@ def search_posterdb_titles(
             progress,
             f"Searching ThePosterDB for “{term}” (page {page})…" if page > 1 else f"Searching ThePosterDB for “{term}”…",
         )
-        soup = cook_soup(_page_url(page), config=config, timeout=12)
+        soup = cook_soup(_page_url(page), config=config, timeout=20)
         return page, _parse_posterdb_title_links(soup, limit=max(limit, 36))
 
     def _batch_has_year_match(batch: list[dict]) -> bool:
@@ -2361,8 +2483,13 @@ def search_posterdb_titles(
         ):
             return True
         if year_val is not None and title_only and any(
-            _posterdb_title_only_key(item.get("title") or "") == title_only
-            and item.get("year") == year_val
+            _posterdb_title_matches_hint(
+                item.get("title") or "",
+                item.get("year"),
+                title_hint=term,
+                year_hint=year_val,
+                media_type=media_type,
+            )
             for item in batch
         ):
             return True
@@ -3486,6 +3613,7 @@ def search_catalog(
             titles,
             title_hint=title_hint or search_term,
             year_hint=year_val,
+            media_type=media_type,
         )
         picked_url = str(picked.get("url") or "").strip() if picked else ""
         if picked_url:
