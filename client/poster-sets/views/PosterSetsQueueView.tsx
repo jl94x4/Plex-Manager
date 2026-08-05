@@ -352,35 +352,40 @@ export const PosterSetsQueueView: React.FC = () => {
                             </button>
                             <button
                                 type="button"
-                                className={buttonClass}
-                                disabled={busy !== null || !(queueStats.pending || queueStats.queued)}
+                                className={primaryButtonClass}
+                                disabled={busy !== null || !Number(queueStats.queued || 0)}
+                                title="Cancel every waiting apply (does not touch running/finished)"
                                 onClick={async () => {
-                                    if (!window.confirm('Cancel all waiting queue items? Running jobs stay active.')) return;
+                                    const waiting = Number(queueStats.queued || 0);
+                                    if (!waiting) return;
+                                    if (!window.confirm(`Cancel all ${waiting} waiting queue item${waiting === 1 ? '' : 's'}? Running jobs stay active.`)) return;
                                     setBusy('queue');
                                     try {
                                         const response = await posterSetsApi.clearQueuedJobs();
+                                        setQueueJobs(response.jobs || []);
                                         setQueueStats(response.stats || {});
                                         await loadQueue();
-                                        toast(`Cancelled ${response.cancelled || 0} queued job(s).`);
+                                        toast(`Cancelled ${response.cancelled || 0} waiting job(s).`);
                                     } catch (error) {
-                                        toast(error instanceof Error ? error.message : 'Failed to clear queued jobs', 'error');
+                                        toast(error instanceof Error ? error.message : 'Failed to cancel queued jobs', 'error');
                                     } finally {
                                         setBusy(null);
                                     }
                                 }}
                             >
-                                Clear queued
+                                Cancel all
                             </button>
                             <button
                                 type="button"
                                 className={buttonClass}
                                 disabled={busy !== null}
+                                title="Remove completed/failed/cancelled rows from the queue list"
                                 onClick={async () => {
                                     setBusy('queue');
                                     try {
                                         await posterSetsApi.clearFinishedQueue();
                                         await loadQueue();
-                                        toast('Cleared finished queue items.');
+                                        toast('Cleared completed queue items.');
                                     } catch (error) {
                                         toast(error instanceof Error ? error.message : 'Failed to clear queue', 'error');
                                     } finally {
@@ -388,7 +393,7 @@ export const PosterSetsQueueView: React.FC = () => {
                                     }
                                 }}
                             >
-                                Clear finished
+                                Clear completed
                             </button>
                         </div>
                     </div>
