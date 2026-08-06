@@ -58,6 +58,7 @@ import {
     DashboardStatCard,
     DashboardSubnav,
     dashboardGlowClass,
+    dashboardPanelClass,
     dashboardSubnavLinkClass,
 } from './shared/dashboard/DashboardChrome';
 import { ANALYTICS_PERIOD_OPTIONS, persistAnalyticsDays, readPersistedAnalyticsDays } from './shared/analyticsPeriodOptions';
@@ -1689,8 +1690,20 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
         return historyItems.sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 8);
     }, [activeInstanceData, isTvInstance]);
 
-    if (isLoading) return <Loader isLoading={true} />;
-    if (error) return <div className="text-center p-8 text-status-expiring">{error}</div>;
+    if (isLoading) {
+        return (
+            <DashboardPageShell>
+                <Loader isLoading={true} />
+            </DashboardPageShell>
+        );
+    }
+    if (error) {
+        return (
+            <DashboardPageShell>
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</div>
+            </DashboardPageShell>
+        );
+    }
     if (!data) return null;
 
     const getHistoryColor = (type: string) => {
@@ -1810,7 +1823,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
         const isOnline = !!tool?.status && !tool?.error;
         const href = tool?.externalUrl || tool?.url || '';
         return (
-            <div key={tool.id || `${tool.type}-${label}`} className="bg-card border border-white/5 shadow-2xl rounded-2xl p-4 md:p-5 relative overflow-hidden">
+            <div key={tool.id || `${tool.type}-${label}`} className={`${dashboardPanelClass} p-4 md:p-5 relative overflow-hidden`}>
                 <div className="absolute top-0 right-0 p-4 opacity-5">
                     {isBazarr ? <FileText className="w-20 h-20" /> : <Music className="w-20 h-20" />}
                 </div>
@@ -1849,39 +1862,42 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
     };
 
     return (
-        <div className="w-full animate-fade-in flex flex-col gap-6">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-2">
-                <div>
-                    <h1 className="text-3xl font-bold text-text uppercase tracking-widest flex items-center gap-3">
-                        {isTvInstance ? <Tv className="w-8 h-8 text-plex" /> : <Film className="w-8 h-8 text-plex" />}
-                        {activeStackLabel}
-                    </h1>
-                    <p className="text-muted text-sm mt-1">
-                        {isTvInstance ? 'TV series releases, downloads, and activity' : 'Movie releases, downloads, and activity'}
-                    </p>
-                </div>
-
-                {stackInstances.length > 0 && (
-                    <div className="flex bg-white/5 p-1 rounded-lg md:rounded-xl border border-white/10 w-full sm:w-auto max-w-full overflow-x-auto custom-scrollbar">
-                        {stackInstances.map((instance: any) => (
-                            <button
-                                key={instance.id}
-                                type="button"
-                                onClick={() => switchInstance(instance.id)}
-                                className={`flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-md md:rounded-lg text-[11px] md:text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0 ${activeInstanceId === instance.id ? 'bg-plex text-background shadow-lg shadow-plex/20' : 'text-muted hover:text-text hover:bg-white/5'}`}
-                            >
-                                {instance.type === 'sonarr' ? <Tv className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <Film className="w-3.5 h-3.5 md:w-4 md:h-4" />}
-                                {instance.name || (instance.type === 'radarr' ? 'Radarr' : 'Sonarr')}
-                            </button>
-                        ))}
+        <DashboardPageShell>
+            <DashboardHero
+                accent="plex"
+                eyebrow="Calendar"
+                title={activeStackLabel}
+                description={isTvInstance ? 'TV series releases, downloads, and activity across your media stack.' : 'Movie releases, downloads, and activity across your media stack.'}
+                icon={<Calendar className="h-3.5 w-3.5" />}
+                secondaryBlob
+                actions={(
+                    <div className="flex flex-wrap items-center gap-2">
+                        {stackInstances.length > 0 && (
+                            <div className="flex max-w-full gap-1 overflow-x-auto rounded-xl border border-white/10 bg-black/20 p-1 no-scrollbar">
+                                {stackInstances.map((instance: any) => (
+                                    <button
+                                        key={instance.id}
+                                        type="button"
+                                        onClick={() => switchInstance(instance.id)}
+                                        className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(activeInstanceId === instance.id)}`}
+                                    >
+                                        {instance.type === 'sonarr' ? <Tv className="h-3.5 w-3.5" /> : <Film className="h-3.5 w-3.5" />}
+                                        {instance.name || (instance.type === 'radarr' ? 'Radarr' : 'Sonarr')}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        <button
+                            type="button"
+                            onClick={fetchData}
+                            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                            Refresh
+                        </button>
                     </div>
                 )}
-            </div>
-
-            <button onClick={fetchData} className="px-3 py-1.5 bg-plex/10 hover:bg-plex/20 text-plex text-xs font-bold rounded-lg border border-plex/20 flex items-center gap-2 transition-all">
-                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
-            </button>
+            />
 
             <DetailsModal item={detailsItem} onClose={() => setDetailsItem(null)} />
 
@@ -1892,27 +1908,22 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                     </div>
                 )}
 
-                <div className="w-full">
-
-                    <div className="bg-card border border-white/5 shadow-2xl rounded-2xl p-4 md:p-6 relative">
-                        <div className="flex flex-row justify-between items-center mb-4 md:mb-6 border-b border-border/30 pb-3 md:pb-4 gap-2">
-                            <h2 className="text-base sm:text-xl font-bold text-text flex items-center gap-1.5 md:gap-2 truncate">
-                                <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-plex flex-shrink-0" />
-                                <span className="truncate">Upcoming Releases</span>
-                            </h2>
-
-                            <div className="flex bg-white/5 p-0.5 md:p-1 rounded-lg md:rounded-xl border border-white/10 w-fit flex-shrink-0 items-center gap-1 md:gap-2">
-                                <button onClick={() => { setAutoMonthNotice(''); setMonthOffset(m => m - 1); }} className="p-1 md:p-1.5 hover:bg-white/10 rounded-md md:rounded-lg text-muted hover:text-text transition-colors">
-                                    <ChevronLeft className="w-3 h-3 md:w-4 md:h-4" />
-                                </button>
-                                <span className="text-[10px] md:text-xs font-bold px-1 w-16 md:w-28 text-center text-text uppercase tracking-wider">
-                                    {new Date(new Date().setFullYear(new Date().getFullYear(), new Date().getMonth() + monthOffset, 1)).toLocaleDateString('default', { month: 'short', year: 'numeric' })}
-                                </span>
-                                <button onClick={() => { setAutoMonthNotice(''); setMonthOffset(m => m + 1); }} className="p-1 md:p-1.5 hover:bg-white/10 rounded-md md:rounded-lg text-muted hover:text-text transition-colors">
-                                    <ChevronRight className="w-3 h-3 md:w-4 md:h-4" />
-                                </button>
-                            </div>
+                <DashboardPanel
+                    title="Upcoming Releases"
+                    controls={(
+                        <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
+                            <button type="button" onClick={() => { setAutoMonthNotice(''); setMonthOffset((m) => m - 1); }} className="rounded-lg p-1.5 text-muted transition hover:bg-white/10 hover:text-text">
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <span className="text-xs font-bold px-2 w-24 text-center text-text uppercase tracking-wider">
+                                {new Date(new Date().setFullYear(new Date().getFullYear(), new Date().getMonth() + monthOffset, 1)).toLocaleDateString('default', { month: 'short', year: 'numeric' })}
+                            </span>
+                            <button type="button" onClick={() => { setAutoMonthNotice(''); setMonthOffset((m) => m + 1); }} className="rounded-lg p-1.5 text-muted transition hover:bg-white/10 hover:text-text">
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
                         </div>
+                    )}
+                >
                         {autoMonthNotice && (
                             <p className="text-xs text-plex/90 mb-3">{autoMonthNotice}</p>
                         )}
@@ -2011,18 +2022,15 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                                 </div>
                             </div>
                         )}
-                    </div>
-                </div>
+                </DashboardPanel>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="flex flex-col gap-8">
-                        <div className="bg-card border border-white/5 shadow-2xl rounded-2xl p-4 md:p-6 relative flex-grow flex flex-col">
-                            <h2 className="text-xl font-bold text-text mb-4 flex items-center gap-2">
-                                <Activity className="w-5 h-5 text-plex" />
-                                {activeStackLabel} Downloads ({activeQueue.length})
-                            </h2>
-
-                            <div className="flex flex-col gap-3 flex-grow justify-start">
+                        <DashboardPanel
+                            title={`${activeStackLabel} Downloads`}
+                            subtitle={`${activeQueue.length} active`}
+                            className="flex-grow flex flex-col"
+                        >
                                 {!activeStackConfigured ? (
                                     <div className="text-center py-8 bg-background/30 rounded-xl border border-white/5 text-muted text-sm flex-grow flex flex-col justify-center items-center">
                                         <DownloadCloud className="w-10 h-10 text-muted/30 mx-auto mb-2" />
@@ -2058,8 +2066,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                                         );
                                     })
                                 )}
-                            </div>
-                        </div>
+                        </DashboardPanel>
                     </div>
 
                     <div className="flex flex-col gap-4">
@@ -2070,12 +2077,10 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                         {renderStatusCard(activeStackLabel, activeInstanceData)}
                     </div>
 
-                    <div className="bg-card border border-white/5 shadow-2xl rounded-2xl p-4 md:p-6 relative flex-grow flex flex-col">
-                        <h2 className="text-xl font-bold text-text mb-4 flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-plex" />
-                            {activeStackLabel} History
-                        </h2>
-
+                    <DashboardPanel
+                        title={`${activeStackLabel} History`}
+                        className="flex-grow flex flex-col"
+                    >
                         <div className="flex flex-col gap-3 flex-grow justify-start">
                             {!activeStackConfigured ? (
                                 <div className="text-center py-12 bg-background/30 rounded-xl border border-white/5 text-muted text-sm flex-grow flex flex-col justify-center items-center">
@@ -2100,10 +2105,10 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                                 ))
                             )}
                         </div>
-                    </div>
+                    </DashboardPanel>
                 </div>
             </div>
-        </div>
+        </DashboardPageShell>
     );
 };
 
@@ -2279,27 +2284,47 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
         }
     };
 
-    if (loading) return <Loader isLoading={true} />;
+    if (loading) {
+        return (
+            <DashboardPageShell>
+                <Loader isLoading={true} />
+            </DashboardPageShell>
+        );
+    }
+
+    const sourceFilterMeta: Record<'all' | 'sonarr' | 'radarr' | 'lidarr' | 'unknown', { label: string; icon: React.ReactNode; glow: string }> = {
+        all: { label: 'All', icon: <DownloadCloud className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('plex') },
+        sonarr: { label: 'Sonarr', icon: <Tv className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('sky') },
+        radarr: { label: 'Radarr', icon: <Film className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('violet') },
+        lidarr: { label: 'Lidarr', icon: <Music className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('emerald') },
+        unknown: { label: 'Other', icon: <HardDrive className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('muted') },
+    };
 
     return (
-        <div className="w-full animate-fade-in flex flex-col gap-6">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold text-text uppercase tracking-widest flex items-center gap-3">
-                        <DownloadCloud className="w-8 h-8 text-plex" />
-                        Download Status
-                    </h1>
-                    <p className="text-muted text-sm mt-1">All configured download clients, grouped by Sonarr, Radarr, and Lidarr.</p>
-                </div>
-                <button type="button" onClick={load} className="px-4 py-2 rounded-lg border border-border text-sm font-bold text-text hover:bg-white/5">
-                    Refresh
-                </button>
-            </div>
+        <DashboardPageShell>
+            <DashboardHero
+                accent="sky"
+                eyebrow="Downloads"
+                title="Download Status"
+                description="All configured download clients, grouped by Sonarr, Radarr, and Lidarr."
+                icon={<DownloadCloud className="h-3.5 w-3.5" />}
+                secondaryBlob
+                actions={(
+                    <button
+                        type="button"
+                        onClick={() => void load()}
+                        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5"
+                    >
+                        <RefreshCw className="h-4 w-4" />
+                        Refresh
+                    </button>
+                )}
+            />
 
             {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-200 px-4 py-3 text-sm">{error}</div>}
 
             {isAdmin && (
-                <div className="bg-card border border-white/5 rounded-2xl p-4 shadow-xl">
+                <DashboardPanel title="Add torrent" subtitle="Send a URL, magnet, or file to a configured client">
                     <div className="flex flex-col lg:flex-row lg:items-end gap-3">
                         <div className="lg:w-56">
                             <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">Client</label>
@@ -2352,21 +2377,33 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                             {uploadBusy ? 'Sending...' : 'Add Torrent'}
                         </button>
                     </div>
-                </div>
+                </DashboardPanel>
             )}
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {(['all', 'sonarr', 'radarr', 'lidarr', 'unknown'] as const).map((key) => (
-                    <button key={key} type="button" onClick={() => setFilter(key)} className={`rounded-xl border p-4 text-left transition-colors ${filter === key ? 'border-plex bg-plex/10 text-plex' : 'border-white/5 bg-card text-text hover:bg-white/5'}`}>
-                        <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{key === 'all' ? 'All' : sourceLabel(key)}</p>
-                        <p className="text-2xl font-black mt-1">{key === 'all' ? data?.counts?.total || 0 : data?.counts?.[key] || 0}</p>
-                    </button>
-                ))}
+                {(['all', 'sonarr', 'radarr', 'lidarr', 'unknown'] as const).map((key) => {
+                    const meta = sourceFilterMeta[key];
+                    const active = filter === key;
+                    return (
+                        <button
+                            key={key}
+                            type="button"
+                            onClick={() => setFilter(key)}
+                            className={`rounded-2xl text-left transition ${active ? 'ring-2 ring-plex/40 ring-offset-2 ring-offset-background' : 'opacity-90 hover:opacity-100'}`}
+                        >
+                            <DashboardStatCard
+                                label={key === 'all' ? 'All' : sourceLabel(key)}
+                                value={key === 'all' ? data?.counts?.total || 0 : data?.counts?.[key] || 0}
+                                icon={meta.icon}
+                                glow={active ? meta.glow : dashboardGlowClass('muted')}
+                            />
+                        </button>
+                    );
+                })}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2 bg-card border border-white/5 rounded-2xl p-4 shadow-xl">
-                    <h2 className="text-xl font-bold text-text mb-4">Active Downloads</h2>
+                <DashboardPanel title="Active Downloads" className="lg:col-span-2">
                     <div className="space-y-3">
                         {downloads.length === 0 ? (
                             <div className="text-center py-12 text-muted bg-background/30 rounded-xl border border-white/5">No downloads for this filter.</div>
@@ -2427,9 +2464,8 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                             </div>
                         );})}
                     </div>
-                </div>
-                <div className="bg-card border border-white/5 rounded-2xl p-4 shadow-xl">
-                    <h2 className="text-xl font-bold text-text mb-4">Clients</h2>
+                </DashboardPanel>
+                <DashboardPanel title="Clients">
                     <div className="space-y-3">
                         {(data?.clients || []).length === 0 ? (
                             <p className="text-sm text-muted">No download clients configured in Settings.</p>
@@ -2463,9 +2499,9 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                             Clear client filter
                         </button>
                     )}
-                </div>
+                </DashboardPanel>
             </div>
-        </div>
+        </DashboardPageShell>
     );
 };
 

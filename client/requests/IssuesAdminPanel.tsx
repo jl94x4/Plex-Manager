@@ -14,6 +14,7 @@ import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { formatDateTime } from '../shared/format';
 import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
+import { dashboardPanelClass } from '../shared/dashboard/DashboardChrome';
 import { RequestCardActions, RequestCardShell, requestCardActionBtnClass } from './RequestCardShell';
 import type { PortalIssueItem } from './types';
 import {
@@ -198,7 +199,7 @@ export const IssuesAdminPanel: React.FC<{ onCountsChange?: () => void }> = ({ on
                 </div>
             </div>
 
-            <div className="glass-card p-4 md:p-6 shadow-2xl">
+            <div className={`${dashboardPanelClass} p-4 md:p-6`}>
                 <div className="flex flex-wrap gap-2 mb-5">
                     {filterTabs.map((tab) => (
                         <button

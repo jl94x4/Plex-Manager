@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Ban, ClipboardList } from 'lucide-react';
+import {
+    DashboardHero,
+    DashboardPageShell,
+    DashboardSubnav,
+    dashboardSubnavLinkClass,
+} from '../shared/dashboard/DashboardChrome';
 import { RequestsAdminPanel } from './RequestsAdminPanel';
 import { IssuesAdminPanel } from './IssuesAdminPanel';
 import { BlocklistAdminPanel } from './BlocklistAdminPanel';
@@ -21,33 +27,34 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
     });
 
     return (
-        <div className="w-full max-w-[100%] animate-fade-in">
-            <div className="flex flex-wrap gap-2 mb-6">
+        <DashboardPageShell>
+            <DashboardHero
+                accent="amber"
+                eyebrow="Requests"
+                title="Review queue"
+                description="Approve or decline portal requests, triage issues, and manage the blocklist."
+                icon={<ClipboardList className="h-3.5 w-3.5" />}
+                secondaryBlob
+            />
+
+            <DashboardSubnav className="!flex">
                 <button
                     type="button"
                     onClick={() => setTab('requests')}
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border transition-colors ${
-                        tab === 'requests'
-                            ? 'bg-plex/15 border-plex/40 text-text'
-                            : 'bg-white/[0.03] border-border text-muted hover:text-text hover:border-white/20'
-                    }`}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(tab === 'requests')}`}
                 >
-                    <ClipboardList className="w-4 h-4" />
+                    <ClipboardList className="h-4 w-4" />
                     Requests
                 </button>
                 <button
                     type="button"
                     onClick={() => setTab('issues')}
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border transition-colors ${
-                        tab === 'issues'
-                            ? 'bg-plex/15 border-plex/40 text-text'
-                            : 'bg-white/[0.03] border-border text-muted hover:text-text hover:border-white/20'
-                    }`}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(tab === 'issues')}`}
                 >
-                    <AlertTriangle className="w-4 h-4" />
+                    <AlertTriangle className="h-4 w-4" />
                     Issues
                     {openIssueCount > 0 && (
-                        <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-500 text-black text-[10px] font-black inline-flex items-center justify-center">
+                        <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-black text-black">
                             {openIssueCount > 99 ? '99+' : openIssueCount}
                         </span>
                     )}
@@ -55,16 +62,12 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
                 <button
                     type="button"
                     onClick={() => setTab('blocklist')}
-                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border transition-colors ${
-                        tab === 'blocklist'
-                            ? 'bg-plex/15 border-plex/40 text-text'
-                            : 'bg-white/[0.03] border-border text-muted hover:text-text hover:border-white/20'
-                    }`}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(tab === 'blocklist')}`}
                 >
-                    <Ban className="w-4 h-4" />
+                    <Ban className="h-4 w-4" />
                     Blocklist
                 </button>
-            </div>
+            </DashboardSubnav>
 
             {tab === 'requests' ? (
                 <RequestsAdminPanel
@@ -77,6 +80,6 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
             ) : (
                 <BlocklistAdminPanel />
             )}
-        </div>
+        </DashboardPageShell>
     );
 };

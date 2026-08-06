@@ -8,6 +8,7 @@ import { RequestApprovalModal } from './RequestApprovalModal';
 import { RequestCardActions, RequestCardShell, requestCardActionBtnClass } from './RequestCardShell';
 import { RequestMetaChips } from './RequestMetaChips';
 import { OpenInArrButton } from '../shared/OpenInArrButton';
+import { dashboardPanelClass } from '../shared/dashboard/DashboardChrome';
 import {
     type AdminRequestFilter,
     buildRequesterOptions,
@@ -375,7 +376,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
             </div>
             )}
 
-            <div className="glass-card p-4 md:p-6 shadow-2xl">
+            <div className={`${dashboardPanelClass} p-4 md:p-6`}>
                 <div className="flex flex-wrap gap-2 mb-4">
                     {filterTabs.map((tab) => (
                         <button
