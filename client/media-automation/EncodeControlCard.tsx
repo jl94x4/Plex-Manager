@@ -6,8 +6,9 @@ import {
     readSystemMetricsRefreshMs,
     SYSTEM_METRICS_REFRESH_EVENT,
 } from './systemMetricsRefresh';
+import { dashboardPanelClass } from '../shared/dashboard/DashboardChrome';
 
-const cardClass = 'glass-card shadow-xl';
+const panelClass = dashboardPanelClass;
 
 const compactButtonClass =
     'inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-black/25 px-3 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
@@ -196,7 +197,7 @@ export const EncodeControlCard: React.FC<Props> = ({ status, busy, onStart, onPa
         && String(status.workerState || status.state || '').toLowerCase() === 'running';
 
     return (
-        <section className={`${cardClass} relative overflow-hidden p-5`}>
+        <section className={`${panelClass} p-5`}>
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgb(var(--color-plex)_/_0.08),transparent_45%)]" />
             <div className="relative flex flex-col gap-4">
                 <div className="flex items-start justify-between gap-3">

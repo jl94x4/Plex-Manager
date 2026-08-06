@@ -46,6 +46,10 @@ const ACCENT: Record<DashboardAccent, {
     },
 };
 
+/** Shared gradient panel surface (matches DashboardPanel body). */
+export const dashboardPanelClass =
+    'relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-black/25 shadow-xl';
+
 export const dashboardGlowClass = (accent: DashboardAccent | string) => {
     const map: Record<string, string> = {
         plex: 'bg-plex/20',
@@ -152,7 +156,7 @@ export const DashboardPanel: React.FC<{
     children: React.ReactNode;
     className?: string;
 }> = ({ title, subtitle, badge, controls, children, className = '' }) => (
-    <section className={`relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-black/25 p-4 shadow-xl md:p-5 ${className}`.trim()}>
+    <section className={`${dashboardPanelClass} p-4 md:p-5 ${className}`.trim()}>
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">

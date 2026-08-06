@@ -37,6 +37,15 @@ import { ModalPortal } from '../shared/ModalPortal';
 import { askConfirm } from '../shared/confirm';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { portalUrl } from '../shared/basePath';
+import {
+    DashboardHero,
+    DashboardPageShell,
+    DashboardStatCard,
+    DashboardSubnav,
+    dashboardGlowClass,
+    dashboardPanelClass,
+    dashboardSubnavLinkClass,
+} from '../shared/dashboard/DashboardChrome';
 import { mediaAutomationApi } from './api';
 import { PathBrowserField } from './PathBrowserField';
 import { PipelineTemplatePicker } from './PipelineTemplatePicker';
@@ -602,7 +611,7 @@ const confirmBroadLibraryScan = async (roots: string[]) => {
 };
 
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
-const cardClass = 'glass-card shadow-xl';
+const panelClass = dashboardPanelClass;
 const listCardClass = 'rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent shadow-xl transition hover:border-plex/40';
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
@@ -836,6 +845,15 @@ const terminalJobCardTone = (job: MediaAutomationJob) => {
     return 'border-l-2 border-l-emerald-400/80 bg-emerald-500/[0.06]';
 };
 
+const statGlowFromTone = (tone: string) => {
+    if (tone.includes('amber')) return dashboardGlowClass('amber');
+    if (tone.includes('sky')) return dashboardGlowClass('sky');
+    if (tone.includes('emerald')) return dashboardGlowClass('emerald');
+    if (tone.includes('red')) return dashboardGlowClass('rose');
+    if (tone.includes('plex')) return dashboardGlowClass('plex');
+    return dashboardGlowClass('muted');
+};
+
 const StatCard: React.FC<{
     label: string;
     value: React.ReactNode;
@@ -843,19 +861,13 @@ const StatCard: React.FC<{
     icon: React.ReactNode;
     tone: string;
 }> = ({ label, value, hint, icon, tone }) => (
-    <div className={`relative overflow-hidden rounded-2xl border px-4 py-4 ${tone}`}>
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.06] via-transparent to-transparent" />
-        <div className="relative flex items-start justify-between gap-3">
-            <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-80">{label}</p>
-                <p className="mt-1.5 text-2xl font-black tracking-tight md:text-3xl">{value}</p>
-                {hint ? <p className="mt-1.5 text-[11px] opacity-70">{hint}</p> : null}
-            </div>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/20">
-                {icon}
-            </div>
-        </div>
-    </div>
+    <DashboardStatCard
+        label={label}
+        value={value}
+        hint={hint}
+        icon={icon}
+        glow={statGlowFromTone(tone)}
+    />
 );
 
 const GPU_ADAPTER_IDS = ['nvenc', 'qsv', 'intel-vaapi', 'vaapi'] as const;
@@ -1204,7 +1216,9 @@ export const MediaAutomationDashboard: React.FC = () => {
             editLibraryDeepLinkHandled.current = editLibrary;
             setTab('libraries');
             writeMediaAutomationTabHash('libraries');
-            if (match) setLibraryDraft({ ...emptyLibrary(), ...match });
+            if (match) {
+                setLibraryDraft({ ...emptyLibrary(), ...match });
+            }
             params.delete('editLibrary');
             params.delete('libraryId');
             const qs = params.toString();
@@ -1755,25 +1769,17 @@ export const MediaAutomationDashboard: React.FC = () => {
     }
 
     return (
-        <div className="flex w-full animate-fade-in flex-col gap-6 pb-10">
+        <DashboardPageShell>
             <ToastContainer toasts={toasts} setToasts={setToasts} />
-            <header className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-plex/15 via-background/40 to-sky-500/10 p-5 md:p-6">
-                <div className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-plex/20 blur-3xl" />
-                <div className="pointer-events-none absolute -bottom-20 left-10 h-40 w-40 rounded-full bg-sky-400/10 blur-3xl" />
-                <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="min-w-0">
-                        <div className="mb-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-plex">
-                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-plex/30 bg-plex/15">
-                                <ServerCog className="h-3.5 w-3.5" />
-                            </span>
-                            Media Automation
-                        </div>
-                        <h1 className="text-3xl font-black tracking-tight text-text md:text-4xl">Encode with control</h1>
-                        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted md:text-[15px]">
-                            Native FFmpeg pipelines for remux, HEVC, and cleanup - with a durable queue, hardware lanes, and safe dry-run until you are ready to encode.
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 self-start lg:self-auto">
+            <DashboardHero
+                accent="sky"
+                eyebrow="Media Automation"
+                title="Encode with control"
+                description="Native FFmpeg pipelines for remux, HEVC, and cleanup — with a durable queue, hardware lanes, and safe dry-run until you are ready to encode."
+                icon={<ServerCog className="h-3.5 w-3.5" />}
+                secondaryBlob
+                actions={(
+                    <>
                         <StatusPill value={workerStatusLabel(status)} size="md" />
                         {status.quietHoursActive && (
                             <span className="inline-flex items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-sky-200">
@@ -1782,15 +1788,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                         )}
                         {status.streamingPauseActive && (
                             <span className="inline-flex items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-amber-200">
-                                Paused - {Number(status.activeStreamCount) || 0} stream{(Number(status.activeStreamCount) || 0) === 1 ? '' : 's'} active
+                                Paused — {Number(status.activeStreamCount) || 0} stream{(Number(status.activeStreamCount) || 0) === 1 ? '' : 's'} active
                             </span>
                         )}
                         <button type="button" className={buttonClass} onClick={() => load(true)} disabled={refreshing}>
                             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
                         </button>
-                    </div>
-                </div>
-            </header>
+                    </>
+                )}
+            />
 
             {unavailable.length > 0 && (
                 <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
@@ -1803,7 +1809,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             )}
 
             <nav className="space-y-2">
-                <div className="relative sm:hidden">
+                <div className="relative md:hidden">
                     {(() => {
                         const active = tabs.find((entry) => entry.id === tab) || tabs[0];
                         const ActiveIcon = active.icon;
@@ -1843,22 +1849,18 @@ export const MediaAutomationDashboard: React.FC = () => {
                         );
                     })()}
                 </div>
-                <div className="hidden gap-1.5 sm:flex">
-                    {tabs.map(({ id, label, icon: Icon }) => (
-                        <button
-                            key={id}
-                            type="button"
-                            onClick={() => selectTab(id)}
-                            className={`inline-flex min-w-max items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-bold transition ${
-                                tab === id
-                                    ? 'border-plex/40 bg-plex/15 text-plex'
-                                    : 'border-white/10 bg-black/20 text-muted hover:border-white/20 hover:text-text'
-                            }`}
-                        >
-                            <Icon className="h-4 w-4" /> {label}
-                        </button>
-                    ))}
-                </div>
+                <DashboardSubnav>
+                        {tabs.map(({ id, label, icon: Icon }) => (
+                            <button
+                                key={id}
+                                type="button"
+                                onClick={() => selectTab(id)}
+                                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(tab === id)}`}
+                            >
+                                <Icon className="h-4 w-4" /> {label}
+                            </button>
+                        ))}
+                    </DashboardSubnav>
             </nav>
 
             {tab === 'overview' && (
@@ -1972,7 +1974,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         />
                     </div>
                     {(status.scanning || status.scanProgress?.running) && (
-                        <section className={`${cardClass} space-y-3 p-5`}>
+                        <section className={`${panelClass} space-y-3 p-5`}>
                             <div className="flex items-center justify-between gap-3">
                                 <div>
                                     <h2 className="font-bold text-text">Scan in progress</h2>
@@ -2012,7 +2014,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </section>
                     )}
                     {!!(status.recentScans || []).length && (
-                        <section className={`${cardClass} p-5`}>
+                        <section className={`${panelClass} p-5`}>
                             <h2 className="font-bold text-text">Recent scans</h2>
                             <div className="mt-3 space-y-2">
                                 {(status.recentScans || []).slice(0, 5).map((scan) => (
@@ -2027,7 +2029,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </section>
                     )}
                     {!!(status.deliveryTargets || []).length && (
-                        <section className={`${cardClass} p-5`}>
+                        <section className={`${panelClass} p-5`}>
                             <h2 className="font-bold text-text">Delivery targets</h2>
                             <p className="mt-1 text-sm text-muted">Cross-Unraid drop folders after successful encodes. Map the remote share into the container path below.</p>
                             <div className="mt-3 space-y-2">
@@ -2058,7 +2060,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </div>
                     )}
                     {showSkipPreview && (
-                        <section className={`${cardClass} p-5`}>
+                        <section className={`${panelClass} p-5`}>
                             <div className="flex items-start justify-between gap-3">
                                 <div>
                                     <h2 className="font-bold text-text">Last scan skip preview</h2>
@@ -2103,7 +2105,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </section>
                     )}
                     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-                                                <section className={`${cardClass} relative overflow-hidden p-0`}>
+                                                <section className={`${panelClass} relative overflow-hidden p-0`}>
                             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgb(var(--color-plex)_/_0.16),transparent_42%)]" />
                             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-plex/50 to-transparent" />
                             <div className="relative space-y-5 p-5 sm:p-6">
@@ -2337,7 +2339,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 })()}
                             </div>
                         </section>
-<section className={`${cardClass} relative overflow-hidden p-0`}>
+                        <section className={`${panelClass} relative overflow-hidden p-0`}>
                             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_100%_0%,rgb(var(--color-plex)_/_0.12),transparent_40%)]" />
                             <div className="relative space-y-4 p-5 sm:p-6">
                             <div className="flex items-center justify-between gap-3">
@@ -2449,7 +2451,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             onStart={() => runAction('control-start', () => mediaAutomationApi.control('start'), 'Encoding started.')}
                             onPause={() => runAction('control-pause', () => mediaAutomationApi.control('pause'), 'Encoding paused (queue only).')}
                         />
-                        <section className={`${cardClass} h-full p-5`}>
+                        <section className={`${panelClass} h-full p-5`}>
                             <h2 className="mb-4 font-bold text-text">Enqueue a path</h2>
                             <div className="space-y-3">
                                 <PathBrowserField
@@ -2501,7 +2503,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         />
                     ) : (
                         <div className="space-y-3">
-                            <section className={`${cardClass} p-4`}>
+                            <section className={`${panelClass} p-4`}>
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                     <div className="flex flex-wrap gap-2">
                                         <button
@@ -2607,7 +2609,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     </label>
                                 </div>
                             </section>
-                            <section className={`${cardClass} p-4`}>
+                            <section className={`${panelClass} p-4`}>
                                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                                     <label className="inline-flex items-center gap-2 text-sm font-semibold text-text">
                                         <input
@@ -2723,7 +2725,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 </p>
                             </section>
                             {filteredJobs.length === 0 ? (
-                                <div className={`${cardClass} p-6 text-center text-sm text-muted`}>
+                                <div className={`${panelClass} p-6 text-center text-sm text-muted`}>
                                     No jobs match this filter{queueSearch.trim() || queueLibraryFilter || queuePipelineFilter || queueErrorFilter.trim() ? ' / filters' : ''}.
                                 </div>
                             ) : (
@@ -2918,7 +2920,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         onAction={handleSetupAction}
                     />
                     {postSavePipeline && (
-                        <section className={`${cardClass} border-plex/30 p-5`}>
+                        <section className={`${panelClass} border-plex/30 p-5`}>
                             <div className="flex items-start justify-between gap-3">
                                 <div>
                                     <h2 className="font-bold text-text">Pipeline saved - next steps</h2>
@@ -2973,7 +2975,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </div>
                         </section>
                     )}
-                    <section className={`${cardClass} p-5`}>
+                    <section className={`${panelClass} p-5`}>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <h2 className="text-lg font-bold tracking-tight text-text">Your pipelines</h2>
@@ -3034,7 +3036,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </div>
                     </section>
                     {pipelines.length === 0 ? (
-                        <section className={`${cardClass} p-6`}>
+                        <section className={`${panelClass} p-6`}>
                             <div className="mx-auto max-w-2xl text-center">
                                 <Layers3 className="mx-auto h-10 w-10 text-plex" />
                                 <h3 className="mt-3 text-lg font-bold text-text">Create your first pipeline</h3>
@@ -3155,7 +3157,7 @@ export const MediaAutomationDashboard: React.FC = () => {
 
             {tab === 'libraries' && (
                 <div className="space-y-4">
-                    <section className={`${cardClass} p-5`}>
+                    <section className={`${panelClass} p-5`}>
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div>
                                 <h2 className="text-lg font-bold tracking-tight text-text">Your libraries</h2>
@@ -3247,7 +3249,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         </dl>
                     </section>
                     {libraries.length === 0 ? (
-                        <section className={`${cardClass} p-6`}>
+                        <section className={`${panelClass} p-6`}>
                             <div className="mx-auto max-w-2xl text-center">
                                 <FolderCog className="mx-auto h-10 w-10 text-plex" />
                                 <h3 className="mt-3 text-lg font-bold text-text">Map your first library</h3>
@@ -3554,7 +3556,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     .includes(needle);
                             })
                             .map((entry) => (
-                                <article key={entry.id} className={`${cardClass} space-y-2 p-4`}>
+                                <article key={entry.id} className={`${panelClass} space-y-2 p-4`}>
                                     <div className="flex flex-wrap items-start justify-between gap-3">
                                         <div className="min-w-0">
                                             <p
@@ -3615,7 +3617,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 </article>
                             ))}
                         {!historyEntries.length && (
-                            <p className={`${cardClass} p-5 text-sm text-muted`}>No history yet. Finished jobs will appear here.</p>
+                            <p className={`${panelClass} p-5 text-sm text-muted`}>No history yet. Finished jobs will appear here.</p>
                         )}
                     </div>
                 </div>
@@ -3679,7 +3681,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         />
                     ) : (
                         <>
-                            <div className={`${cardClass} divide-y divide-border/60 overflow-hidden`}>
+                            <div className={`${panelClass} divide-y divide-border/60 overflow-hidden`}>
                                 {pagedActivity.map((entry, index) => (
                                     <div
                                         key={String(entry.id ?? `${activityPage}-${index}`)}
@@ -4193,6 +4195,6 @@ export const MediaAutomationDashboard: React.FC = () => {
                 toast={toast}
                 onEnqueued={() => load(true)}
             />
-        </div>
+        </DashboardPageShell>
     );
 };

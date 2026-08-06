@@ -1,12 +1,18 @@
 import React from 'react';
-import { Compass, Eye, Library, ListOrdered, RefreshCw, ScrollText, Settings2 } from 'lucide-react';
+import { Compass, Eye, Image as ImageIcon, Library, ListOrdered, RefreshCw, ScrollText, Settings2 } from 'lucide-react';
 import { ToastContainer } from '../../shared/toast';
+import {
+    DashboardHero,
+    DashboardPageShell,
+    DashboardStatCard,
+    DashboardSubnav,
+    dashboardGlowClass,
+    dashboardSubnavLinkClass,
+} from '../../shared/dashboard/DashboardChrome';
 import { usePosterSetsDashboard } from '../PosterSetsDashboardContext';
 import { LibraryTitleDetailPanel } from '../LibraryTitleDetailPanel';
 import {
-    StatusPill,
     buttonClass,
-    cardClass,
     isDiscoverInternalTab,
     primaryButtonClass,
     DISCOVER_SUB_NAV,
@@ -52,54 +58,107 @@ export const PosterSetsShell: React.FC = () => {
     } = ctx;
 
     return (
-        <div className={`flex w-full min-w-0 animate-fade-in flex-col gap-4 sm:gap-6 ${selectedBulkCount > 0 || inspectorOpen ? 'pb-28' : 'pb-10'}`}>
+        <DashboardPageShell className={`${selectedBulkCount > 0 || inspectorOpen ? 'pb-28' : ''}`}>
                 <ToastContainer toasts={toasts} setToasts={setToasts} />
-            
-                <header className={`${cardClass} overflow-hidden p-4 sm:p-6`}>
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="min-w-0 max-w-3xl">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-plex sm:text-xs">Poster Sets</p>
-                            <h1 className="mt-1.5 text-xl font-bold tracking-tight text-text sm:mt-2 sm:text-3xl">Artwork from MediUX & ThePosterDB</h1>
-                            <p className="mt-1.5 text-xs leading-relaxed text-muted sm:mt-2 sm:text-sm">
-                                Start from your library, pick a title, preview poster sets, and apply.
-                                Search creators and browse rails in Discover. Queue, Watching, Logs, and settings stay one click away.
-                            </p>
-                        </div>
-                        <button type="button" className={`${buttonClass} shrink-0`} onClick={() => void load()} disabled={busy !== null}>
+
+                <DashboardHero
+                    accent="plex"
+                    eyebrow="Poster Sets"
+                    title="Artwork from MediUX & ThePosterDB"
+                    description="Start from your library, pick a title, preview poster sets, and apply. Search creators and browse rails in Discover — queue, watching, logs, and settings stay one click away."
+                    icon={<ImageIcon className="h-3.5 w-3.5" />}
+                    secondaryBlob
+                    actions={(
+                        <button type="button" className={buttonClass} onClick={() => void load()} disabled={busy !== null}>
                             <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> Refresh
                         </button>
-                    </div>
-                    <div className="mt-4 grid grid-cols-3 gap-2">
+                    )}
+                />
+
+                <div className="grid grid-cols-3 gap-3">
+                    {([
+                        {
+                            label: 'Worker',
+                            value: status?.workerReady ? 'Ready' : 'Missing',
+                            glow: status?.workerReady ? dashboardGlowClass('emerald') : dashboardGlowClass('rose'),
+                            icon: <Settings2 className="h-4 w-4 text-muted" />,
+                        },
+                        {
+                            label: 'Config',
+                            value: status?.configured ? 'Valid' : 'Setup',
+                            glow: status?.configured ? dashboardGlowClass('emerald') : dashboardGlowClass('amber'),
+                            icon: <Settings2 className="h-4 w-4 text-muted" />,
+                        },
+                        {
+                            label: 'Last job',
+                            value: String(status?.recentJobs?.[0]?.state || 'None'),
+                            glow: dashboardGlowClass('sky'),
+                            icon: <ListOrdered className="h-4 w-4 text-muted" />,
+                            hint: status?.recentJobs?.[0]
+                                ? `${status.recentJobs[0].type || 'job'} · ${status.recentJobs[0].state}`
+                                : 'No jobs yet',
+                        },
+                    ] as const).map((item) => (
+                        <DashboardStatCard
+                            key={item.label}
+                            label={item.label}
+                            value={item.value}
+                            hint={item.hint}
+                            icon={item.icon}
+                            glow={item.glow}
+                        />
+                    ))}
+                </div>
+
+                <div className="space-y-2">
+                    <DashboardSubnav>
                         {([
-                            {
-                                label: 'Worker',
-                                value: status?.workerReady ? 'Ready' : 'Missing',
-                            },
-                            {
-                                label: 'Config',
-                                value: status?.configured ? 'Valid' : 'Setup',
-                            },
-                            {
-                                label: 'Last job',
-                                value: status?.recentJobs?.[0]?.state || 'None',
-                                title: status?.recentJobs?.[0]
-                                    ? `${status.recentJobs[0].type || 'job'} · ${status.recentJobs[0].state}`
-                                    : 'No jobs yet',
-                            },
-                        ] as const).map((item) => (
-                            <div
-                                key={item.label}
-                                className="flex min-w-0 flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-2.5 sm:px-3"
-                                title={'title' in item ? item.title : undefined}
-                            >
-                                <p className="text-[10px] font-bold uppercase tracking-wide text-muted sm:text-[11px]">{item.label}</p>
-                                <StatusPill value={item.value} />
-                            </div>
-                        ))}
-                    </div>
-                </header>
-            
-                <div className="flex min-w-0 flex-wrap justify-start gap-1.5 sm:gap-2">
+                            ['library', 'Library', Library],
+                            ['discover', 'Discover', Compass],
+                            ['queue', 'Queue', ListOrdered],
+                            ['watches', 'Watching', Eye],
+                            ['logs', 'Logs', ScrollText],
+                            ['settings', 'Settings', Settings2],
+                        ] as const).map(([id, label, Icon]) => {
+                            const active = id === 'discover'
+                                ? isDiscoverInternalTab(tab)
+                                : tab === id;
+                            return (
+                                <button
+                                    key={id}
+                                    type="button"
+                                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(active)}`}
+                                    onClick={() => {
+                                        if (active && id === 'discover' && browseSeeAllId) {
+                                            openBrowseRail(null);
+                                            return;
+                                        }
+                                        if (active) return;
+                                        goToPrimaryTab(id);
+                                    }}
+                                >
+                                    <Icon className="h-4 w-4 shrink-0" />
+                                    <span>{label}</span>
+                                    {id === 'queue' && (queueStats.pending || 0) > 0 ? (
+                                        <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
+                                            {queueStats.pending}
+                                        </span>
+                                    ) : null}
+                                    {id === 'watches' && (watchStatsState.errored || 0) > 0 ? (
+                                        <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
+                                            {watchStatsState.errored}
+                                        </span>
+                                    ) : id === 'watches' && (watchStatsState.enabled || 0) > 0 ? (
+                                        <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
+                                            {watchStatsState.enabled}
+                                        </span>
+                                    ) : null}
+                                </button>
+                            );
+                        })}
+                    </DashboardSubnav>
+
+                    <div className="flex min-w-0 flex-wrap justify-start gap-1.5 md:hidden">
                     {([
                         ['library', 'Library', Library],
                         ['discover', 'Discover', Compass],
@@ -163,6 +222,8 @@ export const PosterSetsShell: React.FC = () => {
                         ))}
                     </div>
                 ) : null}
+                </div>
+
             <PosterSetsBrowseView />
             <PosterSetsLibraryView />
             <PosterSetsQueueView />
@@ -189,6 +250,6 @@ export const PosterSetsShell: React.FC = () => {
                     }}
                     onWatchAdded={() => void loadWatches()}
                 />
-        </div>
+        </DashboardPageShell>
     );
 };

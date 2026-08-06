@@ -8,8 +8,9 @@ import {
     setupChecklistComplete,
     type SetupChecklistStep,
 } from './pipelineUi';
+import { dashboardPanelClass } from '../shared/dashboard/DashboardChrome';
 
-const cardClass = 'glass-card shadow-xl';
+const cardClass = dashboardPanelClass;
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40';
 

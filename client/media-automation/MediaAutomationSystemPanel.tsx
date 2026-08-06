@@ -12,8 +12,9 @@ import {
     writeSystemMetricsRefreshMs,
     type SystemMetricsRefreshMs,
 } from './systemMetricsRefresh';
+import { dashboardPanelClass } from '../shared/dashboard/DashboardChrome';
 
-const cardClass = 'glass-card shadow-xl';
+const cardClass = dashboardPanelClass;
 const HISTORY_LEN = 36;
 
 const formatBytes = (value?: number) => {
