@@ -47,6 +47,15 @@ const ACCENT: Record<DashboardAccent, {
 };
 
 /** Shared gradient panel surface (matches DashboardPanel body). */
+const HERO_CORNER_GLOW: Record<DashboardAccent, string> = {
+    plex: 'bg-[radial-gradient(circle_at_100%_0%,rgb(var(--color-plex)_/_0.20),transparent_58%)]',
+    sky: 'bg-[radial-gradient(circle_at_100%_0%,rgb(56_189_248_/_0.18),transparent_58%)]',
+    amber: 'bg-[radial-gradient(circle_at_100%_0%,rgb(251_191_36_/_0.18),transparent_58%)]',
+    emerald: 'bg-[radial-gradient(circle_at_100%_0%,rgb(52_211_153_/_0.18),transparent_58%)]',
+    violet: 'bg-[radial-gradient(circle_at_100%_0%,rgb(167_139_250_/_0.18),transparent_58%)]',
+    rose: 'bg-[radial-gradient(circle_at_100%_0%,rgb(251_113_133_/_0.18),transparent_58%)]',
+};
+
 export const dashboardPanelClass =
     'relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-black/25 shadow-xl';
 
@@ -61,6 +70,27 @@ export const dashboardGlowClass = (accent: DashboardAccent | string) => {
         muted: 'bg-white/10',
     };
     return map[accent] || map.muted;
+};
+
+/** Corner glow for stat cards — radial gradients respect rounded corners (no blur clip artifacts). */
+const statGlowGradient = (glow: string) => {
+    const raw = String(glow || '').toLowerCase();
+    const gradients: Record<string, string> = {
+        plex: 'bg-[radial-gradient(circle_at_100%_0%,rgb(var(--color-plex)_/_0.28),transparent_72%)]',
+        sky: 'bg-[radial-gradient(circle_at_100%_0%,rgb(56_189_248_/_0.26),transparent_72%)]',
+        amber: 'bg-[radial-gradient(circle_at_100%_0%,rgb(251_191_36_/_0.26),transparent_72%)]',
+        emerald: 'bg-[radial-gradient(circle_at_100%_0%,rgb(52_211_153_/_0.26),transparent_72%)]',
+        violet: 'bg-[radial-gradient(circle_at_100%_0%,rgb(167_139_250_/_0.26),transparent_72%)]',
+        rose: 'bg-[radial-gradient(circle_at_100%_0%,rgb(251_113_133_/_0.26),transparent_72%)]',
+        muted: 'bg-[radial-gradient(circle_at_100%_0%,rgb(255_255_255_/_0.10),transparent_72%)]',
+    };
+    if (raw.includes('amber')) return gradients.amber;
+    if (raw.includes('sky')) return gradients.sky;
+    if (raw.includes('emerald')) return gradients.emerald;
+    if (raw.includes('violet')) return gradients.violet;
+    if (raw.includes('rose') || raw.includes('red')) return gradients.rose;
+    if (raw.includes('plex')) return gradients.plex;
+    return gradients.muted;
 };
 
 export const DashboardPageShell: React.FC<{ children: React.ReactNode; className?: string }> = ({
@@ -92,9 +122,9 @@ export const DashboardHero: React.FC<{
     const tone = ACCENT[accent];
     return (
         <div className={`relative overflow-hidden rounded-2xl border border-white/10 ${tone.heroGradient} p-5 md:p-6`}>
-            <div className={`pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full blur-3xl ${tone.blob}`} />
+            <div className={`pointer-events-none absolute inset-0 rounded-[inherit] ${HERO_CORNER_GLOW[accent]}`} />
             {secondaryBlob ? (
-                <div className="pointer-events-none absolute -bottom-20 -left-16 h-48 w-48 rounded-full bg-plex/5 blur-3xl" />
+                <div className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[radial-gradient(circle_at_0%_100%,rgb(var(--color-plex)_/_0.10),transparent_55%)]" />
             ) : null}
             <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                 <div className="min-w-0">
@@ -131,18 +161,20 @@ export const DashboardStatCard: React.FC<{
     glow?: string;
     valueClassName?: string;
 }> = ({ label, value, hint, icon, glow = 'bg-white/10', valueClassName = '' }) => (
-    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 px-4 py-4">
-        <div className={`pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full blur-2xl ${glow}`} />
-        <div className="relative flex items-start justify-between gap-3">
-            <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">{label}</p>
-                <p className={`mt-1.5 text-2xl font-black tabular-nums tracking-tight text-text md:text-3xl ${valueClassName}`.trim()}>
-                    {value}
-                </p>
-                {hint ? <p className="mt-1 text-[11px] text-muted">{hint}</p> : null}
-            </div>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
-                {icon}
+    <div className="relative isolate overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.045] to-black/45 shadow-lg">
+        <div className={`pointer-events-none absolute inset-0 rounded-[inherit] ${statGlowGradient(glow)}`} />
+        <div className="relative px-4 py-4">
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">{label}</p>
+                    <p className={`mt-1.5 text-2xl font-black tabular-nums tracking-tight text-text md:text-3xl ${valueClassName}`.trim()}>
+                        {value}
+                    </p>
+                    {hint ? <p className="mt-1 text-[11px] text-muted">{hint}</p> : null}
+                </div>
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30">
+                    {icon}
+                </div>
             </div>
         </div>
     </div>
