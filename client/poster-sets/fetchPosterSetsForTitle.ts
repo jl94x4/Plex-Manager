@@ -156,11 +156,12 @@ async function fetchBothSetsProgressive(
         fallbackMedia: 'show' | 'movie';
         titleHint: string;
         yearHint: number | null;
+        posterdbSource?: TitleSource;
         onPartial?: (result: PosterSetsSearchResult) => void;
     },
 ): Promise<PosterSetsSearchResult> {
     const workTitle = options.titleHint;
-    const posterdbSource: TitleSource = {
+    const posterdbSource: TitleSource = options.posterdbSource || {
         provider: 'posterdb',
         id: '',
         url: '',
@@ -339,9 +340,10 @@ async function fetchPosterdbSets(
 
     const finalize = (response: PosterSetsSearchResult) => filterResultForWork(response, titleHint);
 
+    const explicitUrl = Boolean(String(source.url || '').trim());
     let response = finalize(await runSearch({
-        titleUrl: tmdbId ? undefined : (source.url || undefined),
-        tmdbId,
+        titleUrl: explicitUrl ? source.url : undefined,
+        tmdbId: explicitUrl ? undefined : tmdbId,
     }));
     if ((response.sets?.length || 0) > 0) return response;
 
@@ -483,12 +485,21 @@ export async function fetchPosterSetsForTitle(
     );
 
     if (useProgressive && linkedTmdbId) {
+        const posterdbFromSources = sources.find((entry) => (
+            entry.provider === 'posterdb' && (entry.url || entry.id)
+        ));
         response = await fetchBothSetsProgressive(linkedTmdbId, {
             dupePreference,
             preferredCreators: options.preferredCreators,
             fallbackMedia,
             titleHint: titleHint || title.title,
             yearHint,
+            posterdbSource: posterdbFromSources || {
+                provider: 'posterdb',
+                id: '',
+                url: '',
+                mediaType: fallbackMedia,
+            },
             onPartial: options.onPartial,
         });
     } else if (sources.length > 1) {

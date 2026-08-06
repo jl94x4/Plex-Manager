@@ -140,7 +140,10 @@ export const filterSetsForWork = <T extends { title?: string | null }>(
 ): T[] => {
     const list = Array.isArray(sets) ? sets : [];
     if (!workTitle.trim()) return list;
-    return list.filter((set) => setTitleMatchesWork(workTitle, String(set?.title || '')));
+    const filtered = list.filter((set) => setTitleMatchesWork(workTitle, String(set?.title || '')));
+    // TPDB set cards often show creator handles (@user) — don't discard a whole title page.
+    if (filtered.length === 0 && list.length > 0) return list;
+    return filtered;
 };
 
 const rankTitleCandidate = (

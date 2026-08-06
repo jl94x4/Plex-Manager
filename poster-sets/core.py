@@ -2045,12 +2045,26 @@ def _parse_posterdb_title_links(soup, *, limit: int = 24, html: str = "") -> lis
         year_match = re.search(r"\((\d{4}|N/A)\)\s*$", title)
         if year_match and year_match.group(1).isdigit():
             year = int(year_match.group(1))
+        thumb = ""
+        for candidate in (anchor, anchor.parent):
+            if not candidate:
+                continue
+            img = candidate.find("img") if hasattr(candidate, "find") else None
+            if not img:
+                continue
+            thumb = str(img.get("data-src") or img.get("src") or "").strip()
+            if thumb.startswith("/"):
+                thumb = _absolute_url("https://theposterdb.com", thumb)
+            if thumb and "missing_poster" not in thumb:
+                break
+            thumb = ""
         titles.append(
             {
                 "id": posters_id,
                 "title": title,
                 "year": year,
                 "url": _absolute_url("https://theposterdb.com", href.split("?")[0]),
+                "thumbUrl": thumb,
                 "mediaType": None,
                 "provider": "posterdb",
             }
@@ -2081,6 +2095,53 @@ def _parse_posterdb_title_links(soup, *, limit: int = 24, html: str = "") -> lis
         if len(titles) >= max(1, int(limit or 24)):
             break
     return titles
+
+
+def _posterdb_pick_thumb_from_soup(soup) -> str:
+    if not soup:
+        return ""
+    og = soup.find("meta", property="og:image")
+    if og and og.get("content"):
+        thumb = str(og.get("content") or "").strip()
+        if thumb:
+            if thumb.startswith("/"):
+                thumb = _absolute_url("https://theposterdb.com", thumb)
+            if "missing_poster" not in thumb:
+                return thumb
+    for img in soup.select("img[src], img[data-src]"):
+        src = str(img.get("data-src") or img.get("src") or "").strip()
+        if not src or "missing_poster" in src:
+            continue
+        if "logo" in src.lower() and "poster" not in src.lower():
+            continue
+        if src.startswith("/"):
+            src = _absolute_url("https://theposterdb.com", src)
+        return src
+    return ""
+
+
+def _posterdb_enrich_title_thumbs(
+    titles: list[dict],
+    *,
+    config: dict | None = None,
+    progress: ProgressFn = None,
+    limit: int = 12,
+) -> None:
+    """Fill missing search-result thumbs by probing each /posters/ page."""
+    take = max(1, int(limit or 12))
+    for item in titles[:take]:
+        if str(item.get("thumbUrl") or "").strip():
+            continue
+        url = str(item.get("url") or "").strip()
+        if not url:
+            continue
+        try:
+            soup = cook_soup(url, config=config, timeout=18)
+            thumb = _posterdb_pick_thumb_from_soup(soup)
+            if thumb:
+                item["thumbUrl"] = thumb
+        except Exception as exc:
+            emit(progress, f"ThePosterDB thumb probe failed for {url}: {exc}")
 
 
 def _posterdb_probe_title_page(url: str, *, config: dict | None = None) -> dict:
@@ -2500,6 +2561,36 @@ def resolve_posterdb_title_page(
                 if url:
                     return _finish({**item, "url": url, "setCount": int(item.get("setCount") or 0)})
 
+    # TMDB pin + strict year can miss the right page when catalog year differs (e.g. 2026 vs 2024).
+    if best_item is None and target_tmdb and year is not None:
+        title_hint_str = bare_title or clean_title or clean_query
+        for item in ordered[:max_probes]:
+            if not _posterdb_title_matches_hint(
+                item.get("title") or "",
+                item.get("year"),
+                title_hint=title_hint_str,
+                year_hint=None,
+                media_type=media_type,
+            ):
+                continue
+            url = str(item.get("url") or "").strip()
+            if not url:
+                continue
+            try:
+                probe = _posterdb_probe_title_page(url, config=config)
+            except Exception:
+                continue
+            media_id = probe.get("mediaId")
+            if media_id and str(media_id) != target_tmdb:
+                continue
+            best_item = {
+                **item,
+                "url": url,
+                "tmdbId": media_id or target_tmdb,
+                "setCount": int(probe.get("setCount") or 0),
+            }
+            break
+
     return _finish(best_item)
 
 
@@ -2668,12 +2759,14 @@ def search_posterdb_titles(
         titles = exact + rest
 
     take = max(1, int(limit or 24))
+    trimmed = titles[:take]
+    _posterdb_enrich_title_thumbs(trimmed, config=config, progress=progress, limit=min(take, 12))
     return {
         "ok": True,
         "provider": "posterdb",
         "phase": "titles",
         "query": term,
-        "titles": titles[:take],
+        "titles": trimmed,
         "sets": [],
     }
 
@@ -2691,8 +2784,10 @@ def list_posterdb_sets(
     year_hint: int | None = None,
     media_type: str = "show",
     _depth: int = 0,
+    explicit_title_url: bool = False,
 ) -> dict:
     url = str(title_url or "").strip()
+    explicit_url = explicit_title_url or bool(url)
     year_val = year_hint
     if year_val is not None and not isinstance(year_val, int):
         try:
@@ -2703,7 +2798,7 @@ def list_posterdb_sets(
     fallback_url = url
     depth = max(0, int(_depth or 0))
 
-    if url and target_tmdb:
+    if url and target_tmdb and not explicit_url:
         try:
             probe = _posterdb_probe_title_page(url, config=config)
             page_tmdb = str(probe.get("mediaId") or "").strip()
@@ -2780,6 +2875,7 @@ def list_posterdb_sets(
                     year_hint=year_val,
                     media_type=media_type,
                     _depth=depth + 1,
+                    explicit_title_url=explicit_url,
                 )
 
         poster_fallback = _collect_posterdb_show_posters(soup, limit=limit, page_title=page_title)
@@ -2792,8 +2888,20 @@ def list_posterdb_sets(
             item["title"] = page_title or f"Set {item['setId']}"
 
     # Last-line guard: if we somehow opened a fuzzy TPDB page, drop unrelated set cards.
+    # Skip when the title page itself matches the work — set cards often label creator handles.
     hint = str(title_hint or "").strip()
-    if hint and results:
+    page_matches_hint = bool(
+        hint
+        and page_title
+        and _posterdb_title_matches_hint(
+            page_title,
+            year_val,
+            title_hint=hint,
+            year_hint=year_val,
+            media_type=media_type,
+        )
+    )
+    if hint and results and not page_matches_hint and not explicit_url:
         hint_tokens = [
             tok
             for tok in re.sub(r"[^a-z0-9]+", " ", hint.lower()).split()
@@ -3699,6 +3807,7 @@ def search_catalog(
                 title_hint=title_hint,
                 year_hint=year_val,
                 media_type=media_type,
+                explicit_title_url=True,
             )
         search_term = str(query or title_hint or "").strip()
         if not search_term:
@@ -3735,9 +3844,38 @@ def search_catalog(
                     title_hint=title_hint or search_term,
                     year_hint=year_val,
                     media_type=media_type,
+                    explicit_title_url=True,
                 )
             except Exception as exc:
                 emit(progress, f"ThePosterDB set load failed: {exc}")
+        for item in titles:
+            alt_url = str(item.get("url") or "").strip()
+            if not alt_url or alt_url == picked_url:
+                continue
+            if not _posterdb_title_matches_hint(
+                item.get("title") or "",
+                item.get("year"),
+                title_hint=title_hint or search_term,
+                year_hint=year_val,
+                media_type=media_type,
+            ):
+                continue
+            try:
+                return list_posterdb_sets(
+                    alt_url,
+                    progress=progress,
+                    limit=limit,
+                    config=config,
+                    tmdb_id=None,
+                    imdb_id=imdb_id,
+                    tvdb_id=tvdb_id,
+                    title_hint=title_hint or search_term,
+                    year_hint=year_val,
+                    media_type=media_type,
+                    explicit_title_url=True,
+                )
+            except Exception as exc:
+                emit(progress, f"ThePosterDB set load failed for {alt_url}: {exc}")
         return result
 
     if tmdb_id:
