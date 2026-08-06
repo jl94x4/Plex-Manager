@@ -2104,6 +2104,123 @@ def _posterdb_advanced_category(media_type: str = "show") -> str:
     return "All"
 
 
+def _posterdb_is_show(media_type: str = "show") -> bool:
+    raw = str(media_type or "show").strip().lower()
+    return raw in {"show", "shows", "tv", "series"}
+
+
+def _posterdb_resolve_probe_limit(
+    media_type: str = "show",
+    *,
+    target_tmdb: str | None = None,
+    default: int = 10,
+) -> int:
+    """Shows need more probes — same-name hits bury the correct /posters/ page."""
+    limit = max(1, int(default or 10))
+    if not target_tmdb:
+        return min(limit, 8)
+    if _posterdb_is_show(media_type):
+        return min(limit, 12)
+    return min(limit, 8)
+
+
+def _posterdb_advanced_resolve_by_ids(
+    config: dict | None,
+    *,
+    tmdb_id: str | int | None = None,
+    imdb_id: str | None = None,
+    tvdb_id: str | int | None = None,
+    category: str = "Shows",
+    media_type: str = "show",
+    progress: ProgressFn = None,
+    limit: int = 24,
+    merge_candidates: dict[str, dict] | None = None,
+) -> Optional[dict]:
+    """Resolve a canonical /posters/ page via separate id-only advanced queries.
+
+    TPDB advanced search is more reliable with one id per request than combined
+    tmdb+tvdb+imdb params (especially for TV shows).
+    """
+    if not _posterdb_has_credentials(config):
+        return None
+    target_tmdb = str(tmdb_id or "").strip() or None
+    target_tvdb = str(tvdb_id or "").strip() or None
+    clean_imdb = str(imdb_id or "").strip() or None
+
+    id_specs: list[tuple[str, dict[str, str]]] = []
+    if _posterdb_is_show(media_type):
+        if target_tvdb:
+            id_specs.append(("tvdb", {"tvdb_id": target_tvdb}))
+        if target_tmdb:
+            id_specs.append(("tmdb", {"tmdb_id": target_tmdb}))
+        if clean_imdb:
+            id_specs.append(("imdb", {"imdb_id": clean_imdb}))
+    else:
+        if target_tmdb:
+            id_specs.append(("tmdb", {"tmdb_id": target_tmdb}))
+        if clean_imdb:
+            id_specs.append(("imdb", {"imdb_id": clean_imdb}))
+        if target_tvdb:
+            id_specs.append(("tvdb", {"tvdb_id": target_tvdb}))
+
+    categories = [category]
+    if category != "All":
+        categories.append("All")
+
+    def _merge_batch(batch: list[dict]) -> None:
+        if merge_candidates is None:
+            return
+        for item in batch:
+            pid = str(item.get("id") or "")
+            if pid and pid not in merge_candidates:
+                merge_candidates[pid] = item
+
+    def _accept_item(item: dict, *, trust_singleton: bool) -> Optional[dict]:
+        url = str(item.get("url") or "").strip()
+        if not url:
+            return None
+        try:
+            probe = _posterdb_probe_title_page(url, config=config)
+        except Exception:
+            probe = {}
+        page_tmdb = str(probe.get("mediaId") or "").strip() or None
+        set_count = int(probe.get("setCount") or 0)
+        if target_tmdb and page_tmdb and page_tmdb != target_tmdb:
+            return None
+        if target_tmdb and not page_tmdb and not trust_singleton:
+            return None
+        return {
+            **item,
+            "url": url,
+            "tmdbId": page_tmdb or target_tmdb,
+            "setCount": set_count,
+        }
+
+    for _kind, id_params in id_specs:
+        for category_value in categories:
+            batch = search_posterdb_advanced_titles(
+                config,
+                term="",
+                category=category_value,
+                progress=progress,
+                limit=limit,
+                **id_params,
+            )
+            if not batch:
+                continue
+            _merge_batch(batch)
+            if len(batch) == 1:
+                accepted = _accept_item(batch[0], trust_singleton=True)
+                if accepted:
+                    return accepted
+            if target_tmdb:
+                for item in batch:
+                    accepted = _accept_item(item, trust_singleton=False)
+                    if accepted and str(accepted.get("tmdbId") or "") == target_tmdb:
+                        return accepted
+    return None
+
+
 def search_posterdb_advanced_titles(
     config: dict | None,
     *,
@@ -2197,6 +2314,12 @@ def resolve_posterdb_title_page(
     category = _posterdb_advanced_category(media_type)
     want_key = _posterdb_title_match_key(bare_title or clean_title or clean_query, year)
     has_creds = _posterdb_has_credentials(config)
+    if target_tmdb and not has_creds:
+        emit(
+            progress,
+            "ThePosterDB login not configured — show matching uses public text search only. "
+            "Add TPDB credentials in Poster Sets settings for TMDB/TVDB id resolve.",
+        )
 
     def _accept_year_hit(item: dict) -> Optional[dict]:
         url = str(item.get("url") or "").strip()
@@ -2224,40 +2347,21 @@ def resolve_posterdb_title_page(
             }
         return None
 
-    # When logged in, TMDB advanced search is one request — try it before multi-page text search.
+    # When logged in, resolve by external ids before multi-page text search.
     if has_creds and (target_tmdb or imdb_id or tvdb_id):
-        advanced_queries: list[tuple[str, str]] = [("", category)]
-        if category != "All":
-            advanced_queries.append(("", "All"))
-        for term_value, category_value in advanced_queries:
-            batch = search_posterdb_advanced_titles(
-                config,
-                tmdb_id=target_tmdb,
-                imdb_id=imdb_id,
-                tvdb_id=tvdb_id,
-                term=term_value,
-                category=category_value,
-                progress=progress,
-                limit=limit,
-            )
-            for item in batch:
-                pid = str(item.get("id") or "")
-                if pid and pid not in candidates:
-                    candidates[pid] = item
-                url = str(item.get("url") or "").strip()
-                if not url or not target_tmdb:
-                    continue
-                try:
-                    probe = _posterdb_probe_title_page(url, config=config)
-                except Exception:
-                    continue
-                if str(probe.get("mediaId") or "") == target_tmdb:
-                    return _finish({
-                        **item,
-                        "url": url,
-                        "tmdbId": probe.get("mediaId"),
-                        "setCount": int(probe.get("setCount") or 0),
-                    })
+        advanced_hit = _posterdb_advanced_resolve_by_ids(
+            config,
+            tmdb_id=target_tmdb,
+            imdb_id=imdb_id,
+            tvdb_id=tvdb_id,
+            category=category,
+            media_type=media_type,
+            progress=progress,
+            limit=limit,
+            merge_candidates=candidates,
+        )
+        if advanced_hit:
+            return _finish(advanced_hit)
 
     # Fast path: parallel paginated text search for exact title+year (no login required).
     if year is not None and bare_title:
@@ -2312,9 +2416,11 @@ def resolve_posterdb_title_page(
 
     best_item: Optional[dict] = None
     best_score: tuple[int, int, int, int] = (-1, -1, -1, -1)
-    max_probes = max(1, int(probe_limit or 10))
-    if target_tmdb:
-        max_probes = min(max_probes, 4)
+    max_probes = _posterdb_resolve_probe_limit(
+        media_type,
+        target_tmdb=target_tmdb,
+        default=int(probe_limit or 10),
+    )
 
     ordered = list(candidates.values())
     if want_key and not want_key.startswith("|"):
@@ -2623,7 +2729,7 @@ def list_posterdb_sets(
             config=config,
             progress=progress,
             limit=limit,
-            probe_limit=4 if target_tmdb else 8,
+            probe_limit=_posterdb_resolve_probe_limit(media_type, target_tmdb=target_tmdb),
         )
         resolved_url = str(resolved.get("url") or "").strip() if resolved else ""
         if resolved_url:
