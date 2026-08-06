@@ -72,10 +72,9 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
 
             bar.style.position = 'fixed';
             bar.style.left = '0px';
-            bar.style.right = 'auto';
-            // 100% excludes Firefox's visible scrollbar gutter; 100vw does not.
-            bar.style.width = '100vw';
-            bar.style.maxWidth = 'none';
+            bar.style.right = '0px';
+            bar.style.width = '';
+            bar.style.maxWidth = '';
             bar.style.margin = '0';
             bar.style.bottom = 'auto';
             bar.style.top = `${top}px`;

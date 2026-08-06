@@ -179,6 +179,19 @@
 
   body {
     @apply bg-background text-text font-sans antialiased transition-colors duration-200;
+    overflow-x: clip;
+    max-width: 100%;
+  }
+
+  html {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+
+  #root {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
   }
 
   input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"] {
@@ -1247,8 +1260,8 @@ html.branded-skeleton .skeleton-base::after {
 /* Portal page gutters — 4px on mobile, comfortable on desktop */
 @layer utilities {
   .page-x {
-    padding-left: max(4px, env(safe-area-inset-left, 0px));
-    padding-right: max(4px, env(safe-area-inset-right, 0px));
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
   }
 
   @media (min-width: 768px) {
@@ -1259,11 +1272,12 @@ html.branded-skeleton .skeleton-base::after {
   }
 
   .page-bleed-x {
-    margin-left: calc(-1 * max(4px, env(safe-area-inset-left, 0px)));
-    margin-right: calc(-1 * max(4px, env(safe-area-inset-right, 0px)));
+    margin-left: calc(-1 * max(12px, env(safe-area-inset-left, 0px)));
+    margin-right: calc(-1 * max(12px, env(safe-area-inset-right, 0px)));
     width: calc(
-      100% + max(4px, env(safe-area-inset-left, 0px)) + max(4px, env(safe-area-inset-right, 0px))
+      100% + max(12px, env(safe-area-inset-left, 0px)) + max(12px, env(safe-area-inset-right, 0px))
     );
+    max-width: 100vw;
   }
 
   @media (min-width: 768px) {
