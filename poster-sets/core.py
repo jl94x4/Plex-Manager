@@ -586,6 +586,10 @@ def _posterdb_resolve_cache_get(key: str) -> tuple[bool, Optional[dict]]:
 
 
 def _posterdb_resolve_cache_set(key: str, value: Optional[dict]) -> None:
+    # Never negative-cache — auth flakes / empty advanced search must not poison retries.
+    if value is None:
+        _POSTERDB_RESOLVE_CACHE.pop(key, None)
+        return
     _POSTERDB_RESOLVE_CACHE[key] = (time.time(), value)
     # Bound memory — drop oldest entries when oversized.
     if len(_POSTERDB_RESOLVE_CACHE) > 128:
@@ -2453,6 +2457,12 @@ def resolve_posterdb_title_page(
         )
         if advanced_hit:
             return _finish(advanced_hit)
+        if target_tmdb:
+            emit(
+                progress,
+                f"ThePosterDB advanced search found no /posters/ page for TMDB {target_tmdb} — "
+                "trying public text search (check TPDB Pro / session if this keeps failing).",
+            )
 
     # Fast path: parallel paginated text search for exact title+year (no login required).
     if year is not None and bare_title:
@@ -2464,7 +2474,7 @@ def resolve_posterdb_title_page(
             media_type=media_type,
             _skip_resolve=True,
             year_hint=year,
-            max_pages=3,
+            max_pages=5 if target_tmdb else 3,
         )
         for item in text.get("titles") or []:
             pid = str(item.get("id") or "")
@@ -2682,12 +2692,12 @@ def search_posterdb_titles(
         year_match = re.search(r"(?:\(|^|\s)(19\d{2}|20\d{2})(?:\)|$|\s)", term)
         if year_match:
             year_val = int(year_match.group(1))
-    # Ambiguous titles (Sisters, etc.) bury the matching year on later pages.
-    # Cap at 3 and fetch in parallel — usually enough, much faster than serial page walks.
+    # Ambiguous titles bury the matching year on later pages. When TMDB is pinned,
+    # walk further — franchise spin-offs often sit past page 3 in public search.
     pages = max(1, int(max_pages or 1))
     if year_val is not None or tmdb_id:
         pages = max(pages, 3)
-    pages = min(pages, 3)
+    pages = min(pages, 8 if tmdb_id else 3)
 
     titles: list[dict] = []
     seen: set[str] = set()
@@ -2731,7 +2741,7 @@ def search_posterdb_titles(
         page_batches[page_num] = batch
     else:
         # Parallel page fetch — Sisters (2015) lives on page 2; one round-trip beats serial walking.
-        with ThreadPoolExecutor(max_workers=min(pages, 3)) as pool:
+        with ThreadPoolExecutor(max_workers=min(pages, 5)) as pool:
             futures = [pool.submit(_fetch_page, page) for page in range(1, pages + 1)]
             for future in as_completed(futures):
                 try:
@@ -2804,10 +2814,25 @@ def search_posterdb_titles(
     }
 
 
+def _posterdb_max_page(soup) -> int:
+    max_page = 1
+    if not soup:
+        return max_page
+    for anchor in soup.find_all("a", href=True):
+        href = str(anchor.get("href") or "")
+        match = re.search(r"[?&]page=(\d+)", href)
+        if match:
+            max_page = max(max_page, int(match.group(1)))
+        text = anchor.get_text(" ", strip=True)
+        if text.isdigit():
+            max_page = max(max_page, int(text))
+    return min(max_page, 50)
+
+
 def list_posterdb_sets(
     title_url: str,
     progress: ProgressFn = None,
-    limit: int = 40,
+    limit: int = 500,
     *,
     config: dict | None = None,
     tmdb_id: str | int | None = None,
@@ -2820,7 +2845,8 @@ def list_posterdb_sets(
     explicit_title_url: bool = False,
 ) -> dict:
     url = str(title_url or "").strip()
-    explicit_url = explicit_title_url or bool(url)
+    # Only user-pasted URLs are explicit — resolved pages must still validate TMDB.
+    explicit_url = bool(explicit_title_url)
     year_val = year_hint
     if year_val is not None and not isinstance(year_val, int):
         try:
@@ -2830,6 +2856,7 @@ def list_posterdb_sets(
     target_tmdb = str(tmdb_id or "").strip() or None
     fallback_url = url
     depth = max(0, int(_depth or 0))
+    take = max(1, min(500, int(limit or 500)))
 
     if url and target_tmdb and not explicit_url:
         try:
@@ -2856,7 +2883,7 @@ def list_posterdb_sets(
             media_type=media_type,
             config=config,
             progress=progress,
-            limit=limit,
+            limit=take,
             probe_limit=_posterdb_resolve_probe_limit(media_type, target_tmdb=target_tmdb),
         )
         resolved_url = str(resolved.get("url") or "").strip() if resolved else ""
@@ -2886,12 +2913,77 @@ def list_posterdb_sets(
         if heading:
             page_title = heading.get_text(" ", strip=True)
     page_media_id, _ = _posterdb_page_media(soup)
+
+    # Reject wrong title pages even after resolve (stale alsoOn URLs, fuzzy search).
+    if (
+        target_tmdb
+        and page_media_id
+        and str(page_media_id) != target_tmdb
+        and not explicit_url
+        and depth < 1
+    ):
+        emit(
+            progress,
+            f"ThePosterDB page TMDB {page_media_id} ≠ {target_tmdb} — re-resolving…",
+        )
+        resolved = resolve_posterdb_title_page(
+            query=title_hint or page_title,
+            title=title_hint or page_title,
+            year=year_val,
+            tmdb_id=target_tmdb,
+            imdb_id=imdb_id,
+            tvdb_id=tvdb_id,
+            media_type=media_type,
+            config=config,
+            progress=progress,
+            limit=take,
+        )
+        alt_url = str(resolved.get("url") or "").strip() if resolved else ""
+        if alt_url and alt_url.rstrip("/") != url.rstrip("/"):
+            return list_posterdb_sets(
+                alt_url,
+                progress=progress,
+                limit=take,
+                config=config,
+                tmdb_id=target_tmdb,
+                imdb_id=imdb_id,
+                tvdb_id=tvdb_id,
+                title_hint=title_hint or page_title,
+                year_hint=year_val,
+                media_type=media_type,
+                _depth=depth + 1,
+                explicit_title_url=False,
+            )
+
     sets: dict = {}
-    _collect_posterdb_set_cards(soup, sets=sets, limit=limit)
+    _collect_posterdb_set_cards(soup, sets=sets, limit=take)
+
+    # Walk title-page pagination when TPDB splits set cards across pages.
+    base_url = url.split("?", 1)[0].rstrip("/")
+    max_page = _posterdb_max_page(soup)
+    for page in range(2, max_page + 1):
+        if len(sets) >= take:
+            break
+        emit(progress, f"Loading ThePosterDB sets page {page}/{max_page}…")
+        try:
+            page_soup = cook_soup(f"{base_url}?page={page}", config=config)
+        except Exception as exc:
+            emit(progress, f"ThePosterDB sets page {page} failed: {exc}")
+            break
+        before = len(sets)
+        _collect_posterdb_set_cards(page_soup, sets=sets, limit=take)
+        if len(sets) == before:
+            break
+
     results = list(sets.values())
+    page_set_links = _posterdb_count_set_links(soup)
+    if page_set_links and len(results) < page_set_links and len(results) < take:
+        emit(
+            progress,
+            f"ThePosterDB page lists ~{page_set_links} set link(s); scraped {len(results)} card(s).",
+        )
 
     if not results:
-        page_media_id, _ = _posterdb_page_media(soup)
         if depth < 1:
             resolved = resolve_posterdb_title_page(
                 query=title_hint or page_title,
@@ -2910,7 +3002,7 @@ def list_posterdb_sets(
                 return list_posterdb_sets(
                     alt_url,
                     progress=progress,
-                    limit=limit,
+                    limit=take,
                     config=config,
                     tmdb_id=target_tmdb or page_media_id,
                     imdb_id=imdb_id,
@@ -2919,10 +3011,10 @@ def list_posterdb_sets(
                     year_hint=year_val,
                     media_type=media_type,
                     _depth=depth + 1,
-                    explicit_title_url=explicit_url,
+                    explicit_title_url=False,
                 )
 
-        poster_fallback = _collect_posterdb_show_posters(soup, limit=limit, page_title=page_title)
+        poster_fallback = _collect_posterdb_show_posters(soup, limit=take, page_title=page_title)
         if poster_fallback:
             emit(progress, f"Using {len(poster_fallback)} individual poster(s) from ThePosterDB title page.")
             results = poster_fallback
@@ -3878,6 +3970,7 @@ def search_catalog(
                 year_val = None
         title_url_value = str(title_url or "").strip()
         user_title_url = title_url_value
+        take = max(1, min(500, int(limit or 500)))
         resolved_page: Optional[dict] = None
         if not title_url_value and tmdb_id:
             resolved_page = resolve_posterdb_title_page(
@@ -3890,14 +3983,20 @@ def search_catalog(
                 media_type=media_type,
                 config=config,
                 progress=progress,
-                limit=limit,
+                limit=take,
             )
             title_url_value = str(resolved_page.get("url") or "").strip() if resolved_page else ""
+            if not title_url_value and _posterdb_has_credentials(config):
+                emit(
+                    progress,
+                    f"ThePosterDB could not resolve a /posters/ page for TMDB {tmdb_id} "
+                    "(advanced search empty — check TPDB Pro / session).",
+                )
         if title_url_value:
             loaded = list_posterdb_sets(
                 title_url_value,
                 progress=progress,
-                limit=limit,
+                limit=take,
                 config=config,
                 tmdb_id=tmdb_id,
                 imdb_id=imdb_id,
@@ -3905,7 +4004,8 @@ def search_catalog(
                 title_hint=title_hint,
                 year_hint=year_val,
                 media_type=media_type,
-                explicit_title_url=bool(user_title_url or resolved_page),
+                # User-pasted URLs only — resolved pages still validate TMDB.
+                explicit_title_url=bool(user_title_url),
             )
             if loaded.get("sets"):
                 return loaded
@@ -3921,14 +4021,14 @@ def search_catalog(
             part = search_posterdb_titles(
                 term,
                 progress=progress,
-                limit=limit,
+                limit=take,
                 config=config,
                 tmdb_id=None,
                 imdb_id=imdb_id,
                 tvdb_id=tvdb_id,
                 media_type=media_type,
                 _skip_resolve=True,
-                max_pages=5,
+                max_pages=8 if tmdb_id else 5,
                 year_hint=year_val if term == search_term else None,
             )
             for item in part.get("titles") or []:
@@ -3942,7 +4042,7 @@ def search_catalog(
             "provider": "posterdb",
             "phase": "titles",
             "query": search_term,
-            "titles": titles[:max(1, int(limit or 24))],
+            "titles": titles[:max(1, min(40, take))],
             "sets": [],
         }
         picked = _pick_posterdb_title_candidate(
@@ -3957,15 +4057,15 @@ def search_catalog(
                 return list_posterdb_sets(
                     picked_url,
                     progress=progress,
-                    limit=limit,
+                    limit=take,
                     config=config,
-                    tmdb_id=None,
+                    tmdb_id=tmdb_id,
                     imdb_id=imdb_id,
                     tvdb_id=tvdb_id,
                     title_hint=title_hint or search_term,
                     year_hint=year_val,
                     media_type=media_type,
-                    explicit_title_url=True,
+                    explicit_title_url=False,
                 )
             except Exception as exc:
                 emit(progress, f"ThePosterDB set load failed: {exc}")
@@ -3985,15 +4085,15 @@ def search_catalog(
                 return list_posterdb_sets(
                     alt_url,
                     progress=progress,
-                    limit=limit,
+                    limit=take,
                     config=config,
-                    tmdb_id=None,
+                    tmdb_id=tmdb_id,
                     imdb_id=imdb_id,
                     tvdb_id=tvdb_id,
                     title_hint=title_hint or search_term,
                     year_hint=year_val,
                     media_type=media_type,
-                    explicit_title_url=True,
+                    explicit_title_url=False,
                 )
             except Exception as exc:
                 emit(progress, f"ThePosterDB set load failed for {alt_url}: {exc}")
@@ -4008,7 +4108,10 @@ def search_catalog(
                 "ThePosterDB login not configured — add TPDB credentials in Poster Sets → Settings.",
             )
         elif tmdb_id:
-            msg = f"ThePosterDB returned no sets for TMDB {tmdb_id}; showing MediUX sets instead."
+            msg = (
+                f"ThePosterDB advanced search found no sets for TMDB {tmdb_id} — "
+                "check TPDB Pro/session in Settings → Test, or paste a set URL in Discover."
+            )
             emit(progress, msg)
             partial_msg.append(msg)
         else:

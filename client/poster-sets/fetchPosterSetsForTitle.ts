@@ -279,7 +279,7 @@ async function fetchMediuxSets(
             provider: 'mediux',
             tmdbId,
             mediaType,
-            limit: 40,
+            limit: 200,
         });
     } catch (error) {
         return softResult(error, 'MediUX search failed');
@@ -357,7 +357,7 @@ async function fetchPosterdbSets(
         titleHint: titleHint || undefined,
         yearHint: yearHint ?? undefined,
         mediaType: options.mediaType,
-        limit: 40,
+        limit: 500,
     };
 
     const runSearch = async (extra: {
@@ -531,7 +531,7 @@ export async function fetchPosterSetsForTitle(
                 titleSources: sourceList,
                 mediaType: fallbackMedia,
                 dupePreference,
-                limit: 40,
+                limit: 500,
                 tmdbId: linkedTmdbId || undefined,
                 titleHint: titleHint || undefined,
                 yearHint: yearHint ?? undefined,
