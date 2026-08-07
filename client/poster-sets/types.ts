@@ -409,7 +409,7 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     arrWatchHookEnabled: true,
     creatorWhitelist: [],
     applyDestination: 'plex',
-    tpdbLocalCacheEnabled: true,
-    tpdbAggressivePrefetch: true,
+    tpdbLocalCacheEnabled: false,
+    tpdbAggressivePrefetch: false,
     tpdbCacheMaxBytes: 2 * 1024 * 1024 * 1024,
 };
