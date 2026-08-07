@@ -318,6 +318,9 @@ export const posterSetsApi = {
         sets?: number;
         images?: number;
         imageBytes?: number;
+        rootDir?: string;
+        relativeRoot?: string;
+        folders?: { titles?: string; sets?: string; images?: string };
         hydrate?: { queue?: number; active?: number; lastError?: string | null };
     }>,
     clearTpdbCache: () => apiFetch(`${ROOT}/tpdb-cache/clear`, json({})) as Promise<{

@@ -324,6 +324,9 @@ export const PosterSetsSettingsView: React.FC = () => {
         sets?: number;
         images?: number;
         imageBytes?: number;
+        rootDir?: string;
+        relativeRoot?: string;
+        folders?: { titles?: string; sets?: string; images?: string };
     } | null>(null);
 
     useEffect(() => {
@@ -405,9 +408,55 @@ export const PosterSetsSettingsView: React.FC = () => {
                         </label>
                         <div className="sm:col-span-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 space-y-0">
                             <p className="pt-3 text-sm font-semibold text-text">ThePosterDB local cache</p>
-                            <p className="pb-2 text-xs text-muted">
-                                Opt-in. When enabled, Poster Sets can scrape and store ThePosterDB data for titles already in your Plex library — faster reopen, offline apply after hydrate, and a disk budget you control. Respects TPDB&apos;s 7s rate limit.
-                            </p>
+                            <div className="space-y-2 pb-3 text-xs leading-relaxed text-muted">
+                                <p>
+                                    Opt-in cache for <span className="text-text">library titles only</span> (TMDB-matched opens from Library / Watching warm).
+                                    It does not crawl Browse or the whole ThePosterDB catalog.
+                                </p>
+                                <p>
+                                    <span className="font-semibold text-text/90">What it’s for:</span>{' '}
+                                    faster reopen of TPDB set lists you’ve already looked up; keeping Poster Sets usable when ThePosterDB is down
+                                    (after sets/images have been hydrated once); offline/reapply from local image files when possible.
+                                </p>
+                                <p>
+                                    <span className="font-semibold text-text/90">How it works:</span>{' '}
+                                    when you open a library title (or run Warm), SMP resolves TPDB sets and can store them on disk.
+                                    Prefetch then downloads each set’s preview metadata and poster files one request at a time with ThePosterDB’s{' '}
+                                    <span className="text-text/90">7 second</span> spacing. Next visit serves the title cache immediately and may refresh in the background.
+                                    Oldest images are dropped when the disk budget is hit.
+                                </p>
+                                <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-[11px] text-text/85">
+                                    <p className="font-sans text-[11px] font-semibold uppercase tracking-wide text-muted">Saved under</p>
+                                    <p className="mt-1 break-all">
+                                        {tpdbCacheStatus?.relativeRoot || 'config/poster-sets'}
+                                        /
+                                    </p>
+                                    <ul className="mt-2 list-disc space-y-1 pl-4 font-sans text-[11px] text-muted">
+                                        <li>
+                                            <code className="text-text/80">tpdb-title-cache/</code>
+                                            {' '}— title page + set lists (JSON)
+                                        </li>
+                                        <li>
+                                            <code className="text-text/80">tpdb-set-cache/</code>
+                                            {' '}— per-set preview / asset metadata (JSON)
+                                        </li>
+                                        <li>
+                                            <code className="text-text/80">tpdb-image-cache/</code>
+                                            {' '}— poster image files (<code className="text-text/80">.bin</code> + meta)
+                                        </li>
+                                    </ul>
+                                    <p className="mt-2 font-sans text-[11px] text-muted">
+                                        Default path is <code className="text-text/80">config/poster-sets/</code> next to portal config
+                                        (or <code className="text-text/80">CONFIG_DIR/poster-sets</code> / <code className="text-text/80">POSTER_SETS_CONFIG_DIR</code> if those env vars are set).
+                                        {tpdbCacheStatus?.rootDir ? (
+                                            <>
+                                                {' '}Absolute on this host:{' '}
+                                                <span className="break-all text-text/70">{tpdbCacheStatus.rootDir}</span>
+                                            </>
+                                        ) : null}
+                                    </p>
+                                </div>
+                            </div>
                             <SettingsToggleRow
                                 title="Enable local TPDB cache"
                                 description="Turn on disk caching for library title set lists (and optionally full set images below)."
@@ -454,7 +503,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         />
                                     </div>
                                     <span className="mt-1 block text-[11px] text-muted">
-                                        Oldest cached images are removed when this limit is reached.
+                                        Caps <code className="text-text/80">tpdb-image-cache/</code> only — oldest images are removed when over budget.
                                         {tpdbCacheStatus
                                             ? ` In use: ${formatBytes(tpdbCacheStatus.imageBytes || 0)} · ${tpdbCacheStatus.titles || 0} titles · ${tpdbCacheStatus.sets || 0} sets · ${tpdbCacheStatus.images || 0} images.`
                                             : ''}
