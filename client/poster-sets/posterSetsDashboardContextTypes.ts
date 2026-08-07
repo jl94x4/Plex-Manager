@@ -1,3 +1,3 @@
-import type { usePosterSetsDashboard } from './usePosterSetsDashboard';
+import type { usePosterSetsDashboardState } from './usePosterSetsDashboard';
 
-export type PosterSetsDashboardContextValue = ReturnType<typeof usePosterSetsDashboard>;
+export type PosterSetsDashboardContextValue = ReturnType<typeof usePosterSetsDashboardState>;

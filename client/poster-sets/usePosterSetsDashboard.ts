@@ -90,7 +90,6 @@ import {
     type SetProvider,
     type TabId,
 } from './shared';
-import type { PosterSetsDashboardContextValue } from './posterSetsDashboardContextTypes';
 import {
     inferPreviewMediaType,
     normalizeRelatedTitle,
@@ -98,7 +97,8 @@ import {
     relatedSetKey,
 } from './posterSetsDashboardUtils';
 
-export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
+/** Provider-only state hook. Views must use `usePosterSetsDashboard` from PosterSetsDashboardContext. */
+export function usePosterSetsDashboardState() {
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const toast = useCallback((message: string, type: ToastMessage['type'] = 'success') => {
         setToasts((current) => pushToast(current, message, type));

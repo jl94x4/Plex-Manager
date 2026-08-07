@@ -1,10 +1,10 @@
 import React from 'react';
 import { PosterSetsDashboardContext } from './PosterSetsDashboardContext';
-import { usePosterSetsDashboard } from './usePosterSetsDashboard';
+import { usePosterSetsDashboardState } from './usePosterSetsDashboard';
 import { PosterSetsShell } from './views/PosterSetsShell';
 
 export const PosterSetsDashboard: React.FC = () => {
-    const value = usePosterSetsDashboard();
+    const value = usePosterSetsDashboardState();
     return (
         <PosterSetsDashboardContext.Provider value={value}>
             <PosterSetsShell />
