@@ -174,6 +174,7 @@ export function LibraryTitleDetailPanel({
     const [loadingMoreSets, setLoadingMoreSets] = useState(false);
     const [mediuxSettled, setMediuxSettled] = useState(false);
     const [tpdbSettled, setTpdbSettled] = useState(false);
+    const [tpdbFromCache, setTpdbFromCache] = useState(false);
     const [titleStatus, setTitleStatus] = useState<PosterSetsTitleStatus | null>(null);
     const [statusLoading, setStatusLoading] = useState(false);
     const [resetScope, setResetScope] = useState<'poster' | 'seasons' | 'episodes' | 'all'>('poster');
@@ -218,6 +219,7 @@ export function LibraryTitleDetailPanel({
         setLoadingMoreSets(false);
         setMediuxSettled(false);
         setTpdbSettled(false);
+        setTpdbFromCache(false);
         setSearchTitles([]);
         setSearchSets([]);
         setSearchContext('');
@@ -252,6 +254,7 @@ export function LibraryTitleDetailPanel({
         const waitForTpdb = hasLinkedTmdb && tpdbConfigured;
         setMediuxSettled(false);
         setTpdbSettled(false);
+        setTpdbFromCache(false);
         if (hasLinkedTmdb) setLoadingMoreSets(true);
         try {
             const response = await fetchPosterSetsForTitle(title, {
@@ -265,9 +268,15 @@ export function LibraryTitleDetailPanel({
                         setSearchSets(partial.sets || []);
                         setSearchContext(partial.title || title.title);
                         setLoading(false);
-                        if (waitForTpdb || hasLinkedTmdb) setLoadingMoreSets(true);
+                        if (partial.fromCache) setTpdbFromCache(true);
                         // Unlock as soon as either provider paints sets.
                         setBusy((current) => (current === 'search' ? null : current));
+                        // Cache-first: don't keep a heavy spinner once TPDB sets are on screen.
+                        if (partial.fromCache || !waitForTpdb) {
+                            setLoadingMoreSets(Boolean(waitForTpdb && !partial.fromCache));
+                        } else {
+                            setLoadingMoreSets(true);
+                        }
                     }
                 },
                 onMediuxSettled: (mediux) => {
@@ -278,10 +287,13 @@ export function LibraryTitleDetailPanel({
                         setLoadingMoreSets(false);
                     }
                 },
-                onTpdbSettled: () => {
+                onTpdbSettled: (tpdb) => {
                     setTpdbSettled(true);
+                    if (tpdb?.fromCache) setTpdbFromCache(true);
                     setLoading(false);
                     setBusy((current) => (current === 'search' ? null : current));
+                    // TPDB done (cache or live) — stop blocking on MediUX for perceived speed.
+                    setLoadingMoreSets(false);
                 },
             });
             // Never wipe painted MediUX sets with an empty final merge.
@@ -331,6 +343,7 @@ export function LibraryTitleDetailPanel({
         setLoadingMoreSets(false);
         setMediuxSettled(false);
         setTpdbSettled(false);
+        setTpdbFromCache(false);
         setSearchTitles([]);
         setSearchSets([]);
         setSearchContext('');
@@ -907,6 +920,13 @@ export function LibraryTitleDetailPanel({
                                         : 'ThePosterDB hasn\'t returned sets yet (or returned none). Still searching MediUX.'}
                                 </p>
                             </div>
+                        </div>
+                    ) : null}
+
+                    {tpdbFromCache && searchSets.length > 0 ? (
+                        <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-text">
+                            ThePosterDB sets loaded from local disk cache
+                            {!mediuxSettled ? ' (MediUX still catching up in the background).' : '.'}
                         </div>
                     ) : null}
 

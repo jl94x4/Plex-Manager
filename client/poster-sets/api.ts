@@ -314,6 +314,8 @@ export const posterSetsApi = {
     }) as Promise<{ ok: boolean; watch: PosterSetsWatch }>,
     tpdbCacheStatus: () => apiFetch(`${ROOT}/tpdb-cache`) as Promise<{
         ok: boolean;
+        cacheEnabled?: boolean;
+        prefetchEnabled?: boolean;
         titles?: number;
         sets?: number;
         images?: number;

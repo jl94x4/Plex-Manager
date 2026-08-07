@@ -320,6 +320,8 @@ export const PosterSetsSettingsView: React.FC = () => {
     } = usePosterSetsDashboard();
 
     const [tpdbCacheStatus, setTpdbCacheStatus] = useState<{
+        cacheEnabled?: boolean;
+        prefetchEnabled?: boolean;
         titles?: number;
         sets?: number;
         images?: number;
@@ -490,6 +492,31 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     ...(next ? {} : { tpdbAggressivePrefetch: false }),
                                 }))}
                             />
+                            {tpdbCacheStatus && (
+                                <p className={`-mt-1 mb-2 text-[11px] ${
+                                    tpdbCacheStatus.cacheEnabled === true
+                                        ? 'text-emerald-300/90'
+                                        : 'text-amber-200/90'
+                                }`}
+                                >
+                                    Server (Docker volume): cache is{' '}
+                                    <span className="font-semibold">
+                                        {tpdbCacheStatus.cacheEnabled === true ? 'ENABLED' : 'DISABLED'}
+                                    </span>
+                                    {typeof tpdbCacheStatus.titles === 'number'
+                                        ? ` · ${tpdbCacheStatus.titles} title(s) cached`
+                                        : ''}
+                                    {configDraft.tpdbLocalCacheEnabled === true && tpdbCacheStatus.cacheEnabled !== true
+                                        ? ' — toggle is on in this form but not saved yet. Click Save settings.'
+                                        : ''}
+                                    {configDraft.tpdbLocalCacheEnabled !== true && tpdbCacheStatus.cacheEnabled === true
+                                        ? ' — form shows off; reload or Save to sync.'
+                                        : ''}
+                                    {tpdbCacheStatus.cacheEnabled === true && (tpdbCacheStatus.titles || 0) === 0
+                                        ? ' — enabled, but empty. Open a library title or run Warm once.'
+                                        : ''}
+                                </p>
+                            )}
                             <SettingsToggleRow
                                 title="Prefetch set images (library titles only)"
                                 description="After a library title's TPDB sets load, download assets/images in the background (7s between requests). Required for offline apply of that art."

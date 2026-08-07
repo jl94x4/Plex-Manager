@@ -302,6 +302,8 @@ export type PosterSetsSearchResult = {
     dupesCollapsed?: number;
     dupePreference?: string;
     partialErrors?: string[];
+    fromCache?: boolean;
+    stale?: boolean;
     loading?: boolean;
     error?: string;
     code?: string;

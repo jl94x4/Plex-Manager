@@ -220,6 +220,8 @@ async function fetchBothSetsProgressive(
             sets: preferSets(sets),
             titles: [],
             title: posterdbResult.title || mediuxResult.title,
+            fromCache: Boolean(posterdbResult.fromCache) && (posterdbResult.sets?.length || 0) > 0,
+            stale: posterdbResult.stale,
         });
     };
 
@@ -297,6 +299,8 @@ async function fetchBothSetsProgressive(
         sets: preferSets(sets),
         titles: [],
         title: posterdbResult.title || mediuxResult.title,
+        fromCache: Boolean(posterdbResult.fromCache) && (posterdbResult.sets?.length || 0) > 0,
+        stale: posterdbResult.stale,
         partialErrors: partialErrors.length ? partialErrors : undefined,
     };
 }
