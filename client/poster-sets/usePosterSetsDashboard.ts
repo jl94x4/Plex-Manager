@@ -1713,18 +1713,21 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         setSelectedSearchSet(null);
         setPreview(null);
         const hasLinkedTmdb = String(title.provider || '').toLowerCase() === 'mediux' && Boolean(title.id);
-        if (hasLinkedTmdb) setSearchLoadingMore(true);
+        const tpdbConfigured = Boolean(configDraft.hasTpdbPassword && String(configDraft.tpdb_username || '').trim());
+        const waitForTpdb = hasLinkedTmdb && tpdbConfigured;
+        if (waitForTpdb) setSearchLoadingMore(true);
         try {
             const response = await fetchPosterSetsForTitle(title, {
                 dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
                 mediaType: libraryItem?.mediaType,
                 libraryItem,
                 preferredCreators: configDraft.creatorWhitelist,
+                tpdbConfigured,
                 onPartial: (partial) => {
                     if ((partial.sets?.length || 0) > 0) {
                         setSearchSets(partial.sets || []);
                         setSearchContext(partial.title || title.title);
-                        setSearchLoadingMore(true);
+                        if (waitForTpdb) setSearchLoadingMore(true);
                         setBusy((current) => (current === 'search' ? null : current));
                     }
                 },
@@ -1741,7 +1744,12 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
             } else {
                 toast(`Sets for ${title.title}${dupes > 0 ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} collapsed` : ''}. Expand one to queue.`);
             }
-            if (response.partialErrors?.length) toast(response.partialErrors[0], 'error');
+            if (response.partialErrors?.length) {
+                const msg = response.partialErrors[0];
+                if (!msg.includes('ThePosterDB login not configured')) {
+                    toast(msg, 'error');
+                }
+            }
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
         } finally {

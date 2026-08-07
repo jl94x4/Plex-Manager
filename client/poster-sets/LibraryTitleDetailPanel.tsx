@@ -147,6 +147,9 @@ export type LibraryTitleDetailPanelProps = {
     onApplied?: () => void;
     onWatchAdded?: () => void;
     onArtReset?: () => void;
+    /** When false, skip long TPDB waits and show login hint instead of empty-set toast. */
+    tpdbConfigured?: boolean;
+    onOpenTpdbSettings?: () => void;
 };
 
 export function LibraryTitleDetailPanel({
@@ -163,6 +166,8 @@ export function LibraryTitleDetailPanel({
     serverType = 'plex',
     layoutMode = 'drawer',
     onLayoutModeChange,
+    tpdbConfigured = false,
+    onOpenTpdbSettings,
 }: LibraryTitleDetailPanelProps) {
     const [busy, setBusy] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -240,19 +245,21 @@ export function LibraryTitleDetailPanel({
         setSelectedSet(null);
         setPreview(null);
         const hasLinkedTmdb = String(title.provider || '').toLowerCase() === 'mediux' && Boolean(title.id);
-        if (hasLinkedTmdb) setLoadingMoreSets(true);
+        const waitForTpdb = hasLinkedTmdb && tpdbConfigured;
+        if (waitForTpdb) setLoadingMoreSets(true);
         try {
             const response = await fetchPosterSetsForTitle(title, {
                 dupePreference,
                 mediaType: libraryItem?.mediaType,
                 libraryItem: libraryItem || undefined,
                 preferredCreators,
+                tpdbConfigured,
                 onPartial: (partial) => {
                     if ((partial.sets?.length || 0) > 0) {
                         setSearchSets(partial.sets || []);
                         setSearchContext(partial.title || title.title);
                         setLoading(false);
-                        setLoadingMoreSets(true);
+                        if (waitForTpdb) setLoadingMoreSets(true);
                         // Unlock the UI as soon as MediUX results land so users can
                         // preview/watch while ThePosterDB is still loading.
                         setBusy((current) => (current === 'search' ? null : current));
@@ -276,9 +283,13 @@ export function LibraryTitleDetailPanel({
             setSearchTitles([]);
             if (response.partialErrors?.length) {
                 const msg = response.partialErrors[0];
-                const soft = msg.includes('ThePosterDB returned no sets')
-                    || msg.includes('ThePosterDB search timed out');
-                toast(msg, soft ? undefined : 'error');
+                if (msg.includes('ThePosterDB login not configured')) {
+                    // Inline banner handles this — avoid misleading green toast.
+                } else {
+                    const soft = msg.includes('ThePosterDB returned no sets')
+                        || msg.includes('ThePosterDB search timed out');
+                    toast(msg, soft ? undefined : 'error');
+                }
             }
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
@@ -287,7 +298,7 @@ export function LibraryTitleDetailPanel({
             setBusy((current) => (current === 'search' ? null : current));
             setLoadingMoreSets(false);
         }
-    }, [dupePreference, preferredCreators, toast]);
+    }, [dupePreference, preferredCreators, toast, tpdbConfigured]);
 
     const runSearch = useCallback(async (libraryItem: LibraryRecentItem) => {
         const generation = ++loadGenRef.current;
@@ -854,6 +865,23 @@ export function LibraryTitleDetailPanel({
                         <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-xs text-muted">
                             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-plex" />
                             Loading more sets from ThePosterDB…
+                        </div>
+                    ) : null}
+
+                    {!tpdbConfigured && searchSets.length > 0 && !loadingMoreSets ? (
+                        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-text">
+                            <p>
+                                ThePosterDB isn&apos;t logged in — MediUX sets only. Many TV spin-offs need TPDB credentials for TMDB matching.
+                            </p>
+                            {onOpenTpdbSettings ? (
+                                <button
+                                    type="button"
+                                    className="mt-1 font-semibold text-plex hover:underline"
+                                    onClick={onOpenTpdbSettings}
+                                >
+                                    Open Poster Sets Settings
+                                </button>
+                            ) : null}
                         </div>
                     ) : null}
 

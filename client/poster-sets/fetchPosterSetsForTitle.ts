@@ -14,6 +14,8 @@ export type FetchPosterSetsOptions = {
     libraryItem?: Pick<LibraryRecentItem, 'title' | 'year' | 'mediaType'>;
     /** Followed creators — title search floats these sets first. */
     preferredCreators?: string[] | null;
+    /** When false, skip long TPDB waits — public search cannot match many TV titles. */
+    tpdbConfigured?: boolean;
     /** Called with MediUX sets as soon as they are ready (TPDB may still be loading). */
     onPartial?: (result: PosterSetsSearchResult) => void;
 };
@@ -65,8 +67,11 @@ const mediuxMediaType = (source: TitleSource, fallback: 'show' | 'movie') =>
     normalizePosterSetsMediaType(source.mediaType) || fallback;
 
 const TPDB_EMPTY_HINT = 'ThePosterDB returned no sets for this title; showing MediUX sets instead.';
-/** Hard wait — server title search allows ~120s; don't abandon TPDB at 25s. */
+const TPDB_NEEDS_LOGIN_HINT = 'ThePosterDB login not configured — add TPDB credentials in Poster Sets → Settings (required for many TV titles), or paste a set URL in Discover.';
+/** Hard wait when TPDB credentials exist — server title search allows ~120s. */
 const TPDB_HARD_MS = 90_000;
+/** Short wait for public-only TPDB search (usually fails fast for TV). */
+const TPDB_PUBLIC_MS = 20_000;
 const TPDB_RETRY_DELAY_MS = 2500;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => {
@@ -158,6 +163,7 @@ async function fetchBothSetsProgressive(
         titleHint: string;
         yearHint: number | null;
         posterdbSource?: TitleSource;
+        tpdbConfigured?: boolean;
         onPartial?: (result: PosterSetsSearchResult) => void;
     },
 ): Promise<PosterSetsSearchResult> {
@@ -174,7 +180,9 @@ async function fetchBothSetsProgressive(
         titleHint: options.titleHint,
         yearHint: options.yearHint,
         mediaType: options.fallbackMedia,
+        tpdbConfigured: options.tpdbConfigured,
     });
+    const tpdbHardMs = options.tpdbConfigured ? TPDB_HARD_MS : TPDB_PUBLIC_MS;
 
     const emitPartial = (partial: PosterSetsSearchResult) => {
         const filtered = filterResultForWork(partial, workTitle);
@@ -212,11 +220,13 @@ async function fetchBothSetsProgressive(
 
     const [mediuxSettled, posterdbSettled] = await Promise.allSettled([
         mediuxP,
-        withTimeout(posterdbP, TPDB_HARD_MS, () => ({
+        withTimeout(posterdbP, tpdbHardMs, () => ({
             ok: false,
             sets: [],
             titles: [],
-            partialErrors: ['ThePosterDB search timed out — showing MediUX sets.'],
+            partialErrors: options.tpdbConfigured
+                ? ['ThePosterDB search timed out — showing MediUX sets.']
+                : [TPDB_NEEDS_LOGIN_HINT],
         })),
     ]);
     const mediuxResult: PosterSetsSearchResult = mediuxSettled.status === 'fulfilled'
@@ -251,7 +261,9 @@ async function fetchBothSetsProgressive(
     if ((posterdbResult.sets?.length || 0) === 0 && (mediuxResult.sets?.length || 0) > 0) {
         const tpdbFailedSoftly = partialErrors.some((msg) => msg.includes('ThePosterDB'));
         if (!tpdbFailedSoftly) {
-            partialErrors.push(TPDB_EMPTY_HINT);
+            partialErrors.push(
+                options.tpdbConfigured ? TPDB_EMPTY_HINT : TPDB_NEEDS_LOGIN_HINT,
+            );
         }
     }
     return filterResultForWork({
@@ -319,11 +331,23 @@ async function fetchPosterdbSets(
         titleHint?: string;
         yearHint?: number | null;
         mediaType?: 'show' | 'movie';
+        tpdbConfigured?: boolean;
     },
 ): Promise<PosterSetsSearchResult> {
     const tmdbId = options.tmdbId || undefined;
     const titleHint = String(options.titleHint || '').trim();
     const yearHint = options.yearHint ?? null;
+    const explicitUrl = Boolean(String(source.url || '').trim());
+
+    if (!options.tpdbConfigured && !explicitUrl) {
+        return {
+            ok: true,
+            sets: [],
+            titles: [],
+            partialErrors: [TPDB_NEEDS_LOGIN_HINT],
+        };
+    }
+
     const basePayload = {
         provider: 'posterdb' as const,
         query: titleHint || undefined,
@@ -342,9 +366,15 @@ async function fetchPosterdbSets(
         tmdbId: extra.tmdbId,
     });
 
-    const finalize = (response: PosterSetsSearchResult) => filterResultForWork(response, titleHint);
+    const finalize = (response: PosterSetsSearchResult) => {
+        const filtered = filterResultForWork(response, titleHint);
+        const partialErrors = [
+            ...(response.partialErrors || []),
+            ...(filtered.partialErrors || []),
+        ];
+        return partialErrors.length ? { ...filtered, partialErrors } : filtered;
+    };
 
-    const explicitUrl = Boolean(String(source.url || '').trim());
     let response = finalize(await runSearch({
         titleUrl: explicitUrl ? source.url : undefined,
         tmdbId: explicitUrl ? undefined : tmdbId,
@@ -399,6 +429,7 @@ async function fetchPosterdbSets(
 async function fetchMediuxSetsViaTmdbLookup(
     libraryItem: Pick<LibraryRecentItem, 'title' | 'year' | 'mediaType'>,
     fallbackMedia: 'show' | 'movie',
+    tpdbConfigured?: boolean,
 ): Promise<PosterSetsSearchResult | null> {
     const queries = libraryItem.year != null
         ? [`${libraryItem.title} ${libraryItem.year}`, libraryItem.title]
@@ -421,7 +452,7 @@ async function fetchMediuxSetsViaTmdbLookup(
             return {
                 ...response,
                 title: match.title,
-                partialErrors: [TPDB_EMPTY_HINT],
+                partialErrors: [tpdbConfigured ? TPDB_EMPTY_HINT : TPDB_NEEDS_LOGIN_HINT],
             };
         }
         return null;
@@ -434,6 +465,7 @@ async function tryMediuxFallback(
     fallbackMedia: 'show' | 'movie',
     libraryItem: FetchPosterSetsOptions['libraryItem'],
     partialErrors: string[] = [],
+    tpdbConfigured?: boolean,
 ): Promise<PosterSetsSearchResult | null> {
     const mediuxSource = sources.find((source) => source.provider === 'mediux' && source.id);
     if (mediuxSource) {
@@ -444,13 +476,13 @@ async function tryMediuxFallback(
         if ((response.sets?.length || 0) > 0) {
             return {
                 ...response,
-                partialErrors: [...partialErrors, TPDB_EMPTY_HINT],
+                partialErrors: [...partialErrors, tpdbConfigured ? TPDB_EMPTY_HINT : TPDB_NEEDS_LOGIN_HINT],
             };
         }
     }
 
     if (libraryItem) {
-        return fetchMediuxSetsViaTmdbLookup(libraryItem, fallbackMedia);
+        return fetchMediuxSetsViaTmdbLookup(libraryItem, fallbackMedia, tpdbConfigured);
     }
     return null;
 }
@@ -504,6 +536,7 @@ export async function fetchPosterSetsForTitle(
                 url: '',
                 mediaType: fallbackMedia,
             },
+            tpdbConfigured: options.tpdbConfigured,
             onPartial: options.onPartial,
         });
     } else if (sources.length > 1) {
@@ -538,6 +571,7 @@ export async function fetchPosterSetsForTitle(
                 titleHint,
                 yearHint,
                 mediaType: fallbackMedia,
+                tpdbConfigured: options.tpdbConfigured,
             });
         }
     } else {
@@ -559,6 +593,7 @@ export async function fetchPosterSetsForTitle(
         fallbackMedia,
         options.libraryItem,
         response.partialErrors || [],
+        options.tpdbConfigured,
     );
     return withPreferred(fallback || response);
 }

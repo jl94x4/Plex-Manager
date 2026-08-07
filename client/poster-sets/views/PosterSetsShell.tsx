@@ -244,6 +244,8 @@ export const PosterSetsShell: React.FC = () => {
                     layoutMode={libraryDetailLayout}
                     onLayoutModeChange={setLibraryDetailLayout}
                     toast={toast}
+                    tpdbConfigured={Boolean(configDraft.hasTpdbPassword && String(configDraft.tpdb_username || '').trim())}
+                    onOpenTpdbSettings={() => goToPrimaryTab('settings')}
                     onApplied={() => {
                         void loadQueue();
                         void loadHistory();
