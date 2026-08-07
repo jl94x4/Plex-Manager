@@ -15,7 +15,6 @@ import {
     PreviewAssetGallery,
     RelatedSetsRail,
     buttonClass,
-    cardClass,
     fieldClass,
     isTitleCardSet,
     primaryButtonClass,
@@ -154,7 +153,7 @@ export const PosterSetsPasteView: React.FC = () => {
 
     return (
         <div className="min-w-0 space-y-4">
-            <section className={`${cardClass} min-w-0 space-y-5 overflow-hidden p-5`}>
+            <section className="min-w-0 space-y-5 overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-xl">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 max-w-3xl">
                         <div className="flex items-center gap-2 text-plex">
