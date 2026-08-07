@@ -327,19 +327,42 @@ export const PosterSetsSettingsView: React.FC = () => {
         rootDir?: string;
         relativeRoot?: string;
         folders?: { titles?: string; sets?: string; images?: string };
+        current?: string | null;
+        activity?: Array<{
+            at: number;
+            level: string;
+            message: string;
+            detail?: string | null;
+        }>;
+        hydrate?: {
+            queue?: number;
+            active?: number;
+            lastError?: string | null;
+            warmQueue?: number;
+            warmActive?: number;
+            rateLimit?: { gapMs?: number; cooldownMs?: number; msSinceLastRequest?: number | null };
+        };
     } | null>(null);
 
     useEffect(() => {
         if (tab !== 'settings') return undefined;
         let cancelled = false;
-        void posterSetsApi.tpdbCacheStatus()
-            .then((status) => {
-                if (!cancelled) setTpdbCacheStatus(status);
-            })
-            .catch(() => {
-                if (!cancelled) setTpdbCacheStatus(null);
-            });
-        return () => { cancelled = true; };
+        const refresh = () => {
+            void posterSetsApi.tpdbCacheStatus()
+                .then((status) => {
+                    if (!cancelled) setTpdbCacheStatus(status);
+                })
+                .catch(() => {
+                    if (!cancelled) setTpdbCacheStatus(null);
+                });
+        };
+        refresh();
+        // Keep the scrape activity panel live while Settings is open.
+        const timer = window.setInterval(refresh, 2000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+        };
     }, [tab]);
 
     if (tab !== 'settings') return null;
@@ -587,6 +610,68 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         <RefreshCw className="h-4 w-4" />
                                         Refresh usage
                                     </button>
+                                </div>
+                                <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 space-y-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                                            Live scrape activity
+                                        </p>
+                                        <p className="text-[11px] text-muted">
+                                            {(tpdbCacheStatus?.hydrate?.warmActive || 0) > 0 || (tpdbCacheStatus?.hydrate?.active || 0) > 0
+                                                ? 'Working…'
+                                                : (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0 || (tpdbCacheStatus?.hydrate?.queue || 0) > 0
+                                                    ? 'Queued'
+                                                    : 'Idle'}
+                                            {(tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
+                                                ? ` · ${tpdbCacheStatus?.hydrate?.warmQueue} title(s)`
+                                                : ''}
+                                            {(tpdbCacheStatus?.hydrate?.queue || 0) > 0
+                                                ? ` · ${tpdbCacheStatus?.hydrate?.queue} set(s)`
+                                                : ''}
+                                            {(tpdbCacheStatus?.hydrate?.rateLimit?.cooldownMs || 0) > 0
+                                                ? ` · cooldown ${Math.ceil((tpdbCacheStatus?.hydrate?.rateLimit?.cooldownMs || 0) / 1000)}s`
+                                                : ''}
+                                        </p>
+                                    </div>
+                                    <p className="text-xs text-text/90">
+                                        {tpdbCacheStatus?.current
+                                            || (configDraft.tpdbLocalCacheEnabled === true
+                                                ? 'No scrape in progress — open a library title or run Warm to see activity here.'
+                                                : 'Enable local TPDB cache to start logging scrape / prefetch work.')}
+                                    </p>
+                                    {tpdbCacheStatus?.hydrate?.lastError ? (
+                                        <p className="text-[11px] text-red-300/90">
+                                            Last error: {tpdbCacheStatus.hydrate.lastError}
+                                        </p>
+                                    ) : null}
+                                    <div className="max-h-52 overflow-y-auto rounded-md border border-white/5 bg-black/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed">
+                                        {(tpdbCacheStatus?.activity || []).length ? (
+                                            (tpdbCacheStatus?.activity || []).slice(0, 40).map((entry) => {
+                                                const time = new Date(entry.at).toLocaleTimeString();
+                                                const tone = entry.level === 'error'
+                                                    ? 'text-red-300'
+                                                    : entry.level === 'warn'
+                                                        ? 'text-amber-200/90'
+                                                        : 'text-text/80';
+                                                return (
+                                                    <div key={`${entry.at}-${entry.message}`} className={`py-0.5 ${tone}`}>
+                                                        <span className="text-muted">{time}</span>
+                                                        {' '}
+                                                        {entry.message}
+                                                        {entry.detail ? (
+                                                            <span className="text-muted"> — {entry.detail}</span>
+                                                        ) : null}
+                                                    </div>
+                                                );
+                                            })
+                                        ) : (
+                                            <p className="py-1 text-muted">No activity yet this session.</p>
+                                        )}
+                                    </div>
+                                    <p className="text-[11px] text-muted">
+                                        Auto-refreshes every 2s while this page is open. Steps include title resolve,
+                                        HTML set scrape, 7s waits, and each image download into tpdb-image-cache.
+                                    </p>
                                 </div>
                             </div>
                         </div>
