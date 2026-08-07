@@ -5,7 +5,7 @@ import {
     pickAutoMatchedTitle,
 } from './autoMatchTitle';
 import type { LibraryRecentItem } from './libraryRecent';
-import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
+import { collapseNearDuplicateSets, prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import type { PosterSetsSearchResult, PosterSetsSearchSet, PosterSetsSearchTitle } from './types';
 
 export type FetchPosterSetsOptions = {
@@ -145,7 +145,8 @@ const mergeSetsForDisplay = (
             out.push(set);
         }
     }
-    return prioritizeSetsByFollowedCreators(out, preferredCreators);
+    const near = collapseNearDuplicateSets(out);
+    return prioritizeSetsByFollowedCreators(near.sets, preferredCreators);
 };
 
 async function fetchBothSetsProgressive(
@@ -180,7 +181,10 @@ async function fetchBothSetsProgressive(
         if ((filtered.sets?.length || 0) > 0) {
             options.onPartial?.({
                 ...filtered,
-                sets: prioritizeSetsByFollowedCreators(filtered.sets || [], options.preferredCreators),
+                sets: prioritizeSetsByFollowedCreators(
+                    collapseNearDuplicateSets(filtered.sets || []).sets,
+                    options.preferredCreators,
+                ),
             });
         }
     };

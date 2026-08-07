@@ -2457,20 +2457,29 @@ def resolve_posterdb_title_page(
 
     # Bare title search — always merge when resolving by TMDB so a wrong Plex season-year
     # (Sugar library 2026 vs catalog 2024) cannot strand us on year-mismatched candidates only.
+    search_terms: list[str] = []
+    if bare_title:
+        search_terms.append(bare_title)
+        if ":" in bare_title:
+            tail = bare_title.rsplit(":", 1)[-1].strip()
+            if tail and len(tail) >= 4 and tail.lower() != bare_title.lower():
+                search_terms.append(tail)
     if bare_title and (not candidates or target_tmdb):
-        text = search_posterdb_titles(
-            bare_title,
-            progress=progress,
-            limit=limit,
-            config=config,
-            media_type=media_type,
-            _skip_resolve=True,
-            max_pages=3 if target_tmdb else 1,
-        )
-        for item in text.get("titles") or []:
-            pid = str(item.get("id") or "")
-            if pid and pid not in candidates:
-                candidates[pid] = item
+        for term in search_terms:
+            text = search_posterdb_titles(
+                term,
+                progress=progress,
+                limit=limit,
+                config=config,
+                media_type=media_type,
+                _skip_resolve=True,
+                max_pages=3 if target_tmdb else 1,
+                year_hint=year if term == bare_title else None,
+            )
+            for item in text.get("titles") or []:
+                pid = str(item.get("id") or "")
+                if pid and pid not in candidates:
+                    candidates[pid] = item
 
     if not candidates:
         return _finish(None)
@@ -3092,6 +3101,39 @@ def _enrich_mediux_set_entry(anchor, entry: dict, *, media_type: str | None = No
             entry["setKind"] = inferred
 
 
+def _mediux_thumb_asset_key(url: str) -> str:
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    try:
+        decoded = unquote(raw)
+        match = re.search(r"/assets/([^/?#]+)", decoded, re.I)
+        if match:
+            return match.group(1).lower()
+    except Exception:
+        pass
+    return raw.lower()
+
+
+def _collapse_mediux_near_duplicate_sets(results: list[dict]) -> list[dict]:
+    """MediUX title pages repeat carousel slides as multiple /sets/ ids with the same thumb."""
+    seen: set[str] = set()
+    out: list[dict] = []
+    for item in results:
+        user = str(item.get("user") or "").strip().lower().lstrip("@")
+        thumb = _mediux_thumb_asset_key(str(item.get("thumbUrl") or ""))
+        if thumb and len(thumb) > 6:
+            key = f"thumb:{user}:{thumb}"
+        else:
+            title = _posterdb_title_only_key(str(item.get("title") or ""))
+            key = f"title:{user}:{title}" if title and user else f"id:{item.get('setId')}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
 def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn = None, limit: int = 40) -> dict:
     kind = str(media_type or "movie").strip().lower()
     if kind in {"tv", "series", "show", "shows"}:
@@ -3153,7 +3195,7 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
         sets[set_id] = entry
         if len(sets) >= max(1, int(limit or 40)):
             break
-    results = list(sets.values())
+    results = _collapse_mediux_near_duplicate_sets(list(sets.values()))
     for item in results:
         if not item.get("title"):
             item["title"] = page_title or f"Set {item['setId']}"
@@ -3781,6 +3823,7 @@ def search_catalog(
             except Exception:
                 year_val = None
         title_url_value = str(title_url or "").strip()
+        user_title_url = title_url_value
         if not title_url_value and tmdb_id:
             resolved = resolve_posterdb_title_page(
                 query=title_hint or query,
@@ -3796,7 +3839,7 @@ def search_catalog(
             )
             title_url_value = str(resolved.get("url") or "").strip() if resolved else ""
         if title_url_value:
-            return list_posterdb_sets(
+            loaded = list_posterdb_sets(
                 title_url_value,
                 progress=progress,
                 limit=limit,
@@ -3807,8 +3850,13 @@ def search_catalog(
                 title_hint=title_hint,
                 year_hint=year_val,
                 media_type=media_type,
-                explicit_title_url=True,
+                explicit_title_url=bool(user_title_url),
             )
+            if loaded.get("sets"):
+                return loaded
+            if user_title_url:
+                return loaded
+            emit(progress, "ThePosterDB title page returned no sets — trying title search…")
         search_term = str(query or title_hint or "").strip()
         if not search_term:
             raise ValueError("query or title hint is required for ThePosterDB title search")

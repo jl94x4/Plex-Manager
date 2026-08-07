@@ -17,7 +17,7 @@ import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem, catalogTitleMatchesLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
-import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
+import { collapseNearDuplicateSets, prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import { classifyPreviewAsset, previewAssetEpisodeLabel } from './previewGroups';
 import { libraryItemPosterSrc, type LibraryRecentItem } from './libraryRecent';
 import { SetInspector, SetInspectorThumbStrip } from './SetInspector';
@@ -649,7 +649,10 @@ export function LibraryTitleDetailPanel({
 
     const setsByCategory = useMemo(
         () => partitionSetsByCategory(
-            prioritizeSetsByFollowedCreators(searchSets, preferredCreators),
+            prioritizeSetsByFollowedCreators(
+                collapseNearDuplicateSets(searchSets).sets,
+                preferredCreators,
+            ),
             { mediaType: item?.mediaType },
         ),
         [searchSets, preferredCreators, item?.mediaType],
