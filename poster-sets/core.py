@@ -2919,7 +2919,20 @@ def list_posterdb_sets(
         url = fallback_url
 
     if not url or "theposterdb.com" not in url.lower() or "/posters/" not in url.lower():
-        raise ValueError("A ThePosterDB /posters/… title URL is required")
+        bits = []
+        if target_tmdb:
+            bits.append(f"TMDB {target_tmdb}")
+        if title_hint:
+            bits.append(f"title “{title_hint}”")
+        if year_val is not None:
+            bits.append(f"year {year_val}")
+        detail = f" ({', '.join(bits)})" if bits else ""
+        hint = (
+            ""
+            if _posterdb_has_credentials(config)
+            else " — add ThePosterDB username/password in Poster Sets settings for TMDB/TVDB advanced resolve"
+        )
+        raise ValueError(f"Could not resolve a ThePosterDB /posters/… title page{detail}{hint}")
     emit(progress, f"Loading sets from {url}")
     soup = cook_soup(url, config=config)
     page_title = ""

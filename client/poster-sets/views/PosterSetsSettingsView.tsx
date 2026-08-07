@@ -546,13 +546,21 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                     ...(recent.shows || []),
                                                     ...(recent.items || []),
                                                 ]
-                                                    .map((row) => ({
-                                                        tmdbId: (row.tmdbId || row.tmdb_id || row.id) as string | number | undefined,
-                                                        title: String(row.title || row.name || ''),
-                                                        year: (row.year as number | null | undefined) ?? null,
-                                                        mediaType: String(row.mediaType || row.type || 'movie'),
-                                                    }))
-                                                    .filter((row) => row.tmdbId && row.title);
+                                                    .map((row) => {
+                                                        const tmdbRaw = row.tmdbId ?? row.tmdb_id;
+                                                        const tmdbId = tmdbRaw != null ? String(tmdbRaw).trim() : '';
+                                                        const mediaRaw = String(row.mediaType || row.type || 'movie').toLowerCase();
+                                                        return {
+                                                            tmdbId,
+                                                            title: String(row.title || row.name || '').trim(),
+                                                            year: (row.year as number | null | undefined) ?? null,
+                                                            mediaType: mediaRaw === 'show' || mediaRaw === 'tv' || mediaRaw === 'series'
+                                                                ? 'show'
+                                                                : 'movie',
+                                                        };
+                                                    })
+                                                    // Real TMDB ids only — never fall back to Plex ratingKey.
+                                                    .filter((row) => /^\d+$/.test(row.tmdbId) && row.title);
                                                 const result = await posterSetsApi.warmTpdbLibraryCache(items);
                                                 toast(result.message || `Warming ${result.titles || 0} library title(s).`);
                                                 const status = await posterSetsApi.tpdbCacheStatus().catch(() => null);
