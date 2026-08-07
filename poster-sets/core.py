@@ -3892,7 +3892,6 @@ def search_catalog(
                 media_type=media_type,
                 explicit_title_url=bool(user_title_url or resolved_page),
             )
-            )
             if loaded.get("sets"):
                 return loaded
             if user_title_url:
