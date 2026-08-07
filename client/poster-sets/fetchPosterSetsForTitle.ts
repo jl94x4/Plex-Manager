@@ -16,10 +16,12 @@ export type FetchPosterSetsOptions = {
     preferredCreators?: string[] | null;
     /** When false, skip long TPDB waits — public search cannot match many TV titles. */
     tpdbConfigured?: boolean;
-    /** Called with MediUX sets as soon as they are ready (TPDB may still be loading). */
+    /** Called with merged sets as either provider lands (TPDB preferred in order). */
     onPartial?: (result: PosterSetsSearchResult) => void;
     /** Fired once MediUX settles (sets or soft failure) so the UI can leave the blank spinner. */
     onMediuxSettled?: (result: PosterSetsSearchResult) => void;
+    /** Fired once ThePosterDB settles. */
+    onTpdbSettled?: (result: PosterSetsSearchResult) => void;
 };
 
 type TitleSource = {
@@ -182,6 +184,7 @@ async function fetchBothSetsProgressive(
         tpdbConfigured?: boolean;
         onPartial?: (result: PosterSetsSearchResult) => void;
         onMediuxSettled?: (result: PosterSetsSearchResult) => void;
+        onTpdbSettled?: (result: PosterSetsSearchResult) => void;
     },
 ): Promise<PosterSetsSearchResult> {
     const posterdbSource: TitleSource = options.posterdbSource || {
@@ -197,61 +200,80 @@ async function fetchBothSetsProgressive(
         options.preferredCreators,
     );
 
-    // MediUX title pages are already TMDB-scoped — do NOT filter set cards by show title
-    // (season packs / short labels would otherwise drop most results).
-    const paint = (partial: PosterSetsSearchResult) => {
-        if ((partial.sets?.length || 0) === 0) return;
+    // Progressive library loads put ThePosterDB first visually (user preference),
+    // while still respecting dupePreference for near-duplicate collapse via merge helpers
+    // that receive that flag on final return when needed.
+    const paintOrder: 'mediux' | 'posterdb' = 'posterdb';
+
+    let mediuxResult: PosterSetsSearchResult = { ok: true, sets: [], titles: [] };
+    let posterdbResult: PosterSetsSearchResult = { ok: true, sets: [], titles: [] };
+
+    const paintMerged = () => {
+        const sets = mergeSetsForDisplay(
+            [mediuxResult, posterdbResult],
+            paintOrder,
+            options.preferredCreators,
+        );
+        if (!sets.length) return;
         options.onPartial?.({
-            ...partial,
-            sets: preferSets(partial.sets || []),
+            ok: true,
+            sets: preferSets(sets),
+            titles: [],
+            title: posterdbResult.title || mediuxResult.title,
         });
     };
 
-    // MediUX first (sequential). Parallel TPDB was starving/racing the MediUX CLI scrape
-    // and left the drawer blank on “Checking ThePosterDB…”.
-    const mediuxRaw = await withTimeout(fetchMediuxSets(linkedTmdbId, options.fallbackMedia), MEDIUX_HARD_MS, () => ({
-        ok: false,
-        sets: [],
-        titles: [],
-        partialErrors: ['MediUX search timed out — checking ThePosterDB…'],
-    }));
-    // One quick retry when Cloudflare/soft-empty — common flake on mediux.pro.
-    let mediuxResult = mediuxRaw;
-    if ((mediuxResult.sets?.length || 0) === 0) {
-        await sleep(800);
-        const retry = await withTimeout(fetchMediuxSets(linkedTmdbId, options.fallbackMedia), 45_000, () => mediuxResult);
-        if ((retry.sets?.length || 0) > 0) mediuxResult = retry;
-    }
-    paint(mediuxResult);
-    options.onMediuxSettled?.(mediuxResult);
+    // Parallel scrapes — paint whichever returns first; don't await MediUX before TPDB
+    // (sequential MediUX-first left the drawer on “Loading MediUX…” for a long time).
+    const mediuxTask = (async () => {
+        const mediuxRaw = await withTimeout(
+            fetchMediuxSets(linkedTmdbId, options.fallbackMedia),
+            MEDIUX_HARD_MS,
+            () => ({
+                ok: false,
+                sets: [],
+                titles: [],
+                partialErrors: ['MediUX search timed out'],
+            }),
+        );
+        mediuxResult = mediuxRaw;
+        if ((mediuxResult.sets?.length || 0) === 0) {
+            await sleep(800);
+            const retry = await withTimeout(
+                fetchMediuxSets(linkedTmdbId, options.fallbackMedia),
+                45_000,
+                () => mediuxResult,
+            );
+            if ((retry.sets?.length || 0) > 0) mediuxResult = retry;
+        }
+        paintMerged();
+        options.onMediuxSettled?.(mediuxResult);
+    })();
 
-    const posterdbResult = await withTimeout(
-        fetchPosterdbSets(posterdbSource, {
-            tmdbId: linkedTmdbId,
-            titleHint: options.titleHint,
-            yearHint: options.yearHint,
-            mediaType: options.fallbackMedia,
-            tpdbConfigured: options.tpdbConfigured,
-        }),
-        tpdbHardMs,
-        () => ({
-            ok: false,
-            sets: [],
-            titles: [],
-            partialErrors: options.tpdbConfigured
-                ? ['ThePosterDB search timed out — showing MediUX sets.']
-                : [TPDB_NEEDS_LOGIN_HINT],
-        }),
-    );
-    if ((posterdbResult.sets?.length || 0) > 0) {
-        // TPDB set cards are often creator handles — keep all once the title page was resolved.
-        paint({
-            ok: true,
-            sets: mergeSetsForDisplay([mediuxResult, posterdbResult], options.dupePreference, options.preferredCreators),
-            titles: [],
-            title: mediuxResult.title || posterdbResult.title,
-        });
-    }
+    const tpdbTask = (async () => {
+        posterdbResult = await withTimeout(
+            fetchPosterdbSets(posterdbSource, {
+                tmdbId: linkedTmdbId,
+                titleHint: options.titleHint,
+                yearHint: options.yearHint,
+                mediaType: options.fallbackMedia,
+                tpdbConfigured: options.tpdbConfigured,
+            }),
+            tpdbHardMs,
+            () => ({
+                ok: false,
+                sets: [],
+                titles: [],
+                partialErrors: options.tpdbConfigured
+                    ? ['ThePosterDB search timed out — showing MediUX sets.']
+                    : [TPDB_NEEDS_LOGIN_HINT],
+            }),
+        );
+        paintMerged();
+        options.onTpdbSettled?.(posterdbResult);
+    })();
+
+    await Promise.all([mediuxTask, tpdbTask]);
 
     const partialErrors = [
         ...(mediuxResult.partialErrors || []),
@@ -259,7 +281,7 @@ async function fetchBothSetsProgressive(
     ];
     const sets = mergeSetsForDisplay(
         [mediuxResult, posterdbResult],
-        options.dupePreference,
+        paintOrder,
         options.preferredCreators,
     );
     if ((posterdbResult.sets?.length || 0) === 0 && (mediuxResult.sets?.length || 0) > 0) {
@@ -270,12 +292,11 @@ async function fetchBothSetsProgressive(
             );
         }
     }
-    // Final merge is already provider-scoped from TMDB pages — skip work-title set filtering.
     return {
         ok: true,
         sets: preferSets(sets),
         titles: [],
-        title: mediuxResult.title || posterdbResult.title,
+        title: posterdbResult.title || mediuxResult.title,
         partialErrors: partialErrors.length ? partialErrors : undefined,
     };
 }
@@ -581,6 +602,7 @@ export async function fetchPosterSetsForTitle(
             tpdbConfigured: options.tpdbConfigured,
             onPartial: options.onPartial,
             onMediuxSettled: options.onMediuxSettled,
+            onTpdbSettled: options.onTpdbSettled,
         });
     }
 

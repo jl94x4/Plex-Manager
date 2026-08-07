@@ -1743,6 +1743,9 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                     setBusy((current) => (current === 'search' ? null : current));
                     if (!waitForTpdb) setSearchLoadingMore(false);
                 },
+                onTpdbSettled: () => {
+                    setBusy((current) => (current === 'search' ? null : current));
+                },
             });
             setSearchSets((prev) => {
                 const next = response.sets || [];

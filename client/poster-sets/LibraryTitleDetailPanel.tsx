@@ -173,6 +173,7 @@ export function LibraryTitleDetailPanel({
     const [loading, setLoading] = useState(false);
     const [loadingMoreSets, setLoadingMoreSets] = useState(false);
     const [mediuxSettled, setMediuxSettled] = useState(false);
+    const [tpdbSettled, setTpdbSettled] = useState(false);
     const [titleStatus, setTitleStatus] = useState<PosterSetsTitleStatus | null>(null);
     const [statusLoading, setStatusLoading] = useState(false);
     const [resetScope, setResetScope] = useState<'poster' | 'seasons' | 'episodes' | 'all'>('poster');
@@ -216,6 +217,7 @@ export function LibraryTitleDetailPanel({
         setLoading(false);
         setLoadingMoreSets(false);
         setMediuxSettled(false);
+        setTpdbSettled(false);
         setSearchTitles([]);
         setSearchSets([]);
         setSearchContext('');
@@ -249,6 +251,7 @@ export function LibraryTitleDetailPanel({
         const hasLinkedTmdb = String(title.provider || '').toLowerCase() === 'mediux' && Boolean(title.id);
         const waitForTpdb = hasLinkedTmdb && tpdbConfigured;
         setMediuxSettled(false);
+        setTpdbSettled(false);
         if (hasLinkedTmdb) setLoadingMoreSets(true);
         try {
             const response = await fetchPosterSetsForTitle(title, {
@@ -262,10 +265,8 @@ export function LibraryTitleDetailPanel({
                         setSearchSets(partial.sets || []);
                         setSearchContext(partial.title || title.title);
                         setLoading(false);
-                        setMediuxSettled(true);
-                        if (waitForTpdb) setLoadingMoreSets(true);
-                        // Unlock the UI as soon as MediUX results land so users can
-                        // preview/watch while ThePosterDB is still loading.
+                        if (waitForTpdb || hasLinkedTmdb) setLoadingMoreSets(true);
+                        // Unlock as soon as either provider paints sets.
                         setBusy((current) => (current === 'search' ? null : current));
                     }
                 },
@@ -273,12 +274,14 @@ export function LibraryTitleDetailPanel({
                     setMediuxSettled(true);
                     setLoading(false);
                     setBusy((current) => (current === 'search' ? null : current));
-                    if ((mediux.sets?.length || 0) > 0) {
-                        setSearchSets(mediux.sets || []);
-                        if (waitForTpdb) setLoadingMoreSets(true);
-                    } else if (!waitForTpdb) {
+                    if ((mediux.sets?.length || 0) > 0 && !waitForTpdb && tpdbConfigured === false) {
                         setLoadingMoreSets(false);
                     }
+                },
+                onTpdbSettled: () => {
+                    setTpdbSettled(true);
+                    setLoading(false);
+                    setBusy((current) => (current === 'search' ? null : current));
                 },
             });
             // Never wipe painted MediUX sets with an empty final merge.
@@ -327,6 +330,7 @@ export function LibraryTitleDetailPanel({
         setLoading(true);
         setLoadingMoreSets(false);
         setMediuxSettled(false);
+        setTpdbSettled(false);
         setSearchTitles([]);
         setSearchSets([]);
         setSearchContext('');
@@ -877,33 +881,43 @@ export function LibraryTitleDetailPanel({
                         </div>
                     ) : null}
 
-                    {loadingMoreSets && searchSets.length === 0 && !mediuxSettled ? (
+                    {loadingMoreSets && searchSets.length === 0 && !mediuxSettled && !tpdbSettled ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted">
                             <Loader2 className="h-6 w-6 animate-spin text-plex" />
-                            Loading MediUX poster sets…
+                            Loading ThePosterDB &amp; MediUX poster sets…
                         </div>
                     ) : null}
 
-                    {loadingMoreSets && searchSets.length === 0 && mediuxSettled ? (
+                    {loadingMoreSets && searchSets.length === 0 && (mediuxSettled || tpdbSettled) ? (
                         <div className="space-y-3">
-                            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-xs text-muted">
+                            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-3 py-2 text-xs text-muted">
                                 <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-plex" />
-                                No MediUX sets yet — checking ThePosterDB…
+                                {!tpdbSettled
+                                    ? 'Still checking ThePosterDB…'
+                                    : 'Still checking MediUX…'}
                             </div>
                             <div className="rounded-xl border border-dashed border-white/10 px-4 py-10 text-center">
                                 <ImageIcon className="mx-auto h-10 w-10 text-muted opacity-40" />
-                                <p className="mt-3 text-sm font-semibold text-text">Waiting on ThePosterDB</p>
+                                <p className="mt-3 text-sm font-semibold text-text">
+                                    {!tpdbSettled ? 'Waiting on ThePosterDB' : 'Waiting on MediUX'}
+                                </p>
                                 <p className="mt-1 text-xs text-muted">
-                                    MediUX didn&apos;t return sets for this title. Still searching ThePosterDB — this can take a minute.
+                                    {!tpdbSettled
+                                        ? 'MediUX hasn\'t returned sets yet (or returned none). Still searching ThePosterDB.'
+                                        : 'ThePosterDB hasn\'t returned sets yet (or returned none). Still searching MediUX.'}
                                 </p>
                             </div>
                         </div>
                     ) : null}
 
                     {loadingMoreSets && searchSets.length > 0 ? (
-                        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-xs text-muted">
+                        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-3 py-2 text-xs text-muted">
                             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-plex" />
-                            Loading more sets from ThePosterDB…
+                            {!tpdbSettled
+                                ? 'Loading more sets from ThePosterDB…'
+                                : !mediuxSettled
+                                    ? 'Loading more sets from MediUX…'
+                                    : 'Finishing set search…'}
                         </div>
                     ) : null}
 
