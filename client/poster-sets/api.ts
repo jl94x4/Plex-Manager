@@ -274,6 +274,17 @@ export const posterSetsApi = {
         queued?: boolean;
         baseline?: boolean;
     }>,
+    reapplyWatch: (id: string, mode: 'entire' | 'matched') => (
+        apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}/reapply`, json({ mode })) as Promise<{
+            ok: boolean;
+            watch?: PosterSetsWatch;
+            mode?: 'entire' | 'matched';
+            queued?: boolean;
+            selectedCount?: number | null;
+            jobId?: string | null;
+            job?: PosterSetsJob | null;
+        }>
+    ),
     runWatches: () => apiFetch(`${ROOT}/watches/run`, json({})) as Promise<{
         ok: boolean;
         started?: boolean;

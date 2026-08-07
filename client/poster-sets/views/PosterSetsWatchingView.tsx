@@ -25,9 +25,10 @@ import {
 } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../../shared/ui';
 import { askConfirm } from '../../shared/confirm';
+import { ModalPortal } from '../../shared/ModalPortal';
 import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
 import { posterSetsApi } from '../api';
-import { MEDIUX_FILTER_OPTIONS } from '../types';
+import { MEDIUX_FILTER_OPTIONS, type PosterSetsWatch } from '../types';
 import { PosterSetsSetupChecklist } from '../PosterSetsSetupChecklist';
 import { PosterSetsLibraryBrowse } from '../PosterSetsLibraryBrowse';
 import { PosterSetsCreatorsPanel } from '../PosterSetsCreatorsPanel';
@@ -76,6 +77,11 @@ type WatchImagePreview = {
     title: string;
     setUrl: string;
     provider: string;
+};
+
+type ReapplyTarget = {
+    watch: PosterSetsWatch;
+    title: string;
 };
 
 export const PosterSetsWatchingView: React.FC = () => {
@@ -311,6 +317,30 @@ export const PosterSetsWatchingView: React.FC = () => {
         initialLocation,
     } = usePosterSetsDashboard();
     const [imagePreview, setImagePreview] = useState<WatchImagePreview | null>(null);
+    const [reapplyTarget, setReapplyTarget] = useState<ReapplyTarget | null>(null);
+
+    const runReapply = async (mode: 'entire' | 'matched') => {
+        const target = reapplyTarget;
+        if (!target) return;
+        setReapplyTarget(null);
+        setBusy('watches');
+        try {
+            const result = await posterSetsApi.reapplyWatch(target.watch.id, mode);
+            await loadWatches();
+            await loadQueue();
+            if (result.mode === 'matched') {
+                toast(`Queued ${result.selectedCount || 0} matched asset(s) for reapply.`);
+            } else {
+                toast('Queued full set reapply.');
+            }
+        } catch (error) {
+            await loadWatches();
+            toast(error instanceof Error ? error.message : 'Reapply failed', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
     if (tab !== 'watches') return null;
     return (
 
@@ -325,12 +355,64 @@ export const PosterSetsWatchingView: React.FC = () => {
                         provider={imagePreview?.provider}
                         onClose={() => setImagePreview(null)}
                     />
+                    <ModalPortal open={Boolean(reapplyTarget)}>
+                        <div
+                            className="fixed inset-0 z-[1100] flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-6"
+                            onClick={() => setReapplyTarget(null)}
+                            role="presentation"
+                        >
+                            <div
+                                className="w-full max-w-md rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl"
+                                role="dialog"
+                                aria-modal="true"
+                                aria-labelledby="poster-sets-reapply-title"
+                                onClick={(event) => event.stopPropagation()}
+                            >
+                                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-plex">Reapply artwork</p>
+                                <h3 id="poster-sets-reapply-title" className="mt-1 text-lg font-bold text-text">
+                                    {reapplyTarget?.title || 'Pinned set'}
+                                </h3>
+                                <p className="mt-2 text-sm text-muted">
+                                    Use after Plex rematches a title and drops art you already applied from this pin.
+                                </p>
+                                <div className="mt-5 flex flex-col gap-2">
+                                    <button
+                                        type="button"
+                                        className={primaryButtonClass}
+                                        disabled={busy !== null}
+                                        onClick={() => void runReapply('entire')}
+                                    >
+                                        <RotateCcw className="h-4 w-4" />
+                                        Entire set
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null}
+                                        onClick={() => void runReapply('matched')}
+                                    >
+                                        <CheckCircle2 className="h-4 w-4" />
+                                        Matched assets only
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null}
+                                        onClick={() => setReapplyTarget(null)}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </ModalPortal>
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 max-w-3xl">
                             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-plex">Pinned artwork</p>
                             <h2 className="mt-1 text-xl font-bold tracking-tight text-text sm:text-2xl">Watching</h2>
                             <p className={sectionBodyClass}>
                                 Keep MediUX and ThePosterDB sets in view, grouped by posters and title cards. New art queues automatically.
+                                Use Reapply if a Plex rematch wiped artwork you already set.
                             </p>
                             <div className="mt-3 flex flex-wrap gap-2">
                                 <MetaPill className="border-plex/35 bg-plex/15 text-plex" truncate={false}>
@@ -829,6 +911,21 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                                     }}
                                                                 >
                                                                     <RefreshCw className="h-3.5 w-3.5" />
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className={iconBtnClass}
+                                                                    disabled={busy !== null}
+                                                                    aria-label="Reapply set"
+                                                                    title="Reapply set (after Plex rematch)"
+                                                                    onClick={() => {
+                                                                        setReapplyTarget({
+                                                                            watch,
+                                                                            title: group.title,
+                                                                        });
+                                                                    }}
+                                                                >
+                                                                    <RotateCcw className="h-3.5 w-3.5" />
                                                                 </button>
                                                                 {String(watch.url || '').trim() ? (
                                                                     <a
