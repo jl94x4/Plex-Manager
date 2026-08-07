@@ -1715,7 +1715,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         const hasLinkedTmdb = String(title.provider || '').toLowerCase() === 'mediux' && Boolean(title.id);
         const tpdbConfigured = Boolean(configDraft.hasTpdbPassword && String(configDraft.tpdb_username || '').trim());
         const waitForTpdb = hasLinkedTmdb && tpdbConfigured;
-        if (waitForTpdb) setSearchLoadingMore(true);
+        if (hasLinkedTmdb) setSearchLoadingMore(true);
         try {
             const response = await fetchPosterSetsForTitle(title, {
                 dupePreference: configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb',
@@ -1731,8 +1731,15 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                         setBusy((current) => (current === 'search' ? null : current));
                     }
                 },
+                onMediuxSettled: () => {
+                    setBusy((current) => (current === 'search' ? null : current));
+                    if (!waitForTpdb) setSearchLoadingMore(false);
+                },
             });
-            setSearchSets(response.sets || []);
+            setSearchSets((prev) => {
+                const next = response.sets || [];
+                return next.length > 0 ? next : prev;
+            });
             setSearchSetsPage(1);
             setSearchContext(response.title || title.title);
             // Focus on sets: titles list becomes a back action only.

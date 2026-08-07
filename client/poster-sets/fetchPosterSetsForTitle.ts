@@ -18,6 +18,8 @@ export type FetchPosterSetsOptions = {
     tpdbConfigured?: boolean;
     /** Called with MediUX sets as soon as they are ready (TPDB may still be loading). */
     onPartial?: (result: PosterSetsSearchResult) => void;
+    /** Fired once MediUX settles (sets or soft failure) so the UI can leave the blank spinner. */
+    onMediuxSettled?: (result: PosterSetsSearchResult) => void;
 };
 
 type TitleSource = {
@@ -80,6 +82,17 @@ const sleep = (ms: number) => new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
 });
 
+const errorMessage = (error: unknown, fallback: string) => (
+    error instanceof Error ? error.message : fallback
+);
+
+const softResult = (error: unknown, fallback: string): PosterSetsSearchResult => ({
+    ok: false,
+    sets: [],
+    titles: [],
+    partialErrors: [errorMessage(error, fallback)],
+});
+
 const filterResultForWork = (
     result: PosterSetsSearchResult,
     workTitle: string,
@@ -102,7 +115,7 @@ const withTimeout = <T,>(
     promise: Promise<T>,
     ms: number,
     onTimeout: () => T,
-): Promise<T> => new Promise((resolve, reject) => {
+): Promise<T> => new Promise((resolve) => {
     let settled = false;
     const timer = window.setTimeout(() => {
         if (settled) return;
@@ -116,11 +129,12 @@ const withTimeout = <T,>(
             window.clearTimeout(timer);
             resolve(value);
         },
-        (error) => {
+        () => {
+            // Soft-timeout wrapper never rejects — callers use softResult upstream.
             if (settled) return;
             settled = true;
             window.clearTimeout(timer);
-            reject(error);
+            resolve(onTimeout());
         },
     );
 });
@@ -167,6 +181,7 @@ async function fetchBothSetsProgressive(
         posterdbSource?: TitleSource;
         tpdbConfigured?: boolean;
         onPartial?: (result: PosterSetsSearchResult) => void;
+        onMediuxSettled?: (result: PosterSetsSearchResult) => void;
     },
 ): Promise<PosterSetsSearchResult> {
     const workTitle = options.titleHint;
@@ -176,6 +191,7 @@ async function fetchBothSetsProgressive(
         url: '',
         mediaType: options.fallbackMedia,
     };
+    // Start both immediately, but settle MediUX first so the drawer never waits on TPDB to paint.
     const mediuxP = fetchMediuxSets(linkedTmdbId, options.fallbackMedia);
     const posterdbP = fetchPosterdbSets(posterdbSource, {
         tmdbId: linkedTmdbId,
@@ -199,67 +215,39 @@ async function fetchBothSetsProgressive(
         }
     };
 
-    // Paint MediUX as soon as it lands; keep waiting for TPDB (scrape is often 30–60s).
-    void mediuxP.then((partial) => {
-        if ((partial.sets?.length || 0) > 0) emitPartial(partial);
-    }).catch(() => undefined);
+    const mediuxResult = await withTimeout(mediuxP, MEDIUX_HARD_MS, () => ({
+        ok: false,
+        sets: [],
+        titles: [],
+        partialErrors: ['MediUX search timed out — showing any ThePosterDB sets found.'],
+    }));
+    if ((mediuxResult.sets?.length || 0) > 0) emitPartial(mediuxResult);
+    options.onMediuxSettled?.(mediuxResult);
 
-    // If TPDB finishes after the hard deadline, still merge it into the drawer.
-    void posterdbP.then(async (late) => {
+    // Late TPDB merges can still update the drawer after MediUX painted.
+    void posterdbP.then((late) => {
         if ((late.sets?.length || 0) === 0) return;
-        const mediuxLate = await mediuxP.catch(() => ({
-            ok: false,
-            sets: [],
-            titles: [],
-        } as PosterSetsSearchResult));
         emitPartial({
             ok: true,
-            sets: mergeSetsForDisplay([mediuxLate, late], options.dupePreference, options.preferredCreators),
+            sets: mergeSetsForDisplay([mediuxResult, late], options.dupePreference, options.preferredCreators),
             titles: [],
-            title: mediuxLate.title || late.title,
+            title: mediuxResult.title || late.title,
         });
     }).catch(() => undefined);
 
-    const [mediuxSettled, posterdbSettled] = await Promise.allSettled([
-        withTimeout(mediuxP, MEDIUX_HARD_MS, () => ({
-            ok: false,
-            sets: [],
-            titles: [],
-            partialErrors: ['MediUX search timed out — showing any ThePosterDB sets found.'],
-        })),
-        withTimeout(posterdbP, tpdbHardMs, () => ({
-            ok: false,
-            sets: [],
-            titles: [],
-            partialErrors: options.tpdbConfigured
-                ? ['ThePosterDB search timed out — showing MediUX sets.']
-                : [TPDB_NEEDS_LOGIN_HINT],
-        })),
-    ]);
-    const mediuxResult: PosterSetsSearchResult = mediuxSettled.status === 'fulfilled'
-        ? mediuxSettled.value
-        : { ok: false, sets: [], titles: [] };
-    const posterdbResult: PosterSetsSearchResult = posterdbSettled.status === 'fulfilled'
-        ? posterdbSettled.value
-        : { ok: false, sets: [], titles: [] };
+    const posterdbResult = await withTimeout(posterdbP, tpdbHardMs, () => ({
+        ok: false,
+        sets: [],
+        titles: [],
+        partialErrors: options.tpdbConfigured
+            ? ['ThePosterDB search timed out — showing MediUX sets.']
+            : [TPDB_NEEDS_LOGIN_HINT],
+    }));
+
     const partialErrors = [
         ...(mediuxResult.partialErrors || []),
         ...(posterdbResult.partialErrors || []),
     ];
-    if (mediuxSettled.status === 'rejected') {
-        partialErrors.push(
-            mediuxSettled.reason instanceof Error
-                ? mediuxSettled.reason.message
-                : 'MediUX search failed',
-        );
-    }
-    if (posterdbSettled.status === 'rejected') {
-        partialErrors.push(
-            posterdbSettled.reason instanceof Error
-                ? posterdbSettled.reason.message
-                : 'ThePosterDB search failed',
-        );
-    }
     const sets = mergeSetsForDisplay(
         [mediuxResult, posterdbResult],
         options.dupePreference,
@@ -286,12 +274,16 @@ async function fetchMediuxSets(
     tmdbId: string,
     mediaType: 'show' | 'movie',
 ): Promise<PosterSetsSearchResult> {
-    return posterSetsApi.search({
-        provider: 'mediux',
-        tmdbId,
-        mediaType,
-        limit: 40,
-    });
+    try {
+        return await posterSetsApi.search({
+            provider: 'mediux',
+            tmdbId,
+            mediaType,
+            limit: 40,
+        });
+    } catch (error) {
+        return softResult(error, 'MediUX search failed');
+    }
 }
 
 const posterdbTmdbFromSources = (sources: TitleSource[]) => {
@@ -316,17 +308,21 @@ async function resolveLinkedTmdbId(
         ? [`${libraryItem.title} ${libraryItem.year}`, libraryItem.title]
         : [libraryItem.title];
     for (const query of queries) {
-        const titleSearch = await posterSetsApi.search({
-            provider: 'mediux',
-            query,
-            mode: 'title',
-            limit: 24,
-            mediaType: fallbackMedia,
-            titleHint: libraryItem.title,
-            yearHint: libraryItem.year ?? undefined,
-        });
-        const match = pickAutoMatchedTitle(libraryItem, titleSearch.titles || []);
-        if (match?.id) return String(match.id);
+        try {
+            const titleSearch = await posterSetsApi.search({
+                provider: 'mediux',
+                query,
+                mode: 'title',
+                limit: 24,
+                mediaType: fallbackMedia,
+                titleHint: libraryItem.title,
+                yearHint: libraryItem.year ?? undefined,
+            });
+            const match = pickAutoMatchedTitle(libraryItem, titleSearch.titles || []);
+            if (match?.id) return String(match.id);
+        } catch {
+            // Title resolve is optional.
+        }
     }
     return null;
 }
@@ -364,14 +360,20 @@ async function fetchPosterdbSets(
         limit: 40,
     };
 
-    const runSearch = (extra: {
+    const runSearch = async (extra: {
         tmdbId?: string;
         titleUrl?: string;
-    } = {}) => posterSetsApi.search({
-        ...basePayload,
-        titleUrl: extra.titleUrl,
-        tmdbId: extra.tmdbId,
-    });
+    } = {}): Promise<PosterSetsSearchResult> => {
+        try {
+            return await posterSetsApi.search({
+                ...basePayload,
+                titleUrl: extra.titleUrl,
+                tmdbId: extra.tmdbId,
+            });
+        } catch (error) {
+            return softResult(error, 'ThePosterDB search failed');
+        }
+    };
 
     const finalize = (response: PosterSetsSearchResult) => {
         const filtered = filterResultForWork(response, titleHint);
@@ -382,55 +384,59 @@ async function fetchPosterdbSets(
         return partialErrors.length ? { ...filtered, partialErrors } : filtered;
     };
 
-    let response = finalize(await runSearch({
-        titleUrl: explicitUrl ? source.url : undefined,
-        tmdbId: explicitUrl ? undefined : tmdbId,
-    }));
-    if ((response.sets?.length || 0) > 0) return response;
-
-    // TMDB resolve can fail transiently — fall back to text search without TMDB pin.
-    if (tmdbId && titleHint) {
-        const fallback = finalize(await runSearch({
-            tmdbId: undefined,
-            titleUrl: source.url || undefined,
-        }));
-        if ((fallback.sets?.length || 0) > 0) return fallback;
-        response = fallback;
-    }
-
-    // Never open titles[0] from a fuzzy TPDB search (e.g. "Python Hunt" → "Monty Python").
-    const matchedTitle = (response.titles || []).find((candidate) => catalogTitleMatchesWork(
-        { title: titleHint, year: yearHint, mediaType: options.mediaType },
-        candidate,
-    ));
-    let pickedUrl = String(matchedTitle?.url || '').trim();
-    if (pickedUrl) {
-        response = finalize(await runSearch({ titleUrl: pickedUrl, tmdbId: undefined }));
-        if ((response.sets?.length || 0) > 0) return response;
-    }
-
-    // One delayed retry — TPDB search pages often flake on first load.
-    if (titleHint) {
-        await sleep(TPDB_RETRY_DELAY_MS);
-        response = finalize(await runSearch({
-            titleUrl: pickedUrl || (tmdbId ? undefined : (source.url || undefined)),
-            tmdbId: pickedUrl ? undefined : tmdbId,
+    try {
+        let response = finalize(await runSearch({
+            titleUrl: explicitUrl ? source.url : undefined,
+            tmdbId: explicitUrl ? undefined : tmdbId,
         }));
         if ((response.sets?.length || 0) > 0) return response;
 
-        if (!pickedUrl) {
-            const retryTitle = (response.titles || []).find((candidate) => catalogTitleMatchesWork(
-                { title: titleHint, year: yearHint, mediaType: options.mediaType },
-                candidate,
-            ));
-            pickedUrl = String(retryTitle?.url || '').trim();
-            if (pickedUrl) {
-                response = finalize(await runSearch({ titleUrl: pickedUrl, tmdbId: undefined }));
+        // TMDB resolve can fail transiently — fall back to text search without TMDB pin.
+        if (tmdbId && titleHint) {
+            const fallback = finalize(await runSearch({
+                tmdbId: undefined,
+                titleUrl: source.url || undefined,
+            }));
+            if ((fallback.sets?.length || 0) > 0) return fallback;
+            response = fallback;
+        }
+
+        // Never open titles[0] from a fuzzy TPDB search (e.g. "Python Hunt" → "Monty Python").
+        const matchedTitle = (response.titles || []).find((candidate) => catalogTitleMatchesWork(
+            { title: titleHint, year: yearHint, mediaType: options.mediaType },
+            candidate,
+        ));
+        let pickedUrl = String(matchedTitle?.url || '').trim();
+        if (pickedUrl) {
+            response = finalize(await runSearch({ titleUrl: pickedUrl, tmdbId: undefined }));
+            if ((response.sets?.length || 0) > 0) return response;
+        }
+
+        // One delayed retry — TPDB search pages often flake on first load.
+        if (titleHint) {
+            await sleep(TPDB_RETRY_DELAY_MS);
+            response = finalize(await runSearch({
+                titleUrl: pickedUrl || (tmdbId ? undefined : (source.url || undefined)),
+                tmdbId: pickedUrl ? undefined : tmdbId,
+            }));
+            if ((response.sets?.length || 0) > 0) return response;
+
+            if (!pickedUrl) {
+                const retryTitle = (response.titles || []).find((candidate) => catalogTitleMatchesWork(
+                    { title: titleHint, year: yearHint, mediaType: options.mediaType },
+                    candidate,
+                ));
+                pickedUrl = String(retryTitle?.url || '').trim();
+                if (pickedUrl) {
+                    response = finalize(await runSearch({ titleUrl: pickedUrl, tmdbId: undefined }));
+                }
             }
         }
-    }
 
-    return response;
+        return response;
+    } catch (error) {
+        return softResult(error, 'ThePosterDB search failed');
+    }
 }
 
 async function fetchMediuxSetsViaTmdbLookup(
@@ -443,26 +449,30 @@ async function fetchMediuxSetsViaTmdbLookup(
         : [libraryItem.title];
 
     for (const query of queries) {
-        const titleSearch = await posterSetsApi.search({
-            provider: 'mediux',
-            query,
-            mode: 'title',
-            limit: 24,
-        });
-        const match = pickAutoMatchedTitle(libraryItem, titleSearch.titles || []);
-        if (!match?.id) continue;
-        const response = await fetchMediuxSets(
-            match.id,
-            normalizePosterSetsMediaType(match.mediaType) || fallbackMedia,
-        );
-        if ((response.sets?.length || 0) > 0) {
-            return {
-                ...response,
-                title: match.title,
-                partialErrors: [tpdbConfigured ? TPDB_EMPTY_HINT : TPDB_NEEDS_LOGIN_HINT],
-            };
+        try {
+            const titleSearch = await posterSetsApi.search({
+                provider: 'mediux',
+                query,
+                mode: 'title',
+                limit: 24,
+            });
+            const match = pickAutoMatchedTitle(libraryItem, titleSearch.titles || []);
+            if (!match?.id) continue;
+            const response = await fetchMediuxSets(
+                match.id,
+                normalizePosterSetsMediaType(match.mediaType) || fallbackMedia,
+            );
+            if ((response.sets?.length || 0) > 0) {
+                return {
+                    ...response,
+                    title: match.title,
+                    partialErrors: [tpdbConfigured ? TPDB_EMPTY_HINT : TPDB_NEEDS_LOGIN_HINT],
+                };
+            }
+            return null;
+        } catch {
+            continue;
         }
-        return null;
     }
     return null;
 }
@@ -510,28 +520,41 @@ export async function fetchPosterSetsForTitle(
 
     let response: PosterSetsSearchResult;
 
-    const useProgressive = Boolean(options.onPartial && linkedTmdbId);
+    const useProgressive = Boolean(linkedTmdbId);
 
-    const fetchBothSources = async (sourceList: TitleSource[]) => (
-        posterSetsApi.search({
-            provider: 'both',
-            query: title.title,
-            title: title.title,
-            titleSources: sourceList,
-            mediaType: fallbackMedia,
-            dupePreference,
-            limit: 40,
-            tmdbId: linkedTmdbId || undefined,
-            titleHint: titleHint || undefined,
-            yearHint: yearHint ?? undefined,
-        })
-    );
+    const fetchBothSources = async (sourceList: TitleSource[]) => {
+        try {
+            return await posterSetsApi.search({
+                provider: 'both',
+                query: title.title,
+                title: title.title,
+                titleSources: sourceList,
+                mediaType: fallbackMedia,
+                dupePreference,
+                limit: 40,
+                tmdbId: linkedTmdbId || undefined,
+                titleHint: titleHint || undefined,
+                yearHint: yearHint ?? undefined,
+            });
+        } catch (error) {
+            return softResult(error, 'Poster set search failed');
+        }
+    };
+
+    const withPreferred = (result: PosterSetsSearchResult): PosterSetsSearchResult => {
+        const filtered = filterResultForWork(result, titleHint || title.title);
+        return {
+            ...filtered,
+            sets: prioritizeSetsByFollowedCreators(filtered.sets || [], options.preferredCreators),
+        };
+    };
 
     if (useProgressive && linkedTmdbId) {
         const posterdbFromSources = sources.find((entry) => (
             entry.provider === 'posterdb' && (entry.url || entry.id)
         ));
-        response = await fetchBothSetsProgressive(linkedTmdbId, {
+        // Progressive already tried MediUX — never fall through to another untimeouted MediUX scrape.
+        return withPreferred(await fetchBothSetsProgressive(linkedTmdbId, {
             dupePreference,
             preferredCreators: options.preferredCreators,
             fallbackMedia,
@@ -545,8 +568,11 @@ export async function fetchPosterSetsForTitle(
             },
             tpdbConfigured: options.tpdbConfigured,
             onPartial: options.onPartial,
-        });
-    } else if (sources.length > 1) {
+            onMediuxSettled: options.onMediuxSettled,
+        }));
+    }
+
+    if (sources.length > 1) {
         response = await fetchBothSources(sources);
     } else if (sources.length === 1) {
         const source = sources[0];
@@ -584,14 +610,6 @@ export async function fetchPosterSetsForTitle(
     } else {
         response = { ok: true, sets: [], titles: [] };
     }
-
-    const withPreferred = (result: PosterSetsSearchResult): PosterSetsSearchResult => {
-        const filtered = filterResultForWork(result, titleHint || title.title);
-        return {
-            ...filtered,
-            sets: prioritizeSetsByFollowedCreators(filtered.sets || [], options.preferredCreators),
-        };
-    };
 
     if ((response.sets?.length || 0) > 0) return withPreferred(response);
 

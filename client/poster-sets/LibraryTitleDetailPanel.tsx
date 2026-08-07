@@ -172,6 +172,7 @@ export function LibraryTitleDetailPanel({
     const [busy, setBusy] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [loadingMoreSets, setLoadingMoreSets] = useState(false);
+    const [mediuxSettled, setMediuxSettled] = useState(false);
     const [titleStatus, setTitleStatus] = useState<PosterSetsTitleStatus | null>(null);
     const [statusLoading, setStatusLoading] = useState(false);
     const [resetScope, setResetScope] = useState<'poster' | 'seasons' | 'episodes' | 'all'>('poster');
@@ -214,6 +215,7 @@ export function LibraryTitleDetailPanel({
         setBusy(null);
         setLoading(false);
         setLoadingMoreSets(false);
+        setMediuxSettled(false);
         setSearchTitles([]);
         setSearchSets([]);
         setSearchContext('');
@@ -246,7 +248,8 @@ export function LibraryTitleDetailPanel({
         setPreview(null);
         const hasLinkedTmdb = String(title.provider || '').toLowerCase() === 'mediux' && Boolean(title.id);
         const waitForTpdb = hasLinkedTmdb && tpdbConfigured;
-        if (waitForTpdb) setLoadingMoreSets(true);
+        setMediuxSettled(false);
+        if (hasLinkedTmdb) setLoadingMoreSets(true);
         try {
             const response = await fetchPosterSetsForTitle(title, {
                 dupePreference,
@@ -259,14 +262,29 @@ export function LibraryTitleDetailPanel({
                         setSearchSets(partial.sets || []);
                         setSearchContext(partial.title || title.title);
                         setLoading(false);
+                        setMediuxSettled(true);
                         if (waitForTpdb) setLoadingMoreSets(true);
                         // Unlock the UI as soon as MediUX results land so users can
                         // preview/watch while ThePosterDB is still loading.
                         setBusy((current) => (current === 'search' ? null : current));
                     }
                 },
+                onMediuxSettled: (mediux) => {
+                    setMediuxSettled(true);
+                    setLoading(false);
+                    setBusy((current) => (current === 'search' ? null : current));
+                    if ((mediux.sets?.length || 0) > 0) {
+                        if (waitForTpdb) setLoadingMoreSets(true);
+                    } else if (!waitForTpdb) {
+                        setLoadingMoreSets(false);
+                    }
+                },
             });
-            setSearchSets(response.sets || []);
+            // Never wipe painted MediUX sets with an empty final merge.
+            setSearchSets((prev) => {
+                const next = response.sets || [];
+                return next.length > 0 ? next : prev;
+            });
             setSetsPage(1);
             if (libraryItem && !catalogTitleMatchesLibraryItem(libraryItem, title)) {
                 setSearchSets([]);
@@ -307,6 +325,7 @@ export function LibraryTitleDetailPanel({
         const generation = ++loadGenRef.current;
         setLoading(true);
         setLoadingMoreSets(false);
+        setMediuxSettled(false);
         setSearchTitles([]);
         setSearchSets([]);
         setSearchContext('');
@@ -857,10 +876,17 @@ export function LibraryTitleDetailPanel({
                         </div>
                     ) : null}
 
-                    {loadingMoreSets && searchSets.length === 0 ? (
+                    {loadingMoreSets && searchSets.length === 0 && !mediuxSettled ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted">
                             <Loader2 className="h-6 w-6 animate-spin text-plex" />
                             Loading poster sets…
+                        </div>
+                    ) : null}
+
+                    {loadingMoreSets && searchSets.length === 0 && mediuxSettled ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-xs text-muted">
+                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-plex" />
+                            Checking ThePosterDB for more sets…
                         </div>
                     ) : null}
 
