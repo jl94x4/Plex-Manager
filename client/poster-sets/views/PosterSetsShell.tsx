@@ -144,13 +144,14 @@ export const PosterSetsShell: React.FC = () => {
                                             {queueStats.pending}
                                         </span>
                                     ) : null}
-                                    {id === 'watches' && (watchStatsState.errored || 0) > 0 ? (
-                                        <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
-                                            {watchStatsState.errored}
-                                        </span>
-                                    ) : id === 'watches' && (watchStatsState.enabled || 0) > 0 ? (
+                                    {id === 'watches' && (watchStatsState.enabled || 0) > 0 ? (
                                         <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
                                             {watchStatsState.enabled}
+                                        </span>
+                                    ) : null}
+                                    {id === 'logs' && (watchStatsState.errored || 0) > 0 ? (
+                                        <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
+                                            {watchStatsState.errored}
                                         </span>
                                     ) : null}
                                 </button>
@@ -190,13 +191,14 @@ export const PosterSetsShell: React.FC = () => {
                                     {queueStats.pending}
                                 </span>
                             ) : null}
-                            {id === 'watches' && (watchStatsState.errored || 0) > 0 ? (
-                                <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
-                                    {watchStatsState.errored}
-                                </span>
-                            ) : id === 'watches' && (watchStatsState.enabled || 0) > 0 ? (
+                            {id === 'watches' && (watchStatsState.enabled || 0) > 0 ? (
                                 <span className="rounded-full bg-background/30 px-1.5 py-0.5 text-[10px] font-bold">
                                     {watchStatsState.enabled}
+                                </span>
+                            ) : null}
+                            {id === 'logs' && (watchStatsState.errored || 0) > 0 ? (
+                                <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
+                                    {watchStatsState.errored}
                                 </span>
                             ) : null}
                         </button>

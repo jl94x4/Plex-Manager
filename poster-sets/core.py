@@ -531,7 +531,8 @@ def cook_soup(
                 response = requests.get(url, headers=headers, timeout=wait)
             if response.status_code == 200 or (response.status_code == 500 and "mediux.pro" in url):
                 return BeautifulSoup(response.text, "html.parser")
-            if response.status_code in {429, 502, 503, 504} and attempt + 1 < attempts:
+            # 520–530 are Cloudflare origin/edge failures — often transient on MediUX/TPDB.
+            if response.status_code in {429, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530} and attempt + 1 < attempts:
                 time.sleep(1.25 * (attempt + 1))
                 continue
             raise RuntimeError(f"Failed to retrieve the page. Status code: {response.status_code}")
@@ -3186,7 +3187,21 @@ def list_mediux_sets(media_type: str, tmdb_id: int | str, progress: ProgressFn =
         raise ValueError("tmdbId is required for MediUX browse")
     page_url = f"https://mediux.pro/{path}/{tmdb}"
     emit(progress, f"Loading MediUX {kind} page {tmdb}…")
-    soup = cook_soup(page_url)
+    try:
+        soup = cook_soup(page_url)
+    except RuntimeError as exc:
+        msg = str(exc)
+        emit(progress, f"MediUX page load failed: {msg}")
+        return {
+            "ok": True,
+            "provider": "mediux",
+            "phase": "sets",
+            "titleUrl": page_url,
+            "title": None,
+            "titles": [],
+            "sets": [],
+            "partial_errors": [msg],
+        }
     page_title = ""
     if soup.title:
         page_title = soup.title.get_text(" ", strip=True)

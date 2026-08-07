@@ -72,6 +72,8 @@ const TPDB_NEEDS_LOGIN_HINT = 'ThePosterDB login not configured — add TPDB cre
 const TPDB_HARD_MS = 90_000;
 /** Short wait for public-only TPDB search (usually fails fast for TV). */
 const TPDB_PUBLIC_MS = 20_000;
+/** MediUX must not hang the library drawer forever (Cloudflare 530 / stalled scrape). */
+const MEDIUX_HARD_MS = 45_000;
 const TPDB_RETRY_DELAY_MS = 2500;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => {
@@ -200,7 +202,7 @@ async function fetchBothSetsProgressive(
     // Paint MediUX as soon as it lands; keep waiting for TPDB (scrape is often 30–60s).
     void mediuxP.then((partial) => {
         if ((partial.sets?.length || 0) > 0) emitPartial(partial);
-    });
+    }).catch(() => undefined);
 
     // If TPDB finishes after the hard deadline, still merge it into the drawer.
     void posterdbP.then(async (late) => {
@@ -219,7 +221,12 @@ async function fetchBothSetsProgressive(
     }).catch(() => undefined);
 
     const [mediuxSettled, posterdbSettled] = await Promise.allSettled([
-        mediuxP,
+        withTimeout(mediuxP, MEDIUX_HARD_MS, () => ({
+            ok: false,
+            sets: [],
+            titles: [],
+            partialErrors: ['MediUX search timed out — showing any ThePosterDB sets found.'],
+        })),
         withTimeout(posterdbP, tpdbHardMs, () => ({
             ok: false,
             sets: [],

@@ -287,7 +287,10 @@ export function LibraryTitleDetailPanel({
                     // Inline banner handles this — avoid misleading green toast.
                 } else {
                     const soft = msg.includes('ThePosterDB returned no sets')
-                        || msg.includes('ThePosterDB search timed out');
+                        || msg.includes('ThePosterDB search timed out')
+                        || msg.includes('MediUX search timed out')
+                        || msg.includes('Status code: 530')
+                        || msg.includes('Status code: 52');
                     toast(msg, soft ? undefined : 'error');
                 }
             }
