@@ -375,7 +375,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                             />
                             <SettingsToggleRow
                                 title="Aggressive prefetch (library titles only)"
-                                description="After a library title's TPDB sets load, download every set's assets and images in the background (rate-limited). Uses disk; default budget 2 GB."
+                                description="After a library title's TPDB sets load, download every set's assets and images in the background. Rate-limited (~22 asset downloads/min, one set at a time, backs off on HTTP 429). Uses disk; default budget 2 GB."
                                 checked={configDraft.tpdbAggressivePrefetch !== false}
                                 onChange={(next) => setConfigDraft((prev) => ({ ...prev, tpdbAggressivePrefetch: next }))}
                                 border={false}
