@@ -74,8 +74,8 @@ const TPDB_NEEDS_LOGIN_HINT = 'ThePosterDB login not configured — add TPDB cre
 const TPDB_HARD_MS = 90_000;
 /** Short wait for public-only TPDB search (usually fails fast for TV). */
 const TPDB_PUBLIC_MS = 20_000;
-/** MediUX must not hang the library drawer forever (Cloudflare 530 / stalled scrape). */
-const MEDIUX_HARD_MS = 45_000;
+/** MediUX title pages can retry Cloudflare flakes — give them room before painting empty. */
+const MEDIUX_HARD_MS = 90_000;
 const TPDB_RETRY_DELAY_MS = 2500;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => {
@@ -184,65 +184,74 @@ async function fetchBothSetsProgressive(
         onMediuxSettled?: (result: PosterSetsSearchResult) => void;
     },
 ): Promise<PosterSetsSearchResult> {
-    const workTitle = options.titleHint;
     const posterdbSource: TitleSource = options.posterdbSource || {
         provider: 'posterdb',
         id: '',
         url: '',
         mediaType: options.fallbackMedia,
     };
-    // Start both immediately, but settle MediUX first so the drawer never waits on TPDB to paint.
-    const mediuxP = fetchMediuxSets(linkedTmdbId, options.fallbackMedia);
-    const posterdbP = fetchPosterdbSets(posterdbSource, {
-        tmdbId: linkedTmdbId,
-        titleHint: options.titleHint,
-        yearHint: options.yearHint,
-        mediaType: options.fallbackMedia,
-        tpdbConfigured: options.tpdbConfigured,
-    });
     const tpdbHardMs = options.tpdbConfigured ? TPDB_HARD_MS : TPDB_PUBLIC_MS;
 
-    const emitPartial = (partial: PosterSetsSearchResult) => {
-        const filtered = filterResultForWork(partial, workTitle);
-        if ((filtered.sets?.length || 0) > 0) {
-            options.onPartial?.({
-                ...filtered,
-                sets: prioritizeSetsByFollowedCreators(
-                    collapseNearDuplicateSets(filtered.sets || []).sets,
-                    options.preferredCreators,
-                ),
-            });
-        }
+    const preferSets = (sets: PosterSetsSearchSet[]) => prioritizeSetsByFollowedCreators(
+        collapseNearDuplicateSets(sets || []).sets,
+        options.preferredCreators,
+    );
+
+    // MediUX title pages are already TMDB-scoped — do NOT filter set cards by show title
+    // (season packs / short labels would otherwise drop most results).
+    const paint = (partial: PosterSetsSearchResult) => {
+        if ((partial.sets?.length || 0) === 0) return;
+        options.onPartial?.({
+            ...partial,
+            sets: preferSets(partial.sets || []),
+        });
     };
 
-    const mediuxResult = await withTimeout(mediuxP, MEDIUX_HARD_MS, () => ({
+    // MediUX first (sequential). Parallel TPDB was starving/racing the MediUX CLI scrape
+    // and left the drawer blank on “Checking ThePosterDB…”.
+    const mediuxRaw = await withTimeout(fetchMediuxSets(linkedTmdbId, options.fallbackMedia), MEDIUX_HARD_MS, () => ({
         ok: false,
         sets: [],
         titles: [],
-        partialErrors: ['MediUX search timed out — showing any ThePosterDB sets found.'],
+        partialErrors: ['MediUX search timed out — checking ThePosterDB…'],
     }));
-    if ((mediuxResult.sets?.length || 0) > 0) emitPartial(mediuxResult);
+    // One quick retry when Cloudflare/soft-empty — common flake on mediux.pro.
+    let mediuxResult = mediuxRaw;
+    if ((mediuxResult.sets?.length || 0) === 0) {
+        await sleep(800);
+        const retry = await withTimeout(fetchMediuxSets(linkedTmdbId, options.fallbackMedia), 45_000, () => mediuxResult);
+        if ((retry.sets?.length || 0) > 0) mediuxResult = retry;
+    }
+    paint(mediuxResult);
     options.onMediuxSettled?.(mediuxResult);
 
-    // Late TPDB merges can still update the drawer after MediUX painted.
-    void posterdbP.then((late) => {
-        if ((late.sets?.length || 0) === 0) return;
-        emitPartial({
-            ok: true,
-            sets: mergeSetsForDisplay([mediuxResult, late], options.dupePreference, options.preferredCreators),
+    const posterdbResult = await withTimeout(
+        fetchPosterdbSets(posterdbSource, {
+            tmdbId: linkedTmdbId,
+            titleHint: options.titleHint,
+            yearHint: options.yearHint,
+            mediaType: options.fallbackMedia,
+            tpdbConfigured: options.tpdbConfigured,
+        }),
+        tpdbHardMs,
+        () => ({
+            ok: false,
+            sets: [],
             titles: [],
-            title: mediuxResult.title || late.title,
+            partialErrors: options.tpdbConfigured
+                ? ['ThePosterDB search timed out — showing MediUX sets.']
+                : [TPDB_NEEDS_LOGIN_HINT],
+        }),
+    );
+    if ((posterdbResult.sets?.length || 0) > 0) {
+        // TPDB set cards are often creator handles — keep all once the title page was resolved.
+        paint({
+            ok: true,
+            sets: mergeSetsForDisplay([mediuxResult, posterdbResult], options.dupePreference, options.preferredCreators),
+            titles: [],
+            title: mediuxResult.title || posterdbResult.title,
         });
-    }).catch(() => undefined);
-
-    const posterdbResult = await withTimeout(posterdbP, tpdbHardMs, () => ({
-        ok: false,
-        sets: [],
-        titles: [],
-        partialErrors: options.tpdbConfigured
-            ? ['ThePosterDB search timed out — showing MediUX sets.']
-            : [TPDB_NEEDS_LOGIN_HINT],
-    }));
+    }
 
     const partialErrors = [
         ...(mediuxResult.partialErrors || []),
@@ -261,13 +270,14 @@ async function fetchBothSetsProgressive(
             );
         }
     }
-    return filterResultForWork({
+    // Final merge is already provider-scoped from TMDB pages — skip work-title set filtering.
+    return {
         ok: true,
-        sets,
+        sets: preferSets(sets),
         titles: [],
         title: mediuxResult.title || posterdbResult.title,
         partialErrors: partialErrors.length ? partialErrors : undefined,
-    }, workTitle);
+    };
 }
 
 async function fetchMediuxSets(
@@ -554,7 +564,9 @@ export async function fetchPosterSetsForTitle(
             entry.provider === 'posterdb' && (entry.url || entry.id)
         ));
         // Progressive already tried MediUX — never fall through to another untimeouted MediUX scrape.
-        return withPreferred(await fetchBothSetsProgressive(linkedTmdbId, {
+        // Skip work-title set filtering: TMDB-scoped pages include season packs whose card titles
+        // do not contain the show name (filtering would wipe most MediUX results).
+        return await fetchBothSetsProgressive(linkedTmdbId, {
             dupePreference,
             preferredCreators: options.preferredCreators,
             fallbackMedia,
@@ -569,7 +581,7 @@ export async function fetchPosterSetsForTitle(
             tpdbConfigured: options.tpdbConfigured,
             onPartial: options.onPartial,
             onMediuxSettled: options.onMediuxSettled,
-        }));
+        });
     }
 
     if (sources.length > 1) {

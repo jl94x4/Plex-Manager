@@ -274,6 +274,7 @@ export function LibraryTitleDetailPanel({
                     setLoading(false);
                     setBusy((current) => (current === 'search' ? null : current));
                     if ((mediux.sets?.length || 0) > 0) {
+                        setSearchSets(mediux.sets || []);
                         if (waitForTpdb) setLoadingMoreSets(true);
                     } else if (!waitForTpdb) {
                         setLoadingMoreSets(false);
@@ -879,14 +880,23 @@ export function LibraryTitleDetailPanel({
                     {loadingMoreSets && searchSets.length === 0 && !mediuxSettled ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-16 text-sm text-muted">
                             <Loader2 className="h-6 w-6 animate-spin text-plex" />
-                            Loading poster sets…
+                            Loading MediUX poster sets…
                         </div>
                     ) : null}
 
                     {loadingMoreSets && searchSets.length === 0 && mediuxSettled ? (
-                        <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-xs text-muted">
-                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-plex" />
-                            Checking ThePosterDB for more sets…
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-surface/40 px-3 py-2 text-xs text-muted">
+                                <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-plex" />
+                                No MediUX sets yet — checking ThePosterDB…
+                            </div>
+                            <div className="rounded-xl border border-dashed border-white/10 px-4 py-10 text-center">
+                                <ImageIcon className="mx-auto h-10 w-10 text-muted opacity-40" />
+                                <p className="mt-3 text-sm font-semibold text-text">Waiting on ThePosterDB</p>
+                                <p className="mt-1 text-xs text-muted">
+                                    MediUX didn&apos;t return sets for this title. Still searching ThePosterDB — this can take a minute.
+                                </p>
+                            </div>
                         </div>
                     ) : null}
 
