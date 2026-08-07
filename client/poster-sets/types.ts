@@ -25,6 +25,12 @@ export type PosterSetsConfig = {
     hasTpdbPassword?: boolean;
     hasToken?: boolean;
     configured?: boolean;
+    /** Persist TPDB scrapes for library titles (fast reopen + offline apply). */
+    tpdbLocalCacheEnabled?: boolean;
+    /** After a library title loads, hydrate all its TPDB set assets/images in the background. */
+    tpdbAggressivePrefetch?: boolean;
+    /** Soft disk budget for tpdb-image-cache (bytes). */
+    tpdbCacheMaxBytes?: number;
 };
 
 export type PosterSetsWatch = {
@@ -403,4 +409,7 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     arrWatchHookEnabled: true,
     creatorWhitelist: [],
     applyDestination: 'plex',
+    tpdbLocalCacheEnabled: true,
+    tpdbAggressivePrefetch: true,
+    tpdbCacheMaxBytes: 2 * 1024 * 1024 * 1024,
 };

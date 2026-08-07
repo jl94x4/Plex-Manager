@@ -27,7 +27,7 @@ import { CustomSelect, SettingsToggleRow } from '../../shared/ui';
 import { askConfirm } from '../../shared/confirm';
 import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
 import { posterSetsApi } from '../api';
-import { MEDIUX_FILTER_OPTIONS } from '../types';
+import { MEDIUX_FILTER_OPTIONS, type PosterSetsConfig } from '../types';
 import { PosterSetsSetupChecklist } from '../PosterSetsSetupChecklist';
 import { PosterSetsLibraryBrowse } from '../PosterSetsLibraryBrowse';
 import { PosterSetsCreatorsPanel } from '../PosterSetsCreatorsPanel';
@@ -362,6 +362,83 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 Optional. Logged-in advanced search finds canonical title pages (e.g. Ted Lasso on /posters/243647).
                             </span>
                         </label>
+                        <div className="sm:col-span-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 space-y-0">
+                            <p className="pt-3 text-sm font-semibold text-text">ThePosterDB local cache</p>
+                            <p className="pb-2 text-xs text-muted">
+                                Only scrapes and stores sets for titles in your Plex library (TMDB-matched opens). Speeds repeat opens and lets apply keep working when TPDB is down — after sets have been hydrated once.
+                            </p>
+                            <SettingsToggleRow
+                                title="Cache library TPDB titles on disk"
+                                description="Remember ThePosterDB set lists for library titles and serve them instantly next time (background refresh when online)."
+                                checked={configDraft.tpdbLocalCacheEnabled !== false}
+                                onChange={(next) => setConfigDraft((prev) => ({ ...prev, tpdbLocalCacheEnabled: next }))}
+                            />
+                            <SettingsToggleRow
+                                title="Aggressive prefetch (library titles only)"
+                                description="After a library title's TPDB sets load, download every set's assets and images in the background (rate-limited). Uses disk; default budget 2 GB."
+                                checked={configDraft.tpdbAggressivePrefetch !== false}
+                                onChange={(next) => setConfigDraft((prev) => ({ ...prev, tpdbAggressivePrefetch: next }))}
+                                border={false}
+                            />
+                            <div className="flex flex-wrap gap-2 py-3">
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null}
+                                    onClick={async () => {
+                                        setBusy('tpdb-cache');
+                                        try {
+                                            const recent = await posterSetsApi.libraryRecent(200);
+                                            const items = [
+                                                ...(recent.movies || []),
+                                                ...(recent.shows || []),
+                                                ...(recent.items || []),
+                                            ]
+                                                .map((row) => ({
+                                                    tmdbId: (row.tmdbId || row.tmdb_id || row.id) as string | number | undefined,
+                                                    title: String(row.title || row.name || ''),
+                                                    year: (row.year as number | null | undefined) ?? null,
+                                                    mediaType: String(row.mediaType || row.type || 'movie'),
+                                                }))
+                                                .filter((row) => row.tmdbId && row.title);
+                                            const result = await posterSetsApi.warmTpdbLibraryCache(items);
+                                            toast(result.message || `Warming ${result.titles || 0} library title(s).`);
+                                        } catch (error) {
+                                            toast(error instanceof Error ? error.message : 'Warm failed', 'error');
+                                        } finally {
+                                            setBusy(null);
+                                        }
+                                    }}
+                                >
+                                    {busy === 'tpdb-cache' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                                    Warm cache from library
+                                </button>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null}
+                                    onClick={async () => {
+                                        const ok = await askConfirm('Clear cached ThePosterDB titles, set previews, and images?', {
+                                            title: 'Clear TPDB cache?',
+                                            confirmLabel: 'Clear cache',
+                                            cancelLabel: 'Cancel',
+                                        });
+                                        if (!ok) return;
+                                        setBusy('tpdb-cache');
+                                        try {
+                                            const result = await posterSetsApi.clearTpdbCache();
+                                            toast(`Cleared ${result.cleared?.titles || 0} titles, ${result.cleared?.sets || 0} sets, ${result.cleared?.images || 0} images.`);
+                                        } catch (error) {
+                                            toast(error instanceof Error ? error.message : 'Clear failed', 'error');
+                                        } finally {
+                                            setBusy(null);
+                                        }
+                                    }}
+                                >
+                                    Clear TPDB cache
+                                </button>
+                            </div>
+                        </div>
                         <label className="block">
                             <textarea
                                 className={`${fieldClass} mt-2 min-h-24`}

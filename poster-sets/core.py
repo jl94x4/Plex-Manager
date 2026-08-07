@@ -145,10 +145,34 @@ def _looks_like_image(data: bytes) -> bool:
 
 
 def download_image(url: str, progress: ProgressFn = None, *, config: dict | None = None) -> Optional[str]:
-    """Download an image to a temp file. Returns path or None."""
+    """Download an image to a temp file. Returns path or None.
+
+    Checks local ThePosterDB image cache dirs first so apply works when TPDB is down.
+    """
     target = str(url or "").strip()
     if not target:
         return None
+
+    # Offline / fast path: hashed bins from Node tpdb-image-cache or image-cache.
+    cfg = config if isinstance(config, dict) else {}
+    for dir_key in ("tpdb_image_cache_dir", "image_cache_dir"):
+        cache_dir = str(cfg.get(dir_key) or "").strip()
+        if not cache_dir:
+            continue
+        try:
+            digest = hashlib.sha1(target.encode("utf-8")).hexdigest()
+            bin_path = os.path.join(cache_dir, f"{digest}.bin")
+            if os.path.isfile(bin_path) and os.path.getsize(bin_path) > 0:
+                suffix = _image_suffix("", target)
+                handle = tempfile.NamedTemporaryFile(suffix=suffix or ".jpg", delete=False)
+                with open(bin_path, "rb") as src:
+                    handle.write(src.read())
+                handle.close()
+                emit(progress, f"Using local cached image for {target[:80]}…")
+                return handle.name
+        except Exception as exc:
+            emit(progress, f"Local image cache miss/error: {exc}")
+
     headers = dict(IMAGE_HEADERS)
     lower = target.lower()
     if "theposterdb.com" in lower:

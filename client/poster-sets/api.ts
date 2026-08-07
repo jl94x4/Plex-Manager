@@ -312,6 +312,30 @@ export const posterSetsApi = {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
     }) as Promise<{ ok: boolean; watch: PosterSetsWatch }>,
+    tpdbCacheStatus: () => apiFetch(`${ROOT}/tpdb-cache`) as Promise<{
+        ok: boolean;
+        titles?: number;
+        sets?: number;
+        images?: number;
+        imageBytes?: number;
+        hydrate?: { queue?: number; active?: number; lastError?: string | null };
+    }>,
+    clearTpdbCache: () => apiFetch(`${ROOT}/tpdb-cache/clear`, json({})) as Promise<{
+        ok: boolean;
+        cleared?: { titles?: number; sets?: number; images?: number };
+    }>,
+    warmTpdbLibraryCache: (items: Array<{
+        tmdbId?: string | number | null;
+        id?: string | number | null;
+        title?: string;
+        year?: number | null;
+        mediaType?: string;
+    }>) => apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({ items })) as Promise<{
+        ok: boolean;
+        started?: boolean;
+        titles?: number;
+        message?: string;
+    }>,
     audit: (limit = 100) => apiFetch(`${ROOT}/audit?limit=${encodeURIComponent(String(limit))}`) as Promise<{
         ok?: boolean;
         entries: PosterSetsAuditEntry[];
