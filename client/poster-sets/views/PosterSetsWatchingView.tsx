@@ -459,7 +459,7 @@ export const PosterSetsWatchingView: React.FC = () => {
                             role="presentation"
                         >
                             <div
-                                className="w-full max-w-md rounded-2xl border border-white/10 bg-surface p-5 shadow-2xl"
+                                className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl"
                                 role="dialog"
                                 aria-modal="true"
                                 aria-labelledby="poster-sets-reapply-title"
@@ -510,7 +510,7 @@ export const PosterSetsWatchingView: React.FC = () => {
                             role="presentation"
                         >
                             <div
-                                className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-white/10 bg-surface shadow-2xl sm:rounded-2xl"
+                                className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl"
                                 role="dialog"
                                 aria-modal="true"
                                 aria-labelledby="poster-sets-watch-sheet-title"
