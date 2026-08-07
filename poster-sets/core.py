@@ -574,6 +574,22 @@ def cook_soup(
 _POSTERDB_RESOLVE_CACHE: dict[str, tuple[float, Optional[dict]]] = {}
 _POSTERDB_RESOLVE_CACHE_TTL_S = 10 * 60
 _POSTERDB_RESOLVE_NEGATIVE_TTL_S = 90
+_POSTERDB_RESOLVE_LAST_ERROR: Optional[str] = None
+
+
+def _posterdb_note_resolve_error(message: str) -> None:
+    """Remember the most useful why-resolve-failed note for the next raised error."""
+    global _POSTERDB_RESOLVE_LAST_ERROR
+    text = str(message or "").strip()
+    if text:
+        _POSTERDB_RESOLVE_LAST_ERROR = text
+
+
+def _posterdb_take_resolve_error() -> Optional[str]:
+    global _POSTERDB_RESOLVE_LAST_ERROR
+    text = _POSTERDB_RESOLVE_LAST_ERROR
+    _POSTERDB_RESOLVE_LAST_ERROR = None
+    return text
 
 
 def _posterdb_resolve_cache_key(
@@ -2353,6 +2369,9 @@ def search_posterdb_advanced_titles(
     """Authenticated advanced search — required for canonical /posters/ pages on many titles."""
     session = _posterdb_http_client(config)
     if not isinstance(session, requests.Session):
+        msg = "ThePosterDB login failed — check username/password (advanced search needs a working session)."
+        emit(progress, msg)
+        _posterdb_note_resolve_error(msg)
         return []
     params: dict[str, str] = {}
     category_value = str(category or "").strip()
@@ -2386,10 +2405,21 @@ def search_posterdb_advanced_titles(
         if isinstance(retry_session, requests.Session):
             response = _fetch(retry_session)
         if "theposterdb.com/login" in str(response.url or "").lower():
-            emit(progress, "ThePosterDB advanced search requires login — add TPDB credentials in Poster Sets settings.")
+            msg = (
+                "ThePosterDB advanced search redirected to login — credentials rejected or session expired. "
+                "Re-save TPDB username/password and use Test connection."
+            )
+            emit(progress, msg)
+            _posterdb_note_resolve_error(msg)
             return []
     soup = BeautifulSoup(response.text, "html.parser")
-    return _parse_posterdb_title_links(soup, limit=limit, html=response.text)
+    titles = _parse_posterdb_title_links(soup, limit=limit, html=response.text)
+    if not titles and (params.get("tmdb_id") or params.get("imdb_id") or params.get("tvdb_id")):
+        _posterdb_note_resolve_error(
+            "Advanced search returned no /posters/<id> hits for this id "
+            "(account may lack Pro advanced search, or TPDB has no page for this title)."
+        )
+    return titles
 
 
 def resolve_posterdb_title_page(
@@ -2407,6 +2437,8 @@ def resolve_posterdb_title_page(
     probe_limit: int = 10,
 ) -> Optional[dict]:
     """Pick the best TPDB /posters/ page — prefer TMDB match and the most sets."""
+    global _POSTERDB_RESOLVE_LAST_ERROR
+    _POSTERDB_RESOLVE_LAST_ERROR = None
     target_tmdb = str(tmdb_id or "").strip() or None
     clean_title = str(title or "").strip()
     clean_query = str(query or "").strip()
@@ -2434,11 +2466,12 @@ def resolve_posterdb_title_page(
     want_key = _posterdb_title_match_key(bare_title or clean_title or clean_query, year)
     has_creds = _posterdb_has_credentials(config)
     if target_tmdb and not has_creds:
-        emit(
-            progress,
-            "ThePosterDB login not configured — show matching uses public text search only. "
-            "Add TPDB credentials in Poster Sets settings for TMDB/TVDB id resolve.",
+        msg = (
+            "ThePosterDB login not configured — matching uses public text search only. "
+            "Add TPDB credentials in Poster Sets settings for TMDB/TVDB id resolve."
         )
+        emit(progress, msg)
+        _posterdb_note_resolve_error(msg)
 
     def _accept_year_hit(item: dict) -> Optional[dict]:
         url = str(item.get("url") or "").strip()
@@ -2482,11 +2515,12 @@ def resolve_posterdb_title_page(
         if advanced_hit:
             return _finish(advanced_hit)
         if target_tmdb:
-            emit(
-                progress,
-                f"ThePosterDB advanced search found no /posters/ page for TMDB {target_tmdb} — "
-                "trying public text search (check TPDB Pro / session if this keeps failing).",
+            msg = (
+                f"ThePosterDB advanced search found no title page for TMDB {target_tmdb} — "
+                "trying public text search (check TPDB Pro / session if this keeps failing)."
             )
+            emit(progress, msg)
+            _posterdb_note_resolve_error(msg)
 
     # Fast path: parallel paginated text search for exact title+year (no login required).
     if year is not None and bare_title:
@@ -2923,16 +2957,22 @@ def list_posterdb_sets(
         if target_tmdb:
             bits.append(f"TMDB {target_tmdb}")
         if title_hint:
-            bits.append(f"title “{title_hint}”")
+            bits.append(f'title "{title_hint}"')
         if year_val is not None:
             bits.append(f"year {year_val}")
         detail = f" ({', '.join(bits)})" if bits else ""
+        reason = _posterdb_take_resolve_error()
         hint = (
             ""
             if _posterdb_has_credentials(config)
-            else " — add ThePosterDB username/password in Poster Sets settings for TMDB/TVDB advanced resolve"
+            else " Add ThePosterDB username/password in Poster Sets settings for TMDB advanced resolve."
         )
-        raise ValueError(f"Could not resolve a ThePosterDB /posters/… title page{detail}{hint}")
+        # Avoid unicode ellipsis (…) — Discord/mobile often renders it as "_" and people chase a fake "/posters/_" bug.
+        raise ValueError(
+            f"Could not find a ThePosterDB title page (needs a /posters/<id> URL){detail}."
+            + (f" Reason: {reason}." if reason else "")
+            + hint
+        )
     emit(progress, f"Loading sets from {url}")
     soup = cook_soup(url, config=config)
     page_title = ""
