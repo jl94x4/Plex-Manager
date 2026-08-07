@@ -3,7 +3,7 @@
 export const POSTER_SETS_PRIMARY_TABS = ['library', 'discover', 'queue', 'watches', 'logs', 'settings'] as const;
 export type PosterSetsPrimaryTab = (typeof POSTER_SETS_PRIMARY_TABS)[number];
 
-export const DISCOVER_VIEWS = ['search', 'browse', 'recent'] as const;
+export const DISCOVER_VIEWS = ['search', 'browse', 'recent', 'paste'] as const;
 export type DiscoverView = (typeof DISCOVER_VIEWS)[number];
 
 /** Internal tabs used by the dashboard render tree (legacy names preserved). */
@@ -14,6 +14,7 @@ export const POSTER_SETS_INTERNAL_TABS = [
     'queue',
     'watches',
     'recent',
+    'paste',
     'history',
     'settings',
 ] as const;
@@ -77,6 +78,8 @@ const legacyTabToState = (legacy: PosterSetsInternalTab): Pick<PosterSetsUrlStat
             return { tab: 'discover', discoverView: 'browse' };
         case 'recent':
             return { tab: 'discover', discoverView: 'recent' };
+        case 'paste':
+            return { tab: 'discover', discoverView: 'paste' };
         case 'apply':
         default:
             return { tab: 'discover', discoverView: 'search' };
@@ -91,6 +94,7 @@ export function internalTabFromUrl(state: PosterSetsUrlState): PosterSetsInterna
     if (state.tab === 'settings') return 'settings';
     if (state.discoverView === 'browse') return 'browse';
     if (state.discoverView === 'recent') return 'recent';
+    if (state.discoverView === 'paste') return 'paste';
     return 'apply';
 }
 
@@ -213,7 +217,7 @@ export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window
         }
     }
 
-    const setUrlRaw = tab === 'discover' && discoverView === 'search'
+    const setUrlRaw = tab === 'discover' && (discoverView === 'search' || discoverView === 'paste')
         ? String(params.get('url') || '').trim()
         : '';
     const setUrl = setUrlRaw || null;
@@ -221,11 +225,14 @@ export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window
         ? normalizeCreator(params.get('creator') || params.get('user'))
         : null;
     const assets = String(params.get('assets') || '').trim().toLowerCase();
-    const titleCardsOnly = tab === 'discover' && discoverView === 'search' && Boolean(setUrl) && (
-        assets === 'title_cards'
-        || assets === 'title_card'
-        || assets === 'titlecards'
-    );
+    const titleCardsOnly = tab === 'discover'
+        && (discoverView === 'search' || discoverView === 'paste')
+        && Boolean(setUrl)
+        && (
+            assets === 'title_cards'
+            || assets === 'title_card'
+            || assets === 'titlecards'
+        );
 
     return { tab, discoverView, rail, setUrl, creator, titleCardsOnly };
 }
@@ -240,7 +247,7 @@ export function buildPosterSetsHash(state: PosterSetsUrlState): string {
             hash += `/${encodeURIComponent(state.rail)}`;
         }
     }
-    if (state.tab === 'discover' && state.discoverView === 'search' && state.setUrl) {
+    if (state.tab === 'discover' && (state.discoverView === 'search' || state.discoverView === 'paste') && state.setUrl) {
         const params = new URLSearchParams();
         params.set('url', state.setUrl);
         if (state.titleCardsOnly) params.set('assets', 'title_cards');

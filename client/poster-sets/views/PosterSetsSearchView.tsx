@@ -1,10 +1,8 @@
 import React from 'react';
 import {
     CheckCircle2,
-    ChevronDown,
     ChevronLeft,
     ChevronRight,
-    ChevronUp,
     Clock,
     Download,
     ExternalLink,
@@ -16,9 +14,7 @@ import {
     Play,
     RefreshCw,
     RotateCcw,
-    Save,
     Search,
-    Sparkles,
     Trash2,
     User,
     UserCheck,
@@ -95,16 +91,10 @@ export const PosterSetsSearchView: React.FC = () => {
         setMovieText,
         whitelistText,
         setWhitelistText,
-        url,
-        setUrl,
         titleCardsOnly,
         setTitleCardsOnly,
-        bulkText,
-        setBulkText,
         findProvider,
         setFindProvider,
-        findId,
-        setFindId,
         searchProvider,
         setSearchProvider,
         searchMode,
@@ -126,8 +116,6 @@ export const PosterSetsSearchView: React.FC = () => {
         setSelectedSearchTitle,
         selectedSearchSet,
         setSelectedSearchSet,
-        advancedOpen,
-        setAdvancedOpen,
         showInspectorAssets,
         setShowInspectorAssets,
         previewPanelRef,
@@ -222,7 +210,6 @@ export const PosterSetsSearchView: React.FC = () => {
         loadBrowse,
         collapseSetInspector,
         dismissPreviewToSearch,
-        pushPosterLocation,
         goToTab,
         goToPrimaryTab,
         goToDiscoverView,
@@ -250,7 +237,6 @@ export const PosterSetsSearchView: React.FC = () => {
         selectBrowseSets,
         queueBulkSelected,
         watchBulkSelected,
-        useFindId,
         posterGridClass,
         posterGridStyle,
         titleCardGridStyle,
@@ -284,7 +270,6 @@ export const PosterSetsSearchView: React.FC = () => {
         browseSeeAllRail,
         toggleAsset,
         selectPreviewAssets,
-        runBulk,
         toggleFilter,
         jobLogs,
         selectedLogs,
@@ -773,116 +758,21 @@ export const PosterSetsSearchView: React.FC = () => {
                             ) : null}
         
                             <div className="mt-5 border-t border-white/10 pt-4">
-                                <button
-                                    type="button"
-                                    className="flex w-full items-center justify-between gap-3 text-left"
-                                    onClick={() => setAdvancedOpen((value) => !value)}
-                                >
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
-                                        <h2 className="text-sm font-bold text-text">Advanced</h2>
-                                        <p className="mt-1 text-xs text-muted">Manual URL / set ID and bulk import.</p>
+                                        <h2 className="text-sm font-bold text-text">Paste a URL or ID?</h2>
+                                        <p className="mt-1 text-xs text-muted">
+                                            Manual set links, ThePosterDB title pages, and bulk import live under Paste / Import.
+                                        </p>
                                     </div>
-                                    {advancedOpen ? <ChevronUp className="h-4 w-4 text-muted" /> : <ChevronDown className="h-4 w-4 text-muted" />}
-                                </button>
-                                {advancedOpen ? (
-                                    <div className="mt-4 space-y-5">
-                                        <div className="space-y-3">
-                                            <p className="text-xs font-bold uppercase tracking-wide text-muted">Manual URL / set ID</p>
-                                            <div className="flex flex-wrap gap-2">
-                                                {([
-                                                    ['mediux', 'MediUX'],
-                                                    ['posterdb', 'ThePosterDB'],
-                                                ] as const).map(([id, label]) => (
-                                                    <button
-                                                        key={id}
-                                                        type="button"
-                                                        className={`${buttonClass} !py-1.5 text-xs ${findProvider === id ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
-                                                        onClick={() => setFindProvider(id)}
-                                                    >
-                                                        {label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            <div className="flex flex-col gap-2 sm:flex-row">
-                                                <input
-                                                    className={fieldClass}
-                                                    value={findId}
-                                                    onChange={(event) => setFindId(event.target.value)}
-                                                    onKeyDown={(event) => {
-                                                        if (event.key === 'Enter') {
-                                                            event.preventDefault();
-                                                            void useFindId(true);
-                                                        }
-                                                    }}
-                                                    placeholder={findProvider === 'mediux' ? 'Set ID e.g. 24522' : 'Set/poster ID e.g. 362735 or username'}
-                                                />
-                                                <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void useFindId(true)}>
-                                                    Load set
-                                                </button>
-                                            </div>
-                                            <input
-                                                className={fieldClass}
-                                                placeholder="https://mediux.pro/sets/… or https://theposterdb.com/set/… or /poster/…"
-                                                value={url}
-                                                onChange={(event) => setUrl(event.target.value)}
-                                            />
-                                            <div className="flex flex-wrap gap-2">
-                                                <button
-                                                    type="button"
-                                                    className={buttonClass}
-                                                    disabled={busy !== null}
-                                                    onClick={() => {
-                                                        const target = String(url).trim();
-                                                        if (!target) {
-                                                            toast('Paste a set URL first.', 'error');
-                                                            return;
-                                                        }
-                                                        setSelectedSearchSet({
-                                                            setId: '',
-                                                            title: target,
-                                                            url: target,
-                                                        });
-                                                        setShowInspectorAssets(false);
-                                                        pushPosterLocation({
-                                                            tab: 'apply',
-                                                            rail: null,
-                                                            setUrl: target,
-                                                            creator: null,
-                                                            titleCardsOnly: false,
-                                                        }, 'push');
-                                                        void runPreview(target, { titleCardsOnly: false, keepSearch: true });
-                                                    }}
-                                                >
-                                                    {busy === 'preview' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
-                                                    Load URL
-                                                </button>
-                                            </div>
-                                        </div>
-        
-                                        <div className="space-y-3 border-t border-white/10 pt-4">
-                                            <div>
-                                                <h3 className="text-sm font-bold text-text">Bulk import</h3>
-                                                <p className="mt-1 text-sm text-muted">One URL per line. Lines starting with # or // are ignored.</p>
-                                            </div>
-                                            <textarea
-                                                className={`${fieldClass} min-h-36 font-mono text-xs`}
-                                                value={bulkText}
-                                                onChange={(event) => setBulkText(event.target.value)}
-                                                placeholder={'https://mediux.pro/sets/123\nhttps://theposterdb.com/set/456'}
-                                            />
-                                            <div className="flex flex-wrap gap-2">
-                                                <button type="button" className={primaryButtonClass} disabled={busy !== null || !bulkText.trim()} onClick={() => void runBulk(false)}>
-                                                    {busy === 'bulk' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                                                    Apply bulk list
-                                                </button>
-                                                <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runBulk(true)}>
-                                                    {busy === 'bulk-file' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                                    Apply from {configDraft.bulk_txt || 'bulk_import.txt'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : null}
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        onClick={() => goToDiscoverView('paste')}
+                                    >
+                                        Open Paste / Import
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </section>

@@ -388,8 +388,10 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
     const pushPosterLocation = useCallback((next: Parameters<typeof normalizePosterLocation>[0], mode: 'push' | 'replace' = 'push') => {
         const state = normalizePosterLocation(next);
         const internal = internalTabFromUrl(state);
-        syncedSetUrlRef.current = internal === 'apply' ? state.setUrl : null;
-        const nextTitleCards = Boolean(internal === 'apply' && state.titleCardsOnly && state.setUrl);
+        syncedSetUrlRef.current = (internal === 'apply' || internal === 'paste') ? state.setUrl : null;
+        const nextTitleCards = Boolean(
+            (internal === 'apply' || internal === 'paste') && state.titleCardsOnly && state.setUrl,
+        );
         titleCardsOnlyRef.current = nextTitleCards;
         setTitleCardsOnly(nextTitleCards);
         writePosterSetsUrl(state, mode);
@@ -441,7 +443,9 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
             ? 'browse'
             : view === 'recent'
                 ? 'recent'
-                : 'apply';
+                : view === 'paste'
+                    ? 'paste'
+                    : 'apply';
         goToTab(internal, options);
     }, [goToTab]);
 
@@ -1482,9 +1486,13 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         }
     };
 
-    const useFindId = async (andPreview: boolean) => {
+    const useFindId = async (
+        andPreview: boolean,
+        options?: { locationTab?: 'apply' | 'paste' },
+    ) => {
         const rawId = findId.trim();
         const built = buildSetUrl(findProvider, rawId);
+        const locationTab = options?.locationTab === 'paste' ? 'paste' : 'apply';
         if (!built) {
             toast(findProvider === 'mediux'
                 ? 'Enter a MediUX set ID (numbers only).'
@@ -1500,7 +1508,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
         setUrl(built);
         if (andPreview) {
             setShowInspectorAssets(false);
-            pushPosterLocation({ tab: 'apply', rail: null, setUrl: built, creator: null, titleCardsOnly: false }, 'push');
+            pushPosterLocation({ tab: locationTab, rail: null, setUrl: built, creator: null, titleCardsOnly: false }, 'push');
             let response = await runPreview(built, { titleCardsOnly: false, keepSearch: true });
             // Numeric TPDb ids are often poster ids (/poster/N), not set ids — retry when /set/N fails.
             if (
@@ -1516,7 +1524,7 @@ export function usePosterSetsDashboard(): PosterSetsDashboardContextValue {
                     provider: 'posterdb',
                 });
                 setUrl(posterUrl);
-                pushPosterLocation({ tab: 'apply', rail: null, setUrl: posterUrl, creator: null, titleCardsOnly: false }, 'replace');
+                pushPosterLocation({ tab: locationTab, rail: null, setUrl: posterUrl, creator: null, titleCardsOnly: false }, 'replace');
                 response = await runPreview(posterUrl, { titleCardsOnly: false, keepSearch: true });
             }
         } else toast('Set URL filled — preview or apply when ready.');
