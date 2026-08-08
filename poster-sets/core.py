@@ -2513,21 +2513,17 @@ def resolve_posterdb_title_page(
             probe = _posterdb_probe_title_page(url, config=config)
         except Exception:
             return None
-        if str(probe.get("mediaId") or "") == target_tmdb:
-            return {
-                **item,
-                "url": url,
-                "tmdbId": probe.get("mediaId"),
-                "setCount": int(probe.get("setCount") or 0),
-            }
-        if not probe.get("mediaId"):
-            return {
-                **item,
-                "url": url,
-                "tmdbId": target_tmdb,
-                "setCount": int(probe.get("setCount") or 0),
-            }
-        return None
+        page_tmdb = str(probe.get("mediaId") or "").strip()
+        # Never invent a TMDB match — that made Warm accept the wrong "Obsession (2026)"
+        # page, then list_posterdb_sets rejected it and soft-skipped every title.
+        if not page_tmdb or page_tmdb != target_tmdb:
+            return None
+        return {
+            **item,
+            "url": url,
+            "tmdbId": page_tmdb,
+            "setCount": int(probe.get("setCount") or 0),
+        }
 
     # When logged in, resolve by external ids before multi-page text search.
     if has_creds and (target_tmdb or imdb_id or tvdb_id):
@@ -2661,6 +2657,9 @@ def resolve_posterdb_title_page(
         if target_tmdb and not tmdb_match:
             if media_id and str(media_id) != target_tmdb:
                 continue
+            # Without a confirmed TMDB id on the page, do not pick same-name year hits.
+            if not media_id:
+                continue
             if not title_compatible:
                 continue
         elif want_key and not want_key.startswith("|") and not title_match and not title_compatible:
@@ -2675,7 +2674,9 @@ def resolve_posterdb_title_page(
                 "tmdbId": media_id,
                 "setCount": set_count,
             }
-            if (tmdb_match or title_match) and set_count > 0:
+            if tmdb_match and set_count > 0:
+                break
+            if (tmdb_match or title_match) and set_count > 0 and not target_tmdb:
                 break
 
     if best_item is None and target_tmdb:
@@ -4107,20 +4108,24 @@ def search_catalog(
                     "(advanced search empty — check TPDB Pro / session).",
                 )
         if title_url_value:
-            loaded = list_posterdb_sets(
-                title_url_value,
-                progress=progress,
-                limit=take,
-                config=config,
-                tmdb_id=tmdb_id,
-                imdb_id=imdb_id,
-                tvdb_id=tvdb_id,
-                title_hint=title_hint,
-                year_hint=year_val,
-                media_type=media_type,
-                # User-pasted URLs only — resolved pages still validate TMDB.
-                explicit_title_url=bool(user_title_url),
-            )
+            try:
+                loaded = list_posterdb_sets(
+                    title_url_value,
+                    progress=progress,
+                    limit=take,
+                    config=config,
+                    tmdb_id=tmdb_id,
+                    imdb_id=imdb_id,
+                    tvdb_id=tvdb_id,
+                    title_hint=title_hint,
+                    year_hint=year_val,
+                    media_type=media_type,
+                    # User-pasted URLs only — resolved pages still validate TMDB.
+                    explicit_title_url=bool(user_title_url),
+                )
+            except Exception as exc:
+                emit(progress, f"ThePosterDB set load failed: {exc}")
+                loaded = {"ok": False, "sets": [], "titles": []}
             if loaded.get("sets"):
                 return loaded
             if user_title_url:
