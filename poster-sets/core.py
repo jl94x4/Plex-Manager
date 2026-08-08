@@ -11,6 +11,7 @@ import math
 import os
 import re
 import tempfile
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Set, Tuple
@@ -409,6 +410,23 @@ def base_url_safe(config: dict) -> str:
 
 
 _POSTERDB_SESSIONS: dict[str, requests.Session] = {}
+_POSTERDB_HTTP_LOCK = threading.RLock()
+# ThePosterDB paces requests (~7s). Parallel HTML walks race the shared session and get empty pages.
+_POSTERDB_HTML_GAP_S = 7.0
+_posterdb_last_http_at = 0.0
+
+
+def _posterdb_throttle() -> None:
+    """Pace TPDB HTTP so login + search + probes don't stampede the rate limiter."""
+    global _posterdb_last_http_at
+    with _POSTERDB_HTTP_LOCK:
+        now = time.time()
+        wait = (_POSTERDB_HTML_GAP_S - (now - _posterdb_last_http_at)) if _posterdb_last_http_at else 0.0
+        if wait > 0.05:
+            time.sleep(wait)
+        _posterdb_last_http_at = time.time()
+
+
 _POSTERDB_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
@@ -445,21 +463,25 @@ def _posterdb_http_client(config: dict | None = None) -> requests.Session | type
     session = requests.Session()
     session.headers.update({"User-Agent": _POSTERDB_UA})
     try:
-        login_page = session.get("https://theposterdb.com/login", timeout=60)
+        _posterdb_throttle()
+        with _POSTERDB_HTTP_LOCK:
+            login_page = session.get("https://theposterdb.com/login", timeout=60)
         login_soup = BeautifulSoup(login_page.text, "html.parser")
         token_node = login_soup.find("input", {"name": "_token"})
         token = str(token_node.get("value") or "") if token_node else ""
-        response = session.post(
-            "https://theposterdb.com/login",
-            data={
-                "_token": token,
-                "login": user,
-                "password": password,
-                "remember": "on",
-            },
-            timeout=60,
-            allow_redirects=True,
-        )
+        _posterdb_throttle()
+        with _POSTERDB_HTTP_LOCK:
+            response = session.post(
+                "https://theposterdb.com/login",
+                data={
+                    "_token": token,
+                    "login": user,
+                    "password": password,
+                    "remember": "on",
+                },
+                timeout=60,
+                allow_redirects=True,
+            )
         if "theposterdb.com/login" in str(response.url or "").lower() and response.status_code == 200:
             emit(None, "ThePosterDB login failed — check TPDB username/password in Poster Sets settings.")
             return requests
@@ -549,15 +571,20 @@ def cook_soup(
     last_error: Exception | None = None
     for attempt in range(attempts):
         try:
+            if is_tpdb:
+                _posterdb_throttle()
             if isinstance(client, requests.Session):
-                response = client.get(url, headers=headers, timeout=wait)
+                with _POSTERDB_HTTP_LOCK:
+                    response = client.get(url, headers=headers, timeout=wait)
             else:
                 response = requests.get(url, headers=headers, timeout=wait)
             if response.status_code == 200 or (response.status_code == 500 and "mediux.pro" in url):
                 return BeautifulSoup(response.text, "html.parser")
             # 520–530 are Cloudflare origin/edge failures — often transient on MediUX/TPDB.
             if response.status_code in {429, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530} and attempt + 1 < attempts:
-                time.sleep(1.25 * (attempt + 1))
+                # TPDB rate-limit: honor a longer cooldown than generic retries.
+                cool = 8.0 if (is_tpdb and response.status_code == 429) else 1.25 * (attempt + 1)
+                time.sleep(cool)
                 continue
             raise RuntimeError(f"Failed to retrieve the page. Status code: {response.status_code}")
         except (requests.Timeout, requests.ConnectionError) as exc:
@@ -2017,7 +2044,8 @@ def _posterdb_title_only_key(title: str) -> str:
 def _posterdb_year_tolerance(media_type: str = "show") -> int:
     raw = str(media_type or "show").strip().lower()
     if raw in {"movie", "movies", "film"}:
-        return 1
+        # Theatrical vs digital / "2025 film, 2026 release" mismatches are common on TPDB.
+        return 2
     return 5
 
 
@@ -2390,12 +2418,14 @@ def search_posterdb_advanced_titles(
     emit(progress, "Searching ThePosterDB advanced catalog…")
 
     def _fetch(active_session: requests.Session) -> requests.Response:
-        return active_session.get(
-            "https://theposterdb.com/search/advanced/results",
-            params=params,
-            timeout=60,
-            allow_redirects=True,
-        )
+        _posterdb_throttle()
+        with _POSTERDB_HTTP_LOCK:
+            return active_session.get(
+                "https://theposterdb.com/search/advanced/results",
+                params=params,
+                timeout=60,
+                allow_redirects=True,
+            )
 
     response = _fetch(session)
     if "theposterdb.com/login" in str(response.url or "").lower():
@@ -2574,6 +2604,11 @@ def resolve_posterdb_title_page(
                     candidates[pid] = item
 
     if not candidates:
+        if target_tmdb:
+            _posterdb_note_resolve_error(
+                f"No ThePosterDB /posters/<id> candidates for TMDB {target_tmdb} "
+                f"(advanced + public search). This title may not exist on TPDB yet."
+            )
         return _finish(None)
 
     best_item: Optional[dict] = None
@@ -2642,6 +2677,12 @@ def resolve_posterdb_title_page(
             }
             if (tmdb_match or title_match) and set_count > 0:
                 break
+
+    if best_item is None and target_tmdb:
+        _posterdb_note_resolve_error(
+            f"Probed ThePosterDB candidates but none matched TMDB {target_tmdb} "
+            "(wrong same-name titles, or TPDB has no page for this id yet)."
+        )
 
     # Do NOT relax into a different TMDB id — that caused Sisters (2026) for Sisters (2015).
     if best_item is None and not target_tmdb and year is not None and want_key:
@@ -2794,20 +2835,17 @@ def search_posterdb_titles(
         return False
 
     page_batches: dict[int, list[dict]] = {}
-    if pages <= 1:
-        page_num, batch = _fetch_page(1)
+    # Serial page walks only — parallel fetches shared a requests.Session (racey) and
+    # hammered ThePosterDB's ~7s limiter, so Warm "logged in" then found zero title pages.
+    for page in range(1, pages + 1):
+        try:
+            page_num, batch = _fetch_page(page)
+        except Exception as exc:
+            emit(progress, f"ThePosterDB search page failed: {exc}")
+            continue
         page_batches[page_num] = batch
-    else:
-        # Parallel page fetch — Sisters (2015) lives on page 2; one round-trip beats serial walking.
-        with ThreadPoolExecutor(max_workers=min(pages, 5)) as pool:
-            futures = [pool.submit(_fetch_page, page) for page in range(1, pages + 1)]
-            for future in as_completed(futures):
-                try:
-                    page_num, batch = future.result()
-                except Exception as exc:
-                    emit(progress, f"ThePosterDB search page failed: {exc}")
-                    continue
-                page_batches[page_num] = batch
+        if _batch_has_year_match(batch):
+            break
 
     for page in sorted(page_batches):
         batch = page_batches.get(page) or []
@@ -2820,7 +2858,6 @@ def search_posterdb_titles(
             seen.add(pid)
             titles.append(item)
         if _batch_has_year_match(batch):
-            # Keep any already-fetched later pages that finished in parallel, but stop preferring more work.
             break
 
     if not _skip_resolve and (tmdb_id or imdb_id or tvdb_id or len(titles) > 1):
