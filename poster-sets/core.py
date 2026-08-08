@@ -417,7 +417,7 @@ _POSTERDB_LOGIN_LAST_ERROR: Optional[str] = None
 _POSTERDB_HTTP_LOCK = threading.RLock()
 # Adaptive HTML pacing — authenticated traffic can go faster; 429s raise the floor.
 _POSTERDB_HTML_GAP_AUTH_S = 1.5
-_POSTERDB_HTML_GAP_PUBLIC_S = 5.0
+_POSTERDB_HTML_GAP_PUBLIC_S = 2.5
 _POSTERDB_HTML_GAP_S = 0.0  # raised to >=7 on HTTP 429
 _posterdb_last_http_at = 0.0
 # Warm metadata pass: enough sets for browsing; full crawl happens when a title is opened.
@@ -2905,6 +2905,9 @@ def resolve_posterdb_title_page(
             _posterdb_note_resolve_error(msg)
 
     public_pages = 3 if not has_creds else (5 if target_tmdb else 3)
+    # Warm public mode: fewer search pages — most year matches land on page 1–2.
+    if (config or {}).get("_posterdb_warm") and not has_creds:
+        public_pages = 2
 
     # Fast path: paginated text search for exact title+year (no login required).
     if year is not None and bare_title:
@@ -3154,10 +3157,13 @@ def search_posterdb_titles(
             year_val = int(year_match.group(1))
     # Ambiguous titles bury the matching year on later pages. When TMDB is pinned,
     # walk further — franchise spin-offs often sit past page 3 in public search.
-    pages = max(1, int(max_pages or 1))
+    # Respect explicit lower caps (Warm passes max_pages=2) so Warm stays faster.
+    requested = max(1, int(max_pages or 1))
     if year_val is not None or tmdb_id:
-        pages = max(pages, 3)
-    pages = min(pages, 8 if tmdb_id else 3)
+        pages = requested if requested < 3 else max(requested, 3)
+    else:
+        pages = requested
+    pages = min(pages, 8 if tmdb_id else 5)
 
     titles: list[dict] = []
     seen: set[str] = set()
@@ -4506,6 +4512,9 @@ def search_catalog(
             raise ValueError("query or title hint is required for ThePosterDB title search")
         titles: list[dict] = []
         seen_ids: set[str] = set()
+        fallback_pages = 8 if tmdb_id else 5
+        if (config or {}).get("_posterdb_warm") and not _posterdb_should_use_login(config):
+            fallback_pages = 2
         for term in _posterdb_search_terms_from_hint(search_term) or [search_term]:
             part = search_posterdb_titles(
                 term,
@@ -4517,7 +4526,7 @@ def search_catalog(
                 tvdb_id=tvdb_id,
                 media_type=media_type,
                 _skip_resolve=True,
-                max_pages=8 if tmdb_id else 5,
+                max_pages=fallback_pages,
                 year_hint=year_val if term == search_term else None,
             )
             for item in part.get("titles") or []:
@@ -4635,6 +4644,7 @@ def warm_library_titles(
         return {"ok": False, "error": "No library titles provided", "results": []}
 
     working = dict(config)
+    working["_posterdb_warm"] = True
     if _posterdb_should_use_login(working):
         session = _posterdb_http_client(working)
         if isinstance(session, requests.Session):
@@ -4646,6 +4656,7 @@ def warm_library_titles(
                 "continuing with public text search (no login required for posters).",
             )
             working = _posterdb_public_only_config(working)
+            working["_posterdb_warm"] = True
     else:
         emit(
             progress,

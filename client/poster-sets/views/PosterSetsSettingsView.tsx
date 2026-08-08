@@ -459,8 +459,8 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     <span className="font-semibold text-text/90">How it works:</span>{' '}
                                     when you open a library title (or run Warm), SMP resolves TPDB sets and can store them on disk.
                                     Warm is <span className="text-text/90">metadata-only</span> (title URL + set list, first page / up to ~48 sets)
-                                    with ~1.5s HTML spacing when logged in — images hydrate when you open a title (or via Prefetch).
-                                    Optional parallel Warm workers (3 separate sessions) speed title resolve but raise 429 risk.
+                                    with ~1.5s HTML spacing when logged in, ~2.5s when using public search — images hydrate when you open a title (or via Prefetch).
+                                    Optional parallel Warm workers (5 separate sessions) speed title resolve but raise 429 risk.
                                     Warm skips titles already on disk and, after a portal restart, resumes any unfinished queue from{' '}
                                     <code className="text-text/80">tpdb-warm-progress.json</code>.
                                     Oldest images are dropped when the disk budget is hit.
@@ -545,7 +545,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                             />
                             <SettingsToggleRow
                                 title="Parallel Warm workers (experimental)"
-                                description="Run 3 Warm workers with separate TPDB sessions (~3× title resolve). Turn off if you hit rate limits or Cloudflare blocks."
+                                description="Run 5 Warm workers with separate TPDB sessions (~5× title resolve). Turn off if you hit rate limits or Cloudflare blocks."
                                 checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbWarmParallelWorkers === true}
                                 onChange={(next) => setConfigDraft((prev) => ({
                                     ...prev,
