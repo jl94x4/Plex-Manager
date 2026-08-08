@@ -811,7 +811,7 @@ const setSessionCookie = (req, res, token) => {
     });
 };
 
-app.use(express.json({ limit: '50kb' })); // Middleware to parse JSON bodies (with size limit)
+app.use(express.json({ limit: '1mb' })); // Poster Sets Warm + other admin payloads; was 50kb (413 on large Warm)
 app.use(cookieParser()); // Middleware to parse cookies
 
 // CSRF defense for cookie-authenticated API mutations: require same-origin

@@ -343,19 +343,51 @@ export const posterSetsApi = {
         ok: boolean;
         cleared?: { titles?: number; sets?: number; images?: number };
     }>,
-    warmTpdbLibraryCache: (items: Array<{
+    warmTpdbLibraryCache: async (items: Array<{
         tmdbId?: string | number | null;
         id?: string | number | null;
         title?: string;
         year?: number | null;
         mediaType?: string;
-    }>) => apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({ items })) as Promise<{
-        ok: boolean;
-        started?: boolean;
-        titles?: number;
-        skippedCached?: number;
-        message?: string;
-    }>,
+    }>) => {
+        const list = Array.isArray(items) ? items : [];
+        // Stay well under reverse-proxy / historical body limits — queue merges across calls.
+        const CHUNK = 80;
+        let titles = 0;
+        let skippedCached = 0;
+        let lastMessage = '';
+        if (!list.length) {
+            return apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({ items: [] })) as Promise<{
+                ok: boolean;
+                started?: boolean;
+                titles?: number;
+                skippedCached?: number;
+                message?: string;
+            }>;
+        }
+        for (let offset = 0; offset < list.length; offset += CHUNK) {
+            const chunk = list.slice(offset, offset + CHUNK);
+            const result = await apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({ items: chunk })) as {
+                ok: boolean;
+                started?: boolean;
+                titles?: number;
+                skippedCached?: number;
+                message?: string;
+            };
+            titles += Number(result.titles) || 0;
+            skippedCached += Number(result.skippedCached) || 0;
+            lastMessage = String(result.message || lastMessage);
+        }
+        return {
+            ok: true,
+            started: true,
+            titles,
+            skippedCached,
+            message: lastMessage
+                || `Queued ${titles} library title(s) for Warm`
+                + (skippedCached ? ` (skipped ${skippedCached} already cached).` : '.'),
+        };
+    },
     audit: (limit = 100) => apiFetch(`${ROOT}/audit?limit=${encodeURIComponent(String(limit))}`) as Promise<{
         ok?: boolean;
         entries: PosterSetsAuditEntry[];
