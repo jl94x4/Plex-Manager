@@ -353,6 +353,7 @@ export const posterSetsApi = {
         ok: boolean;
         started?: boolean;
         titles?: number;
+        skippedCached?: number;
         message?: string;
     }>,
     audit: (limit = 100) => apiFetch(`${ROOT}/audit?limit=${encodeURIComponent(String(limit))}`) as Promise<{

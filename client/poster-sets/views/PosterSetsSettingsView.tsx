@@ -448,6 +448,8 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     when you open a library title (or run Warm), SMP resolves TPDB sets and can store them on disk.
                                     Prefetch then downloads each set’s preview metadata and poster files one request at a time with ThePosterDB’s{' '}
                                     <span className="text-text/90">7 second</span> spacing. Next visit serves the title cache immediately and may refresh in the background.
+                                    Warm skips titles already on disk and, after a portal restart, resumes any unfinished queue from{' '}
+                                    <code className="text-text/80">tpdb-warm-progress.json</code>.
                                     Oldest images are dropped when the disk budget is hit.
                                 </p>
                                 <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-[11px] text-text/85">
