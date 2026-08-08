@@ -680,65 +680,69 @@ export const PosterSetsSettingsView: React.FC = () => {
                             </div>
 
                             <div className={`space-y-3 border-t border-white/10 pt-5 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none opacity-50'}`}>
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Build scope</p>
-                                <div className="grid gap-4 lg:grid-cols-12 lg:gap-5">
-                                    <div className="grid gap-2 sm:grid-cols-2 lg:col-span-5">
-                                        <label className="block">
-                                            <span className="text-[10px] uppercase tracking-wide text-muted">Media</span>
-                                            <div className="mt-1">
-                                                <CustomSelect
-                                                    value={warmScope.media}
-                                                    onChange={(value) => setWarmScope((prev) => ({
-                                                        ...prev,
-                                                        media: (value === 'movie' || value === 'show' ? value : 'all') as 'all' | 'movie' | 'show',
-                                                    }))}
-                                                    options={[
-                                                        { value: 'all', label: 'Movies + TV' },
-                                                        { value: 'movie', label: 'Movies only' },
-                                                        { value: 'show', label: 'TV only' },
-                                                    ]}
-                                                    className="w-full"
-                                                />
-                                            </div>
-                                        </label>
-                                        <label className="block">
-                                            <span className="text-[10px] uppercase tracking-wide text-muted">Library source</span>
-                                            <div className="mt-1">
-                                                <CustomSelect
-                                                    value={warmScope.source}
-                                                    onChange={(value) => setWarmScope((prev) => ({
-                                                        ...prev,
-                                                        source: value === 'recent' ? 'recent' : 'full',
-                                                    }))}
-                                                    options={[
-                                                        { value: 'full', label: 'Recent + full library' },
-                                                        { value: 'recent', label: 'Recently added only' },
-                                                    ]}
-                                                    className="w-full"
-                                                />
-                                            </div>
-                                        </label>
+                                <div className="overflow-hidden rounded-lg border border-white/10 bg-black/25">
+                                    <div className="border-b border-white/10 px-3 py-2 sm:px-4">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Build scope</p>
                                     </div>
-                                    <div className="rounded-lg border border-white/10 bg-black/20 px-3 lg:col-span-7">
-                                        <SettingsToggleRow
-                                            title="Skip already cached titles"
-                                            description="Only queue titles that do not already have a TPDB set list on disk (resume-friendly)."
-                                            checked={warmScope.skipCached}
-                                            onChange={(next) => setWarmScope((prev) => ({ ...prev, skipCached: next }))}
-                                            border
-                                            className="!py-2.5"
-                                        />
-                                        <SettingsToggleRow
-                                            title="Prefetch followed creators only"
-                                            description="When Prefetch is on, only hydrate sets from Creators you follow for this build."
-                                            checked={warmScope.followedPrefetchOnly}
-                                            onChange={(next) => setWarmScope((prev) => ({ ...prev, followedPrefetchOnly: next }))}
-                                            border={false}
-                                            className="!py-2.5"
-                                        />
+                                    <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-white/10">
+                                        <div className="grid gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4">
+                                            <label className="block min-w-0">
+                                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Media</span>
+                                                <div className="mt-1.5">
+                                                    <CustomSelect
+                                                        value={warmScope.media}
+                                                        onChange={(value) => setWarmScope((prev) => ({
+                                                            ...prev,
+                                                            media: (value === 'movie' || value === 'show' ? value : 'all') as 'all' | 'movie' | 'show',
+                                                        }))}
+                                                        options={[
+                                                            { value: 'all', label: 'Movies + TV' },
+                                                            { value: 'movie', label: 'Movies only' },
+                                                            { value: 'show', label: 'TV only' },
+                                                        ]}
+                                                        className="w-full"
+                                                    />
+                                                </div>
+                                            </label>
+                                            <label className="block min-w-0">
+                                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Library source</span>
+                                                <div className="mt-1.5">
+                                                    <CustomSelect
+                                                        value={warmScope.source}
+                                                        onChange={(value) => setWarmScope((prev) => ({
+                                                            ...prev,
+                                                            source: value === 'recent' ? 'recent' : 'full',
+                                                        }))}
+                                                        options={[
+                                                            { value: 'full', label: 'Recent + full library' },
+                                                            { value: 'recent', label: 'Recently added only' },
+                                                        ]}
+                                                        className="w-full"
+                                                    />
+                                                </div>
+                                            </label>
+                                        </div>
+                                        <div className="border-t border-white/10 px-3 py-1 lg:border-t-0 sm:px-4">
+                                            <SettingsToggleRow
+                                                title="Skip already cached titles"
+                                                description="Only queue titles that do not already have a TPDB set list on disk (resume-friendly)."
+                                                checked={warmScope.skipCached}
+                                                onChange={(next) => setWarmScope((prev) => ({ ...prev, skipCached: next }))}
+                                                border
+                                                className="!py-2.5"
+                                            />
+                                            <SettingsToggleRow
+                                                title="Prefetch followed creators first"
+                                                description="When Prefetch is on, hydrate sets from Creators you follow before everyone else for this build — others still queue after."
+                                                checked={warmScope.followedPrefetchOnly}
+                                                onChange={(next) => setWarmScope((prev) => ({ ...prev, followedPrefetchOnly: next }))}
+                                                border={false}
+                                                className="!py-2.5"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="flex flex-wrap gap-2 pt-1">
+                                <div className="flex flex-wrap gap-2">
                                     <button
                                         type="button"
                                         className={buttonClass}
