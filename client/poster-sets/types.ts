@@ -29,6 +29,10 @@ export type PosterSetsConfig = {
     tpdbLocalCacheEnabled?: boolean;
     /** After a library title loads, hydrate all its TPDB set assets/images in the background. */
     tpdbAggressivePrefetch?: boolean;
+    /** Experimental: 3 parallel Warm workers (separate sessions). Disable if rate-limited. */
+    tpdbWarmParallelWorkers?: boolean;
+    /** Attempt TPDB login for advanced id search. Off = public title search only. */
+    tpdbUseLogin?: boolean;
     /** Soft disk budget for tpdb-image-cache (bytes). */
     tpdbCacheMaxBytes?: number;
 };
@@ -413,5 +417,7 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     applyDestination: 'plex',
     tpdbLocalCacheEnabled: false,
     tpdbAggressivePrefetch: false,
+    tpdbWarmParallelWorkers: false,
+    tpdbUseLogin: true,
     tpdbCacheMaxBytes: 2 * 1024 * 1024 * 1024,
 };

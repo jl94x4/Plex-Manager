@@ -428,9 +428,21 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 onChange={(event) => setConfigDraft((prev) => ({ ...prev, tpdb_password: event.target.value }))}
                             />
                             <span className="mt-1 block text-[11px] text-muted">
-                                Optional. Logged-in advanced search finds canonical title pages (e.g. Ted Lasso on /posters/243647).
+                                Optional. Login unlocks advanced TMDB-id search. Poster pages themselves are public — if Cloudflare blocks login from your server, turn off “Use TPDB login” below and Warm still scrapes via public search.
                             </span>
                         </label>
+                        <div className="sm:col-span-2">
+                            <SettingsToggleRow
+                                title="Use TPDB login (advanced search)"
+                                description="On: try login for TMDB/IMDB/TVDB resolve. Off: public title+year search only (works when Cloudflare blocks login from Docker/VPS)."
+                                checked={configDraft.tpdbUseLogin !== false}
+                                onChange={(next) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    tpdbUseLogin: next,
+                                }))}
+                                border={false}
+                            />
+                        </div>
                         <div className="sm:col-span-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 space-y-0">
                             <p className="pt-3 text-sm font-semibold text-text">ThePosterDB local cache</p>
                             <div className="space-y-2 pb-3 text-xs leading-relaxed text-muted">
@@ -446,8 +458,9 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 <p>
                                     <span className="font-semibold text-text/90">How it works:</span>{' '}
                                     when you open a library title (or run Warm), SMP resolves TPDB sets and can store them on disk.
-                                    Warm runs titles in batches with one saved TPDB login (HTML ~2.5s when logged in; parallel HTML workers still get rate-limited).
-                                    Prefetch downloads set images with up to 6 parallel CDN workers.
+                                    Warm is <span className="text-text/90">metadata-only</span> (title URL + set list, first page / up to ~48 sets)
+                                    with ~1.5s HTML spacing when logged in — images hydrate when you open a title (or via Prefetch).
+                                    Optional parallel Warm workers (3 separate sessions) speed title resolve but raise 429 risk.
                                     Warm skips titles already on disk and, after a portal restart, resumes any unfinished queue from{' '}
                                     <code className="text-text/80">tpdb-warm-progress.json</code>.
                                     Oldest images are dropped when the disk budget is hit.
@@ -491,7 +504,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 onChange={(next) => setConfigDraft((prev) => ({
                                     ...prev,
                                     tpdbLocalCacheEnabled: next,
-                                    ...(next ? {} : { tpdbAggressivePrefetch: false }),
+                                    ...(next ? {} : { tpdbAggressivePrefetch: false, tpdbWarmParallelWorkers: false }),
                                 }))}
                             />
                             {tpdbCacheStatus && (
@@ -521,11 +534,22 @@ export const PosterSetsSettingsView: React.FC = () => {
                             )}
                             <SettingsToggleRow
                                 title="Prefetch set images (library titles only)"
-                                description="After a library title's TPDB sets load, download assets/images in the background (up to 6 parallel CDN downloads). Required for offline apply of that art."
+                                description="After you open a library title's TPDB sets, download assets/images in the background (up to 6 parallel CDN downloads). Warm itself stays metadata-only."
                                 checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbAggressivePrefetch === true}
                                 onChange={(next) => setConfigDraft((prev) => ({
                                     ...prev,
                                     tpdbAggressivePrefetch: next,
+                                    ...(next ? { tpdbLocalCacheEnabled: true } : {}),
+                                }))}
+                                disabled={configDraft.tpdbLocalCacheEnabled !== true}
+                            />
+                            <SettingsToggleRow
+                                title="Parallel Warm workers (experimental)"
+                                description="Run 3 Warm workers with separate TPDB sessions (~3× title resolve). Turn off if you hit rate limits or Cloudflare blocks."
+                                checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbWarmParallelWorkers === true}
+                                onChange={(next) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    tpdbWarmParallelWorkers: next,
                                     ...(next ? { tpdbLocalCacheEnabled: true } : {}),
                                 }))}
                                 disabled={configDraft.tpdbLocalCacheEnabled !== true}
@@ -569,27 +593,69 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         onClick={async () => {
                                             setBusy('tpdb-cache');
                                             try {
+                                                const mapRow = (row: Record<string, unknown>) => {
+                                                    const tmdbRaw = row.tmdbId ?? row.tmdb_id;
+                                                    const tmdbId = tmdbRaw != null ? String(tmdbRaw).trim() : '';
+                                                    const mediaRaw = String(row.mediaType || row.type || 'movie').toLowerCase();
+                                                    return {
+                                                        tmdbId,
+                                                        title: String(row.title || row.name || '').trim(),
+                                                        year: (row.year as number | null | undefined) ?? null,
+                                                        mediaType: mediaRaw === 'show' || mediaRaw === 'tv' || mediaRaw === 'series'
+                                                            ? 'show'
+                                                            : 'movie',
+                                                    };
+                                                };
+                                                const seen = new Set<string>();
+                                                const items: Array<{
+                                                    tmdbId: string;
+                                                    title: string;
+                                                    year: number | null;
+                                                    mediaType: string;
+                                                }> = [];
+                                                const pushRows = (rows: Array<Record<string, unknown>>) => {
+                                                    for (const row of rows) {
+                                                        const mapped = mapRow(row);
+                                                        // Real TMDB ids only — never fall back to Plex ratingKey.
+                                                        if (!/^\d+$/.test(mapped.tmdbId) || !mapped.title) continue;
+                                                        const key = `${mapped.mediaType}:${mapped.tmdbId}`;
+                                                        if (seen.has(key)) continue;
+                                                        seen.add(key);
+                                                        items.push(mapped);
+                                                        if (items.length >= 1000) return;
+                                                    }
+                                                };
+
                                                 const recent = await posterSetsApi.libraryRecent(200);
-                                                const items = [
+                                                pushRows([
                                                     ...(recent.movies || []),
                                                     ...(recent.shows || []),
                                                     ...(recent.items || []),
-                                                ]
-                                                    .map((row) => {
-                                                        const tmdbRaw = row.tmdbId ?? row.tmdb_id;
-                                                        const tmdbId = tmdbRaw != null ? String(tmdbRaw).trim() : '';
-                                                        const mediaRaw = String(row.mediaType || row.type || 'movie').toLowerCase();
-                                                        return {
-                                                            tmdbId,
-                                                            title: String(row.title || row.name || '').trim(),
-                                                            year: (row.year as number | null | undefined) ?? null,
-                                                            mediaType: mediaRaw === 'show' || mediaRaw === 'tv' || mediaRaw === 'series'
-                                                                ? 'show'
-                                                                : 'movie',
-                                                        };
-                                                    })
-                                                    // Real TMDB ids only — never fall back to Plex ratingKey.
-                                                    .filter((row) => /^\d+$/.test(row.tmdbId) && row.title);
+                                                ] as Array<Record<string, unknown>>);
+
+                                                const sections = await posterSetsApi.librarySections().catch(() => null);
+                                                for (const section of sections?.sections || []) {
+                                                    if (items.length >= 1000) break;
+                                                    const sectionType = String(section.type || '').toLowerCase();
+                                                    if (sectionType !== 'movie' && sectionType !== 'show') continue;
+                                                    let start = 0;
+                                                    for (let page = 0; page < 20 && items.length < 1000; page += 1) {
+                                                        const browse = await posterSetsApi.libraryBrowse({
+                                                            section: section.key,
+                                                            type: sectionType === 'show' ? 'show' : 'movie',
+                                                            start,
+                                                            limit: 100,
+                                                            sort: 'titleSort',
+                                                        }).catch(() => null);
+                                                        const batch = (browse?.items || []) as Array<Record<string, unknown>>;
+                                                        if (!batch.length) break;
+                                                        const before = items.length;
+                                                        pushRows(batch);
+                                                        start += batch.length;
+                                                        if (batch.length < 100 || items.length === before) break;
+                                                    }
+                                                }
+
                                                 const result = await posterSetsApi.warmTpdbLibraryCache(items);
                                                 toast(result.message || `Warming ${result.titles || 0} library title(s).`);
                                                 const status = await posterSetsApi.tpdbCacheStatus().catch(() => null);
@@ -707,7 +773,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     </div>
                                     <p className="text-[11px] text-muted">
                                         Auto-refreshes every 2s while this page is open. Steps include title resolve,
-                                        HTML set scrape (~2.5s when logged in), parallel CDN image downloads, and each file into tpdb-image-cache.
+                                        HTML set scrape (~1.5s when logged in), parallel CDN image downloads, and each file into tpdb-image-cache.
                                     </p>
                                 </div>
                             </div>

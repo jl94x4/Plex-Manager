@@ -416,10 +416,13 @@ _POSTERDB_LOGIN_FAIL_COOLDOWN_S = 90.0
 _POSTERDB_LOGIN_LAST_ERROR: Optional[str] = None
 _POSTERDB_HTTP_LOCK = threading.RLock()
 # Adaptive HTML pacing — authenticated traffic can go faster; 429s raise the floor.
-_POSTERDB_HTML_GAP_AUTH_S = 2.5
+_POSTERDB_HTML_GAP_AUTH_S = 1.5
 _POSTERDB_HTML_GAP_PUBLIC_S = 5.0
 _POSTERDB_HTML_GAP_S = 0.0  # raised to >=7 on HTTP 429
 _posterdb_last_http_at = 0.0
+# Warm metadata pass: enough sets for browsing; full crawl happens when a title is opened.
+_POSTERDB_WARM_SET_LIMIT = 48
+_POSTERDB_WARM_MAX_SET_PAGES = 1
 _POSTERDB_SESSION_MAX_AGE_S = 12 * 60 * 60
 
 
@@ -670,8 +673,10 @@ def _posterdb_session_looks_logged_in(
 
 
 def _posterdb_http_client(config: dict | None = None) -> requests.Session | type(requests):
-    """Return an authenticated TPDB session when credentials exist in config."""
+    """Return an authenticated TPDB session when credentials exist and login is enabled."""
     config = config if isinstance(config, dict) else {}
+    if not _posterdb_should_use_login(config):
+        return requests
     user = str(config.get("tpdb_username") or config.get("tpdb_login") or "").strip()
     password = str(config.get("tpdb_password") or "").strip()
     if not user or not password or password == "********":
@@ -967,6 +972,27 @@ def _posterdb_has_credentials(config: dict | None) -> bool:
     user = str(config.get("tpdb_username") or config.get("tpdb_login") or "").strip()
     password = str(config.get("tpdb_password") or "").strip()
     return bool(user and password and password != "********")
+
+
+def _posterdb_should_use_login(config: dict | None = None) -> bool:
+    """Whether to attempt authenticated advanced search (optional — public search works without it)."""
+    config = config if isinstance(config, dict) else {}
+    if not _posterdb_has_credentials(config):
+        return False
+    raw = config.get("tpdbUseLogin", config.get("tpdb_use_login", True))
+    if raw is False or raw == 0:
+        return False
+    if isinstance(raw, str) and raw.strip().lower() in {"", "0", "false", "off", "no"}:
+        return False
+    return True
+
+
+def _posterdb_public_only_config(config: dict | None = None) -> dict:
+    """Copy config with login disabled so workers stop retrying Cloudflare-blocked auth."""
+    next_config = dict(config or {})
+    next_config["tpdbUseLogin"] = False
+    next_config["tpdb_use_login"] = False
+    return next_config
 
 
 def _posterdb_search_terms_from_hint(title: str) -> list[str]:
@@ -2600,7 +2626,7 @@ def _posterdb_advanced_resolve_by_ids(
     TPDB advanced search is more reliable with one id per request than combined
     tmdb+tvdb+imdb params (especially for TV shows).
     """
-    if not _posterdb_has_credentials(config):
+    if not _posterdb_should_use_login(config):
         return None
     target_tmdb = str(tmdb_id or "").strip() or None
     target_tvdb = str(tvdb_id or "").strip() or None
@@ -2811,7 +2837,7 @@ def resolve_posterdb_title_page(
         imdb_id=str(imdb_id or "").strip() or None,
         tvdb_id=str(tvdb_id or "").strip() or None,
         media_type=media_type,
-        authenticated=_posterdb_has_credentials(config),
+        authenticated=_posterdb_should_use_login(config),
     )
     cached_hit, cached_value = _posterdb_resolve_cache_get(cache_key)
     if cached_hit:
@@ -2824,11 +2850,11 @@ def resolve_posterdb_title_page(
     candidates: dict[str, dict] = {}
     category = _posterdb_advanced_category(media_type)
     want_key = _posterdb_title_match_key(bare_title or clean_title or clean_query, year)
-    has_creds = _posterdb_has_credentials(config)
+    has_creds = _posterdb_should_use_login(config)
     if target_tmdb and not has_creds:
         msg = (
-            "ThePosterDB login not configured — matching uses public text search only. "
-            "Add TPDB credentials in Poster Sets settings for TMDB/TVDB id resolve."
+            "ThePosterDB login not used — matching uses public text search. "
+            "Enable TPDB login in Settings when Cloudflare allows it for TMDB-id resolve."
         )
         emit(progress, msg)
         _posterdb_note_resolve_error(msg)
@@ -2870,25 +2896,17 @@ def resolve_posterdb_title_page(
         )
         if advanced_hit:
             return _finish(advanced_hit)
-        # Credentials configured but session dead — public text + probes burn ~10 minutes
-        # per title and still usually miss TMDB matches. Fail fast so Warm can move on.
-        if not _posterdb_session_ready(config):
-            msg = (
-                "ThePosterDB login failed — skipping slow public text search. "
-                "Fix username/password (Settings → Test) and re-run Warm."
-            )
-            emit(progress, msg)
-            _posterdb_note_resolve_error(msg)
-            return _finish(None)
         if target_tmdb:
             msg = (
                 f"ThePosterDB advanced search found no title page for TMDB {target_tmdb} — "
-                "trying public text search (check TPDB Pro / session if this keeps failing)."
+                "trying public text search."
             )
             emit(progress, msg)
             _posterdb_note_resolve_error(msg)
 
-    # Fast path: parallel paginated text search for exact title+year (no login required).
+    public_pages = 3 if not has_creds else (5 if target_tmdb else 3)
+
+    # Fast path: paginated text search for exact title+year (no login required).
     if year is not None and bare_title:
         text = search_posterdb_titles(
             bare_title,
@@ -2898,7 +2916,7 @@ def resolve_posterdb_title_page(
             media_type=media_type,
             _skip_resolve=True,
             year_hint=year,
-            max_pages=5 if target_tmdb else 3,
+            max_pages=public_pages,
         )
         for item in text.get("titles") or []:
             pid = str(item.get("id") or "")
@@ -2931,7 +2949,7 @@ def resolve_posterdb_title_page(
                 config=config,
                 media_type=media_type,
                 _skip_resolve=True,
-                max_pages=5 if target_tmdb else 2,
+                max_pages=public_pages,
                 year_hint=year if term == (bare_title or search_terms[0]) else None,
             )
             for item in text.get("titles") or []:
@@ -2954,6 +2972,8 @@ def resolve_posterdb_title_page(
         target_tmdb=target_tmdb,
         default=int(probe_limit or 10),
     )
+    if not has_creds:
+        max_probes = min(max_probes, 4)
 
     ordered = list(candidates.values())
     if want_key and not want_key.startswith("|"):
@@ -3279,6 +3299,7 @@ def list_posterdb_sets(
     media_type: str = "show",
     _depth: int = 0,
     explicit_title_url: bool = False,
+    max_pages: int | None = None,
 ) -> dict:
     url = str(title_url or "").strip()
     # Only user-pasted URLs are explicit — resolved pages must still validate TMDB.
@@ -3408,6 +3429,7 @@ def list_posterdb_sets(
                 media_type=media_type,
                 _depth=depth + 1,
                 explicit_title_url=False,
+                max_pages=max_pages,
             )
 
     sets: dict = {}
@@ -3416,6 +3438,11 @@ def list_posterdb_sets(
     # Walk title-page pagination when TPDB splits set cards across pages.
     base_url = url.split("?", 1)[0].rstrip("/")
     max_page = _posterdb_max_page(soup)
+    if max_pages is not None:
+        try:
+            max_page = min(max_page, max(1, int(max_pages)))
+        except Exception:
+            max_page = min(max_page, 1)
     for page in range(2, max_page + 1):
         if len(sets) >= take:
             break
@@ -3467,6 +3494,7 @@ def list_posterdb_sets(
                     media_type=media_type,
                     _depth=depth + 1,
                     explicit_title_url=False,
+                    max_pages=max_pages,
                 )
 
         poster_fallback = _collect_posterdb_show_posters(soup, limit=take, page_title=page_title)
@@ -4375,6 +4403,7 @@ def search_catalog(
     on_batch: BatchFn = None,
     batch_pages: int = 3,
     config: dict | None = None,
+    max_set_pages: int | None = None,
 ) -> dict:
     """Scrape MediUX / ThePosterDB discovery pages (user-initiated only)."""
     config = config if isinstance(config, dict) else {}
@@ -4441,19 +4470,12 @@ def search_catalog(
                 limit=take,
             )
             title_url_value = str(resolved_page.get("url") or "").strip() if resolved_page else ""
-            if not title_url_value and _posterdb_has_credentials(config):
+            if not title_url_value and _posterdb_should_use_login(config):
                 emit(
                     progress,
                     f"ThePosterDB could not resolve a /posters/ page for TMDB {tmdb_id} "
-                    "(advanced search empty — check TPDB Pro / session).",
+                    "(advanced search empty — trying public text search).",
                 )
-                # Login dead: don't fall into multi-page public search + probes (~10 min/title).
-                if not _posterdb_session_ready(config):
-                    reason = _posterdb_take_resolve_error() or "ThePosterDB login failed"
-                    raise ValueError(
-                        f"Could not find a ThePosterDB title page (needs a /posters/<id> URL) "
-                        f"(TMDB {tmdb_id}). Reason: {reason}."
-                    )
         if title_url_value:
             try:
                 loaded = list_posterdb_sets(
@@ -4469,6 +4491,7 @@ def search_catalog(
                     media_type=media_type,
                     # User-pasted URLs only — resolved pages still validate TMDB.
                     explicit_title_url=bool(user_title_url),
+                    max_pages=max_set_pages,
                 )
             except Exception as exc:
                 emit(progress, f"ThePosterDB set load failed: {exc}")
@@ -4532,6 +4555,7 @@ def search_catalog(
                     year_hint=year_val,
                     media_type=media_type,
                     explicit_title_url=False,
+                    max_pages=max_set_pages,
                 )
             except Exception as exc:
                 emit(progress, f"ThePosterDB set load failed: {exc}")
@@ -4560,6 +4584,7 @@ def search_catalog(
                     year_hint=year_val,
                     media_type=media_type,
                     explicit_title_url=False,
+                    max_pages=max_set_pages,
                 )
             except Exception as exc:
                 emit(progress, f"ThePosterDB set load failed for {alt_url}: {exc}")
@@ -4599,30 +4624,32 @@ def warm_library_titles(
     progress: ProgressFn = None,
     on_title: BatchFn = None,
 ) -> dict:
-    """Resolve many library titles in one process (one TPDB login, serial HTML).
+    """Resolve many library titles in one process (optional login, then public search).
 
-    Parallel HTML workers race ThePosterDB's session/rate limit — keep title resolves
-    serial here; callers may parallelize CDN image downloads separately.
+    Login improves TMDB-id matching but is not required — title pages/sets/images are public.
+    Parallel HTML workers race ThePosterDB's rate limit; keep title resolves serial here.
     """
     config = config if isinstance(config, dict) else {}
     rows = [item for item in (items or []) if isinstance(item, dict)]
     if not rows:
         return {"ok": False, "error": "No library titles provided", "results": []}
 
-    if _posterdb_has_credentials(config):
-        session = _posterdb_http_client(config)
-        if not isinstance(session, requests.Session):
-            msg = (
-                "Warm aborted: ThePosterDB login failed — check username/password "
-                "(advanced search needs a working session)."
+    working = dict(config)
+    if _posterdb_should_use_login(working):
+        session = _posterdb_http_client(working)
+        if isinstance(session, requests.Session):
+            emit(progress, f"Warm: TPDB login OK — resolving {len(rows)} library title(s)…")
+        else:
+            emit(
+                progress,
+                "Warm: TPDB login unavailable (Cloudflare/credentials) — "
+                "continuing with public text search (no login required for posters).",
             )
-            emit(progress, msg)
-            return {"ok": False, "error": msg, "results": []}
-        emit(progress, f"Warm: TPDB login OK — resolving {len(rows)} library title(s)…")
+            working = _posterdb_public_only_config(working)
     else:
         emit(
             progress,
-            "Warm: no TPDB login configured — public text search only (slow / many skips).",
+            f"Warm: public text search for {len(rows)} library title(s) (TPDB login off or not set).",
         )
 
     results: list[dict] = []
@@ -4670,14 +4697,15 @@ def warm_library_titles(
                 query=title,
                 media_type=media_type,
                 tmdb_id=tmdb_id,
-                imdb_id=imdb_id,
-                tvdb_id=tvdb_id,
+                imdb_id=imdb_id if _posterdb_should_use_login(working) else None,
+                tvdb_id=tvdb_id if _posterdb_should_use_login(working) else None,
                 title_hint=title,
                 year_hint=year_hint,
                 mode="title",
-                limit=500,
+                limit=_POSTERDB_WARM_SET_LIMIT,
+                max_set_pages=_POSTERDB_WARM_MAX_SET_PAGES,
                 progress=progress,
-                config=config,
+                config=working,
             )
             sets = list(loaded.get("sets") or [])
             entry["sets"] = sets
@@ -4706,17 +4734,6 @@ def warm_library_titles(
         results.append(entry)
         if on_title:
             on_title({"phase": "warm-title", **entry})
-
-        # Stop the whole batch if login dies mid-run (don't grind remaining titles).
-        if _posterdb_has_credentials(config) and not _posterdb_session_ready(config):
-            remaining = len(rows) - (index + 1)
-            if remaining > 0:
-                msg = (
-                    f"Warm stopped early: TPDB login lost after {index + 1} title(s); "
-                    f"{remaining} left for next run."
-                )
-                emit(progress, msg)
-            break
 
     ok_count = sum(1 for item in results if item.get("ok"))
     return {
