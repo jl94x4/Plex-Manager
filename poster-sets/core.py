@@ -410,26 +410,44 @@ def base_url_safe(config: dict) -> str:
 
 
 _POSTERDB_SESSIONS: dict[str, requests.Session] = {}
+# Negative login cache — avoid re-posting credentials every title (TPDB rate-limits login).
+_POSTERDB_LOGIN_FAILED_UNTIL: dict[str, float] = {}
+_POSTERDB_LOGIN_FAIL_COOLDOWN_S = 90.0
+_POSTERDB_LOGIN_LAST_ERROR: Optional[str] = None
 _POSTERDB_HTTP_LOCK = threading.RLock()
-# ThePosterDB paces requests (~7s). Parallel HTML walks race the shared session and get empty pages.
-_POSTERDB_HTML_GAP_S = 7.0
+# Adaptive HTML pacing — authenticated traffic can go faster; 429s raise the floor.
+_POSTERDB_HTML_GAP_AUTH_S = 2.5
+_POSTERDB_HTML_GAP_PUBLIC_S = 5.0
+_POSTERDB_HTML_GAP_S = 0.0  # raised to >=7 on HTTP 429
 _posterdb_last_http_at = 0.0
+_POSTERDB_SESSION_MAX_AGE_S = 12 * 60 * 60
 
 
-def _posterdb_throttle() -> None:
-    """Pace TPDB HTTP so login + search + probes don't stampede the rate limiter."""
+def _posterdb_throttle(*, authenticated: bool = False) -> None:
+    """Pace TPDB HTML so login + search + probes don't stampede the rate limiter."""
     global _posterdb_last_http_at
+    base = _POSTERDB_HTML_GAP_AUTH_S if authenticated else _POSTERDB_HTML_GAP_PUBLIC_S
+    gap = max(base, _POSTERDB_HTML_GAP_S)
     with _POSTERDB_HTTP_LOCK:
         now = time.time()
-        wait = (_POSTERDB_HTML_GAP_S - (now - _posterdb_last_http_at)) if _posterdb_last_http_at else 0.0
+        wait = (gap - (now - _posterdb_last_http_at)) if _posterdb_last_http_at else 0.0
         if wait > 0.05:
             time.sleep(wait)
         _posterdb_last_http_at = time.time()
 
 
+def _posterdb_note_rate_limit(retry_after: float | None = None) -> None:
+    """Back off HTML pacing after HTTP 429."""
+    global _POSTERDB_HTML_GAP_S, _posterdb_last_http_at
+    cool = max(15.0, float(retry_after or 0) or 20.0)
+    _POSTERDB_HTML_GAP_S = max(_POSTERDB_HTML_GAP_S, 7.0)
+    _posterdb_last_http_at = time.time() + cool - _POSTERDB_HTML_GAP_S
+    emit(None, f"ThePosterDB rate limited — cooling {int(cool)}s and slowing HTML gap to {_POSTERDB_HTML_GAP_S:.1f}s")
+
+
 _POSTERDB_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
 
@@ -438,14 +456,217 @@ def _posterdb_session_cache_key(user: str, password: str) -> str:
     return f"{user.lower()}:{digest}"
 
 
+def _posterdb_session_path(config: dict | None = None) -> str:
+    config = config if isinstance(config, dict) else {}
+    explicit = str(config.get("tpdb_session_path") or "").strip()
+    if explicit:
+        return explicit
+    cache_dir = str(config.get("tpdb_image_cache_dir") or "").strip()
+    if cache_dir:
+        return os.path.join(os.path.dirname(cache_dir), "tpdb-session.json")
+    return ""
+
+
 def _posterdb_invalidate_sessions(user: str = "") -> None:
     if not user:
         _POSTERDB_SESSIONS.clear()
+        _POSTERDB_LOGIN_FAILED_UNTIL.clear()
         return
     prefix = f"{user.lower()}:"
     for key in list(_POSTERDB_SESSIONS.keys()):
         if key.startswith(prefix):
             del _POSTERDB_SESSIONS[key]
+    for key in list(_POSTERDB_LOGIN_FAILED_UNTIL.keys()):
+        if key.startswith(prefix):
+            del _POSTERDB_LOGIN_FAILED_UNTIL[key]
+
+
+def _posterdb_mark_login_failed(cache_key: str, message: str = "") -> None:
+    global _POSTERDB_LOGIN_LAST_ERROR
+    _POSTERDB_LOGIN_FAILED_UNTIL[cache_key] = time.time() + _POSTERDB_LOGIN_FAIL_COOLDOWN_S
+    text = str(message or "").strip()
+    if text:
+        _POSTERDB_LOGIN_LAST_ERROR = text
+
+
+def _posterdb_take_login_error() -> Optional[str]:
+    global _POSTERDB_LOGIN_LAST_ERROR
+    text = _POSTERDB_LOGIN_LAST_ERROR
+    _POSTERDB_LOGIN_LAST_ERROR = None
+    return text
+
+
+def _posterdb_session_ready(config: dict | None = None) -> bool:
+    """True when credentials exist and we already hold a live authenticated session."""
+    config = config if isinstance(config, dict) else {}
+    user = str(config.get("tpdb_username") or config.get("tpdb_login") or "").strip()
+    password = str(config.get("tpdb_password") or "").strip()
+    if not user or not password or password == "********":
+        return False
+    return _POSTERDB_SESSIONS.get(_posterdb_session_cache_key(user, password)) is not None
+
+
+def _posterdb_cookie_rows(session: requests.Session) -> list[dict]:
+    rows: list[dict] = []
+    for cookie in session.cookies:
+        rows.append({
+            "name": cookie.name,
+            "value": cookie.value,
+            "domain": cookie.domain,
+            "path": cookie.path or "/",
+            "secure": bool(cookie.secure),
+            "expires": cookie.expires,
+        })
+    return rows
+
+
+def _posterdb_apply_cookie_rows(session: requests.Session, rows: Sequence[dict] | None) -> None:
+    for row in rows or []:
+        name = str(row.get("name") or "").strip()
+        value = str(row.get("value") or "")
+        if not name:
+            continue
+        session.cookies.set(
+            name,
+            value,
+            domain=str(row.get("domain") or "theposterdb.com") or None,
+            path=str(row.get("path") or "/") or "/",
+        )
+
+
+def _posterdb_save_session_file(config: dict | None, cache_key: str, session: requests.Session) -> None:
+    path = _posterdb_session_path(config)
+    if not path:
+        return
+    try:
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        payload = {
+            "cacheKey": cache_key,
+            "savedAt": time.time(),
+            "cookies": _posterdb_cookie_rows(session),
+        }
+        tmp = f"{path}.tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        os.replace(tmp, path)
+    except Exception as exc:
+        emit(None, f"ThePosterDB session persist skipped: {exc}")
+
+
+def _posterdb_load_session_file(config: dict | None, cache_key: str) -> Optional[requests.Session]:
+    path = _posterdb_session_path(config)
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if str(payload.get("cacheKey") or "") != cache_key:
+        return None
+    saved_at = float(payload.get("savedAt") or 0)
+    if saved_at <= 0 or (time.time() - saved_at) > _POSTERDB_SESSION_MAX_AGE_S:
+        return None
+    session = requests.Session()
+    session.headers.update({"User-Agent": _POSTERDB_UA})
+    _posterdb_apply_cookie_rows(session, payload.get("cookies") if isinstance(payload.get("cookies"), list) else [])
+    if not _posterdb_session_looks_logged_in(session, config=config, quiet=True):
+        return None
+    return session
+
+
+def _posterdb_page_looks_like_challenge(html: str, url: str = "") -> bool:
+    text = str(html or "")
+    lower = text.lower()
+    if "just a moment" in lower or "cf-browser-verification" in lower:
+        return True
+    if "checking your browser" in lower:
+        return True
+    # challenge-platform alone appears on normal TPDB pages — only treat as block
+    # when the login form CSRF token is missing.
+    if "challenge-platform" in lower and 'name="_token"' not in text and "name='_token'" not in text:
+        return True
+    if "/cdn-cgi/challenge" in lower:
+        return True
+    return False
+
+
+def _posterdb_extract_login_error(html: str) -> str:
+    soup = BeautifulSoup(html or "", "html.parser")
+    for selector in (".invalid-feedback", ".alert-danger", ".text-danger", "[role='alert']"):
+        for node in soup.select(selector):
+            text = node.get_text(" ", strip=True)
+            if text and len(text) < 240:
+                return text
+    match = re.search(
+        r"(these credentials do not match|invalid credentials|too many login attempts|throttle|recaptcha|captcha)[^.<]{0,120}",
+        html or "",
+        flags=re.I,
+    )
+    if match:
+        return match.group(0).strip()
+    return ""
+
+
+def _posterdb_xsrf_headers(session: requests.Session) -> dict[str, str]:
+    headers = {
+        "Referer": "https://theposterdb.com/login",
+        "Origin": "https://theposterdb.com",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+    token = ""
+    for cookie in session.cookies:
+        if cookie.name == "XSRF-TOKEN":
+            try:
+                token = unquote(cookie.value or "")
+            except Exception:
+                token = cookie.value or ""
+            break
+    if token:
+        headers["X-XSRF-TOKEN"] = token
+        headers["X-CSRF-TOKEN"] = token
+    return headers
+
+
+def _posterdb_session_looks_logged_in(
+    session: requests.Session,
+    *,
+    config: dict | None = None,
+    quiet: bool = False,
+) -> bool:
+    """Confirm cookies actually unlock advanced search (not just a soft login redirect)."""
+    try:
+        _posterdb_throttle(authenticated=True)
+        with _POSTERDB_HTTP_LOCK:
+            response = session.get(
+                "https://theposterdb.com/search/advanced/results",
+                params={"category": "Shows", "tmdb_id": "97546"},
+                timeout=45,
+                allow_redirects=True,
+                headers={
+                    "User-Agent": _POSTERDB_UA,
+                    "Referer": "https://theposterdb.com/search/advanced",
+                    "Accept": "text/html,application/xhtml+xml",
+                },
+            )
+    except Exception as exc:
+        if not quiet:
+            emit(None, f"ThePosterDB session check error: {exc}")
+        return False
+    final_url = str(response.url or "").lower()
+    if "theposterdb.com/login" in final_url:
+        return False
+    if response.status_code >= 400:
+        return False
+    if _posterdb_page_looks_like_challenge(response.text, final_url):
+        if not quiet:
+            emit(None, "ThePosterDB session check hit a Cloudflare challenge page.")
+        return False
+    return True
 
 
 def _posterdb_http_client(config: dict | None = None) -> requests.Session | type(requests):
@@ -459,17 +680,52 @@ def _posterdb_http_client(config: dict | None = None) -> requests.Session | type
     cached = _POSTERDB_SESSIONS.get(cache_key)
     if cached is not None:
         return cached
+    failed_until = float(_POSTERDB_LOGIN_FAILED_UNTIL.get(cache_key) or 0)
+    if failed_until > time.time():
+        return requests
+
+    restored = _posterdb_load_session_file(config, cache_key)
+    if restored is not None:
+        _POSTERDB_SESSIONS[cache_key] = restored
+        _POSTERDB_LOGIN_FAILED_UNTIL.pop(cache_key, None)
+        emit(None, "ThePosterDB: restored saved login session")
+        return restored
 
     session = requests.Session()
     session.headers.update({"User-Agent": _POSTERDB_UA})
     try:
-        _posterdb_throttle()
+        _posterdb_throttle(authenticated=True)
         with _POSTERDB_HTTP_LOCK:
-            login_page = session.get("https://theposterdb.com/login", timeout=60)
+            login_page = session.get(
+                "https://theposterdb.com/login",
+                timeout=60,
+                headers={
+                    "User-Agent": _POSTERDB_UA,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                },
+            )
+        if _posterdb_page_looks_like_challenge(login_page.text, str(login_page.url or "")):
+            msg = (
+                "ThePosterDB login blocked by Cloudflare challenge from this host. "
+                "Try again later, or log in from a residential IP / different network."
+            )
+            emit(None, msg)
+            _posterdb_mark_login_failed(cache_key, msg)
+            return requests
         login_soup = BeautifulSoup(login_page.text, "html.parser")
         token_node = login_soup.find("input", {"name": "_token"})
         token = str(token_node.get("value") or "") if token_node else ""
-        _posterdb_throttle()
+        if not token:
+            msg = (
+                "ThePosterDB login page had no CSRF token (Cloudflare interstitial or changed form). "
+                "Cannot sign in from this host right now."
+            )
+            emit(None, msg)
+            _posterdb_mark_login_failed(cache_key, msg)
+            return requests
+
+        _posterdb_throttle(authenticated=True)
+        post_headers = _posterdb_xsrf_headers(session)
         with _POSTERDB_HTTP_LOCK:
             response = session.post(
                 "https://theposterdb.com/login",
@@ -481,14 +737,37 @@ def _posterdb_http_client(config: dict | None = None) -> requests.Session | type
                 },
                 timeout=60,
                 allow_redirects=True,
+                headers=post_headers,
             )
-        if "theposterdb.com/login" in str(response.url or "").lower() and response.status_code == 200:
-            emit(None, "ThePosterDB login failed — check TPDB username/password in Poster Sets settings.")
+        final_url = str(response.url or "").lower()
+        still_on_login = "theposterdb.com/login" in final_url
+        if still_on_login or response.status_code >= 400:
+            detail = _posterdb_extract_login_error(response.text) or f"HTTP {response.status_code}"
+            if _posterdb_page_looks_like_challenge(response.text, final_url):
+                detail = "Cloudflare challenge on login POST"
+            msg = f"ThePosterDB login failed — {detail}"
+            emit(None, msg)
+            _posterdb_mark_login_failed(cache_key, msg)
             return requests
+
+        if not _posterdb_session_looks_logged_in(session, config=config):
+            msg = (
+                "ThePosterDB login appeared to succeed but advanced search still redirects to login. "
+                "Check username/password and TPDB Pro / advanced search access."
+            )
+            emit(None, msg)
+            _posterdb_mark_login_failed(cache_key, msg)
+            return requests
+
         _POSTERDB_SESSIONS[cache_key] = session
+        _POSTERDB_LOGIN_FAILED_UNTIL.pop(cache_key, None)
+        _posterdb_save_session_file(config, cache_key, session)
+        emit(None, "ThePosterDB login OK (session verified + saved)")
         return session
     except Exception as exc:
-        emit(None, f"ThePosterDB login error: {exc}")
+        msg = f"ThePosterDB login error: {exc}"
+        emit(None, msg)
+        _posterdb_mark_login_failed(cache_key, msg)
         return requests
 
 
@@ -500,9 +779,17 @@ def test_posterdb_login(config: dict | None = None) -> dict:
     if not user or not password or password == "********":
         return {"ok": False, "configured": False, "error": "TPDB username and password are not configured."}
     _posterdb_invalidate_sessions(user)
+    # Force a fresh login (ignore saved cookie jar) so Test is authoritative.
+    path = _posterdb_session_path(config)
+    if path and os.path.isfile(path):
+        try:
+            os.remove(path)
+        except Exception:
+            pass
     session = _posterdb_http_client(config)
     if not isinstance(session, requests.Session):
-        return {"ok": False, "configured": True, "error": "ThePosterDB login failed — check TPDB username/password."}
+        detail = _posterdb_take_login_error() or "ThePosterDB login failed — check TPDB username/password."
+        return {"ok": False, "configured": True, "error": detail}
     response = session.get(
         "https://theposterdb.com/search/advanced/results",
         params={"category": "Shows", "tmdb_id": "97546"},
@@ -567,12 +854,13 @@ def cook_soup(
         wait = 60
     is_tpdb = "theposterdb.com" in str(url or "").lower()
     client = _posterdb_http_client(config) if is_tpdb else requests
+    authenticated = isinstance(client, requests.Session)
     attempts = max(1, int(retries or 1))
     last_error: Exception | None = None
     for attempt in range(attempts):
         try:
             if is_tpdb:
-                _posterdb_throttle()
+                _posterdb_throttle(authenticated=authenticated)
             if isinstance(client, requests.Session):
                 with _POSTERDB_HTTP_LOCK:
                     response = client.get(url, headers=headers, timeout=wait)
@@ -583,7 +871,16 @@ def cook_soup(
             # 520–530 are Cloudflare origin/edge failures — often transient on MediUX/TPDB.
             if response.status_code in {429, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530} and attempt + 1 < attempts:
                 # TPDB rate-limit: honor a longer cooldown than generic retries.
-                cool = 8.0 if (is_tpdb and response.status_code == 429) else 1.25 * (attempt + 1)
+                if is_tpdb and response.status_code == 429:
+                    retry_after = None
+                    try:
+                        retry_after = float(response.headers.get("Retry-After") or 0) or None
+                    except Exception:
+                        retry_after = None
+                    _posterdb_note_rate_limit(retry_after)
+                    cool = 8.0
+                else:
+                    cool = 1.25 * (attempt + 1)
                 time.sleep(cool)
                 continue
             raise RuntimeError(f"Failed to retrieve the page. Status code: {response.status_code}")
@@ -2326,8 +2623,7 @@ def _posterdb_advanced_resolve_by_ids(
             id_specs.append(("tvdb", {"tvdb_id": target_tvdb}))
 
     categories = [category]
-    if category != "All":
-        categories.append("All")
+    # Only fall back to "All" when the typed category returns nothing.
 
     def _merge_batch(batch: list[dict]) -> None:
         if merge_candidates is None:
@@ -2337,10 +2633,19 @@ def _posterdb_advanced_resolve_by_ids(
             if pid and pid not in merge_candidates:
                 merge_candidates[pid] = item
 
-    def _accept_item(item: dict, *, trust_singleton: bool) -> Optional[dict]:
+    def _accept_item(item: dict, *, trust_singleton: bool, trust_tmdb_query: bool = False) -> Optional[dict]:
         url = str(item.get("url") or "").strip()
         if not url:
             return None
+        # Advanced search was already filtered by tmdb_id — skip an extra title-page probe.
+        if trust_tmdb_query and target_tmdb and (trust_singleton or len(str(item.get("id") or "")) > 0):
+            if trust_singleton:
+                return {
+                    **item,
+                    "url": url,
+                    "tmdbId": target_tmdb,
+                    "setCount": int(item.get("setCount") or 0),
+                }
         try:
             probe = _posterdb_probe_title_page(url, config=config)
         except Exception:
@@ -2359,7 +2664,10 @@ def _posterdb_advanced_resolve_by_ids(
         }
 
     for _kind, id_params in id_specs:
-        for category_value in categories:
+        category_attempts = list(categories)
+        if category != "All":
+            category_attempts = [category, "All"]
+        for category_value in category_attempts:
             batch = search_posterdb_advanced_titles(
                 config,
                 term="",
@@ -2371,15 +2679,26 @@ def _posterdb_advanced_resolve_by_ids(
             if not batch:
                 continue
             _merge_batch(batch)
+            trust_tmdb_query = "tmdb_id" in id_params and bool(target_tmdb)
             if len(batch) == 1:
-                accepted = _accept_item(batch[0], trust_singleton=True)
+                accepted = _accept_item(
+                    batch[0],
+                    trust_singleton=True,
+                    trust_tmdb_query=trust_tmdb_query,
+                )
                 if accepted:
                     return accepted
             if target_tmdb:
                 for item in batch:
-                    accepted = _accept_item(item, trust_singleton=False)
+                    accepted = _accept_item(
+                        item,
+                        trust_singleton=False,
+                        trust_tmdb_query=trust_tmdb_query,
+                    )
                     if accepted and str(accepted.get("tmdbId") or "") == target_tmdb:
                         return accepted
+            # Typed category already returned hits — don't burn another request on "All".
+            break
     return None
 
 
@@ -2397,7 +2716,8 @@ def search_posterdb_advanced_titles(
     """Authenticated advanced search — required for canonical /posters/ pages on many titles."""
     session = _posterdb_http_client(config)
     if not isinstance(session, requests.Session):
-        msg = "ThePosterDB login failed — check username/password (advanced search needs a working session)."
+        detail = _posterdb_take_login_error()
+        msg = detail or "ThePosterDB login failed — check username/password (advanced search needs a working session)."
         emit(progress, msg)
         _posterdb_note_resolve_error(msg)
         return []
@@ -2418,7 +2738,7 @@ def search_posterdb_advanced_titles(
     emit(progress, "Searching ThePosterDB advanced catalog…")
 
     def _fetch(active_session: requests.Session) -> requests.Response:
-        _posterdb_throttle()
+        _posterdb_throttle(authenticated=True)
         with _POSTERDB_HTTP_LOCK:
             return active_session.get(
                 "https://theposterdb.com/search/advanced/results",
@@ -2431,6 +2751,12 @@ def search_posterdb_advanced_titles(
     if "theposterdb.com/login" in str(response.url or "").lower():
         user = str((config or {}).get("tpdb_username") or (config or {}).get("tpdb_login") or "").strip()
         _posterdb_invalidate_sessions(user)
+        path = _posterdb_session_path(config)
+        if path and os.path.isfile(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
         retry_session = _posterdb_http_client(config)
         if isinstance(retry_session, requests.Session):
             response = _fetch(retry_session)
@@ -2441,6 +2767,10 @@ def search_posterdb_advanced_titles(
             )
             emit(progress, msg)
             _posterdb_note_resolve_error(msg)
+            user = str((config or {}).get("tpdb_username") or (config or {}).get("tpdb_login") or "").strip()
+            password = str((config or {}).get("tpdb_password") or "").strip()
+            if user and password and password != "********":
+                _posterdb_mark_login_failed(_posterdb_session_cache_key(user, password), msg)
             return []
     soup = BeautifulSoup(response.text, "html.parser")
     titles = _parse_posterdb_title_links(soup, limit=limit, html=response.text)
@@ -2540,6 +2870,16 @@ def resolve_posterdb_title_page(
         )
         if advanced_hit:
             return _finish(advanced_hit)
+        # Credentials configured but session dead — public text + probes burn ~10 minutes
+        # per title and still usually miss TMDB matches. Fail fast so Warm can move on.
+        if not _posterdb_session_ready(config):
+            msg = (
+                "ThePosterDB login failed — skipping slow public text search. "
+                "Fix username/password (Settings → Test) and re-run Warm."
+            )
+            emit(progress, msg)
+            _posterdb_note_resolve_error(msg)
+            return _finish(None)
         if target_tmdb:
             msg = (
                 f"ThePosterDB advanced search found no title page for TMDB {target_tmdb} — "
@@ -4107,6 +4447,13 @@ def search_catalog(
                     f"ThePosterDB could not resolve a /posters/ page for TMDB {tmdb_id} "
                     "(advanced search empty — check TPDB Pro / session).",
                 )
+                # Login dead: don't fall into multi-page public search + probes (~10 min/title).
+                if not _posterdb_session_ready(config):
+                    reason = _posterdb_take_resolve_error() or "ThePosterDB login failed"
+                    raise ValueError(
+                        f"Could not find a ThePosterDB title page (needs a /posters/<id> URL) "
+                        f"(TMDB {tmdb_id}). Reason: {reason}."
+                    )
         if title_url_value:
             try:
                 loaded = list_posterdb_sets(
@@ -4243,6 +4590,142 @@ def search_catalog(
     if tmdb_id:
         return list_mediux_sets(media_type, tmdb_id, progress=progress, limit=limit)
     raise ValueError("MediUX browse needs a TMDB title id (search titles in the portal first)")
+
+
+def warm_library_titles(
+    items: Sequence[dict] | None,
+    *,
+    config: dict | None = None,
+    progress: ProgressFn = None,
+    on_title: BatchFn = None,
+) -> dict:
+    """Resolve many library titles in one process (one TPDB login, serial HTML).
+
+    Parallel HTML workers race ThePosterDB's session/rate limit — keep title resolves
+    serial here; callers may parallelize CDN image downloads separately.
+    """
+    config = config if isinstance(config, dict) else {}
+    rows = [item for item in (items or []) if isinstance(item, dict)]
+    if not rows:
+        return {"ok": False, "error": "No library titles provided", "results": []}
+
+    if _posterdb_has_credentials(config):
+        session = _posterdb_http_client(config)
+        if not isinstance(session, requests.Session):
+            msg = (
+                "Warm aborted: ThePosterDB login failed — check username/password "
+                "(advanced search needs a working session)."
+            )
+            emit(progress, msg)
+            return {"ok": False, "error": msg, "results": []}
+        emit(progress, f"Warm: TPDB login OK — resolving {len(rows)} library title(s)…")
+    else:
+        emit(
+            progress,
+            "Warm: no TPDB login configured — public text search only (slow / many skips).",
+        )
+
+    results: list[dict] = []
+    for index, raw in enumerate(rows):
+        tmdb_id = str(raw.get("tmdbId") or raw.get("tmdb_id") or raw.get("id") or "").strip()
+        title = str(raw.get("title") or "").strip()
+        media_type = str(raw.get("mediaType") or raw.get("media_type") or "movie").strip().lower()
+        if media_type in {"tv", "series", "show", "shows"}:
+            media_type = "show"
+        else:
+            media_type = "movie"
+        year_hint = raw.get("year") if raw.get("year") is not None else raw.get("yearHint")
+        if year_hint is not None and not isinstance(year_hint, int):
+            try:
+                year_hint = int(year_hint)
+            except Exception:
+                year_hint = None
+        imdb_id = str(raw.get("imdbId") or raw.get("imdb_id") or "").strip() or None
+        tvdb_id = raw.get("tvdbId") if raw.get("tvdbId") is not None else raw.get("tvdb_id")
+        label = f"{title} ({year_hint})" if title and year_hint is not None else (title or f"tmdb {tmdb_id}")
+        emit(progress, f"Warm [{index + 1}/{len(rows)}]: resolving {label}")
+
+        entry: dict = {
+            "ok": False,
+            "tmdbId": tmdb_id,
+            "title": title,
+            "year": year_hint,
+            "mediaType": media_type,
+            "sets": [],
+            "titleUrl": None,
+            "softSkip": False,
+            "softError": None,
+        }
+        if not tmdb_id:
+            entry["softSkip"] = True
+            entry["softError"] = "Missing TMDB id"
+            results.append(entry)
+            if on_title:
+                on_title({"phase": "warm-title", **entry})
+            continue
+
+        try:
+            loaded = search_catalog(
+                "posterdb",
+                query=title,
+                media_type=media_type,
+                tmdb_id=tmdb_id,
+                imdb_id=imdb_id,
+                tvdb_id=tvdb_id,
+                title_hint=title,
+                year_hint=year_hint,
+                mode="title",
+                limit=500,
+                progress=progress,
+                config=config,
+            )
+            sets = list(loaded.get("sets") or [])
+            entry["sets"] = sets
+            entry["titleUrl"] = (
+                loaded.get("titleUrl")
+                or loaded.get("title_url")
+                or loaded.get("url")
+                or None
+            )
+            entry["title"] = str(loaded.get("title") or title or "").strip() or title
+            if sets:
+                entry["ok"] = True
+                emit(progress, f"Warm [{index + 1}/{len(rows)}]: {label} → {len(sets)} set(s)")
+            else:
+                entry["softSkip"] = True
+                entry["softError"] = (
+                    _posterdb_take_resolve_error()
+                    or "No ThePosterDB sets found for this title"
+                )
+                emit(progress, f"Warm [{index + 1}/{len(rows)}]: skipped {label} — {entry['softError']}")
+        except Exception as exc:
+            entry["softSkip"] = True
+            entry["softError"] = str(exc)
+            emit(progress, f"Warm [{index + 1}/{len(rows)}]: skipped {label} — {exc}")
+
+        results.append(entry)
+        if on_title:
+            on_title({"phase": "warm-title", **entry})
+
+        # Stop the whole batch if login dies mid-run (don't grind remaining titles).
+        if _posterdb_has_credentials(config) and not _posterdb_session_ready(config):
+            remaining = len(rows) - (index + 1)
+            if remaining > 0:
+                msg = (
+                    f"Warm stopped early: TPDB login lost after {index + 1} title(s); "
+                    f"{remaining} left for next run."
+                )
+                emit(progress, msg)
+            break
+
+    ok_count = sum(1 for item in results if item.get("ok"))
+    return {
+        "ok": True,
+        "results": results,
+        "count": len(results),
+        "resolved": ok_count,
+        "skipped": len(results) - ok_count,
+    }
 
 
 def apply_bulk(urls: Sequence[str], config: dict, progress: ProgressFn = None) -> dict:

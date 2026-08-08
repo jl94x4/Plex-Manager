@@ -8,7 +8,17 @@ import json
 import sys
 import traceback
 
-from core import apply_bulk, apply_url, list_assets, parse_bulk_urls, preview_url, search_catalog, test_connection, test_posterdb_login
+from core import (
+    apply_bulk,
+    apply_url,
+    list_assets,
+    parse_bulk_urls,
+    preview_url,
+    search_catalog,
+    test_connection,
+    test_posterdb_login,
+    warm_library_titles,
+)
 
 
 def write_event(event_type: str, **payload) -> None:
@@ -22,7 +32,7 @@ def progress(message: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poster Sets headless CLI")
-    parser.add_argument("command", choices=["test", "test-tpdb", "preview", "apply", "bulk", "search", "inspect"])
+    parser.add_argument("command", choices=["test", "test-tpdb", "preview", "apply", "bulk", "search", "inspect", "warm"])
     parser.add_argument("--payload", default="", help="JSON payload string (otherwise read stdin)")
     args = parser.parse_args()
 
@@ -118,6 +128,21 @@ def main() -> int:
             )
             write_event("result", **result)
             return 0
+
+        if args.command == "warm":
+            items = request.get("items") if isinstance(request.get("items"), list) else []
+
+            def on_title(payload: dict) -> None:
+                write_event("batch", **payload)
+
+            result = warm_library_titles(
+                items,
+                config=config,
+                progress=progress,
+                on_title=on_title,
+            )
+            write_event("result", **result)
+            return 0 if result.get("ok") is not False else 1
 
         if args.command == "apply":
             url = str(request.get("url") or "").strip()

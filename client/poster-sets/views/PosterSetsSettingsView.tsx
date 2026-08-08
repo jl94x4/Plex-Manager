@@ -446,8 +446,8 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 <p>
                                     <span className="font-semibold text-text/90">How it works:</span>{' '}
                                     when you open a library title (or run Warm), SMP resolves TPDB sets and can store them on disk.
-                                    Prefetch then downloads each set’s preview metadata and poster files one request at a time with ThePosterDB’s{' '}
-                                    <span className="text-text/90">7 second</span> spacing. Next visit serves the title cache immediately and may refresh in the background.
+                                    Warm runs titles in batches with one saved TPDB login (HTML ~2.5s when logged in; parallel HTML workers still get rate-limited).
+                                    Prefetch downloads set images with up to 6 parallel CDN workers.
                                     Warm skips titles already on disk and, after a portal restart, resumes any unfinished queue from{' '}
                                     <code className="text-text/80">tpdb-warm-progress.json</code>.
                                     Oldest images are dropped when the disk budget is hit.
@@ -521,7 +521,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                             )}
                             <SettingsToggleRow
                                 title="Prefetch set images (library titles only)"
-                                description="After a library title's TPDB sets load, download assets/images in the background (7s between requests). Required for offline apply of that art."
+                                description="After a library title's TPDB sets load, download assets/images in the background (up to 6 parallel CDN downloads). Required for offline apply of that art."
                                 checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbAggressivePrefetch === true}
                                 onChange={(next) => setConfigDraft((prev) => ({
                                     ...prev,
@@ -707,7 +707,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     </div>
                                     <p className="text-[11px] text-muted">
                                         Auto-refreshes every 2s while this page is open. Steps include title resolve,
-                                        HTML set scrape, 7s waits, and each image download into tpdb-image-cache.
+                                        HTML set scrape (~2.5s when logged in), parallel CDN image downloads, and each file into tpdb-image-cache.
                                     </p>
                                 </div>
                             </div>
