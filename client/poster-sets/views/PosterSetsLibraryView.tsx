@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     CheckCircle2,
     ChevronDown,
@@ -67,6 +67,8 @@ import {
     upsertRecentSet,
 } from '../shared';
 import { usePosterSetsDashboard } from '../PosterSetsDashboardContext';
+import { useTpdbCoverageMap } from '../shared/useTpdbCoverageMap';
+import { coverageKeyForItem } from '../shared/tpdbCacheUi';
 
 export const PosterSetsLibraryView: React.FC = () => {
     const {
@@ -294,6 +296,15 @@ export const PosterSetsLibraryView: React.FC = () => {
         initialUrlState,
         initialLocation,
     } = usePosterSetsDashboard();
+
+    const coverageItems = useMemo(() => {
+        const rows = libraryViewMode === 'recent' && librarySearchQuery.trim().length >= 2
+            ? librarySearchResults
+            : [...libraryMovies, ...libraryShows];
+        return rows.filter((item) => coverageKeyForItem(item));
+    }, [libraryViewMode, librarySearchQuery, librarySearchResults, libraryMovies, libraryShows]);
+    const { levelFor } = useTpdbCoverageMap(coverageItems, tab === 'library');
+
     if (tab !== 'library') return null;
     return (
 
@@ -449,6 +460,7 @@ export const PosterSetsLibraryView: React.FC = () => {
                                             item={item}
                                             disabled={busy !== null}
                                             onOpen={openLibraryItem}
+                                            cacheLevel={levelFor(item)}
                                         />
                                     ))}
                                 </div>
@@ -482,6 +494,7 @@ export const PosterSetsLibraryView: React.FC = () => {
                                         item={item}
                                         disabled={busy !== null}
                                         onOpen={openLibraryItem}
+                                        cacheLevel={levelFor(item)}
                                     />
                                 ))}
                             </div>
@@ -501,6 +514,7 @@ export const PosterSetsLibraryView: React.FC = () => {
                                         item={item}
                                         disabled={busy !== null}
                                         onOpen={openLibraryItem}
+                                        cacheLevel={levelFor(item)}
                                     />
                                 ))}
                             </div>

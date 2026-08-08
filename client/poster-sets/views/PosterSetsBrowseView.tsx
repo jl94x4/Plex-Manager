@@ -458,7 +458,10 @@ export const PosterSetsBrowseView: React.FC = () => {
                             <PosterSetsCreatorsPanel
                                 creators={textToList(whitelistText).map((item) => item.replace(/^@+/, ''))}
                                 busy={busy}
-                                onChange={(next) => setWhitelistText(listToText(next))}
+                                onChange={(next) => {
+                                    setWhitelistText(listToText(next));
+                                    setConfigDraft((prev) => ({ ...prev, creatorWhitelist: next }));
+                                }}
                                 onSave={saveCreatorsConfig}
                                 onOpenCreator={openCreatorCatalog}
                                 toast={toast}

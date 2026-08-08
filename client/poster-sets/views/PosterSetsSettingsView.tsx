@@ -28,6 +28,7 @@ import { askConfirm } from '../../shared/confirm';
 import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
 import { posterSetsApi } from '../api';
 import { MEDIUX_FILTER_OPTIONS, type PosterSetsConfig } from '../types';
+import { formatTpdbEta } from '../shared/tpdbCacheUi';
 import { PosterSetsSetupChecklist } from '../PosterSetsSetupChecklist';
 import { PosterSetsLibraryBrowse } from '../PosterSetsLibraryBrowse';
 import { PosterSetsCreatorsPanel } from '../PosterSetsCreatorsPanel';
@@ -319,32 +320,19 @@ export const PosterSetsSettingsView: React.FC = () => {
         initialLocation,
     } = usePosterSetsDashboard();
 
-    const [tpdbCacheStatus, setTpdbCacheStatus] = useState<{
-        cacheEnabled?: boolean;
-        prefetchEnabled?: boolean;
-        titles?: number;
-        sets?: number;
-        images?: number;
-        imageBytes?: number;
-        rootDir?: string;
-        relativeRoot?: string;
-        folders?: { titles?: string; sets?: string; images?: string };
-        current?: string | null;
-        activity?: Array<{
-            at: number;
-            level: string;
-            message: string;
-            detail?: string | null;
-        }>;
-        hydrate?: {
-            queue?: number;
-            active?: number;
-            lastError?: string | null;
-            warmQueue?: number;
-            warmActive?: number;
-            rateLimit?: { gapMs?: number; cooldownMs?: number; msSinceLastRequest?: number | null };
-        };
-    } | null>(null);
+    const [tpdbCacheStatus, setTpdbCacheStatus] = useState<Awaited<ReturnType<typeof posterSetsApi.tpdbCacheStatus>> | null>(null);
+    const [warmScope, setWarmScope] = useState<{
+        media: 'all' | 'movie' | 'show';
+        source: 'full' | 'recent';
+        skipCached: boolean;
+        followedPrefetchOnly: boolean;
+    }>({
+        media: 'all',
+        source: 'full',
+        skipCached: true,
+        followedPrefetchOnly: false,
+    });
+    const [activityFilter, setActivityFilter] = useState<'all' | 'cache' | 'prefetch' | 'error' | 'followed'>('all');
 
     useEffect(() => {
         if (tab !== 'settings') return undefined;
@@ -368,6 +356,28 @@ export const PosterSetsSettingsView: React.FC = () => {
     }, [tab]);
 
     if (tab !== 'settings') return null;
+
+    const warmPct = tpdbCacheStatus?.progress?.warm?.percent;
+    const warmEta = formatTpdbEta(tpdbCacheStatus?.progress?.warm?.etaMs);
+    const hydratePct = tpdbCacheStatus?.progress?.hydrate?.percent;
+    const hydrateEta = formatTpdbEta(tpdbCacheStatus?.progress?.hydrate?.etaMs);
+    const cacheBusy = Boolean(tpdbCacheStatus?.progress?.busy)
+        || (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
+        || (tpdbCacheStatus?.hydrate?.queue || 0) > 0
+        || (tpdbCacheStatus?.hydrate?.warmActive || 0) > 0
+        || (tpdbCacheStatus?.hydrate?.active || 0) > 0
+        || tpdbCacheStatus?.paused === true;
+    const filteredActivity = (tpdbCacheStatus?.activity || []).filter((entry) => {
+        if (activityFilter === 'all') return true;
+        const kind = String(entry.kind || (
+            entry.level === 'error' ? 'error'
+                : /prefetch|hydrat|image/i.test(entry.message) ? 'prefetch'
+                    : /follow/i.test(entry.message) ? 'followed'
+                        : 'cache'
+        ));
+        return kind === activityFilter;
+    });
+
     return (
 
 
@@ -644,6 +654,62 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         </div>
                                     ) : null}
                                 </label>
+                                <div className={`space-y-3 border-t border-white/10 pt-3 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none opacity-50'}`}>
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Build scope</p>
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <label className="block">
+                                            <span className="text-[10px] uppercase tracking-wide text-muted">Media</span>
+                                            <div className="mt-1">
+                                                <CustomSelect
+                                                    value={warmScope.media}
+                                                    onChange={(value) => setWarmScope((prev) => ({
+                                                        ...prev,
+                                                        media: (value === 'movie' || value === 'show' ? value : 'all') as 'all' | 'movie' | 'show',
+                                                    }))}
+                                                    options={[
+                                                        { value: 'all', label: 'Movies + TV' },
+                                                        { value: 'movie', label: 'Movies only' },
+                                                        { value: 'show', label: 'TV only' },
+                                                    ]}
+                                                    className="w-full"
+                                                />
+                                            </div>
+                                        </label>
+                                        <label className="block">
+                                            <span className="text-[10px] uppercase tracking-wide text-muted">Library source</span>
+                                            <div className="mt-1">
+                                                <CustomSelect
+                                                    value={warmScope.source}
+                                                    onChange={(value) => setWarmScope((prev) => ({
+                                                        ...prev,
+                                                        source: value === 'recent' ? 'recent' : 'full',
+                                                    }))}
+                                                    options={[
+                                                        { value: 'full', label: 'Recent + full library' },
+                                                        { value: 'recent', label: 'Recently added only' },
+                                                    ]}
+                                                    className="w-full"
+                                                />
+                                            </div>
+                                        </label>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        <SettingsToggleRow
+                                            title="Skip already cached titles"
+                                            description="Only queue titles that do not already have a TPDB set list on disk (resume-friendly)."
+                                            checked={warmScope.skipCached}
+                                            onChange={(next) => setWarmScope((prev) => ({ ...prev, skipCached: next }))}
+                                            border={false}
+                                        />
+                                        <SettingsToggleRow
+                                            title="Prefetch followed creators only"
+                                            description="When Prefetch is on, only hydrate sets from Creators you follow for this build."
+                                            checked={warmScope.followedPrefetchOnly}
+                                            onChange={(next) => setWarmScope((prev) => ({ ...prev, followedPrefetchOnly: next }))}
+                                            border={false}
+                                        />
+                                    </div>
+                                </div>
                                 <div className="flex flex-wrap gap-2 pt-1">
                                     <button
                                         type="button"
@@ -675,8 +741,8 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 const pushRows = (rows: Array<Record<string, unknown>>) => {
                                                     for (const row of rows) {
                                                         const mapped = mapRow(row);
-                                                        // Real TMDB ids only — never fall back to Plex ratingKey.
                                                         if (!/^\d+$/.test(mapped.tmdbId) || !mapped.title) continue;
+                                                        if (warmScope.media !== 'all' && mapped.mediaType !== warmScope.media) continue;
                                                         const key = `${mapped.mediaType}:${mapped.tmdbId}`;
                                                         if (seen.has(key)) continue;
                                                         seen.add(key);
@@ -692,30 +758,38 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                     ...(recent.items || []),
                                                 ] as Array<Record<string, unknown>>);
 
-                                                const sections = await posterSetsApi.librarySections().catch(() => null);
-                                                for (const section of sections?.sections || []) {
-                                                    if (items.length >= 1000) break;
-                                                    const sectionType = String(section.type || '').toLowerCase();
-                                                    if (sectionType !== 'movie' && sectionType !== 'show') continue;
-                                                    let start = 0;
-                                                    for (let page = 0; page < 20 && items.length < 1000; page += 1) {
-                                                        const browse = await posterSetsApi.libraryBrowse({
-                                                            section: section.key,
-                                                            type: sectionType === 'show' ? 'show' : 'movie',
-                                                            start,
-                                                            limit: 100,
-                                                            sort: 'titleSort',
-                                                        }).catch(() => null);
-                                                        const batch = (browse?.items || []) as Array<Record<string, unknown>>;
-                                                        if (!batch.length) break;
-                                                        const before = items.length;
-                                                        pushRows(batch);
-                                                        start += batch.length;
-                                                        if (batch.length < 100 || items.length === before) break;
+                                                if (warmScope.source === 'full') {
+                                                    const sections = await posterSetsApi.librarySections().catch(() => null);
+                                                    for (const section of sections?.sections || []) {
+                                                        if (items.length >= 1000) break;
+                                                        const sectionType = String(section.type || '').toLowerCase();
+                                                        if (sectionType !== 'movie' && sectionType !== 'show') continue;
+                                                        if (warmScope.media === 'movie' && sectionType !== 'movie') continue;
+                                                        if (warmScope.media === 'show' && sectionType !== 'show') continue;
+                                                        let start = 0;
+                                                        for (let page = 0; page < 20 && items.length < 1000; page += 1) {
+                                                            const browse = await posterSetsApi.libraryBrowse({
+                                                                section: section.key,
+                                                                type: sectionType === 'show' ? 'show' : 'movie',
+                                                                start,
+                                                                limit: 100,
+                                                                sort: 'titleSort',
+                                                            }).catch(() => null);
+                                                            const batch = (browse?.items || []) as Array<Record<string, unknown>>;
+                                                            if (!batch.length) break;
+                                                            const before = items.length;
+                                                            pushRows(batch);
+                                                            start += batch.length;
+                                                            if (batch.length < 100 || items.length === before) break;
+                                                        }
                                                     }
                                                 }
 
-                                                const result = await posterSetsApi.warmTpdbLibraryCache(items);
+                                                const result = await posterSetsApi.warmTpdbLibraryCache(items, {
+                                                    skipCached: warmScope.skipCached,
+                                                    force: !warmScope.skipCached,
+                                                    followedPrefetchOnly: warmScope.followedPrefetchOnly,
+                                                });
                                                 toast(result.message || `Caching ${result.titles || 0} library title(s).`);
                                                 const status = await posterSetsApi.tpdbCacheStatus().catch(() => null);
                                                 if (status) setTpdbCacheStatus(status);
@@ -728,6 +802,53 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     >
                                         {busy === 'tpdb-cache' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                                         Build cache from library
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null || !cacheBusy}
+                                        onClick={async () => {
+                                            try {
+                                                if (tpdbCacheStatus?.paused) {
+                                                    await posterSetsApi.resumeTpdbCache();
+                                                    toast('Cache resumed.');
+                                                } else {
+                                                    await posterSetsApi.pauseTpdbCache();
+                                                    toast('Cache paused after the current title/set.');
+                                                }
+                                                const status = await posterSetsApi.tpdbCacheStatus().catch(() => null);
+                                                if (status) setTpdbCacheStatus(status);
+                                            } catch (error) {
+                                                toast(error instanceof Error ? error.message : 'Pause/resume failed', 'error');
+                                            }
+                                        }}
+                                    >
+                                        {tpdbCacheStatus?.paused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                                        {tpdbCacheStatus?.paused ? 'Resume' : 'Pause'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null || !cacheBusy}
+                                        onClick={async () => {
+                                            const ok = await askConfirm('Stop the cache queue? In-flight work finishes; waiting titles/sets are dropped (disk cache is kept).', {
+                                                title: 'Stop cache build?',
+                                                confirmLabel: 'Stop',
+                                                cancelLabel: 'Cancel',
+                                            });
+                                            if (!ok) return;
+                                            try {
+                                                const result = await posterSetsApi.stopTpdbCache();
+                                                toast(`Stopped — dropped ${result.droppedTitles || 0} title(s), ${result.droppedSets || 0} set(s).`);
+                                                const status = await posterSetsApi.tpdbCacheStatus().catch(() => null);
+                                                if (status) setTpdbCacheStatus(status);
+                                            } catch (error) {
+                                                toast(error instanceof Error ? error.message : 'Stop failed', 'error');
+                                            }
+                                        }}
+                                    >
+                                        <X className="h-4 w-4" />
+                                        Stop
                                     </button>
                                     <button
                                         type="button"
@@ -779,11 +900,13 @@ export const PosterSetsSettingsView: React.FC = () => {
                                             Live scrape activity
                                         </p>
                                         <p className="text-[11px] text-muted">
-                                            {(tpdbCacheStatus?.hydrate?.warmActive || 0) > 0 || (tpdbCacheStatus?.hydrate?.active || 0) > 0
-                                                ? 'Working…'
-                                                : (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0 || (tpdbCacheStatus?.hydrate?.queue || 0) > 0
-                                                    ? 'Queued'
-                                                    : 'Idle'}
+                                            {tpdbCacheStatus?.paused
+                                                ? 'Paused'
+                                                : (tpdbCacheStatus?.hydrate?.warmActive || 0) > 0 || (tpdbCacheStatus?.hydrate?.active || 0) > 0
+                                                    ? 'Working…'
+                                                    : (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0 || (tpdbCacheStatus?.hydrate?.queue || 0) > 0
+                                                        ? 'Queued'
+                                                        : 'Idle'}
                                             {(tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
                                                 ? ` · ${tpdbCacheStatus?.hydrate?.warmQueue} title(s)`
                                                 : ''}
@@ -795,6 +918,38 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 : ''}
                                         </p>
                                     </div>
+                                    {(warmPct != null || hydratePct != null) ? (
+                                        <div className="space-y-2 rounded-md border border-white/10 bg-black/25 px-2.5 py-2">
+                                            {warmPct != null ? (
+                                                <div>
+                                                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                                        <span className="font-semibold text-text/90">
+                                                            Titles {tpdbCacheStatus?.progress?.warm?.completed || 0}/{tpdbCacheStatus?.progress?.warm?.total || 0}
+                                                            {warmPct != null ? ` · ${warmPct}%` : ''}
+                                                        </span>
+                                                        <span className="text-muted">{warmEta ? `ETA ${warmEta}` : 'ETA —'}</span>
+                                                    </div>
+                                                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                                                        <div className="h-full rounded-full bg-plex/80 transition-all" style={{ width: `${Math.max(2, warmPct || 0)}%` }} />
+                                                    </div>
+                                                </div>
+                                            ) : null}
+                                            {hydratePct != null && (tpdbCacheStatus?.progress?.hydrate?.total || 0) > 0 ? (
+                                                <div>
+                                                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                                        <span className="font-semibold text-text/90">
+                                                            Prefetch {tpdbCacheStatus?.progress?.hydrate?.completed || 0}/{tpdbCacheStatus?.progress?.hydrate?.total || 0}
+                                                            {hydratePct != null ? ` · ${hydratePct}%` : ''}
+                                                        </span>
+                                                        <span className="text-muted">{hydrateEta ? `ETA ${hydrateEta}` : 'ETA —'}</span>
+                                                    </div>
+                                                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                                                        <div className="h-full rounded-full bg-sky-400/80 transition-all" style={{ width: `${Math.max(2, hydratePct || 0)}%` }} />
+                                                    </div>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    ) : null}
                                     <p className="text-xs text-text/90">
                                         {tpdbCacheStatus?.current
                                             || (configDraft.tpdbLocalCacheEnabled === true
@@ -802,13 +957,51 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 : 'Enable local TPDB cache to start logging scrape / prefetch work.')}
                                     </p>
                                     {tpdbCacheStatus?.hydrate?.lastError ? (
-                                        <p className="text-[11px] text-red-300/90">
-                                            Last error: {tpdbCacheStatus.hydrate.lastError}
-                                        </p>
+                                        <div className="flex flex-wrap items-start justify-between gap-2">
+                                            <p className="text-[11px] text-red-300/90">
+                                                Last error: {tpdbCacheStatus.hydrate.lastError}
+                                            </p>
+                                            <button
+                                                type="button"
+                                                className="text-[11px] font-semibold text-plex hover:underline"
+                                                onClick={async () => {
+                                                    try {
+                                                        await navigator.clipboard.writeText(String(tpdbCacheStatus.hydrate?.lastError || ''));
+                                                        toast('Copied last error.');
+                                                    } catch {
+                                                        toast('Could not copy error', 'error');
+                                                    }
+                                                }}
+                                            >
+                                                Copy error
+                                            </button>
+                                        </div>
                                     ) : null}
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {([
+                                            ['all', 'All'],
+                                            ['cache', 'Cache'],
+                                            ['prefetch', 'Prefetch'],
+                                            ['followed', 'Followed'],
+                                            ['error', 'Errors'],
+                                        ] as const).map(([id, label]) => (
+                                            <button
+                                                key={id}
+                                                type="button"
+                                                className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                                                    activityFilter === id
+                                                        ? 'border-plex/40 bg-plex/15 text-plex'
+                                                        : 'border-white/10 bg-black/20 text-muted hover:border-plex/30 hover:text-text'
+                                                }`}
+                                                onClick={() => setActivityFilter(id)}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                    </div>
                                     <div className="max-h-52 overflow-y-auto rounded-md border border-white/5 bg-black/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed">
-                                        {(tpdbCacheStatus?.activity || []).length ? (
-                                            (tpdbCacheStatus?.activity || []).slice(0, 40).map((entry) => {
+                                        {filteredActivity.length ? (
+                                            filteredActivity.slice(0, 40).map((entry) => {
                                                 const time = new Date(entry.at).toLocaleTimeString();
                                                 const tone = entry.level === 'error'
                                                     ? 'text-red-300'

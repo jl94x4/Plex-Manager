@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Loader2, Plus, Trash2, User } from 'lucide-react';
 import type { PosterSetsConfig } from './types';
 
-const buttonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-plex px-2.5 py-1.5 text-xs font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
 const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-xs text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex sm:py-2.5 sm:text-sm';
 
@@ -26,15 +25,28 @@ export function PosterSetsCreatorsPanel({
     toast,
 }: PosterSetsCreatorsPanelProps) {
     const [draft, setDraft] = useState('');
+    const [saving, setSaving] = useState(false);
+    const inputRef = useRef<HTMLInputElement | null>(null);
     const sorted = useMemo(
         () => [...creators].map(normalizeHandle).filter(Boolean).sort((a, b) => a.localeCompare(b)),
         [creators],
     );
+    const saveLocked = saving || busy === 'save';
+
+    const readHandle = () => {
+        // Prefer the live DOM value — browser autofill can paint text without firing React onChange.
+        const fromDom = normalizeHandle(inputRef.current?.value || '');
+        return fromDom || normalizeHandle(draft);
+    };
 
     const addCreator = async () => {
-        const handle = normalizeHandle(draft);
+        const handle = readHandle();
         if (!handle) {
             toast('Enter a creator username.', 'error');
+            return;
+        }
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(handle)) {
+            toast('Usernames can only use letters, numbers, dots, underscores, and hyphens.', 'error');
             return;
         }
         if (sorted.some((entry) => entry.toLowerCase() === handle.toLowerCase())) {
@@ -42,24 +54,35 @@ export function PosterSetsCreatorsPanel({
             return;
         }
         const next = [...sorted, handle];
+        const previous = [...sorted];
         onChange(next);
         setDraft('');
+        if (inputRef.current) inputRef.current.value = '';
+        setSaving(true);
         try {
             await onSave({ creatorWhitelist: next });
             toast(`Following @${handle}.`);
         } catch (error) {
+            onChange(previous);
             toast(error instanceof Error ? error.message : 'Failed to save creators', 'error');
+        } finally {
+            setSaving(false);
         }
     };
 
     const removeCreator = async (handle: string) => {
         const next = sorted.filter((entry) => entry.toLowerCase() !== handle.toLowerCase());
+        const previous = [...sorted];
         onChange(next);
+        setSaving(true);
         try {
             await onSave({ creatorWhitelist: next });
             toast(`Removed @${handle}.`);
         } catch (error) {
+            onChange(previous);
             toast(error instanceof Error ? error.message : 'Failed to save creators', 'error');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -75,9 +98,16 @@ export function PosterSetsCreatorsPanel({
                 <div className="relative min-w-0 flex-1">
                     <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                     <input
+                        ref={inputRef}
                         className={`${fieldClass} pl-9`}
                         value={draft}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        name="poster-sets-follow-creator"
                         onChange={(event) => setDraft(event.target.value)}
+                        onInput={(event) => setDraft((event.target as HTMLInputElement).value)}
                         onKeyDown={(event) => {
                             if (event.key === 'Enter') {
                                 event.preventDefault();
@@ -87,8 +117,13 @@ export function PosterSetsCreatorsPanel({
                         placeholder="Username e.g. kaster"
                     />
                 </div>
-                <button type="button" className={primaryButtonClass} disabled={busy != null} onClick={() => void addCreator()}>
-                    {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                <button
+                    type="button"
+                    className={primaryButtonClass}
+                    disabled={saveLocked}
+                    onClick={() => void addCreator()}
+                >
+                    {saveLocked ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                     Add
                 </button>
             </div>
@@ -110,7 +145,7 @@ export function PosterSetsCreatorsPanel({
                                 type="button"
                                 className="rounded-full p-1 text-muted transition hover:bg-white/10 hover:text-red-200"
                                 aria-label={`Remove ${handle}`}
-                                disabled={busy != null}
+                                disabled={saveLocked}
                                 onClick={() => void removeCreator(handle)}
                             >
                                 <Trash2 className="h-3.5 w-3.5" />

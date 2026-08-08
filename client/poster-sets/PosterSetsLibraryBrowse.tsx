@@ -9,8 +9,9 @@ import {
     type UpgraderGridSize,
 } from '../shared/portalLayout';
 import { posterSetsApi } from './api';
+import { LibraryMediaCard } from './shared/posterSetsCards';
+import { useTpdbCoverageMap } from './shared/useTpdbCoverageMap';
 import {
-    libraryItemPosterSrc,
     normalizeLibraryItems,
     type LibraryBrowseSort,
     type LibraryRecentItem,
@@ -28,50 +29,6 @@ const SORT_OPTIONS = [
     { value: 'addedDesc', label: 'Recently added' },
     { value: 'addedAsc', label: 'Oldest added' },
 ];
-
-function LibraryMediaCard({
-    item,
-    disabled,
-    onOpen,
-}: {
-    item: LibraryRecentItem;
-    disabled?: boolean;
-    onOpen: (item: LibraryRecentItem) => void;
-}) {
-    const label = item.year ? `${item.title} (${item.year})` : item.title;
-    return (
-        <button
-            type="button"
-            disabled={disabled}
-            onClick={() => onOpen(item)}
-            className="group flex w-full min-w-0 flex-col overflow-hidden rounded-md border border-white/10 bg-black/20 text-left transition hover:border-plex/40 disabled:opacity-50"
-        >
-            <div className="relative aspect-[2/3] w-full shrink-0 overflow-hidden bg-black">
-                {libraryItemPosterSrc(item) ? (
-                    <img
-                        src={libraryItemPosterSrc(item)}
-                        alt={item.title}
-                        className="absolute inset-0 h-full w-full object-cover"
-                        loading="lazy"
-                    />
-                ) : (
-                    <div className="absolute inset-0 bg-black/40" />
-                )}
-                <span className="absolute left-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
-                    {item.mediaType === 'movie' ? 'Movie' : 'TV'}
-                </span>
-            </div>
-            <div className="min-w-0 px-2 py-2 text-left">
-                <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-text sm:text-xs" title={label}>
-                    {item.title}
-                </p>
-                {item.librarySection ? (
-                    <p className="mt-0.5 truncate text-[10px] text-muted">{item.librarySection}</p>
-                ) : null}
-            </div>
-        </button>
-    );
-}
 
 export type PosterSetsLibraryBrowseProps = {
     disabled?: boolean;
@@ -100,6 +57,7 @@ export function PosterSetsLibraryBrowse({
 
     const posterGridClass = upgraderPosterGridClass(gridSize);
     const posterGridStyle = upgraderPosterGridStyle(gridSize);
+    const { levelFor } = useTpdbCoverageMap(items, items.length > 0);
 
     useEffect(() => {
         let cancelled = false;
@@ -263,6 +221,7 @@ export function PosterSetsLibraryBrowse({
                                 item={item}
                                 disabled={disabled}
                                 onOpen={onOpenItem}
+                                cacheLevel={levelFor(item)}
                             />
                         ))}
                     </div>

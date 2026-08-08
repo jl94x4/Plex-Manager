@@ -659,12 +659,19 @@ export function usePosterSetsDashboardState() {
     const saveCreatorsConfig = async (partial: Partial<PosterSetsConfig>) => {
         setBusy('save');
         try {
+            const fromPartial = Array.isArray(partial.creatorWhitelist)
+                ? partial.creatorWhitelist.map((item) => String(item || '').trim().replace(/^@+/, '')).filter(Boolean)
+                : null;
+            const creatorWhitelist = fromPartial
+                || textToList(whitelistText).map((item) => item.replace(/^@+/, ''));
             const response = await posterSetsApi.saveConfig({
                 ...configDraft,
                 tv_library: textToList(tvText),
                 movie_library: textToList(movieText),
-                creatorWhitelist: textToList(whitelistText).map((item) => item.replace(/^@+/, '')),
+                token: configDraft.token === '********' ? undefined : configDraft.token,
+                tpdb_password: configDraft.tpdb_password === '********' ? undefined : configDraft.tpdb_password,
                 ...partial,
+                creatorWhitelist,
             });
             setConfigDraft({
                 ...response.config,

@@ -316,6 +316,9 @@ export const posterSetsApi = {
         ok: boolean;
         cacheEnabled?: boolean;
         prefetchEnabled?: boolean;
+        prioritizeFollowedCreators?: boolean;
+        paused?: boolean;
+        followedPrefetchOnly?: boolean;
         titles?: number;
         sets?: number;
         images?: number;
@@ -327,9 +330,31 @@ export const posterSetsApi = {
         activity?: Array<{
             at: number;
             level: string;
+            kind?: string;
             message: string;
             detail?: string | null;
         }>;
+        progress?: {
+            busy?: boolean;
+            warm?: {
+                total?: number;
+                completed?: number;
+                skippedCached?: number;
+                failed?: number;
+                percent?: number | null;
+                etaMs?: number | null;
+                elapsedMs?: number | null;
+                startedAt?: number | null;
+                finishedAt?: number | null;
+            };
+            hydrate?: {
+                total?: number;
+                completed?: number;
+                percent?: number | null;
+                etaMs?: number | null;
+                elapsedMs?: number | null;
+            };
+        };
         hydrate?: {
             queue?: number;
             active?: number;
@@ -343,21 +368,47 @@ export const posterSetsApi = {
         ok: boolean;
         cleared?: { titles?: number; sets?: number; images?: number };
     }>,
+    pauseTpdbCache: () => apiFetch(`${ROOT}/tpdb-cache/pause`, json({})) as Promise<{ ok: boolean; paused?: boolean }>,
+    resumeTpdbCache: () => apiFetch(`${ROOT}/tpdb-cache/resume`, json({})) as Promise<{ ok: boolean; paused?: boolean }>,
+    stopTpdbCache: () => apiFetch(`${ROOT}/tpdb-cache/stop`, json({})) as Promise<{
+        ok: boolean;
+        stopped?: boolean;
+        droppedTitles?: number;
+        droppedSets?: number;
+    }>,
+    tpdbCacheCoverage: (items: Array<{
+        tmdbId?: string | number | null;
+        id?: string | number | null;
+        title?: string;
+        year?: number | null;
+        mediaType?: string;
+    }>) => apiFetch(`${ROOT}/tpdb-cache/coverage`, json({ items })) as Promise<{
+        ok: boolean;
+        coverage?: Record<string, { level?: string; setCount?: number }>;
+    }>,
     warmTpdbLibraryCache: async (items: Array<{
         tmdbId?: string | number | null;
         id?: string | number | null;
         title?: string;
         year?: number | null;
         mediaType?: string;
-    }>) => {
+    }>, options: {
+        force?: boolean;
+        skipCached?: boolean;
+        followedPrefetchOnly?: boolean;
+    } = {}) => {
         const list = Array.isArray(items) ? items : [];
         // Stay well under reverse-proxy / historical body limits — queue merges across calls.
         const CHUNK = 80;
         let titles = 0;
         let skippedCached = 0;
         let lastMessage = '';
+        const payloadExtra = {
+            ...(options.force === true || options.skipCached === false ? { force: true } : {}),
+            ...(options.followedPrefetchOnly === true ? { followedPrefetchOnly: true } : {}),
+        };
         if (!list.length) {
-            return apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({ items: [] })) as Promise<{
+            return apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({ items: [], ...payloadExtra })) as Promise<{
                 ok: boolean;
                 started?: boolean;
                 titles?: number;
@@ -367,7 +418,10 @@ export const posterSetsApi = {
         }
         for (let offset = 0; offset < list.length; offset += CHUNK) {
             const chunk = list.slice(offset, offset + CHUNK);
-            const result = await apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({ items: chunk })) as {
+            const result = await apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({
+                items: chunk,
+                ...payloadExtra,
+            })) as {
                 ok: boolean;
                 started?: boolean;
                 titles?: number;

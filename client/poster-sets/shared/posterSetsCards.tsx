@@ -8,6 +8,7 @@ import { posterMediaRadiusClass, previewStripClass } from './posterSetsUi';
 import { isTitleCardSet } from './posterSetsRecent';
 import { CreatorPill, ProviderCornerBadge, ProviderPill, SetKindPill } from './posterSetsPills';
 import { providerLabel } from './posterSetsFormat';
+import { coverageBadgeClass, coverageBadgeLabel, type TpdbCoverageLevel } from './tpdbCacheUi';
 
 /** Proxied poster thumb with retry + graceful fallback when TPDB rate-limits. */
 export const PosterThumb: React.FC<{
@@ -225,12 +226,15 @@ export function LibraryMediaCard({
     item,
     disabled,
     onOpen,
+    cacheLevel = null,
 }: {
     item: LibraryRecentItem;
     disabled?: boolean;
     onOpen: (item: LibraryRecentItem) => void;
+    cacheLevel?: TpdbCoverageLevel | string | null;
 }) {
     const label = item.year ? `${item.title} (${item.year})` : item.title;
+    const cacheLabel = coverageBadgeLabel(cacheLevel);
     return (
         <button
             type="button"
@@ -248,6 +252,20 @@ export function LibraryMediaCard({
                 <span className="absolute left-2 top-2 rounded-full border border-white/15 bg-black/55 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">
                     {item.mediaType === 'movie' ? 'Movie' : 'TV'}
                 </span>
+                {cacheLabel ? (
+                    <span
+                        className={`absolute right-1.5 top-1.5 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${coverageBadgeClass(cacheLevel)}`}
+                        title={
+                            cacheLevel === 'images'
+                                ? 'Title, set pages, and images cached'
+                                : cacheLevel === 'sets'
+                                    ? 'Title + set pages cached'
+                                    : 'Title set list cached'
+                        }
+                    >
+                        {cacheLabel}
+                    </span>
+                ) : null}
             </div>
             <div className="min-w-0 px-2 py-2 text-left">
                 <p className="line-clamp-2 text-[11px] font-semibold leading-snug text-text sm:text-xs" title={label}>
