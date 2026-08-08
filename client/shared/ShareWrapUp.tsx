@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas';
 import { WrapUpCardGrid, periodLabel } from './WrapUpCards';
 import { formatStreamingHour } from './format';
 import { getPublicOrigin } from './basePath';
+import { useDiscoverI18n } from '../discovery/i18n';
 
 const EXPORT_WIDTH_PX = 1080;
 
@@ -67,8 +68,10 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
     onClose,
     onToast,
 }) => {
+    const { t } = useDiscoverI18n();
     const exportRef = useRef<HTMLDivElement>(null);
     const [busy, setBusy] = useState<'copy' | 'download' | 'share' | null>(null);
+    const period = periodLabel(days, t);
 
     const leaderboardRank = Number(analytics?.leaderboardRank);
     const hasRank = Number.isFinite(leaderboardRank) && leaderboardRank > 0;
@@ -231,7 +234,7 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
                             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-plex mb-1">Personal Wrap-Up</p>
                             <h4 className="text-2xl font-black text-white">{serverName}</h4>
                             <p className="text-sm text-muted mt-1">
-                                {periodLabel(days)}
+                                {period}
                                 {username ? ` · ${username}` : ''}
                             </p>
                         </div>

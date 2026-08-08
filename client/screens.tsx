@@ -26,7 +26,7 @@ import {
 } from './shared/skeletons';
 import type { User, PlexConfig, AppSettings, PlexServer, ToastMessage, DeletedUser, AuditEntry, UserStatus } from './shared/types';
 import { ShareWrapUpModal } from './shared/ShareWrapUp';
-import { WrapUpCardGrid } from './shared/WrapUpCards';
+import { WrapUpCardGrid, periodLabel } from './shared/WrapUpCards';
 import { SetupWizard } from './setup/SetupWizard';
 import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
 import { AuthPageBackground, themeClasses, SlideshowBackground } from './shared/theme';
@@ -34,6 +34,7 @@ import { activityStreamColumnCount, activityStreamGridClass, upgraderPosterGridC
 import { DiscoverGridSizeSelect } from './discovery/DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './discovery/useDiscoverGridSize';
 import { DiscoverLocaleSelect } from './discovery/i18n/DiscoverLocaleSelect';
+import { useDiscoverI18n } from './discovery/i18n';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import {
@@ -6938,6 +6939,7 @@ const PortalWidgetEditorModal: React.FC<{
 };
 
 export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onLogout: () => void; refreshSession: () => void; onViewAdmin: () => void; onViewStatus: () => void; onViewDashboard: () => void; onViewSettings?: () => void; onViewLogs?: () => void; onViewCollexions?: () => void; onViewScanner?: () => void; onViewMediaAutomation?: () => void; onViewRequests?: (reviewId?: number) => void; onPendingRequestsChange?: () => void }> = ({ sessionInfo, publicConfig, onLogout, refreshSession, onViewAdmin, onViewStatus, onViewDashboard, onViewSettings, onViewLogs, onViewCollexions, onViewScanner, onViewMediaAutomation, onViewRequests, onPendingRequestsChange }) => {
+    const { t } = useDiscoverI18n();
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<ToastMessage | null>(null);
     const [analytics, setAnalytics] = useState<any>(null);
@@ -7339,7 +7341,13 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     const isRevoked = user?.plexAccessStatus === 'revoked';
     const isPending = user?.plexAccessStatus?.toLowerCase() === 'pending';
 
-    const wrapUpDaysOptions = ANALYTICS_PERIOD_OPTIONS;
+    const wrapUpDaysOptions = useMemo(
+        () => ANALYTICS_PERIOD_OPTIONS.map((opt) => ({
+            ...opt,
+            label: periodLabel(opt.value, t),
+        })),
+        [t],
+    );
 
     const layoutCtx = useMemo(() => ({
         isAdmin: !!sessionInfo.session.isAdmin,
@@ -7591,7 +7599,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                         {(sessionInfo.session.isAdmin || user) && !analyticsLoading && analytics && (
                             <div className="glass-card p-4 md:p-5 shadow-xl">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 md:mb-4">
-                                    <h3 className="text-xl font-bold text-text">Your Personal Wrap-Up</h3>
+                                    <h3 className="text-xl font-bold text-text">{t('wrapUp.title')}</h3>
                                     <div className="flex items-center gap-2">
                                         <button
                                             type="button"
@@ -7599,7 +7607,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                                             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-plex/10 border border-plex/30 text-plex hover:bg-plex/20 transition-colors shadow-sm"
                                         >
                                             <Share2 className="w-4 h-4 flex-shrink-0" />
-                                            Share
+                                            {t('wrapUp.share')}
                                         </button>
                                         <PeriodDropdown
                                             value={analyticsDays}
@@ -7608,7 +7616,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                                             onClose={() => setWrapUpDaysOpen(false)}
                                             onChange={(value) => setAnalyticsDays(value as number | 'all')}
                                             options={wrapUpDaysOptions}
-                                            fallbackLabel="Last 7 Days"
+                                            fallbackLabel={t('wrapUp.last7Days')}
                                             buttonClassName="flex items-center gap-2 bg-background border border-border/50 rounded-lg px-3 py-1.5 text-sm font-medium text-text focus:outline-none hover:border-plex/50 transition-colors cursor-pointer shadow-sm"
                                         />
                                     </div>
@@ -7617,7 +7625,10 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                                 {analytics.heatmapData && (
                                     <div className="mt-6 pt-6 border-t border-white/10 min-w-0 overflow-hidden">
                                         <h4 className="text-xs uppercase tracking-widest text-muted font-bold mb-4 flex items-center gap-2">
-                                            <Calendar className="w-4 h-4 text-plex" /> Activity ({analyticsDays === 'all' ? 'All Time' : `Last ${analyticsDays} Days`})
+                                            <Calendar className="w-4 h-4 text-plex" />{' '}
+                                            {analyticsDays === 'all'
+                                                ? t('wrapUp.activityAllTime')
+                                                : t('wrapUp.activityLastDays', { days: analyticsDays })}
                                         </h4>
                                         <ActivityHeatmap data={analytics.heatmapData} />
                                     </div>
@@ -7632,7 +7643,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                     return (
                         <div className="glass-card p-4 md:p-5 shadow-xl flex flex-col h-full w-full min-h-0">
                             <div className="flex items-center justify-between mb-3 md:mb-4 flex-shrink-0">
-                                <h3 className="text-lg md:text-xl font-bold text-text">Recently Watched</h3>
+                                <h3 className="text-lg md:text-xl font-bold text-text">{t('wrapUp.recentlyWatched')}</h3>
                                 {analytics.recentHistory.length > recentHistoryPageSize && (
                                     <div className="flex items-center gap-2">
                                         <button
@@ -7738,8 +7749,8 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                                         onToggle={() => setAnalyticsDaysOpen(!analyticsDaysOpen)}
                                         onClose={() => setAnalyticsDaysOpen(false)}
                                         onChange={(value) => setAnalyticsDays(value as number | 'all')}
-                                        options={ANALYTICS_PERIOD_OPTIONS}
-                                        fallbackLabel="Last 7 Days"
+                                        options={wrapUpDaysOptions}
+                                        fallbackLabel={t('wrapUp.last7Days')}
                                         buttonClassName="flex items-center gap-2 bg-background border border-border/50 rounded-lg px-3 py-1.5 text-sm font-medium text-text focus:outline-none hover:border-plex/50 transition-colors cursor-pointer shadow-sm"
                                     />
                                 </div>

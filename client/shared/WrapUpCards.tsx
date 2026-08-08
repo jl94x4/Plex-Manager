@@ -5,15 +5,29 @@ import {
 } from 'lucide-react';
 import { formatStreamingHour } from './format';
 import { portalUrl } from './basePath';
+import { useDiscoverI18n } from '../discovery/i18n';
+import type { DiscoverTranslate } from '../discovery/i18n/types';
 
-export const periodLabel = (days: number | string) => {
-    if (days === 'all') return 'All Time';
-    if (days === 7) return 'Last 7 Days';
-    if (days === 30) return 'Last 30 Days';
-    if (days === 60) return 'Last 60 Days';
-    if (days === 90) return 'Last 90 Days';
-    if (days === 180) return 'Last 180 Days';
-    return `Last ${days} Days`;
+export const periodLabel = (days: number | string, t?: DiscoverTranslate) => {
+    const translate = t || ((key: string, vars?: Record<string, string | number>) => {
+        if (key === 'wrapUp.allTime') return 'All Time';
+        if (key === 'wrapUp.last7Days') return 'Last 7 Days';
+        if (key === 'wrapUp.last30Days') return 'Last 30 Days';
+        if (key === 'wrapUp.last60Days') return 'Last 60 Days';
+        if (key === 'wrapUp.last90Days') return 'Last 90 Days';
+        if (key === 'wrapUp.last180Days') return 'Last 180 Days';
+        if (key === 'wrapUp.last365Days') return 'Last 365 Days';
+        if (key === 'wrapUp.lastNDays') return `Last ${vars?.days ?? days} Days`;
+        return key;
+    });
+    if (days === 'all') return translate('wrapUp.allTime');
+    if (days === 7) return translate('wrapUp.last7Days');
+    if (days === 30) return translate('wrapUp.last30Days');
+    if (days === 60) return translate('wrapUp.last60Days');
+    if (days === 90) return translate('wrapUp.last90Days');
+    if (days === 180) return translate('wrapUp.last180Days');
+    if (days === 365) return translate('wrapUp.last365Days');
+    return translate('wrapUp.lastNDays', { days: Number(days) || 0 });
 };
 
 const FALLBACK_IMAGES = {
@@ -41,7 +55,35 @@ export type WrapUpCardDef = {
 
 const resolveCardImage = (url: string) => portalUrl(url);
 
-export const buildWrapUpCards = (analytics: any): WrapUpCardDef[] => {
+export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpCardDef[] => {
+    const translate = t || ((key: string, vars?: Record<string, string | number>) => {
+        const fallbacks: Record<string, string> = {
+            'wrapUp.serverRank': 'Server Rank',
+            'wrapUp.totalStreams': 'Total Streams',
+            'wrapUp.topBinge': 'Top Binge',
+            'wrapUp.topMovie': 'Top Movie',
+            'wrapUp.timeOfDay': 'Time of Day',
+            'wrapUp.topDay': 'Top Day',
+            'wrapUp.topLibrary': 'Top Library',
+            'wrapUp.mediaProfile': 'Media Profile',
+            'wrapUp.watchStyle': 'Watch Style',
+            'wrapUp.streamingHabit': 'Streaming Habit',
+            'wrapUp.notRankedYet': 'Not ranked yet',
+            'wrapUp.topPctOfUsers': `Top ${vars?.pct ?? ''}% of users`,
+            'wrapUp.nothingYet': 'Nothing yet',
+            'wrapUp.episodePlays': `${vars?.count ?? 0} episodes`,
+            'wrapUp.plays': `${vars?.count ?? 0} plays`,
+            'wrapUp.peakTime': `Peak Time: ${vars?.time ?? ''}`,
+            'wrapUp.streamsCount': `${vars?.count ?? 0} streams`,
+            'wrapUp.none': 'None',
+            'wrapUp.prefersMovies': 'Prefers Movies',
+            'wrapUp.prefersTvShows': 'Prefers TV Shows',
+            'wrapUp.uniqueTitles': `${vars?.count ?? 0} unique titles`,
+            'wrapUp.unknown': 'Unknown',
+            'wrapUp.mixedBag': 'Mixed Bag',
+        };
+        return fallbacks[key] || key;
+    });
     const dayCounts = Object.values(analytics?.dayOfWeekCounts || {})
         .map((value) => Number(value) || 0)
         .filter((value) => Number.isFinite(value));
@@ -56,18 +98,18 @@ export const buildWrapUpCards = (analytics: any): WrapUpCardDef[] => {
     return [
         {
             metric: 'Server Rank',
-            label: 'Server Rank',
+            label: translate('wrapUp.serverRank'),
             bgImage: FALLBACK_IMAGES.rank,
             icon: Trophy,
             valueClassName: 'text-2xl font-black leading-none',
             value: hasRank ? (
                 <><span className="text-plex text-xl mr-0.5">#</span>{leaderboardRank}</>
-            ) : 'Not ranked yet',
-            subValue: rankPct ? `Top ${rankPct}% of users` : undefined,
+            ) : translate('wrapUp.notRankedYet'),
+            subValue: rankPct ? translate('wrapUp.topPctOfUsers', { pct: rankPct }) : undefined,
         },
         {
             metric: 'Total Streams',
-            label: 'Total Streams',
+            label: translate('wrapUp.totalStreams'),
             bgImage: FALLBACK_IMAGES.streams,
             icon: PlayCircle,
             valueClassName: 'text-2xl font-black leading-none',
@@ -82,74 +124,76 @@ export const buildWrapUpCards = (analytics: any): WrapUpCardDef[] => {
         },
         {
             metric: 'Top Binge',
-            label: 'Top Binge',
+            label: translate('wrapUp.topBinge'),
             bgImage: analytics.topBinge?.artUrl || analytics.topBinge?.thumbUrl || FALLBACK_IMAGES.binge,
             icon: Tv,
             valueClassName: 'text-sm font-bold line-clamp-2 leading-tight',
-            value: analytics.topBinge?.title || 'Nothing yet',
-            subValue: `${analytics.topBinge?.plays || 0} episodes`,
+            value: analytics.topBinge?.title || translate('wrapUp.nothingYet'),
+            subValue: translate('wrapUp.episodePlays', { count: analytics.topBinge?.plays || 0 }),
         },
         {
             metric: 'Top Movie',
-            label: 'Top Movie',
+            label: translate('wrapUp.topMovie'),
             bgImage: analytics.topMovie?.artUrl || analytics.topMovie?.thumbUrl || FALLBACK_IMAGES.movie,
             icon: Clapperboard,
             valueClassName: 'text-sm font-bold line-clamp-2 leading-tight',
-            value: analytics.topMovie?.title || 'Nothing yet',
-            subValue: `${analytics.topMovie?.plays || 0} plays`,
+            value: analytics.topMovie?.title || translate('wrapUp.nothingYet'),
+            subValue: translate('wrapUp.plays', { count: analytics.topMovie?.plays || 0 }),
         },
         {
             metric: 'Time of Day',
-            label: 'Time of Day',
+            label: translate('wrapUp.timeOfDay'),
             bgImage: FALLBACK_IMAGES.time,
             icon: Clock,
             valueClassName: 'text-sm font-bold leading-tight',
-            value: analytics.timeOfDay || 'Unknown',
-            subValue: `Peak Time: ${formatStreamingHour(analytics.peakHour ?? analytics.avgHour)}`,
+            value: analytics.timeOfDay || translate('wrapUp.unknown'),
+            subValue: translate('wrapUp.peakTime', { time: formatStreamingHour(analytics.peakHour ?? analytics.avgHour) }),
         },
         {
             metric: 'Top Day',
-            label: 'Top Day',
+            label: translate('wrapUp.topDay'),
             bgImage: FALLBACK_IMAGES.day,
             icon: Calendar,
             valueClassName: 'text-sm font-bold leading-tight',
-            value: analytics.popularDay || 'Unknown',
-            subValue: `${topDayStreams} streams`,
+            value: analytics.popularDay || translate('wrapUp.unknown'),
+            subValue: translate('wrapUp.streamsCount', { count: topDayStreams }),
         },
         {
             metric: 'Top Library',
-            label: 'Top Library',
+            label: translate('wrapUp.topLibrary'),
             bgImage: FALLBACK_IMAGES.library,
             icon: Layers,
             valueClassName: 'text-sm font-bold line-clamp-2 leading-tight',
-            value: analytics.favoriteLibrary || 'None',
-            subValue: `${analytics.topLibraries?.[0]?.plays || 0} plays`,
+            value: analytics.favoriteLibrary || translate('wrapUp.none'),
+            subValue: translate('wrapUp.plays', { count: analytics.topLibraries?.[0]?.plays || 0 }),
         },
         {
             metric: 'Media Profile',
-            label: 'Media Profile',
+            label: translate('wrapUp.mediaProfile'),
             bgImage: FALLBACK_IMAGES.profile,
             icon: PieChart,
             valueClassName: 'text-sm font-bold leading-tight',
-            value: analytics.mediaPreference || 'Mixed Bag',
-            subValue: `Prefers ${analytics.moviesCount > analytics.showsCount ? 'Movies' : 'TV Shows'}`,
+            value: analytics.mediaPreference || translate('wrapUp.mixedBag'),
+            subValue: analytics.moviesCount > analytics.showsCount
+                ? translate('wrapUp.prefersMovies')
+                : translate('wrapUp.prefersTvShows'),
         },
         {
             metric: 'Watch Style',
-            label: 'Watch Style',
+            label: translate('wrapUp.watchStyle'),
             bgImage: FALLBACK_IMAGES.style,
             icon: Compass,
             valueClassName: 'text-sm font-bold leading-tight',
-            value: analytics.watchStyle || 'Unknown',
-            subValue: `${analytics.uniqueTitles || 0} unique titles`,
+            value: analytics.watchStyle || translate('wrapUp.unknown'),
+            subValue: translate('wrapUp.uniqueTitles', { count: analytics.uniqueTitles || 0 }),
         },
         {
             metric: 'Streaming Habit',
-            label: 'Streaming Habit',
+            label: translate('wrapUp.streamingHabit'),
             bgImage: FALLBACK_IMAGES.habit,
             icon: Coffee,
             valueClassName: 'text-sm font-bold leading-tight',
-            value: analytics.streamingHabit || 'Unknown',
+            value: analytics.streamingHabit || translate('wrapUp.unknown'),
             subValue: `${analytics.weekdayPlays || 0} WD • ${analytics.weekendPlays || 0} WE`,
         },
     ];
@@ -189,7 +233,8 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
     valueClassName: defaultValueClassName = 'text-sm font-bold leading-tight',
     variant = 'default',
 }) => {
-    const cards = buildWrapUpCards(analytics);
+    const { t } = useDiscoverI18n();
+    const cards = buildWrapUpCards(analytics, t);
     const isExport = variant === 'export';
     const resolvedMinHeight = minCardHeight ?? (isExport ? 128 : 112);
     const gridClass = isExport
