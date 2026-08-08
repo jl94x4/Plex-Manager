@@ -580,10 +580,53 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     </div>
                                     <span className="mt-1 block text-[11px] text-muted">
                                         Caps <code className="text-text/80">tpdb-image-cache/</code> only — oldest images are removed when over budget.
-                                        {tpdbCacheStatus
-                                            ? ` In use: ${formatBytes(tpdbCacheStatus.imageBytes || 0)} · ${tpdbCacheStatus.titles || 0} titles · ${tpdbCacheStatus.sets || 0} sets · ${tpdbCacheStatus.images || 0} images.`
-                                            : ''}
                                     </span>
+                                    {tpdbCacheStatus ? (
+                                        <div className="mt-2 rounded-md border border-white/10 bg-black/25 px-3 py-2">
+                                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                                                    Cache on disk
+                                                </p>
+                                                <p className="text-[11px] text-muted">
+                                                    {(tpdbCacheStatus?.hydrate?.warmActive || 0) > 0
+                                                        || (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
+                                                        || (tpdbCacheStatus?.hydrate?.active || 0) > 0
+                                                        ? 'Live · refreshes every 2s'
+                                                        : 'Refreshes every 2s'}
+                                                </p>
+                                            </div>
+                                            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                                <div>
+                                                    <p className="text-[10px] uppercase tracking-wide text-muted">Title pages</p>
+                                                    <p className="text-sm font-semibold tabular-nums text-text">
+                                                        {tpdbCacheStatus.titles || 0}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] uppercase tracking-wide text-muted">Set pages</p>
+                                                    <p className="text-sm font-semibold tabular-nums text-text">
+                                                        {tpdbCacheStatus.sets || 0}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] uppercase tracking-wide text-muted">Images</p>
+                                                    <p className="text-sm font-semibold tabular-nums text-text">
+                                                        {tpdbCacheStatus.images || 0}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] uppercase tracking-wide text-muted">Image disk</p>
+                                                    <p className="text-sm font-semibold tabular-nums text-text">
+                                                        {formatBytes(tpdbCacheStatus.imageBytes || 0)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <p className="mt-2 text-[11px] text-muted">
+                                                Warm grows <span className="text-text/80">title pages</span> as each title resolves.
+                                                Set pages and images rise when you open a title or enable Prefetch.
+                                            </p>
+                                        </div>
+                                    ) : null}
                                 </label>
                                 <div className="flex flex-wrap gap-2 pt-1">
                                     <button
@@ -772,8 +815,9 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         )}
                                     </div>
                                     <p className="text-[11px] text-muted">
-                                        Auto-refreshes every 2s while this page is open. Steps include title resolve,
-                                        HTML set scrape (~1.5s when logged in), parallel CDN image downloads, and each file into tpdb-image-cache.
+                                        Auto-refreshes every 2s while this page is open. Warm writes each title page as it
+                                        finishes (metadata only). Set HTML (~1.5s when logged in) and CDN images land when
+                                        you open a title or enable Prefetch.
                                     </p>
                                 </div>
                             </div>
