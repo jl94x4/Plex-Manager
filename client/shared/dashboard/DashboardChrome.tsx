@@ -196,7 +196,7 @@ export const DashboardPanel: React.FC<{
                 {subtitle ? <p className="mt-0.5 text-xs text-muted">{subtitle}</p> : null}
             </div>
             {(controls || badge) ? (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                     {controls}
                     {badge}
                 </div>

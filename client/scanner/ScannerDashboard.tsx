@@ -504,7 +504,7 @@ export const ScannerDashboard: React.FC = () => {
                     title="Recent activity"
                     subtitle={`Latest ${ACTIVITY_FETCH_LIMIT} events · ${ACTIVITY_PAGE_SIZE} per page.`}
                     controls={(
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex w-full min-w-0 flex-nowrap items-center gap-2 sm:w-auto">
                             {configuredSources.length > 0 ? (
                                 <CustomSelect
                                     id="scanner-activity-source"
@@ -512,7 +512,7 @@ export const ScannerDashboard: React.FC = () => {
                                     onChange={setActivitySource}
                                     options={activitySourceOptions}
                                     compact
-                                    className="w-44"
+                                    className="min-w-0 flex-1 sm:w-44 sm:flex-none"
                                 />
                             ) : null}
                             <CustomSelect
@@ -521,14 +521,12 @@ export const ScannerDashboard: React.FC = () => {
                                 onChange={setActivityEvent}
                                 options={activityEventOptions}
                                 compact
-                                className="w-40"
+                                className="min-w-0 flex-1 sm:w-40 sm:flex-none"
                             />
+                            <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-200">
+                                {filteredLog.length} events
+                            </span>
                         </div>
-                    )}
-                    badge={(
-                        <span className="whitespace-nowrap rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-200">
-                            {filteredLog.length} events
-                        </span>
                     )}
                 >
                     {filteredLog.length === 0 ? (
