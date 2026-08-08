@@ -768,7 +768,9 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 Number(configDraft.tpdbCacheRefreshHour ?? 3),
                                                 Number(configDraft.tpdbCacheRefreshIntervalHours ?? 0),
                                             )}
-                                            {' '}Save settings to apply. Times use the server/container clock.
+                                            {' '}Only rechecks titles already on disk for new sets — never starts a library build.
+                                            Runs as its own worker (separate TPDB session), so it still goes ahead while a cache build is running.
+                                            Save settings to apply. Times use the server/container clock.
                                         </p>
                                     </div>
                                 </div>
