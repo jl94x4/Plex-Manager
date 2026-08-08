@@ -38,7 +38,9 @@ IMAGE_HEADERS = {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     ),
-    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    # Prefer formats we can magic-check and Plex can ingest. AVIF-first caused
+    # silent apply failures when TPDB returned AVIF and we rejected the bytes.
+    "Accept": "image/jpeg,image/png,image/webp;q=0.9,image/*;q=0.8,*/*;q=0.7",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://mediux.pro/",
 }
@@ -134,15 +136,35 @@ def _image_suffix(content_type: str, url: str) -> str:
 
 
 def _looks_like_image(data: bytes) -> bool:
-    if len(data) < 24:
+    if len(data) < 12:
         return False
     if data[:3] == b"\xff\xd8\xff":
         return True  # JPEG
     if data[:8] == b"\x89PNG\r\n\x1a\n":
         return True  # PNG
-    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+    if data[:4] == b"RIFF" and len(data) >= 12 and data[8:12] == b"WEBP":
         return True  # WEBP
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return True  # GIF
+    # AVIF / HEIF: ....ftyp.... with brand containing avif/heic/mif1
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        brand = data[8:12].lower()
+        if brand in (b"avif", b"avis", b"heic", b"heif", b"mif1", b"msf1"):
+            return True
+        if b"avif" in data[8:24].lower() or b"heic" in data[8:24].lower():
+            return True
     return False
+
+
+def _image_payload_hint(data: bytes) -> str:
+    if not data:
+        return "empty"
+    head = data[:200].lstrip().lower()
+    if head.startswith(b"<!doctype html") or head.startswith(b"<html") or b"cloudflare" in head:
+        return "html/challenge page"
+    if head.startswith(b"{") or head.startswith(b"["):
+        return "json"
+    return f"{len(data)} bytes, unknown format"
 
 
 def download_image(url: str, progress: ProgressFn = None, *, config: dict | None = None) -> Optional[str]:
@@ -164,10 +186,14 @@ def download_image(url: str, progress: ProgressFn = None, *, config: dict | None
             digest = hashlib.sha1(target.encode("utf-8")).hexdigest()
             bin_path = os.path.join(cache_dir, f"{digest}.bin")
             if os.path.isfile(bin_path) and os.path.getsize(bin_path) > 0:
+                with open(bin_path, "rb") as src:
+                    cached = src.read()
+                if not _looks_like_image(cached):
+                    emit(progress, f"Skipping corrupt local cache entry for {target[:80]}…")
+                    continue
                 suffix = _image_suffix("", target)
                 handle = tempfile.NamedTemporaryFile(suffix=suffix or ".jpg", delete=False)
-                with open(bin_path, "rb") as src:
-                    handle.write(src.read())
+                handle.write(cached)
                 handle.close()
                 emit(progress, f"Using local cached image for {target[:80]}…")
                 return handle.name
@@ -176,33 +202,70 @@ def download_image(url: str, progress: ProgressFn = None, *, config: dict | None
 
     headers = dict(IMAGE_HEADERS)
     lower = target.lower()
-    if "theposterdb.com" in lower:
+    is_tpdb = "theposterdb.com" in lower
+    if is_tpdb:
         headers["Referer"] = "https://theposterdb.com/"
     elif "mediux.pro" in lower:
         headers["Referer"] = "https://mediux.pro/"
-    try:
-        session = None
-        if "theposterdb.com" in lower and config:
-            try:
-                session = _posterdb_http_client(config)
-            except Exception:
-                session = None
-        if isinstance(session, requests.Session):
-            response = session.get(target, headers=headers, timeout=60)
-        else:
-            response = requests.get(target, headers=headers, timeout=60)
-        response.raise_for_status()
-        if not _looks_like_image(response.content):
-            emit(progress, f"Downloaded non-image payload from {target[:80]}… ({len(response.content)} bytes)")
-            return None
-        suffix = _image_suffix(response.headers.get("content-type", ""), target)
-        handle = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-        handle.write(response.content)
-        handle.close()
-        return handle.name
-    except Exception as exc:
-        emit(progress, f"Failed to download image: {exc}")
-        return None
+
+    session = None
+    if is_tpdb and config:
+        try:
+            session = _posterdb_http_client(config)
+        except Exception:
+            session = None
+
+    last_error = None
+    for attempt in range(4):
+        try:
+            if is_tpdb:
+                _posterdb_throttle(authenticated=isinstance(session, requests.Session))
+            if isinstance(session, requests.Session):
+                response = session.get(target, headers=headers, timeout=60)
+            else:
+                response = requests.get(target, headers=headers, timeout=60)
+            if response.status_code == 429:
+                retry_after = None
+                try:
+                    retry_after = float(response.headers.get("Retry-After") or 0) or None
+                except Exception:
+                    retry_after = None
+                if is_tpdb:
+                    _posterdb_note_rate_limit(retry_after)
+                wait_s = max(2.0, float(retry_after or 0) or (2.0 + attempt * 2.0))
+                emit(progress, f"Image download rate-limited (429); retrying in {int(wait_s)}s…")
+                time.sleep(wait_s)
+                last_error = f"HTTP 429 for {target}"
+                continue
+            if response.status_code >= 500:
+                wait_s = 0.8 + attempt * 0.8
+                emit(progress, f"Image download HTTP {response.status_code}; retrying…")
+                time.sleep(wait_s)
+                last_error = f"HTTP {response.status_code} for {target}"
+                continue
+            response.raise_for_status()
+            if not _looks_like_image(response.content):
+                hint = _image_payload_hint(response.content)
+                emit(progress, f"Downloaded non-image payload from {target[:80]}… ({hint})")
+                # Authed session sometimes still gets a challenge HTML — try anonymous once.
+                if is_tpdb and isinstance(session, requests.Session) and attempt < 3:
+                    session = None
+                    last_error = f"non-image payload ({hint})"
+                    time.sleep(0.5 + attempt * 0.4)
+                    continue
+                return None
+            suffix = _image_suffix(response.headers.get("content-type", ""), target)
+            handle = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+            handle.write(response.content)
+            handle.close()
+            return handle.name
+        except Exception as exc:
+            last_error = str(exc)
+            emit(progress, f"Failed to download image (attempt {attempt + 1}/4): {exc}")
+            time.sleep(0.6 + attempt * 0.6)
+    if last_error:
+        emit(progress, f"Failed to download image: {last_error}")
+    return None
 
 
 def cleanup_temp_file(path: Optional[str]) -> None:

@@ -1,12 +1,21 @@
 import React from 'react';
-import { Compass, Eye, Image as ImageIcon, Library, ListOrdered, RefreshCw, ScrollText, Settings2 } from 'lucide-react';
+import {
+    CheckCircle2,
+    Compass,
+    Eye,
+    Image as ImageIcon,
+    Library,
+    ListOrdered,
+    RefreshCw,
+    ScrollText,
+    Settings2,
+    XCircle,
+} from 'lucide-react';
 import { ToastContainer } from '../../shared/toast';
 import {
     DashboardHero,
     DashboardPageShell,
-    DashboardStatCard,
     DashboardSubnav,
-    dashboardGlowClass,
     dashboardSubnavLinkClass,
 } from '../../shared/dashboard/DashboardChrome';
 import { usePosterSetsDashboard } from '../PosterSetsDashboardContext';
@@ -27,6 +36,12 @@ import { PosterSetsPasteView } from './PosterSetsPasteView';
 import { PosterSetsHistoryView } from './PosterSetsHistoryView';
 import { PosterSetsSettingsView } from './PosterSetsSettingsView';
 import { PosterSetsFloatingBars } from './PosterSetsFloatingBars';
+
+const formatJobState = (state?: string | null) => {
+    const raw = String(state || 'none').trim();
+    if (!raw) return 'None';
+    return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+};
 
 export const PosterSetsShell: React.FC = () => {
     const ctx = usePosterSetsDashboard();
@@ -58,6 +73,44 @@ export const PosterSetsShell: React.FC = () => {
         loadWatches,
     } = ctx;
 
+    const workerReady = Boolean(status?.workerReady);
+    const configured = Boolean(status?.configured);
+    const lastJob = status?.recentJobs?.[0] || null;
+    const lastJobState = formatJobState(lastJob?.state);
+    const lastJobFailed = /fail|error|cancel/i.test(String(lastJob?.state || ''));
+
+    const statusItems = [
+        {
+            label: 'Worker',
+            value: workerReady ? 'Ready' : 'Missing',
+            ok: workerReady,
+            icon: workerReady
+                ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
+                : <XCircle className="h-3.5 w-3.5 text-rose-300" />,
+            hint: null as string | null,
+        },
+        {
+            label: 'Config',
+            value: configured ? 'Valid' : 'Setup',
+            ok: configured,
+            icon: configured
+                ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
+                : <Settings2 className="h-3.5 w-3.5 text-amber-300" />,
+            hint: null as string | null,
+        },
+        {
+            label: 'Last job',
+            value: lastJobState,
+            ok: !lastJobFailed && lastJobState !== 'None',
+            icon: lastJobFailed
+                ? <XCircle className="h-3.5 w-3.5 text-rose-300" />
+                : <ListOrdered className="h-3.5 w-3.5 text-sky-300" />,
+            hint: lastJob
+                ? `${lastJob.type || 'job'} · ${lastJobState}`
+                : 'No jobs yet',
+        },
+    ];
+
     return (
         <DashboardPageShell className={`${selectedBulkCount > 0 || inspectorOpen ? 'pb-28' : ''}`}>
                 <ToastContainer toasts={toasts} setToasts={setToasts} />
@@ -76,39 +129,33 @@ export const PosterSetsShell: React.FC = () => {
                     )}
                 />
 
-                <div className="grid grid-cols-3 gap-3">
-                    {([
-                        {
-                            label: 'Worker',
-                            value: status?.workerReady ? 'Ready' : 'Missing',
-                            glow: status?.workerReady ? dashboardGlowClass('emerald') : dashboardGlowClass('rose'),
-                            icon: <Settings2 className="h-4 w-4 text-muted" />,
-                        },
-                        {
-                            label: 'Config',
-                            value: status?.configured ? 'Valid' : 'Setup',
-                            glow: status?.configured ? dashboardGlowClass('emerald') : dashboardGlowClass('amber'),
-                            icon: <Settings2 className="h-4 w-4 text-muted" />,
-                        },
-                        {
-                            label: 'Last job',
-                            value: String(status?.recentJobs?.[0]?.state || 'None'),
-                            glow: dashboardGlowClass('sky'),
-                            icon: <ListOrdered className="h-4 w-4 text-muted" />,
-                            hint: status?.recentJobs?.[0]
-                                ? `${status.recentJobs[0].type || 'job'} · ${status.recentJobs[0].state}`
-                                : 'No jobs yet',
-                        },
-                    ] as const).map((item) => (
-                        <DashboardStatCard
-                            key={item.label}
-                            label={item.label}
-                            value={item.value}
-                            hint={item.hint}
-                            icon={item.icon}
-                            glow={item.glow}
-                        />
-                    ))}
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
+                    <div className="grid grid-cols-3 divide-x divide-white/10">
+                        {statusItems.map((item) => (
+                            <div
+                                key={item.label}
+                                className="flex min-w-0 flex-col items-center gap-1 px-2 py-2.5 text-center sm:items-start sm:px-3 sm:py-3 sm:text-left"
+                                title={item.hint || undefined}
+                            >
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+                                    {item.icon}
+                                    <span>{item.label}</span>
+                                </div>
+                                <p className={`truncate text-sm font-semibold sm:text-[15px] ${
+                                    item.ok
+                                        ? 'text-text'
+                                        : item.label === 'Last job' && lastJobFailed
+                                            ? 'text-rose-200'
+                                            : 'text-amber-100'
+                                }`}>
+                                    {item.value}
+                                </p>
+                                {item.hint ? (
+                                    <p className="hidden truncate text-[10px] text-muted sm:block">{item.hint}</p>
+                                ) : null}
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 <div className="space-y-2">
@@ -160,7 +207,7 @@ export const PosterSetsShell: React.FC = () => {
                         })}
                     </DashboardSubnav>
 
-                    <div className="flex min-w-0 flex-wrap justify-start gap-1.5 md:hidden">
+                    <div className="flex min-w-0 flex-wrap justify-center gap-1.5 md:hidden">
                     {([
                         ['library', 'Library', Library],
                         ['discover', 'Discover', Compass],
@@ -208,7 +255,7 @@ export const PosterSetsShell: React.FC = () => {
                 </div>
             
                 {isDiscoverInternalTab(tab) ? (
-                    <div className="flex min-w-0 flex-wrap justify-start gap-1 sm:gap-1.5">
+                    <div className="flex min-w-0 flex-wrap justify-center gap-1 sm:gap-1.5 md:justify-start">
                         {DISCOVER_SUB_NAV.map(({ id, label, internalTab }) => (
                             <button
                                 key={id}
