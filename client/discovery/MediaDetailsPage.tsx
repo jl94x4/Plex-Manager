@@ -166,17 +166,47 @@ export const MediaDetailsPage: React.FC<{
         let cancelled = false;
 
         // Live library badge when disk cache missed (movies + TV).
-        // Movies always reconcile with Radarr so Request vs Available matches the modal.
+        // Movies reconcile with Radarr, but keep Seerr/portal PENDING/PROCESSING so the
+        // Request CTA matches the modal ("already requested") instead of flipping back
+        // to "Request Movie".
+        const existingStatus = Number(details?.mediaInfo?.status);
+        const hasRequestStamp = Array.isArray(details?.mediaInfo?.requests)
+            && details.mediaInfo.requests.length > 0;
+        const preserveRequestState = existingStatus === 2
+            || existingStatus === 3
+            || hasRequestStamp;
         const needsLive = mediaType === 'movie'
-            || !Number.isFinite(Number(details?.mediaInfo?.status));
+            || !Number.isFinite(existingStatus);
         if (needsLive) {
-            const enrichTarget = mediaType === 'movie'
+            const enrichTarget = mediaType === 'movie' && !preserveRequestState
                 ? { ...details, mediaInfo: null }
                 : details;
             enrichDiscoverItemsWithAvailability([enrichTarget])
                 .then((enriched) => {
                     if (cancelled || !enriched?.[0]) return;
-                    setDetails((prev) => (prev ? { ...prev, ...enriched[0] } : enriched[0]));
+                    setDetails((prev) => {
+                        if (!prev) return enriched[0];
+                        const next = { ...prev, ...enriched[0] };
+                        const prevStatus = Number(prev?.mediaInfo?.status);
+                        const nextStatus = Number(next?.mediaInfo?.status);
+                        const keepPrevRequest = (
+                            (prevStatus === 2 || prevStatus === 3
+                                || (Array.isArray(prev?.mediaInfo?.requests) && prev.mediaInfo.requests.length > 0))
+                            && !(nextStatus === 4 || nextStatus === 5 || nextStatus === 6)
+                        );
+                        if (keepPrevRequest) {
+                            next.mediaInfo = {
+                                ...(next.mediaInfo || {}),
+                                status: Number.isFinite(prevStatus) && prevStatus > 1
+                                    ? prevStatus
+                                    : (next.mediaInfo?.status ?? 3),
+                                ...(Array.isArray(prev?.mediaInfo?.requests) && prev.mediaInfo.requests.length
+                                    ? { requests: prev.mediaInfo.requests }
+                                    : {}),
+                            };
+                        }
+                        return next;
+                    });
                 })
                 .catch(() => undefined);
         }

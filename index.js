@@ -6646,6 +6646,120 @@ const overlayPortalPendingRequestsOntoItems = async (config, sessionUser, items 
     }
 };
 
+/**
+ * Same role as portal overlay, for requestEngine=seerr: stamp Seerr mediaInfo so
+ * detail CTAs show Requested/Pending instead of "Request Movie" when Seerr already
+ * has the title (modal already knew via /request-options).
+ */
+const overlaySeerrPendingRequestsOntoItems = async (config, sessionUser, items = []) => {
+    if (getRequestEngine(config) !== 'seerr' || !sessionUser || !Array.isArray(items) || !items.length) {
+        return items;
+    }
+    try {
+        // Detail fast path: same Seerr media endpoint the request modal uses.
+        if (items.length === 1) {
+            const item = items[0];
+            const isMusic = item?.mediaType === 'music' || item?.type === 'music';
+            if (!isMusic) {
+                const mediaType = item?.mediaType === 'tv' || item?.mediaType === 2 || item?.mediaType === '2'
+                    ? 'tv'
+                    : 'movie';
+                const tmdbId = Number(item?.tmdbId ?? item?.id);
+                if (Number.isFinite(tmdbId) && tmdbId > 0) {
+                    const opts = await requestAppService.getMemberRequestOptions(config, sessionUser, {
+                        mediaType,
+                        mediaId: tmdbId,
+                    });
+                    const seerrInfo = opts?.mediaInfo && typeof opts.mediaInfo === 'object'
+                        ? opts.mediaInfo
+                        : null;
+                    const mediaStatus = Number(opts?.mediaStatus ?? seerrInfo?.status);
+                    if (seerrInfo || (Number.isFinite(mediaStatus) && mediaStatus > 1)) {
+                        const mediaInfo = {
+                            ...(item?.mediaInfo || {}),
+                            ...(seerrInfo || {}),
+                        };
+                        if (Number.isFinite(mediaStatus) && mediaStatus > 0) {
+                            mediaInfo.status = mediaStatus;
+                        }
+                        return [{ ...item, mediaInfo }];
+                    }
+                }
+            }
+        }
+
+        const userKey = `seerr:${String(sessionUser?.id || sessionUser?.plexId || '')}`;
+        let activeByKey = null;
+        const cached = userKey !== 'seerr:' ? memberActiveRequestsOverlayCache.get(userKey) : null;
+        if (cached && (Date.now() - cached.at) < MEMBER_ACTIVE_REQUESTS_OVERLAY_TTL_MS) {
+            activeByKey = cached.byKey;
+        } else {
+            const listed = await requestAppService.listMemberRequests(config, sessionUser, {
+                filter: 'all',
+                take: 50,
+                skip: 0,
+            });
+            activeByKey = new Map();
+            for (const row of listed.results || []) {
+                const status = Number(row?.status);
+                if (status === 3 || status === 4) continue; // declined / failed
+                const mediaType = row?.type === 'tv' ? 'tv' : 'movie';
+                const tmdbId = Number(row?.tmdbId);
+                if (!Number.isFinite(tmdbId) || tmdbId <= 0) continue;
+                const key = `${mediaType}:${tmdbId}`;
+                const existing = activeByKey.get(key);
+                if (!existing || (status === 1 && Number(existing.status) !== 1)) {
+                    activeByKey.set(key, row);
+                }
+            }
+            if (userKey !== 'seerr:') {
+                memberActiveRequestsOverlayCache.set(userKey, { at: Date.now(), byKey: activeByKey });
+            }
+        }
+        if (!activeByKey.size) return items;
+        return items.map((item) => {
+            const mediaType = item?.mediaType === 'tv' || item?.mediaType === 2 || item?.mediaType === '2'
+                ? 'tv'
+                : 'movie';
+            const tmdbId = Number(item?.tmdbId ?? item?.id);
+            if (!Number.isFinite(tmdbId) || tmdbId <= 0) return item;
+            const active = activeByKey.get(`${mediaType}:${tmdbId}`);
+            if (!active) return item;
+            const mediaInfo = { ...(item?.mediaInfo || {}) };
+            const requestStatus = Number(active.status) || 1;
+            mediaInfo.requests = [
+                {
+                    id: active.id,
+                    status: requestStatus,
+                    is4k: !!active.is4k,
+                    createdAt: active.createdAt,
+                },
+                ...(Array.isArray(mediaInfo.requests) ? mediaInfo.requests : []),
+            ];
+            const currentStatus = Number(mediaInfo.status);
+            const seerrMediaStatus = Number(active.mediaStatus);
+            if (!Number.isFinite(currentStatus) || currentStatus === 1) {
+                if (Number.isFinite(seerrMediaStatus) && seerrMediaStatus > 1) {
+                    mediaInfo.status = seerrMediaStatus;
+                } else {
+                    mediaInfo.status = requestStatus === 1 ? 2 : 3;
+                }
+            }
+            return { ...item, mediaInfo };
+        });
+    } catch (error) {
+        log(`Discovery Seerr request overlay skipped: ${error.message}`);
+        return items;
+    }
+};
+
+const overlayPendingRequestsOntoItems = async (config, sessionUser, items = []) => {
+    const engine = getRequestEngine(config);
+    if (engine === 'portal') return overlayPortalPendingRequestsOntoItems(config, sessionUser, items);
+    if (engine === 'seerr') return overlaySeerrPendingRequestsOntoItems(config, sessionUser, items);
+    return items;
+};
+
 const attachDiscoveryAvailabilityCacheToPayload = async (config, sessionUser, data) => {
     if (!data || typeof data !== 'object') return data;
     const cache = await loadDiscoveryAvailabilityCacheFile();
@@ -6668,7 +6782,7 @@ const attachDiscoveryAvailabilityCacheToPayload = async (config, sessionUser, da
 
     if (Array.isArray(next?.results)) {
         const overlaid = await Promise.race([
-            overlayPortalPendingRequestsOntoItems(config, sessionUser, next.results),
+            overlayPendingRequestsOntoItems(config, sessionUser, next.results),
             new Promise((resolve) => setTimeout(() => resolve(next.results), 400)),
         ]);
         next = {
@@ -6679,9 +6793,11 @@ const attachDiscoveryAvailabilityCacheToPayload = async (config, sessionUser, da
     }
     // Detail pages: disk cache + pending overlay only.
     if (!Array.isArray(next) && (next?.mediaType === 'movie' || next?.mediaType === 'tv' || next?.mediaType === 'music' || next?.id)) {
+        // Seerr media lookup needs more headroom than the portal request-list overlay.
+        const overlayMs = getRequestEngine(config) === 'seerr' ? 2500 : 400;
         const overlaid = await Promise.race([
-            overlayPortalPendingRequestsOntoItems(config, sessionUser, [next]),
-            new Promise((resolve) => setTimeout(() => resolve([next]), 400)),
+            overlayPendingRequestsOntoItems(config, sessionUser, [next]),
+            new Promise((resolve) => setTimeout(() => resolve([next]), overlayMs)),
         ]);
         const [detailed] = Array.isArray(overlaid) ? overlaid : [next];
         return detailed || next;
@@ -6912,7 +7028,7 @@ app.post('/api/discovery/availability-batch', requireAuth, requireMember, async 
             enrichedByKey.set(`${mediaType}:${tmdbId}`, item);
         }
 
-        const withPending = await overlayPortalPendingRequestsOntoItems(
+        const withPending = await overlayPendingRequestsOntoItems(
             config,
             req.user,
             items.map((item) => {

@@ -31,18 +31,65 @@ const itemKey = (item: any) => {
     return `${mediaType}:${tmdbId}`;
 };
 
+const REQUEST_PRESERVE_STATUSES = new Set<number>([
+    MEDIA_STATUS.PENDING,
+    MEDIA_STATUS.PROCESSING,
+]);
+
+const LIBRARY_OWNED_STATUSES = new Set<number>([
+    MEDIA_STATUS.PARTIAL,
+    MEDIA_STATUS.AVAILABLE,
+    MEDIA_STATUS.BLACKLISTED,
+]);
+
+const hasActiveMediaRequests = (mediaInfo: any) => (
+    Array.isArray(mediaInfo?.requests)
+    && mediaInfo.requests.some((req: any) => {
+        const status = Number(req?.status);
+        return status === 1 || status === 2; // pending / approved
+    })
+);
+
 export const mergeAvailabilityOntoItems = <T,>(items: T[], availabilityByKey: Record<string, any>): T[] => {
     if (!Array.isArray(items) || !items.length) return items;
     return items.map((item) => {
         const key = itemKey(item);
         if (!key || !availabilityByKey[key]) return item;
         const patch = availabilityByKey[key];
+        const existingInfo = (item as any)?.mediaInfo || {};
+        const patchInfo = patch.mediaInfo || {};
+        const existingStatus = Number(existingInfo?.status);
+        const patchStatus = Number(patchInfo?.status);
+        const mergedInfo = {
+            ...existingInfo,
+            ...patchInfo,
+        };
+        // Library AVAILABLE/PARTIAL/BLACKLISTED always wins.
+        // Don't let empty Radarr/cache patches wipe Seerr/portal PENDING/PROCESSING
+        // (or an active requests[] stamp) — that left detail CTAs on "Request Movie"
+        // while the modal correctly said already requested.
+        const preserveRequest = (
+            (REQUEST_PRESERVE_STATUSES.has(existingStatus) || hasActiveMediaRequests(existingInfo))
+            && !LIBRARY_OWNED_STATUSES.has(patchStatus)
+        );
+        if (preserveRequest) {
+            if (REQUEST_PRESERVE_STATUSES.has(existingStatus)) {
+                mergedInfo.status = existingStatus;
+            } else if (!Number.isFinite(patchStatus) || patchStatus <= 1) {
+                mergedInfo.status = MEDIA_STATUS.PROCESSING;
+            }
+            if (Array.isArray(existingInfo.requests) && existingInfo.requests.length) {
+                mergedInfo.requests = existingInfo.requests;
+            }
+        } else if (
+            (!Number.isFinite(patchStatus) || patchStatus <= 1)
+            && REQUEST_PRESERVE_STATUSES.has(existingStatus)
+        ) {
+            mergedInfo.status = existingStatus;
+        }
         return {
             ...item,
-            mediaInfo: {
-                ...((item as any)?.mediaInfo || {}),
-                ...(patch.mediaInfo || {}),
-            },
+            mediaInfo: mergedInfo,
             ...(patch.sonarrLibraryStatus ? { sonarrLibraryStatus: patch.sonarrLibraryStatus } : {}),
             ...(patch.radarrLibraryStatus ? { radarrLibraryStatus: patch.radarrLibraryStatus } : {}),
             ...(patch.lidarrLibraryStatus ? { lidarrLibraryStatus: patch.lidarrLibraryStatus } : {}),
