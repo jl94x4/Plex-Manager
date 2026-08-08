@@ -21,12 +21,52 @@ export type ScannerEventMeta = {
     source?: string;
 };
 
+/** Stable filter bucket for activity list (upgrades, deletes, imports, …). */
+export const scannerActionFilterKey = (action?: string, isUpgrade?: boolean): string => {
+    const raw = String(action || '').toLowerCase().trim();
+    if (isUpgrade && (raw === 'import' || raw === 'upgrade' || !raw)) return 'upgrade';
+    if (raw === 'upgrade') return 'upgrade';
+    if (raw.includes('delete')) {
+        if (raw === 'series-delete' || raw === 'movie-delete' || raw === 'artist-delete' || raw === 'file-delete') {
+            return raw;
+        }
+        return 'file-delete';
+    }
+    if (raw === 'import' || raw === 'rename' || raw === 'manual' || raw === 'refresh' || raw === 'test') {
+        return raw;
+    }
+    return raw || 'other';
+};
+
+/** Coarse filter groups for the Recent activity dropdown. */
+export const scannerActionFilterGroup = (action?: string, isUpgrade?: boolean): string => {
+    const key = scannerActionFilterKey(action, isUpgrade);
+    if (key === 'upgrade') return 'upgrade';
+    if (key.includes('delete')) return 'deleted';
+    if (key === 'import') return 'import';
+    if (key === 'rename') return 'rename';
+    if (key === 'manual') return 'manual';
+    if (key === 'refresh' || key === 'test') return 'refresh';
+    return key || 'other';
+};
+
+export const SCANNER_ACTION_FILTER_LABELS: Record<string, string> = {
+    all: 'All events',
+    import: 'Imports',
+    upgrade: 'Upgrades',
+    deleted: 'Deleted',
+    rename: 'Renames',
+    manual: 'Manual',
+    refresh: 'Refresh',
+    other: 'Other',
+};
+
 export const scannerActionStyles = (action?: string, isUpgrade?: boolean): {
     label: string;
     className: string;
     iconTone: string;
 } => {
-    const key = isUpgrade && action === 'import' ? 'upgrade' : String(action || '').toLowerCase();
+    const key = scannerActionFilterKey(action, isUpgrade);
     switch (key) {
         case 'import':
             return {
@@ -84,7 +124,7 @@ export const scannerActionStyles = (action?: string, isUpgrade?: boolean): {
             };
         default:
             return {
-                label: 'Refresh',
+                label: key === 'other' ? 'Other' : key.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
                 className: 'bg-white/10 text-muted border-white/15',
                 iconTone: 'text-muted',
             };

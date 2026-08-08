@@ -24,6 +24,8 @@ import { portalUrl } from '../shared/basePath';
 import { CustomSelect } from '../shared/ui';
 import {
     formatScannerWhen,
+    SCANNER_ACTION_FILTER_LABELS,
+    scannerActionFilterGroup,
     scannerActionStyles,
     sourceAppIconUrl,
     sourceAppKey,
@@ -106,6 +108,8 @@ const readManualPathCollapsed = () => {
     }
 };
 
+const ACTIVITY_EVENT_FILTER_ORDER = ['import', 'upgrade', 'deleted', 'rename', 'manual', 'refresh', 'other'];
+
 const ActionIcon: React.FC<{ action?: string; className?: string }> = ({ action, className }) => {
     const key = String(action || '').toLowerCase();
     if (key === 'upgrade') return <ArrowUpCircle className={className} />;
@@ -144,6 +148,7 @@ export const ScannerDashboard: React.FC = () => {
     const [manualCollapsed, setManualCollapsed] = useState(readManualPathCollapsed);
     const [activityPage, setActivityPage] = useState(0);
     const [activitySource, setActivitySource] = useState('all');
+    const [activityEvent, setActivityEvent] = useState('all');
 
     const toggleManualPath = () => {
         setManualCollapsed((prev) => {
@@ -204,12 +209,35 @@ export const ScannerDashboard: React.FC = () => {
             ) : undefined,
         })),
     ], [configuredSources]);
-    const filteredLog = useMemo(
-        () => activitySource === 'all'
-            ? log
-            : log.filter((entry) => sourceAppKey(entry.source) === activitySource),
-        [activitySource, log],
-    );
+    const activityEventOptions = useMemo(() => {
+        const present = new Set(
+            log.map((entry) => scannerActionFilterGroup(entry.action || entry.reason, entry.isUpgrade)),
+        );
+        const ordered = ACTIVITY_EVENT_FILTER_ORDER.filter((key) => present.has(key));
+        for (const key of present) {
+            if (!ordered.includes(key)) ordered.push(key);
+        }
+        return [
+            { value: 'all', label: SCANNER_ACTION_FILTER_LABELS.all },
+            ...ordered.map((key) => ({
+                value: key,
+                label: SCANNER_ACTION_FILTER_LABELS[key]
+                    || key.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+            })),
+        ];
+    }, [log]);
+    const filteredLog = useMemo(() => {
+        let rows = log;
+        if (activitySource !== 'all') {
+            rows = rows.filter((entry) => sourceAppKey(entry.source) === activitySource);
+        }
+        if (activityEvent !== 'all') {
+            rows = rows.filter(
+                (entry) => scannerActionFilterGroup(entry.action || entry.reason, entry.isUpgrade) === activityEvent,
+            );
+        }
+        return rows;
+    }, [activityEvent, activitySource, log]);
     const activityTotalPages = Math.max(1, Math.ceil(filteredLog.length / ACTIVITY_PAGE_SIZE) || 1);
     const activitySafePage = Math.min(activityPage, activityTotalPages - 1);
     const activityPageEntries = filteredLog.slice(
@@ -227,8 +255,17 @@ export const ScannerDashboard: React.FC = () => {
     }, [activitySource, configuredSources]);
 
     useEffect(() => {
+        if (
+            activityEvent !== 'all'
+            && !activityEventOptions.some((option) => option.value === activityEvent)
+        ) {
+            setActivityEvent('all');
+        }
+    }, [activityEvent, activityEventOptions]);
+
+    useEffect(() => {
         setActivityPage(0);
-    }, [activitySource]);
+    }, [activitySource, activityEvent]);
 
     useEffect(() => {
         if (activityPage > activityTotalPages - 1) {
@@ -466,16 +503,28 @@ export const ScannerDashboard: React.FC = () => {
                 <DashboardPanel
                     title="Recent activity"
                     subtitle={`Latest ${ACTIVITY_FETCH_LIMIT} events · ${ACTIVITY_PAGE_SIZE} per page.`}
-                    controls={configuredSources.length > 0 ? (
-                        <CustomSelect
-                            id="scanner-activity-source"
-                            value={activitySource}
-                            onChange={setActivitySource}
-                            options={activitySourceOptions}
-                            compact
-                            className="w-44"
-                        />
-                    ) : null}
+                    controls={(
+                        <div className="flex flex-wrap items-center gap-2">
+                            {configuredSources.length > 0 ? (
+                                <CustomSelect
+                                    id="scanner-activity-source"
+                                    value={activitySource}
+                                    onChange={setActivitySource}
+                                    options={activitySourceOptions}
+                                    compact
+                                    className="w-44"
+                                />
+                            ) : null}
+                            <CustomSelect
+                                id="scanner-activity-event"
+                                value={activityEvent}
+                                onChange={setActivityEvent}
+                                options={activityEventOptions}
+                                compact
+                                className="w-40"
+                            />
+                        </div>
+                    )}
                     badge={(
                         <span className="whitespace-nowrap rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-200">
                             {filteredLog.length} events
@@ -485,7 +534,11 @@ export const ScannerDashboard: React.FC = () => {
                     {filteredLog.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center">
                             <p className="text-sm text-muted">
-                                {log.length === 0 ? 'No scans processed yet.' : `No ${SOURCE_LABELS[activitySource] || activitySource} activity found.`}
+                                {log.length === 0
+                                    ? 'No scans processed yet.'
+                                    : activityEvent !== 'all'
+                                        ? `No ${SCANNER_ACTION_FILTER_LABELS[activityEvent] || activityEvent} events${activitySource !== 'all' ? ` for ${SOURCE_LABELS[activitySource] || activitySource}` : ''}.`
+                                        : `No ${SOURCE_LABELS[activitySource] || activitySource} activity found.`}
                             </p>
                         </div>
                     ) : (
