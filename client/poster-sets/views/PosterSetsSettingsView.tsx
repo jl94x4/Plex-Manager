@@ -534,7 +534,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                             )}
                             <SettingsToggleRow
                                 title="Prefetch set images (library titles only)"
-                                description="After you open a library title's TPDB sets, download assets/images in the background (up to 6 parallel CDN downloads). Warm itself stays metadata-only."
+                                description="Download set pages and images in the background after Warm resolves a title or you open one (up to 6 parallel CDN downloads). Disk counts for sets/images update live while this runs."
                                 checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbAggressivePrefetch === true}
                                 onChange={(next) => setConfigDraft((prev) => ({
                                     ...prev,
@@ -623,7 +623,8 @@ export const PosterSetsSettingsView: React.FC = () => {
                                             </div>
                                             <p className="mt-2 text-[11px] text-muted">
                                                 Warm grows <span className="text-text/80">title pages</span> as each title resolves.
-                                                Set pages and images rise when you open a title or enable Prefetch.
+                                                With <span className="text-text/80">Prefetch</span> on, it also queues set pages and images
+                                                so those counts rise live too (otherwise they grow when you open a title).
                                             </p>
                                         </div>
                                     ) : null}
@@ -816,8 +817,8 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     </div>
                                     <p className="text-[11px] text-muted">
                                         Auto-refreshes every 2s while this page is open. Warm writes each title page as it
-                                        finishes (metadata only). Set HTML (~1.5s when logged in) and CDN images land when
-                                        you open a title or enable Prefetch.
+                                        finishes; with Prefetch on it also scrapes set pages and downloads images so those
+                                        counts rise live. Without Prefetch, open a title to hydrate sets/images.
                                     </p>
                                 </div>
                             </div>
