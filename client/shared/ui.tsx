@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { Check } from 'lucide-react';
+import { Check, AlertTriangle } from 'lucide-react';
 import { SettingHint } from '../settings/SettingHint';
 import type { CustomSelectProps } from './types';
 
@@ -211,6 +211,7 @@ export const ConfirmModal: React.FC<{
     confirmLabel?: string;
     cancelLabel?: string;
     hideCancel?: boolean;
+    danger?: boolean;
 }> = ({
     isOpen,
     message,
@@ -220,6 +221,7 @@ export const ConfirmModal: React.FC<{
     confirmLabel = 'Confirm',
     cancelLabel = 'Cancel',
     hideCancel = false,
+    danger = false,
 }) => {
     if (!isOpen || typeof document === 'undefined') return null;
     return ReactDOM.createPortal(
@@ -229,19 +231,45 @@ export const ConfirmModal: React.FC<{
             onMouseDown={(event) => event.stopPropagation()}
         >
             <div
-                className="modal-glass animate-slide-up max-w-md w-full pointer-events-auto"
+                className={`modal-glass animate-slide-up max-w-md w-full pointer-events-auto ${
+                    danger ? 'border border-red-500/40 shadow-[0_0_40px_rgba(239,68,68,0.15)]' : ''
+                }`}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="portal-confirm-title"
                 onMouseDown={(event) => event.stopPropagation()}
             >
-                <h3 id="portal-confirm-title" className="text-xl font-black mb-4 text-text tracking-tight">{title}</h3>
+                {danger ? (
+                    <div className="mb-4 flex items-center gap-3 rounded-lg border border-red-500/50 bg-red-500/15 px-4 py-3">
+                        <AlertTriangle className="h-10 w-10 shrink-0 text-red-400" aria-hidden="true" />
+                        <div className="min-w-0">
+                            <p className="text-lg font-black uppercase tracking-[0.2em] text-red-400">Danger</p>
+                            <p className="text-xs font-bold uppercase tracking-wide text-red-300/90">This is not reversible</p>
+                        </div>
+                    </div>
+                ) : null}
+                <h3
+                    id="portal-confirm-title"
+                    className={`text-xl font-black mb-4 tracking-tight ${danger ? 'text-red-200' : 'text-text'}`}
+                >
+                    {title}
+                </h3>
                 <p className="text-muted mb-8 text-sm leading-relaxed whitespace-pre-line">{message}</p>
                 <div className="flex gap-3 justify-end">
                     {!hideCancel && (
                         <button type="button" className="btn-secondary px-4 py-2.5 text-sm" onClick={onCancel}>{cancelLabel}</button>
                     )}
-                    <button type="button" className="btn-primary px-4 py-2.5 text-sm" onClick={onConfirm}>{confirmLabel}</button>
+                    <button
+                        type="button"
+                        className={
+                            danger
+                                ? 'rounded-lg border border-red-500/60 bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-500'
+                                : 'btn-primary px-4 py-2.5 text-sm'
+                        }
+                        onClick={onConfirm}
+                    >
+                        {confirmLabel}
+                    </button>
                 </div>
             </div>
         </div>,

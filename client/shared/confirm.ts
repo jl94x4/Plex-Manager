@@ -2,6 +2,8 @@ export type AskConfirmOptions = {
     title?: string;
     confirmLabel?: string;
     cancelLabel?: string;
+    /** Red destructive styling + DANGER banner in the confirm modal. */
+    danger?: boolean;
 };
 
 type ConfirmHandler = (message: string, onConfirm: () => void) => void;

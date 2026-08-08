@@ -453,137 +453,153 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 border={false}
                             />
                         </div>
-                        <div className="sm:col-span-2 rounded-xl border border-white/10 bg-black/20 px-4 py-3 space-y-0">
-                            <p className="pt-3 text-sm font-semibold text-text">ThePosterDB local cache</p>
-                            <div className="space-y-2 pb-3 text-xs leading-relaxed text-muted">
-                                <p>
-                                    Opt-in cache for <span className="text-text">library titles only</span> (TMDB-matched opens from Library / Watching).
-                                    It does not crawl Browse or the whole ThePosterDB catalog.
-                                </p>
-                                <p>
-                                    <span className="font-semibold text-text/90">What it’s for:</span>{' '}
-                                    faster reopen of TPDB set lists you’ve already looked up; keeping Poster Sets usable when ThePosterDB is down
-                                    (after sets/images have been hydrated once); offline/reapply from local image files when possible.
-                                </p>
-                                <p>
-                                    <span className="font-semibold text-text/90">How it works:</span>{' '}
-                                    when you open a library title (or build the cache from your library), SMP resolves TPDB sets and can store them on disk.
-                                    A library cache build is <span className="text-text/90">metadata-first</span> (title URL + set list, first page / up to ~48 sets)
-                                    with ~1.5s HTML spacing when logged in, ~2.5s when using public search — images hydrate when you open a title (or via Prefetch).
-                                    With <span className="text-text/90">Prioritize Creators you follow</span> on, Prefetch queues those creators&apos; sets before others.
-                                    Optional parallel cache workers (5 separate sessions) speed title resolve but raise 429 risk.
-                                    Already-cached titles are skipped and, after a portal restart, any unfinished queue resumes from{' '}
-                                    <code className="text-text/80">tpdb-warm-progress.json</code>.
-                                    Oldest images are dropped when the disk budget is hit.
-                                </p>
-                                <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-[11px] text-text/85">
-                                    <p className="font-sans text-[11px] font-semibold uppercase tracking-wide text-muted">Saved under</p>
-                                    <p className="mt-1 break-all">
-                                        {tpdbCacheStatus?.relativeRoot || 'config/poster-sets'}
-                                        /
-                                    </p>
-                                    <ul className="mt-2 list-disc space-y-1 pl-4 font-sans text-[11px] text-muted">
-                                        <li>
-                                            <code className="text-text/80">tpdb-title-cache/</code>
-                                            {' '}— title page + set lists (JSON)
-                                        </li>
-                                        <li>
-                                            <code className="text-text/80">tpdb-set-cache/</code>
-                                            {' '}— per-set preview / asset metadata (JSON)
-                                        </li>
-                                        <li>
-                                            <code className="text-text/80">tpdb-image-cache/</code>
-                                            {' '}— poster image files (<code className="text-text/80">.bin</code> + meta)
-                                        </li>
-                                    </ul>
-                                    <p className="mt-2 font-sans text-[11px] text-muted">
-                                        Default path is <code className="text-text/80">config/poster-sets/</code> next to portal config
-                                        (or <code className="text-text/80">CONFIG_DIR/poster-sets</code> / <code className="text-text/80">POSTER_SETS_CONFIG_DIR</code> if those env vars are set).
-                                        {tpdbCacheStatus?.rootDir ? (
-                                            <>
-                                                {' '}Absolute on this host:{' '}
-                                                <span className="break-all text-text/70">{tpdbCacheStatus.rootDir}</span>
-                                            </>
-                                        ) : null}
+                        <div className="sm:col-span-2 rounded-xl border border-white/10 bg-black/20 px-4 py-4 lg:px-5 lg:py-5 space-y-5">
+                            <div className="flex flex-wrap items-end justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-text">ThePosterDB local cache</p>
+                                    <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted">
+                                        Opt-in disk cache for <span className="text-text">library titles only</span> (Library / Watching).
+                                        Faster reopen, offline reapply when hydrated, and resume after restart — not a Browse crawl.
                                     </p>
                                 </div>
+                                {tpdbCacheStatus ? (
+                                    <p className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                                        tpdbCacheStatus.cacheEnabled === true
+                                            ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
+                                            : 'border-amber-400/30 bg-amber-500/10 text-amber-200'
+                                    }`}
+                                    >
+                                        Server {tpdbCacheStatus.cacheEnabled === true ? 'ENABLED' : 'DISABLED'}
+                                        {typeof tpdbCacheStatus.titles === 'number'
+                                            ? ` · ${tpdbCacheStatus.titles} titles`
+                                            : ''}
+                                    </p>
+                                ) : null}
                             </div>
-                            <SettingsToggleRow
-                                title="Enable local TPDB cache"
-                                description="Turn on disk caching for library title set lists (and optionally full set images below)."
-                                checked={configDraft.tpdbLocalCacheEnabled === true}
-                                onChange={(next) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    tpdbLocalCacheEnabled: next,
-                                    ...(next ? {} : { tpdbAggressivePrefetch: false, tpdbWarmParallelWorkers: false }),
-                                }))}
-                            />
-                            {tpdbCacheStatus && (
-                                <p className={`-mt-1 mb-2 text-[11px] ${
-                                    tpdbCacheStatus.cacheEnabled === true
-                                        ? 'text-emerald-300/90'
-                                        : 'text-amber-200/90'
-                                }`}
-                                >
-                                    Server (Docker volume): cache is{' '}
-                                    <span className="font-semibold">
-                                        {tpdbCacheStatus.cacheEnabled === true ? 'ENABLED' : 'DISABLED'}
-                                    </span>
-                                    {typeof tpdbCacheStatus.titles === 'number'
-                                        ? ` · ${tpdbCacheStatus.titles} title(s) cached`
-                                        : ''}
-                                    {configDraft.tpdbLocalCacheEnabled === true && tpdbCacheStatus.cacheEnabled !== true
-                                        ? ' — toggle is on in this form but not saved yet. Click Save settings.'
-                                        : ''}
-                                    {configDraft.tpdbLocalCacheEnabled !== true && tpdbCacheStatus.cacheEnabled === true
-                                        ? ' — form shows off; reload or Save to sync.'
-                                        : ''}
-                                    {tpdbCacheStatus.cacheEnabled === true && (tpdbCacheStatus.titles || 0) === 0
-                                        ? ' — enabled, but empty. Open a library title or build the cache from your library once.'
-                                        : ''}
-                                </p>
-                            )}
-                            <SettingsToggleRow
-                                title="Prefetch set images (library titles only)"
-                                description="Download set pages and images in the background after a library cache build resolves a title or you open one (up to 6 parallel CDN downloads). Disk counts for sets/images update live while this runs."
-                                checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbAggressivePrefetch === true}
-                                onChange={(next) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    tpdbAggressivePrefetch: next,
-                                    ...(next ? { tpdbLocalCacheEnabled: true } : {}),
-                                }))}
-                                disabled={configDraft.tpdbLocalCacheEnabled !== true}
-                            />
-                            <SettingsToggleRow
-                                title="Prioritize Creators you follow"
-                                description="When Prefetch is caching set pages and images, queue sets from Creators you follow first (in whitelist order) ahead of everyone else. Add creators under Creators you follow below."
-                                checked={
-                                    configDraft.tpdbLocalCacheEnabled === true
-                                    && configDraft.tpdbPrioritizeFollowedCreators !== false
-                                }
-                                onChange={(next) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    tpdbPrioritizeFollowedCreators: next,
-                                    ...(next ? { tpdbLocalCacheEnabled: true } : {}),
-                                }))}
-                                disabled={configDraft.tpdbLocalCacheEnabled !== true}
-                            />
-                            <SettingsToggleRow
-                                title="Parallel cache workers (experimental)"
-                                description="Run 5 cache workers with separate TPDB sessions (~5× title resolve). Turn off if you hit rate limits or Cloudflare blocks."
-                                checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbWarmParallelWorkers === true}
-                                onChange={(next) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    tpdbWarmParallelWorkers: next,
-                                    ...(next ? { tpdbLocalCacheEnabled: true } : {}),
-                                }))}
-                                disabled={configDraft.tpdbLocalCacheEnabled !== true}
-                                border={false}
-                            />
-                            <div className={`space-y-2 border-t border-white/10 py-3 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'opacity-50'}`}>
-                                <label className="block max-w-md">
+
+                            <div className="grid gap-4 lg:grid-cols-12 lg:gap-5">
+                                <div className="space-y-3 lg:col-span-5">
+                                    <div className="space-y-2 text-xs leading-relaxed text-muted">
+                                        <p>
+                                            <span className="font-semibold text-text/90">What it’s for:</span>{' '}
+                                            faster reopen of TPDB set lists; usable when ThePosterDB is down (after hydrate);
+                                            offline/reapply from local images when possible.
+                                        </p>
+                                        <p>
+                                            <span className="font-semibold text-text/90">How it works:</span>{' '}
+                                            open a library title or build from library → metadata-first set lists (~1.5s logged in / ~2.5s public).
+                                            Images hydrate on open or via Prefetch. Followed creators can queue first; parallel workers (5) speed titles but raise 429 risk.
+                                            Resumes from <code className="text-text/80">tpdb-warm-progress.json</code>; oldest images drop when over budget.
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 font-mono text-[11px] text-text/85">
+                                        <p className="font-sans text-[11px] font-semibold uppercase tracking-wide text-muted">Saved under</p>
+                                        <p className="mt-1 break-all">
+                                            {tpdbCacheStatus?.relativeRoot || 'config/poster-sets'}
+                                            /
+                                        </p>
+                                        <ul className="mt-2 list-disc space-y-1 pl-4 font-sans text-[11px] text-muted">
+                                            <li>
+                                                <code className="text-text/80">tpdb-title-cache/</code>
+                                                {' '}— title + set lists
+                                            </li>
+                                            <li>
+                                                <code className="text-text/80">tpdb-set-cache/</code>
+                                                {' '}— set preview metadata
+                                            </li>
+                                            <li>
+                                                <code className="text-text/80">tpdb-image-cache/</code>
+                                                {' '}— poster images
+                                            </li>
+                                        </ul>
+                                        {tpdbCacheStatus?.rootDir ? (
+                                            <p className="mt-2 break-all font-sans text-[11px] text-muted">
+                                                Host: <span className="text-text/70">{tpdbCacheStatus.rootDir}</span>
+                                            </p>
+                                        ) : (
+                                            <p className="mt-2 font-sans text-[11px] text-muted">
+                                                Default <code className="text-text/80">config/poster-sets/</code>
+                                                {' '}(or <code className="text-text/80">CONFIG_DIR</code> / <code className="text-text/80">POSTER_SETS_CONFIG_DIR</code>).
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border border-white/10 bg-black/25 px-3 lg:col-span-7">
+                                    <SettingsToggleRow
+                                        title="Enable local TPDB cache"
+                                        description="Turn on disk caching for library title set lists (and optionally full set images below)."
+                                        checked={configDraft.tpdbLocalCacheEnabled === true}
+                                        onChange={(next) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            tpdbLocalCacheEnabled: next,
+                                            ...(next ? {} : { tpdbAggressivePrefetch: false, tpdbWarmParallelWorkers: false }),
+                                        }))}
+                                        className="!py-3"
+                                    />
+                                    {tpdbCacheStatus && (
+                                        <p className={`-mt-1 mb-1 text-[11px] ${
+                                            tpdbCacheStatus.cacheEnabled === true
+                                                ? 'text-emerald-300/90'
+                                                : 'text-amber-200/90'
+                                        }`}
+                                        >
+                                            {configDraft.tpdbLocalCacheEnabled === true && tpdbCacheStatus.cacheEnabled !== true
+                                                ? 'Toggle is on in this form but not saved yet — click Save settings.'
+                                                : configDraft.tpdbLocalCacheEnabled !== true && tpdbCacheStatus.cacheEnabled === true
+                                                    ? 'Form shows off; reload or Save to sync.'
+                                                    : tpdbCacheStatus.cacheEnabled === true && (tpdbCacheStatus.titles || 0) === 0
+                                                        ? 'Enabled but empty — open a library title or build from library once.'
+                                                        : null}
+                                        </p>
+                                    )}
+                                    <SettingsToggleRow
+                                        title="Prefetch set images (library titles only)"
+                                        description="Download set pages and images in the background after a library cache build resolves a title or you open one (up to 6 parallel CDN downloads). Disk counts for sets/images update live while this runs."
+                                        checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbAggressivePrefetch === true}
+                                        onChange={(next) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            tpdbAggressivePrefetch: next,
+                                            ...(next ? { tpdbLocalCacheEnabled: true } : {}),
+                                        }))}
+                                        disabled={configDraft.tpdbLocalCacheEnabled !== true}
+                                        className="!py-3"
+                                    />
+                                    <SettingsToggleRow
+                                        title="Prioritize Creators you follow"
+                                        description="When Prefetch is caching set pages and images, queue sets from Creators you follow first (in whitelist order) ahead of everyone else. Add creators under Creators you follow below."
+                                        checked={
+                                            configDraft.tpdbLocalCacheEnabled === true
+                                            && configDraft.tpdbPrioritizeFollowedCreators !== false
+                                        }
+                                        onChange={(next) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            tpdbPrioritizeFollowedCreators: next,
+                                            ...(next ? { tpdbLocalCacheEnabled: true } : {}),
+                                        }))}
+                                        disabled={configDraft.tpdbLocalCacheEnabled !== true}
+                                        className="!py-3"
+                                    />
+                                    <SettingsToggleRow
+                                        title="Parallel cache workers (experimental)"
+                                        description="Run 5 cache workers with separate TPDB sessions (~5× title resolve). Turn off if you hit rate limits or Cloudflare blocks."
+                                        checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbWarmParallelWorkers === true}
+                                        onChange={(next) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            tpdbWarmParallelWorkers: next,
+                                            ...(next ? { tpdbLocalCacheEnabled: true } : {}),
+                                        }))}
+                                        disabled={configDraft.tpdbLocalCacheEnabled !== true}
+                                        border={false}
+                                        className="!py-3"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className={`grid gap-4 border-t border-white/10 pt-5 lg:grid-cols-12 lg:gap-5 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'opacity-50'}`}>
+                                <div className={`lg:col-span-4 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none'}`}>
                                     <span className="text-xs font-bold uppercase tracking-wide text-muted">Disk budget</span>
-                                    <div className={`mt-2 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none'}`}>
+                                    <div className="mt-2">
                                         <CustomSelect
                                             value={String(
                                                 TPDB_DISK_BUDGET_OPTIONS.find((option) => (
@@ -603,60 +619,67 @@ export const PosterSetsSettingsView: React.FC = () => {
                                             className="w-full min-w-[180px]"
                                         />
                                     </div>
-                                    <span className="mt-1 block text-[11px] text-muted">
+                                    <span className="mt-1.5 block text-[11px] text-muted">
                                         Caps <code className="text-text/80">tpdb-image-cache/</code> only — oldest images are removed when over budget.
                                     </span>
-                                    {tpdbCacheStatus ? (
-                                        <div className="mt-2 rounded-md border border-white/10 bg-black/25 px-3 py-2">
-                                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                                                    Cache on disk
-                                                </p>
-                                                <p className="text-[11px] text-muted">
-                                                    {(tpdbCacheStatus?.hydrate?.warmActive || 0) > 0
-                                                        || (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
-                                                        || (tpdbCacheStatus?.hydrate?.active || 0) > 0
-                                                        ? 'Live · refreshes every 2s'
-                                                        : 'Refreshes every 2s'}
-                                                </p>
-                                            </div>
-                                            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                                <div>
-                                                    <p className="text-[10px] uppercase tracking-wide text-muted">Title pages</p>
-                                                    <p className="text-sm font-semibold tabular-nums text-text">
-                                                        {tpdbCacheStatus.titles || 0}
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] uppercase tracking-wide text-muted">Set pages</p>
-                                                    <p className="text-sm font-semibold tabular-nums text-text">
-                                                        {tpdbCacheStatus.sets || 0}
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] uppercase tracking-wide text-muted">Images</p>
-                                                    <p className="text-sm font-semibold tabular-nums text-text">
-                                                        {tpdbCacheStatus.images || 0}
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] uppercase tracking-wide text-muted">Image disk</p>
-                                                    <p className="text-sm font-semibold tabular-nums text-text">
-                                                        {formatBytes(tpdbCacheStatus.imageBytes || 0)}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <p className="mt-2 text-[11px] text-muted">
-                                                A library cache build grows <span className="text-text/80">title pages</span> as each title resolves.
-                                                With <span className="text-text/80">Prefetch</span> on, it also queues set pages and images
-                                                so those counts rise live too (otherwise they grow when you open a title).
+                                </div>
+                                {tpdbCacheStatus ? (
+                                    <div className="rounded-lg border border-white/10 bg-black/25 px-3 py-3 sm:px-4 lg:col-span-8">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                                                Cache on disk
+                                            </p>
+                                            <p className="text-[11px] text-muted">
+                                                {(tpdbCacheStatus?.hydrate?.warmActive || 0) > 0
+                                                    || (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
+                                                    || (tpdbCacheStatus?.hydrate?.active || 0) > 0
+                                                    ? 'Live · refreshes every 2s'
+                                                    : 'Refreshes every 2s'}
                                             </p>
                                         </div>
-                                    ) : null}
-                                </label>
-                                <div className={`space-y-3 border-t border-white/10 pt-3 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none opacity-50'}`}>
-                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Build scope</p>
-                                    <div className="grid gap-2 sm:grid-cols-2">
+                                        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wide text-muted">Title pages</p>
+                                                <p className="text-lg font-semibold tabular-nums text-text sm:text-xl">
+                                                    {tpdbCacheStatus.titles || 0}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wide text-muted">Set pages</p>
+                                                <p className="text-lg font-semibold tabular-nums text-text sm:text-xl">
+                                                    {tpdbCacheStatus.sets || 0}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wide text-muted">Images</p>
+                                                <p className="text-lg font-semibold tabular-nums text-text sm:text-xl">
+                                                    {tpdbCacheStatus.images || 0}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] uppercase tracking-wide text-muted">Image disk</p>
+                                                <p className="text-lg font-semibold tabular-nums text-text sm:text-xl">
+                                                    {formatBytes(tpdbCacheStatus.imageBytes || 0)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <p className="mt-3 text-[11px] text-muted">
+                                            Library builds grow <span className="text-text/80">title pages</span> as each title resolves.
+                                            With <span className="text-text/80">Prefetch</span>, set pages and images rise live too
+                                            (otherwise when you open a title).
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-lg border border-dashed border-white/10 px-3 py-3 text-[11px] text-muted lg:col-span-8">
+                                        Cache usage appears here once status loads.
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className={`space-y-3 border-t border-white/10 pt-5 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none opacity-50'}`}>
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Build scope</p>
+                                <div className="grid gap-4 lg:grid-cols-12 lg:gap-5">
+                                    <div className="grid gap-2 sm:grid-cols-2 lg:col-span-5">
                                         <label className="block">
                                             <span className="text-[10px] uppercase tracking-wide text-muted">Media</span>
                                             <div className="mt-1">
@@ -693,13 +716,14 @@ export const PosterSetsSettingsView: React.FC = () => {
                                             </div>
                                         </label>
                                     </div>
-                                    <div className="flex flex-col gap-2">
+                                    <div className="rounded-lg border border-white/10 bg-black/20 px-3 lg:col-span-7">
                                         <SettingsToggleRow
                                             title="Skip already cached titles"
                                             description="Only queue titles that do not already have a TPDB set list on disk (resume-friendly)."
                                             checked={warmScope.skipCached}
                                             onChange={(next) => setWarmScope((prev) => ({ ...prev, skipCached: next }))}
-                                            border={false}
+                                            border
+                                            className="!py-2.5"
                                         />
                                         <SettingsToggleRow
                                             title="Prefetch followed creators only"
@@ -707,6 +731,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                             checked={warmScope.followedPrefetchOnly}
                                             onChange={(next) => setWarmScope((prev) => ({ ...prev, followedPrefetchOnly: next }))}
                                             border={false}
+                                            className="!py-2.5"
                                         />
                                     </div>
                                 </div>
@@ -855,12 +880,25 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         className={buttonClass}
                                         disabled={busy !== null}
                                         onClick={async () => {
-                                            const ok = await askConfirm('Clear cached ThePosterDB titles, set previews, and images?', {
-                                                title: 'Clear TPDB cache?',
-                                                confirmLabel: 'Clear cache',
-                                                cancelLabel: 'Cancel',
-                                            });
+                                            const ok = await askConfirm(
+                                                'This will delete cached ThePosterDB title pages, set previews, and downloaded images from disk.',
+                                                {
+                                                    title: 'Clear TPDB cache?',
+                                                    confirmLabel: 'Continue',
+                                                    cancelLabel: 'Cancel',
+                                                },
+                                            );
                                             if (!ok) return;
+                                            const confirmed = await askConfirm(
+                                                'All TPDB cache files on disk will be permanently deleted. You will need to rebuild or re-open titles to restore them.\n\nThis action cannot be undone.',
+                                                {
+                                                    title: 'Permanently delete TPDB cache?',
+                                                    confirmLabel: 'Delete everything',
+                                                    cancelLabel: 'Keep cache',
+                                                    danger: true,
+                                                },
+                                            );
+                                            if (!confirmed) return;
                                             setBusy('tpdb-cache');
                                             try {
                                                 const result = await posterSetsApi.clearTpdbCache();
@@ -894,140 +932,145 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         Refresh usage
                                     </button>
                                 </div>
-                                <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 space-y-2">
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-                                            Live scrape activity
-                                        </p>
-                                        <p className="text-[11px] text-muted">
-                                            {tpdbCacheStatus?.paused
-                                                ? 'Paused'
-                                                : (tpdbCacheStatus?.hydrate?.warmActive || 0) > 0 || (tpdbCacheStatus?.hydrate?.active || 0) > 0
-                                                    ? 'Working…'
-                                                    : (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0 || (tpdbCacheStatus?.hydrate?.queue || 0) > 0
-                                                        ? 'Queued'
-                                                        : 'Idle'}
-                                            {(tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
-                                                ? ` · ${tpdbCacheStatus?.hydrate?.warmQueue} title(s)`
-                                                : ''}
-                                            {(tpdbCacheStatus?.hydrate?.queue || 0) > 0
-                                                ? ` · ${tpdbCacheStatus?.hydrate?.queue} set(s)`
-                                                : ''}
-                                            {(tpdbCacheStatus?.hydrate?.rateLimit?.cooldownMs || 0) > 0
-                                                ? ` · cooldown ${Math.ceil((tpdbCacheStatus?.hydrate?.rateLimit?.cooldownMs || 0) / 1000)}s`
-                                                : ''}
-                                        </p>
-                                    </div>
-                                    {(warmPct != null || hydratePct != null) ? (
-                                        <div className="space-y-2 rounded-md border border-white/10 bg-black/25 px-2.5 py-2">
-                                            {warmPct != null ? (
-                                                <div>
-                                                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                                                        <span className="font-semibold text-text/90">
-                                                            Titles {tpdbCacheStatus?.progress?.warm?.completed || 0}/{tpdbCacheStatus?.progress?.warm?.total || 0}
-                                                            {warmPct != null ? ` · ${warmPct}%` : ''}
-                                                        </span>
-                                                        <span className="text-muted">{warmEta ? `ETA ${warmEta}` : 'ETA —'}</span>
-                                                    </div>
-                                                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                                                        <div className="h-full rounded-full bg-plex/80 transition-all" style={{ width: `${Math.max(2, warmPct || 0)}%` }} />
-                                                    </div>
-                                                </div>
-                                            ) : null}
-                                            {hydratePct != null && (tpdbCacheStatus?.progress?.hydrate?.total || 0) > 0 ? (
-                                                <div>
-                                                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                                                        <span className="font-semibold text-text/90">
-                                                            Prefetch {tpdbCacheStatus?.progress?.hydrate?.completed || 0}/{tpdbCacheStatus?.progress?.hydrate?.total || 0}
-                                                            {hydratePct != null ? ` · ${hydratePct}%` : ''}
-                                                        </span>
-                                                        <span className="text-muted">{hydrateEta ? `ETA ${hydrateEta}` : 'ETA —'}</span>
-                                                    </div>
-                                                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                                                        <div className="h-full rounded-full bg-sky-400/80 transition-all" style={{ width: `${Math.max(2, hydratePct || 0)}%` }} />
-                                                    </div>
-                                                </div>
-                                            ) : null}
-                                        </div>
-                                    ) : null}
-                                    <p className="text-xs text-text/90">
-                                        {tpdbCacheStatus?.current
-                                            || (configDraft.tpdbLocalCacheEnabled === true
-                                                ? 'No scrape in progress — open a library title or build the cache from your library to see activity here.'
-                                                : 'Enable local TPDB cache to start logging scrape / prefetch work.')}
+                            </div>
+
+                            <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-3 sm:px-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                                        Live scrape activity
                                     </p>
-                                    {tpdbCacheStatus?.hydrate?.lastError ? (
-                                        <div className="flex flex-wrap items-start justify-between gap-2">
-                                            <p className="text-[11px] text-red-300/90">
-                                                Last error: {tpdbCacheStatus.hydrate.lastError}
-                                            </p>
-                                            <button
-                                                type="button"
-                                                className="text-[11px] font-semibold text-plex hover:underline"
-                                                onClick={async () => {
-                                                    try {
-                                                        await navigator.clipboard.writeText(String(tpdbCacheStatus.hydrate?.lastError || ''));
-                                                        toast('Copied last error.');
-                                                    } catch {
-                                                        toast('Could not copy error', 'error');
-                                                    }
-                                                }}
-                                            >
-                                                Copy error
-                                            </button>
-                                        </div>
-                                    ) : null}
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {([
-                                            ['all', 'All'],
-                                            ['cache', 'Cache'],
-                                            ['prefetch', 'Prefetch'],
-                                            ['followed', 'Followed'],
-                                            ['error', 'Errors'],
-                                        ] as const).map(([id, label]) => (
-                                            <button
-                                                key={id}
-                                                type="button"
-                                                className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition ${
-                                                    activityFilter === id
-                                                        ? 'border-plex/40 bg-plex/15 text-plex'
-                                                        : 'border-white/10 bg-black/20 text-muted hover:border-plex/30 hover:text-text'
-                                                }`}
-                                                onClick={() => setActivityFilter(id)}
-                                            >
-                                                {label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="max-h-52 overflow-y-auto rounded-md border border-white/5 bg-black/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed">
-                                        {filteredActivity.length ? (
-                                            filteredActivity.slice(0, 40).map((entry) => {
-                                                const time = new Date(entry.at).toLocaleTimeString();
-                                                const tone = entry.level === 'error'
-                                                    ? 'text-red-300'
-                                                    : entry.level === 'warn'
-                                                        ? 'text-amber-200/90'
-                                                        : 'text-text/80';
-                                                return (
-                                                    <div key={`${entry.at}-${entry.message}`} className={`py-0.5 ${tone}`}>
-                                                        <span className="text-muted">{time}</span>
-                                                        {' '}
-                                                        {entry.message}
-                                                        {entry.detail ? (
-                                                            <span className="text-muted"> — {entry.detail}</span>
-                                                        ) : null}
-                                                    </div>
-                                                );
-                                            })
-                                        ) : (
-                                            <p className="py-1 text-muted">No activity yet this session.</p>
-                                        )}
-                                    </div>
                                     <p className="text-[11px] text-muted">
-                                        Auto-refreshes every 2s while this page is open. A library cache build writes each title page as it
-                                        finishes; with Prefetch on it also scrapes set pages and downloads images so those
-                                        counts rise live. Without Prefetch, open a title to hydrate sets/images.
+                                        {tpdbCacheStatus?.paused
+                                            ? 'Paused'
+                                            : (tpdbCacheStatus?.hydrate?.warmActive || 0) > 0 || (tpdbCacheStatus?.hydrate?.active || 0) > 0
+                                                ? 'Working…'
+                                                : (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0 || (tpdbCacheStatus?.hydrate?.queue || 0) > 0
+                                                    ? 'Queued'
+                                                    : 'Idle'}
+                                        {(tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
+                                            ? ` · ${tpdbCacheStatus?.hydrate?.warmQueue} title(s)`
+                                            : ''}
+                                        {(tpdbCacheStatus?.hydrate?.queue || 0) > 0
+                                            ? ` · ${tpdbCacheStatus?.hydrate?.queue} set(s)`
+                                            : ''}
+                                        {(tpdbCacheStatus?.hydrate?.rateLimit?.cooldownMs || 0) > 0
+                                            ? ` · cooldown ${Math.ceil((tpdbCacheStatus?.hydrate?.rateLimit?.cooldownMs || 0) / 1000)}s`
+                                            : ''}
                                     </p>
+                                </div>
+                                <div className="mt-3 grid gap-4 lg:grid-cols-12 lg:gap-5">
+                                    <div className="space-y-2 lg:col-span-5">
+                                        {(warmPct != null || hydratePct != null) ? (
+                                            <div className="space-y-2 rounded-md border border-white/10 bg-black/25 px-2.5 py-2">
+                                                {warmPct != null ? (
+                                                    <div>
+                                                        <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                                            <span className="font-semibold text-text/90">
+                                                                Titles {tpdbCacheStatus?.progress?.warm?.completed || 0}/{tpdbCacheStatus?.progress?.warm?.total || 0}
+                                                                {warmPct != null ? ` · ${warmPct}%` : ''}
+                                                            </span>
+                                                            <span className="text-muted">{warmEta ? `ETA ${warmEta}` : 'ETA —'}</span>
+                                                        </div>
+                                                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                                                            <div className="h-full rounded-full bg-plex/80 transition-all" style={{ width: `${Math.max(2, warmPct || 0)}%` }} />
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                                {hydratePct != null && (tpdbCacheStatus?.progress?.hydrate?.total || 0) > 0 ? (
+                                                    <div>
+                                                        <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                                            <span className="font-semibold text-text/90">
+                                                                Prefetch {tpdbCacheStatus?.progress?.hydrate?.completed || 0}/{tpdbCacheStatus?.progress?.hydrate?.total || 0}
+                                                                {hydratePct != null ? ` · ${hydratePct}%` : ''}
+                                                            </span>
+                                                            <span className="text-muted">{hydrateEta ? `ETA ${hydrateEta}` : 'ETA —'}</span>
+                                                        </div>
+                                                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                                                            <div className="h-full rounded-full bg-sky-400/80 transition-all" style={{ width: `${Math.max(2, hydratePct || 0)}%` }} />
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
+                                        <p className="text-xs text-text/90">
+                                            {tpdbCacheStatus?.current
+                                                || (configDraft.tpdbLocalCacheEnabled === true
+                                                    ? 'No scrape in progress — open a library title or build the cache from your library to see activity here.'
+                                                    : 'Enable local TPDB cache to start logging scrape / prefetch work.')}
+                                        </p>
+                                        {tpdbCacheStatus?.hydrate?.lastError ? (
+                                            <div className="flex flex-wrap items-start justify-between gap-2">
+                                                <p className="text-[11px] text-red-300/90">
+                                                    Last error: {tpdbCacheStatus.hydrate.lastError}
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    className="text-[11px] font-semibold text-plex hover:underline"
+                                                    onClick={async () => {
+                                                        try {
+                                                            await navigator.clipboard.writeText(String(tpdbCacheStatus.hydrate?.lastError || ''));
+                                                            toast('Copied last error.');
+                                                        } catch {
+                                                            toast('Could not copy error', 'error');
+                                                        }
+                                                    }}
+                                                >
+                                                    Copy error
+                                                </button>
+                                            </div>
+                                        ) : null}
+                                        <p className="text-[11px] text-muted">
+                                            Auto-refreshes every 2s. Builds write title pages as they finish; Prefetch also grows set/image counts live.
+                                        </p>
+                                    </div>
+                                    <div className="space-y-2 lg:col-span-7">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {([
+                                                ['all', 'All'],
+                                                ['cache', 'Cache'],
+                                                ['prefetch', 'Prefetch'],
+                                                ['followed', 'Followed'],
+                                                ['error', 'Errors'],
+                                            ] as const).map(([id, label]) => (
+                                                <button
+                                                    key={id}
+                                                    type="button"
+                                                    className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                                                        activityFilter === id
+                                                            ? 'border-plex/40 bg-plex/15 text-plex'
+                                                            : 'border-white/10 bg-black/20 text-muted hover:border-plex/30 hover:text-text'
+                                                    }`}
+                                                    onClick={() => setActivityFilter(id)}
+                                                >
+                                                    {label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="max-h-56 overflow-y-auto rounded-md border border-white/5 bg-black/40 px-2 py-1.5 font-mono text-[11px] leading-relaxed lg:min-h-[12rem]">
+                                            {filteredActivity.length ? (
+                                                filteredActivity.slice(0, 40).map((entry) => {
+                                                    const time = new Date(entry.at).toLocaleTimeString();
+                                                    const tone = entry.level === 'error'
+                                                        ? 'text-red-300'
+                                                        : entry.level === 'warn'
+                                                            ? 'text-amber-200/90'
+                                                            : 'text-text/80';
+                                                    return (
+                                                        <div key={`${entry.at}-${entry.message}`} className={`py-0.5 ${tone}`}>
+                                                            <span className="text-muted">{time}</span>
+                                                            {' '}
+                                                            {entry.message}
+                                                            {entry.detail ? (
+                                                                <span className="text-muted"> — {entry.detail}</span>
+                                                            ) : null}
+                                                        </div>
+                                                    );
+                                                })
+                                            ) : (
+                                                <p className="py-1 text-muted">No activity yet this session.</p>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -54,6 +54,7 @@ export const MainApp: React.FC = () => {
         confirmLabel?: string;
         cancelLabel?: string;
         hideCancel?: boolean;
+        danger?: boolean;
         onConfirm: () => void;
         onCancel: () => void;
     }>({ isOpen: false, message: '', onConfirm: () => { }, onCancel: () => { } });
@@ -85,6 +86,7 @@ export const MainApp: React.FC = () => {
                 confirmLabel: options.confirmLabel,
                 cancelLabel: options.cancelLabel,
                 hideCancel: options.hideCancel === true,
+                danger: options.danger === true,
                 onConfirm,
                 onCancel,
             });
@@ -561,6 +563,7 @@ export const MainApp: React.FC = () => {
                 confirmLabel={confirmState.confirmLabel}
                 cancelLabel={confirmState.cancelLabel}
                 hideCancel={confirmState.hideCancel}
+                danger={confirmState.danger}
                 onConfirm={handleConfirm}
                 onCancel={handleCancel}
             />
