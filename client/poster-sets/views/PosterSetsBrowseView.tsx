@@ -433,7 +433,7 @@ export const PosterSetsBrowseView: React.FC = () => {
                                 <div className="min-w-0 max-w-3xl">
                                     <h2 className={sectionTitleClass}>Browse recently added</h2>
                                     <p className={sectionBodyClass}>
-                                        First results appear immediately; more fill in the background (up to 600 per row). Tap a row title to see all.
+                                        Newest sets show first; more fill in the background (up to 600 per row) without reshuffling the first page. Tap a row title to see all.
                                         Check sets to queue many at once without opening each one.
                                     </p>
                                 </div>
