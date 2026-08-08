@@ -81,6 +81,9 @@ const TPDB_DISK_BUDGET_OPTIONS: Array<{ bytes: number; label: string }> = [
     { bytes: 20 * GB, label: '20 GB' },
     { bytes: 50 * GB, label: '50 GB' },
     { bytes: 100 * GB, label: '100 GB' },
+    { bytes: 128 * GB, label: '128 GB' },
+    { bytes: 256 * GB, label: '256 GB' },
+    { bytes: 512 * GB, label: '512 GB' },
 ];
 
 const formatBytes = (bytes: number) => {
