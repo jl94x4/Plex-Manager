@@ -31,6 +31,8 @@ export type PosterSetsConfig = {
     tpdbAggressivePrefetch?: boolean;
     /** Experimental: 5 parallel cache-build workers (separate sessions). Disable if rate-limited. */
     tpdbWarmParallelWorkers?: boolean;
+    /** Prefetch followed creators' sets before other creators when caching. */
+    tpdbPrioritizeFollowedCreators?: boolean;
     /** Attempt TPDB login for advanced id search. Off = public title search only. */
     tpdbUseLogin?: boolean;
     /** Soft disk budget for tpdb-image-cache (bytes). */
@@ -418,6 +420,7 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     tpdbLocalCacheEnabled: false,
     tpdbAggressivePrefetch: false,
     tpdbWarmParallelWorkers: false,
+    tpdbPrioritizeFollowedCreators: true,
     tpdbUseLogin: true,
     tpdbCacheMaxBytes: 2 * 1024 * 1024 * 1024,
 };

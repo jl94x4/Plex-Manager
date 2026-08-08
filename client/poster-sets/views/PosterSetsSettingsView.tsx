@@ -460,6 +460,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     when you open a library title (or build the cache from your library), SMP resolves TPDB sets and can store them on disk.
                                     A library cache build is <span className="text-text/90">metadata-first</span> (title URL + set list, first page / up to ~48 sets)
                                     with ~1.5s HTML spacing when logged in, ~2.5s when using public search — images hydrate when you open a title (or via Prefetch).
+                                    With <span className="text-text/90">Prioritize Creators you follow</span> on, Prefetch queues those creators&apos; sets before others.
                                     Optional parallel cache workers (5 separate sessions) speed title resolve but raise 429 risk.
                                     Already-cached titles are skipped and, after a portal restart, any unfinished queue resumes from{' '}
                                     <code className="text-text/80">tpdb-warm-progress.json</code>.
@@ -539,6 +540,20 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 onChange={(next) => setConfigDraft((prev) => ({
                                     ...prev,
                                     tpdbAggressivePrefetch: next,
+                                    ...(next ? { tpdbLocalCacheEnabled: true } : {}),
+                                }))}
+                                disabled={configDraft.tpdbLocalCacheEnabled !== true}
+                            />
+                            <SettingsToggleRow
+                                title="Prioritize Creators you follow"
+                                description="When Prefetch is caching set pages and images, queue sets from Creators you follow first (in whitelist order) ahead of everyone else. Add creators under Creators you follow below."
+                                checked={
+                                    configDraft.tpdbLocalCacheEnabled === true
+                                    && configDraft.tpdbPrioritizeFollowedCreators !== false
+                                }
+                                onChange={(next) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    tpdbPrioritizeFollowedCreators: next,
                                     ...(next ? { tpdbLocalCacheEnabled: true } : {}),
                                 }))}
                                 disabled={configDraft.tpdbLocalCacheEnabled !== true}
@@ -861,7 +876,9 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 onChange={(event) => setWhitelistText(event.target.value)}
                             />
                             <span className="mt-1 block text-[11px] text-muted">
-                                One MediUX / ThePosterDB username per line (no @ needed). Browse adds a "Creators you follow" row with only their sets. Click any @username to open their full catalog.
+                                One MediUX / ThePosterDB username per line (no @ needed). Browse adds a &quot;Creators you follow&quot; row with only their sets.
+                                With local cache Prefetch + Prioritize Creators you follow, their sets hydrate first during cache builds.
+                                Click any @username to open their full catalog.
                             </span>
                         </label>
                     </div>
