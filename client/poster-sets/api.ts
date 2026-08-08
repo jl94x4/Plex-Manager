@@ -384,7 +384,7 @@ export const posterSetsApi = {
             titles,
             skippedCached,
             message: lastMessage
-                || `Queued ${titles} library title(s) for Warm`
+                || `Queued ${titles} library title(s) for cache build`
                 + (skippedCached ? ` (skipped ${skippedCached} already cached).` : '.'),
         };
     },

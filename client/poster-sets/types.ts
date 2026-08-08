@@ -29,7 +29,7 @@ export type PosterSetsConfig = {
     tpdbLocalCacheEnabled?: boolean;
     /** After a library title loads, hydrate all its TPDB set assets/images in the background. */
     tpdbAggressivePrefetch?: boolean;
-    /** Experimental: 5 parallel Warm workers (separate sessions). Disable if rate-limited. */
+    /** Experimental: 5 parallel cache-build workers (separate sessions). Disable if rate-limited. */
     tpdbWarmParallelWorkers?: boolean;
     /** Attempt TPDB login for advanced id search. Off = public title search only. */
     tpdbUseLogin?: boolean;

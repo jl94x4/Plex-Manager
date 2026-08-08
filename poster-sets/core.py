@@ -4648,11 +4648,11 @@ def warm_library_titles(
     if _posterdb_should_use_login(working):
         session = _posterdb_http_client(working)
         if isinstance(session, requests.Session):
-            emit(progress, f"Warm: TPDB login OK — resolving {len(rows)} library title(s)…")
+            emit(progress, f"Cache: TPDB login OK — resolving {len(rows)} library title(s)…")
         else:
             emit(
                 progress,
-                "Warm: TPDB login unavailable (Cloudflare/credentials) — "
+                "Cache: TPDB login unavailable (Cloudflare/credentials) — "
                 "continuing with public text search (no login required for posters).",
             )
             working = _posterdb_public_only_config(working)
@@ -4660,7 +4660,7 @@ def warm_library_titles(
     else:
         emit(
             progress,
-            f"Warm: public text search for {len(rows)} library title(s) (TPDB login off or not set).",
+            f"Cache: public text search for {len(rows)} library title(s) (TPDB login off or not set).",
         )
 
     results: list[dict] = []
@@ -4681,7 +4681,7 @@ def warm_library_titles(
         imdb_id = str(raw.get("imdbId") or raw.get("imdb_id") or "").strip() or None
         tvdb_id = raw.get("tvdbId") if raw.get("tvdbId") is not None else raw.get("tvdb_id")
         label = f"{title} ({year_hint})" if title and year_hint is not None else (title or f"tmdb {tmdb_id}")
-        emit(progress, f"Warm [{index + 1}/{len(rows)}]: resolving {label}")
+        emit(progress, f"Cache [{index + 1}/{len(rows)}]: resolving {label}")
 
         entry: dict = {
             "ok": False,
@@ -4729,18 +4729,18 @@ def warm_library_titles(
             entry["title"] = str(loaded.get("title") or title or "").strip() or title
             if sets:
                 entry["ok"] = True
-                emit(progress, f"Warm [{index + 1}/{len(rows)}]: {label} → {len(sets)} set(s)")
+                emit(progress, f"Cache [{index + 1}/{len(rows)}]: {label} → {len(sets)} set(s)")
             else:
                 entry["softSkip"] = True
                 entry["softError"] = (
                     _posterdb_take_resolve_error()
                     or "No ThePosterDB sets found for this title"
                 )
-                emit(progress, f"Warm [{index + 1}/{len(rows)}]: skipped {label} — {entry['softError']}")
+                emit(progress, f"Cache [{index + 1}/{len(rows)}]: skipped {label} — {entry['softError']}")
         except Exception as exc:
             entry["softSkip"] = True
             entry["softError"] = str(exc)
-            emit(progress, f"Warm [{index + 1}/{len(rows)}]: skipped {label} — {exc}")
+            emit(progress, f"Cache [{index + 1}/{len(rows)}]: skipped {label} — {exc}")
 
         results.append(entry)
         if on_title:

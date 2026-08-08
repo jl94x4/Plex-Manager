@@ -428,7 +428,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 onChange={(event) => setConfigDraft((prev) => ({ ...prev, tpdb_password: event.target.value }))}
                             />
                             <span className="mt-1 block text-[11px] text-muted">
-                                Optional. Login unlocks advanced TMDB-id search. Poster pages themselves are public — if Cloudflare blocks login from your server, turn off “Use TPDB login” below and Warm still scrapes via public search.
+                                Optional. Login unlocks advanced TMDB-id search. Poster pages themselves are public — if Cloudflare blocks login from your server, turn off “Use TPDB login” below and cache builds still scrape via public search.
                             </span>
                         </label>
                         <div className="sm:col-span-2">
@@ -447,7 +447,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                             <p className="pt-3 text-sm font-semibold text-text">ThePosterDB local cache</p>
                             <div className="space-y-2 pb-3 text-xs leading-relaxed text-muted">
                                 <p>
-                                    Opt-in cache for <span className="text-text">library titles only</span> (TMDB-matched opens from Library / Watching warm).
+                                    Opt-in cache for <span className="text-text">library titles only</span> (TMDB-matched opens from Library / Watching).
                                     It does not crawl Browse or the whole ThePosterDB catalog.
                                 </p>
                                 <p>
@@ -457,11 +457,11 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 </p>
                                 <p>
                                     <span className="font-semibold text-text/90">How it works:</span>{' '}
-                                    when you open a library title (or run Warm), SMP resolves TPDB sets and can store them on disk.
-                                    Warm is <span className="text-text/90">metadata-only</span> (title URL + set list, first page / up to ~48 sets)
+                                    when you open a library title (or build the cache from your library), SMP resolves TPDB sets and can store them on disk.
+                                    A library cache build is <span className="text-text/90">metadata-first</span> (title URL + set list, first page / up to ~48 sets)
                                     with ~1.5s HTML spacing when logged in, ~2.5s when using public search — images hydrate when you open a title (or via Prefetch).
-                                    Optional parallel Warm workers (5 separate sessions) speed title resolve but raise 429 risk.
-                                    Warm skips titles already on disk and, after a portal restart, resumes any unfinished queue from{' '}
+                                    Optional parallel cache workers (5 separate sessions) speed title resolve but raise 429 risk.
+                                    Already-cached titles are skipped and, after a portal restart, any unfinished queue resumes from{' '}
                                     <code className="text-text/80">tpdb-warm-progress.json</code>.
                                     Oldest images are dropped when the disk budget is hit.
                                 </p>
@@ -528,13 +528,13 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         ? ' — form shows off; reload or Save to sync.'
                                         : ''}
                                     {tpdbCacheStatus.cacheEnabled === true && (tpdbCacheStatus.titles || 0) === 0
-                                        ? ' — enabled, but empty. Open a library title or run Warm once.'
+                                        ? ' — enabled, but empty. Open a library title or build the cache from your library once.'
                                         : ''}
                                 </p>
                             )}
                             <SettingsToggleRow
                                 title="Prefetch set images (library titles only)"
-                                description="Download set pages and images in the background after Warm resolves a title or you open one (up to 6 parallel CDN downloads). Disk counts for sets/images update live while this runs."
+                                description="Download set pages and images in the background after a library cache build resolves a title or you open one (up to 6 parallel CDN downloads). Disk counts for sets/images update live while this runs."
                                 checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbAggressivePrefetch === true}
                                 onChange={(next) => setConfigDraft((prev) => ({
                                     ...prev,
@@ -544,8 +544,8 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 disabled={configDraft.tpdbLocalCacheEnabled !== true}
                             />
                             <SettingsToggleRow
-                                title="Parallel Warm workers (experimental)"
-                                description="Run 5 Warm workers with separate TPDB sessions (~5× title resolve). Turn off if you hit rate limits or Cloudflare blocks."
+                                title="Parallel cache workers (experimental)"
+                                description="Run 5 cache workers with separate TPDB sessions (~5× title resolve). Turn off if you hit rate limits or Cloudflare blocks."
                                 checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbWarmParallelWorkers === true}
                                 onChange={(next) => setConfigDraft((prev) => ({
                                     ...prev,
@@ -622,7 +622,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 </div>
                                             </div>
                                             <p className="mt-2 text-[11px] text-muted">
-                                                Warm grows <span className="text-text/80">title pages</span> as each title resolves.
+                                                A library cache build grows <span className="text-text/80">title pages</span> as each title resolves.
                                                 With <span className="text-text/80">Prefetch</span> on, it also queues set pages and images
                                                 so those counts rise live too (otherwise they grow when you open a title).
                                             </p>
@@ -701,18 +701,18 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 }
 
                                                 const result = await posterSetsApi.warmTpdbLibraryCache(items);
-                                                toast(result.message || `Warming ${result.titles || 0} library title(s).`);
+                                                toast(result.message || `Caching ${result.titles || 0} library title(s).`);
                                                 const status = await posterSetsApi.tpdbCacheStatus().catch(() => null);
                                                 if (status) setTpdbCacheStatus(status);
                                             } catch (error) {
-                                                toast(error instanceof Error ? error.message : 'Warm failed', 'error');
+                                                toast(error instanceof Error ? error.message : 'Cache build failed', 'error');
                                             } finally {
                                                 setBusy(null);
                                             }
                                         }}
                                     >
                                         {busy === 'tpdb-cache' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                                        Warm cache from library
+                                        Build cache from library
                                     </button>
                                     <button
                                         type="button"
@@ -783,7 +783,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     <p className="text-xs text-text/90">
                                         {tpdbCacheStatus?.current
                                             || (configDraft.tpdbLocalCacheEnabled === true
-                                                ? 'No scrape in progress — open a library title or run Warm to see activity here.'
+                                                ? 'No scrape in progress — open a library title or build the cache from your library to see activity here.'
                                                 : 'Enable local TPDB cache to start logging scrape / prefetch work.')}
                                     </p>
                                     {tpdbCacheStatus?.hydrate?.lastError ? (
@@ -816,7 +816,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         )}
                                     </div>
                                     <p className="text-[11px] text-muted">
-                                        Auto-refreshes every 2s while this page is open. Warm writes each title page as it
+                                        Auto-refreshes every 2s while this page is open. A library cache build writes each title page as it
                                         finishes; with Prefetch on it also scrapes set pages and downloads images so those
                                         counts rise live. Without Prefetch, open a title to hydrate sets/images.
                                     </p>
