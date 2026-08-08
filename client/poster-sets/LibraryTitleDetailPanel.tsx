@@ -319,6 +319,11 @@ export function LibraryTitleDetailPanel({
                 const msg = response.partialErrors[0];
                 if (msg.includes('ThePosterDB login not configured')) {
                     // Inline banner handles this — avoid misleading green toast.
+                } else if (
+                    msg.includes('Serving cached ThePosterDB')
+                    || msg.includes('loaded from local')
+                ) {
+                    // Permanent local cache hit — never toast as an error.
                 } else {
                     const soft = msg.includes('ThePosterDB returned no sets')
                         || msg.includes('ThePosterDB search timed out')
@@ -925,7 +930,7 @@ export function LibraryTitleDetailPanel({
 
                     {tpdbFromCache && searchSets.length > 0 ? (
                         <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs text-text">
-                            ThePosterDB sets loaded from local disk cache
+                            ThePosterDB sets loaded from local poster cache
                             {!mediuxSettled ? ' (MediUX still catching up in the background).' : '.'}
                         </div>
                     ) : null}

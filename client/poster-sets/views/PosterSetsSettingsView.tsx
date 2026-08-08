@@ -86,6 +86,37 @@ const TPDB_DISK_BUDGET_OPTIONS: Array<{ bytes: number; label: string }> = [
     { bytes: 512 * GB, label: '512 GB' },
 ];
 
+const TPDB_REFRESH_HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
+    value: String(hour),
+    label: `${String(hour).padStart(2, '0')}:00`,
+}));
+
+const TPDB_REFRESH_INTERVAL_OPTIONS = [
+    { value: '0', label: 'Once per day' },
+    { value: '1', label: 'Every 1 hour' },
+    { value: '2', label: 'Every 2 hours' },
+    { value: '3', label: 'Every 3 hours' },
+    { value: '4', label: 'Every 4 hours' },
+    { value: '6', label: 'Every 6 hours' },
+    { value: '8', label: 'Every 8 hours' },
+    { value: '12', label: 'Every 12 hours' },
+];
+
+const formatRefreshScheduleHint = (hour: number, intervalHours: number) => {
+    const start = Math.max(0, Math.min(23, Math.round(Number(hour) || 0)));
+    const interval = Math.max(0, Math.min(24, Math.round(Number(intervalHours) || 0)));
+    const fmt = (h: number) => `${String(h).padStart(2, '0')}:00`;
+    if (!interval || interval >= 24) {
+        return `Runs once daily at ${fmt(start)} (server local time).`;
+    }
+    const slots: number[] = [];
+    for (let t = start; t < start + 24; t += interval) {
+        slots.push(((t % 24) + 24) % 24);
+    }
+    const unique = [...new Set(slots)].sort((a, b) => a - b);
+    return `Runs at ${unique.map(fmt).join(', ')} (server local time).`;
+};
+
 const formatBytes = (bytes: number) => {
     const value = Number(bytes) || 0;
     if (value < 1024) return `${value} B`;
@@ -461,8 +492,8 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 <div className="min-w-0">
                                     <p className="text-sm font-semibold text-text">ThePosterDB local cache</p>
                                     <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted">
-                                        Opt-in disk cache for <span className="text-text">library titles only</span> (Library / Watching).
-                                        Faster reopen, offline reapply when hydrated, and resume after restart — not a Browse crawl.
+                                        Permanent local poster database for <span className="text-text">library titles</span> (Library / Watching) —
+                                        set lists and images stay on disk until you clear them or hit the image budget. Not a Browse crawl.
                                     </p>
                                 </div>
                                 {tpdbCacheStatus ? (
@@ -485,14 +516,16 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     <div className="space-y-2 text-xs leading-relaxed text-muted">
                                         <p>
                                             <span className="font-semibold text-text/90">What it’s for:</span>{' '}
-                                            faster reopen of TPDB set lists; usable when ThePosterDB is down (after hydrate);
-                                            offline/reapply from local images when possible.
+                                            a local poster “database” you keep — reopen titles offline, reapply from disk when TPDB is down,
+                                            and keep sets/images ready when you change posters later.
                                         </p>
                                         <p>
                                             <span className="font-semibold text-text/90">How it works:</span>{' '}
-                                            open a library title or build from library → metadata-first set lists (~1.5s logged in / ~2.5s public).
-                                            Images hydrate on open or via Prefetch. Followed creators can queue first; parallel workers (5) speed titles but raise 429 risk.
-                                            Resumes from <code className="text-text/80">tpdb-warm-progress.json</code>; oldest images drop when over budget.
+                                            first open or library build scrapes TPDB once and writes title/set/image files.
+                                            Later opens serve that disk copy, then quietly check TPDB for any new sets and merge them in.
+                                            A scheduled job (configurable below) also checks all cached titles. Prefetch hydrates new set images.
+                                            Followed creators can queue first; parallel workers (5) speed title resolve but raise 429 risk.
+                                            Resumes from <code className="text-text/80">tpdb-warm-progress.json</code>; only image files drop when over budget.
                                         </p>
                                     </div>
                                     <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 font-mono text-[11px] text-text/85">
@@ -677,6 +710,68 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         Cache usage appears here once status loads.
                                     </div>
                                 )}
+                            </div>
+
+                            <div className={`space-y-3 border-t border-white/10 pt-5 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none opacity-50'}`}>
+                                <div className="overflow-hidden rounded-lg border border-white/10 bg-black/25">
+                                    <div className="border-b border-white/10 px-3 py-2 sm:px-4">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                                                New-sets refresh schedule
+                                            </p>
+                                            {tpdbCacheStatus?.dailyRefresh?.nextRunAt ? (
+                                                <p className="text-[11px] text-muted">
+                                                    Next {new Date(tpdbCacheStatus.dailyRefresh.nextRunAt).toLocaleString()}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    <div className={`grid gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none'}`}>
+                                        <label className="block min-w-0">
+                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Start time</span>
+                                            <div className="mt-1.5">
+                                                <CustomSelect
+                                                    value={String(
+                                                        Number.isFinite(Number(configDraft.tpdbCacheRefreshHour))
+                                                            ? Math.max(0, Math.min(23, Number(configDraft.tpdbCacheRefreshHour)))
+                                                            : 3
+                                                    )}
+                                                    onChange={(value) => setConfigDraft((prev) => ({
+                                                        ...prev,
+                                                        tpdbCacheRefreshHour: Math.max(0, Math.min(23, Number(value) || 0)),
+                                                    }))}
+                                                    options={TPDB_REFRESH_HOUR_OPTIONS}
+                                                    className="w-full"
+                                                />
+                                            </div>
+                                        </label>
+                                        <label className="block min-w-0">
+                                            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Repeat</span>
+                                            <div className="mt-1.5">
+                                                <CustomSelect
+                                                    value={String(
+                                                        Number.isFinite(Number(configDraft.tpdbCacheRefreshIntervalHours))
+                                                            ? Math.max(0, Math.min(24, Number(configDraft.tpdbCacheRefreshIntervalHours)))
+                                                            : 0
+                                                    )}
+                                                    onChange={(value) => setConfigDraft((prev) => ({
+                                                        ...prev,
+                                                        tpdbCacheRefreshIntervalHours: Math.max(0, Math.min(24, Number(value) || 0)),
+                                                    }))}
+                                                    options={TPDB_REFRESH_INTERVAL_OPTIONS}
+                                                    className="w-full"
+                                                />
+                                            </div>
+                                        </label>
+                                        <p className="text-[11px] text-muted sm:col-span-2">
+                                            {formatRefreshScheduleHint(
+                                                Number(configDraft.tpdbCacheRefreshHour ?? 3),
+                                                Number(configDraft.tpdbCacheRefreshIntervalHours ?? 0),
+                                            )}
+                                            {' '}Save settings to apply. Times use the server/container clock.
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
 
                             <div className={`space-y-3 border-t border-white/10 pt-5 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none opacity-50'}`}>

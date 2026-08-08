@@ -273,6 +273,29 @@ async function fetchBothSetsProgressive(
         );
         paintMerged();
         options.onTpdbSettled?.(posterdbResult);
+
+        // After a cache hit, await a live merge so new sets appear in the UI (and disk).
+        if (posterdbResult.fromCache && options.tpdbConfigured !== false) {
+            try {
+                const refreshed = await fetchPosterdbSets(posterdbSource, {
+                    tmdbId: linkedTmdbId,
+                    titleHint: options.titleHint,
+                    yearHint: options.yearHint,
+                    mediaType: options.fallbackMedia,
+                    tpdbConfigured: options.tpdbConfigured,
+                    refresh: true,
+                });
+                if ((refreshed.sets?.length || 0) > 0) {
+                    posterdbResult = {
+                        ...refreshed,
+                        fromCache: true,
+                    };
+                    paintMerged();
+                }
+            } catch {
+                // Keep the cache paint — scheduled refresh will try again later.
+            }
+        }
     })();
 
     await Promise.all([mediuxTask, tpdbTask]);
@@ -370,6 +393,7 @@ async function fetchPosterdbSets(
         yearHint?: number | null;
         mediaType?: 'show' | 'movie';
         tpdbConfigured?: boolean;
+        refresh?: boolean;
     },
 ): Promise<PosterSetsSearchResult> {
     const tmdbId = options.tmdbId || undefined;
@@ -393,6 +417,7 @@ async function fetchPosterdbSets(
         yearHint: yearHint ?? undefined,
         mediaType: options.mediaType,
         limit: 500,
+        refresh: options.refresh === true,
     };
 
     const runSearch = async (extra: {

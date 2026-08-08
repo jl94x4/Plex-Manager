@@ -37,6 +37,10 @@ export type PosterSetsConfig = {
     tpdbUseLogin?: boolean;
     /** Soft disk budget for tpdb-image-cache (bytes). */
     tpdbCacheMaxBytes?: number;
+    /** Local hour (0–23) when the daily “new sets” refresh first runs. */
+    tpdbCacheRefreshHour?: number;
+    /** Repeat every N hours after that (0 = once daily). */
+    tpdbCacheRefreshIntervalHours?: number;
 };
 
 export type PosterSetsWatch = {
@@ -423,4 +427,6 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     tpdbPrioritizeFollowedCreators: true,
     tpdbUseLogin: true,
     tpdbCacheMaxBytes: 2 * 1024 * 1024 * 1024,
+    tpdbCacheRefreshHour: 3,
+    tpdbCacheRefreshIntervalHours: 0,
 };

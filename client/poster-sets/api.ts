@@ -47,6 +47,8 @@ export type PosterSetsSearchPayload = {
     dupePreference?: 'posterdb' | 'mediux';
     limit?: number;
     batchPages?: number;
+    /** Force a live TPDB scrape and merge new sets into the local cache. */
+    refresh?: boolean;
 };
 
 const readNdjsonStream = async (
@@ -362,6 +364,15 @@ export const posterSetsApi = {
             warmQueue?: number;
             warmActive?: number;
             rateLimit?: { gapMs?: number; cooldownMs?: number; msSinceLastRequest?: number | null };
+        };
+        dailyRefresh?: {
+            hourLocal?: number;
+            intervalHours?: number;
+            running?: boolean;
+            busy?: boolean;
+            lastRunAt?: string | null;
+            nextRunAt?: string | null;
+            lastResult?: Record<string, unknown> | null;
         };
     }>,
     clearTpdbCache: () => apiFetch(`${ROOT}/tpdb-cache/clear`, json({})) as Promise<{

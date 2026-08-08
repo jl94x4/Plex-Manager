@@ -59,7 +59,7 @@ import {
     selectMediaAdapter,
     spawnCommand,
 } from './lib/media-automation/index.js';
-import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook } from './lib/poster-sets/index.js';
+import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook, startTpdbCacheDailyRefresh } from './lib/poster-sets/index.js';
 import { loadPosterSetsAudit } from './lib/poster-sets/audit.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
@@ -23586,7 +23586,9 @@ app.listen(PORT, BIND_HOST, async () => {
             await sendGotifyAlert(config, title || 'Poster Sets watcher', message || '');
         });
         startPosterSetsWatcher();
+        startTpdbCacheDailyRefresh();
         log('[poster-sets] Watcher scheduled');
+        log('[poster-sets] TPDB cache refresh scheduler started');
     } catch (error) {
         log(`[poster-sets] Watcher startup failed: ${error.message}`);
     }
