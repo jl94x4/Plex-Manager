@@ -521,7 +521,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         </p>
                                         <p>
                                             <span className="font-semibold text-text/90">How it works:</span>{' '}
-                                            first open or library build scrapes TPDB once and writes title/set/image files.
+                                            first open or library build scrapes TPDB once through the cache worker (priority front-of-queue on open) and writes title/set/image files.
                                             Later opens serve that disk copy, then quietly check TPDB for any new sets and merge them in.
                                             A scheduled job (configurable below) also checks all cached titles. Prefetch hydrates new set images.
                                             Followed creators can queue first; parallel workers (5) speed title resolve but raise 429 risk.
