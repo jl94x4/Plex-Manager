@@ -13979,6 +13979,7 @@ registerAchievementsRoutes(app, {
     },
     fetchTautulliUserHistoryItems,
     fetchTautulliTimezone,
+    getAdminProfile,
     resolvePortalAccountId: async (req, config) => {
         const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
         if (mediaServerType === 'plex') {

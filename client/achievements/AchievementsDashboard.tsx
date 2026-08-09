@@ -154,7 +154,7 @@ export const XpBreakdownModal: React.FC<{
     );
 };
 
-export const AchievementsDashboard: React.FC = () => {
+export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ sessionInfo = null }) => {
     const [data, setData] = useState<any>(null);
     const [board, setBoard] = useState<any[]>([]);
     const [boardPage, setBoardPage] = useState(0);
@@ -165,6 +165,19 @@ export const AchievementsDashboard: React.FC = () => {
     const [breakdownOpen, setBreakdownOpen] = useState(false);
     const [optOutBusy, setOptOutBusy] = useState(false);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+    const sessionThumb = useMemo(() => {
+        const session = sessionInfo?.session || {};
+        return session.thumb
+            || sessionInfo?.account?.thumb
+            || (session.isAdmin ? sessionInfo?.adminThumb : null)
+            || null;
+    }, [sessionInfo]);
+
+    const avatarForEntry = (entry: any) => {
+        const thumb = entry?.thumb || (entry?.isMe ? sessionThumb : null);
+        return resolveLeaderboardAvatar(thumb, 72, 72);
+    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -361,12 +374,20 @@ export const AchievementsDashboard: React.FC = () => {
                                     >
                                         <div className="flex items-center gap-2.5 min-w-0">
                                             <img
-                                                src={resolveLeaderboardAvatar(entry.thumb, 72, 72)}
+                                                src={avatarForEntry(entry)}
                                                 alt=""
                                                 className={`w-10 h-10 rounded-full object-cover bg-black/40 shrink-0 border ${
                                                     entry.isMe ? 'border-plex/60' : 'border-white/10'
                                                 }`}
-                                                onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
+                                                onError={(e) => {
+                                                    const img = e.target as HTMLImageElement;
+                                                    if (entry.isMe && sessionThumb && !img.dataset.fallback) {
+                                                        img.dataset.fallback = '1';
+                                                        img.src = resolveLeaderboardAvatar(sessionThumb, 72, 72);
+                                                        return;
+                                                    }
+                                                    img.src = logoUrl();
+                                                }}
                                             />
                                             <div className="min-w-0 flex-1">
                                                 <p className="font-mono font-bold text-plex text-sm">#{entry.rank}</p>

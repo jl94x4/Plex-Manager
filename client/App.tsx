@@ -556,7 +556,7 @@ export const MainApp: React.FC = () => {
         if (currentRoute === 'downloads') return <DownloadStatusPage isAdmin={isAdmin} />;
         if (currentRoute === 'analytics') return <AnalyticsDashboard isAdmin={isAdmin} sessionInfo={sessionInfo} />;
         if (currentRoute === 'achievements' && sessionInfo?.navFeatures?.achievements) {
-            return <AchievementsDashboard />;
+            return <AchievementsDashboard sessionInfo={sessionInfo} />;
         }
         if (currentRoute === 'about') return <AboutDashboard appVersion={publicConfig?.appVersion} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType} />;
         if (currentRoute === 'admin' || currentRoute === 'users') return <AdminDashboard onLogout={handleLogout} onViewUserPortal={() => setRoute('user')} onViewStatus={() => setRoute('status')} onViewDashboard={() => setRoute('dashboard')} onViewAsUser={handleViewAsUser} />;
