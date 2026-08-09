@@ -210,7 +210,7 @@ export const AchievementsDashboard: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="w-full max-w-5xl mx-auto py-10 text-center text-muted text-sm">
+            <div className="w-full py-10 text-center text-muted text-sm">
                 {tAchievements('page.loading')}
             </div>
         );
@@ -218,7 +218,7 @@ export const AchievementsDashboard: React.FC = () => {
 
     if (error) {
         return (
-            <div className="w-full max-w-5xl mx-auto py-10 text-center text-red-300 text-sm">
+            <div className="w-full py-10 text-center text-red-300 text-sm">
                 {error}
             </div>
         );
@@ -227,7 +227,7 @@ export const AchievementsDashboard: React.FC = () => {
     const lp = data?.levelProgress || {};
 
     return (
-        <div className="w-full max-w-5xl mx-auto space-y-6 animate-fade-in pb-8">
+        <div className="w-full space-y-6 animate-fade-in pb-8">
             <ToastContainer toasts={toasts} setToasts={setToasts} />
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
                 <div>

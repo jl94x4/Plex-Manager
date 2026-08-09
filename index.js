@@ -3362,6 +3362,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         mediaAutomationHomeWidget: !!config.mediaAutomationEnabled && !!config.mediaAutomationHomeWidgetEnabled,
         posterSets: !!config.posterSetsEnabled,
         achievements: !!config.achievementsEnabled,
+        achievementsLeaderboard: !!config.achievementsEnabled && config.achievementsLeaderboardEnabled !== false,
         // Portal engine unlocks Discover; Seerr URL still works when using Seerr as engine.
         request: portalRequestNav || seerrRequestNav,
         requestsQueue: portalRequestNav || requestAppService.isRequestAppConfigured(config),

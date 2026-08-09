@@ -39,6 +39,7 @@ import { useDiscoverI18n } from './discovery/i18n';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
+import { AchievementsAnalyticsLeaderboard } from './achievements/AchievementsAnalyticsLeaderboard';
 import {
     STATUS_PERIODS,
     barsForPeriod,
@@ -4170,7 +4171,23 @@ return (
                     ) : null}
 
                     <div className="w-full">
-                        <AnimatedLeaderboard users={topUsers} resolveAvatar={resolveUserAvatar} isAdmin={isAdmin} onUserClick={(u: any) => openUserAnalytics(u)} />
+                        {(sessionInfo?.navFeatures?.achievementsLeaderboard
+                            ?? sessionInfo?.navFeatures?.achievements) ? (
+                            <AchievementsAnalyticsLeaderboard
+                                resolveAvatar={resolveUserAvatar}
+                                resolveThumbForUsername={(username) => {
+                                    const key = String(username || '').toLowerCase();
+                                    const fromUsers = allUsers.find((u: any) => String(u.username || '').toLowerCase() === key);
+                                    if (fromUsers?.thumb) return fromUsers.thumb;
+                                    const fromTop = (topUsers || []).find((u: any) => String(u.username || '').toLowerCase() === key);
+                                    return fromTop?.thumb || null;
+                                }}
+                                isAdmin={isAdmin}
+                                onUserClick={(u) => openUserAnalytics(u)}
+                            />
+                        ) : (
+                            <AnimatedLeaderboard users={topUsers} resolveAvatar={resolveUserAvatar} isAdmin={isAdmin} onUserClick={(u: any) => openUserAnalytics(u)} />
+                        )}
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

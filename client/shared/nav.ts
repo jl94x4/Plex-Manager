@@ -6,6 +6,8 @@ export type NavFeatureFlags = {
     mediaAutomation?: boolean;
     posterSets?: boolean;
     achievements?: boolean;
+    /** Achievements XP/badge leaderboard (requires achievements). Default true when achievements on. */
+    achievementsLeaderboard?: boolean;
     request?: boolean;
     requestsQueue?: boolean;
     /** When false, Downloads is hidden from non-admins. Default/undefined = visible. */
