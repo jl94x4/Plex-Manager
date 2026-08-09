@@ -74,7 +74,8 @@ export const MainApp: React.FC = () => {
 
     const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading'>('loading');
     const [sessionInfo, setSessionInfo] = useState<any>(null);
-    const [publicConfig, setPublicConfig] = useState<any>({});
+    // Default temporary access off so login never flashes the trial panel before public config arrives.
+    const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
     const [releaseNotes, setReleaseNotes] = useState<ReleaseNotes | null>(null);
     const [showWhatsNew, setShowWhatsNew] = useState(false);
     const whatsNewCheckedRef = useRef(false);

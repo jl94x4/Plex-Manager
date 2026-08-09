@@ -4800,7 +4800,8 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, i
     const mediaServerLabel = isEmbyAuth ? 'Emby' : 'Jellyfin';
     const mediaServerIconUrl = isEmbyAuth ? EMBY_ICON_URL : JELLYFIN_ICON_URL;
     const showMediaServerPasswordLogin = isEmbyAuth || showJellyfinPassword;
-    const showTrialAccess = !isEmbyLikeAuth && publicConfig?.allowTemporaryAccess !== false;
+    // Opt-in only — undefined/empty publicConfig must not flash the trial panel before /api/config/public loads.
+    const showTrialAccess = !isEmbyLikeAuth && publicConfig?.allowTemporaryAccess === true;
     const logoSrc = publicConfig?.customLogoUrl
         ? resolvePortalAssetUrl(publicConfig.customLogoUrl)
         : (publicInfo.customLogoUrl
