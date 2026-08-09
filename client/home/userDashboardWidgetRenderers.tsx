@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     Activity,
     AlertTriangle,
@@ -20,7 +20,7 @@ import {
     Tv,
     Users,
 } from 'lucide-react';
-import { getPublicOrigin } from '../shared/basePath';
+import { getPublicOrigin, portalUrl } from '../shared/basePath';
 import type { MainGridWidgetId, RecentlyAddedWidgetId } from '../shared/dashboardLayout';
 import { LibraryStatsSkeleton } from '../shared/skeletons';
 import { PeriodDropdown } from '../shared/PeriodDropdown';
@@ -30,6 +30,33 @@ import { PendingRequestsHomeWidget } from '../requests/PendingRequestsHomeWidget
 import { CollexionsHomeWidget } from '../collexions/CollexionsHomeWidget';
 import { ScannerHomeWidget } from '../scanner/ScannerHomeWidget';
 import { MediaAutomationHomeWidget } from '../media-automation/MediaAutomationHomeWidget';
+import { AchievementsHomeWidget } from '../achievements/AchievementsDashboard';
+import { apiFetch } from '../shared/api';
+
+const AchievementsHomeWidgetConnected: React.FC = () => {
+    const [summary, setSummary] = useState<any>(null);
+    useEffect(() => {
+        let cancelled = false;
+        apiFetch('/api/achievements/me')
+            .then((data) => {
+                if (!cancelled && data?.homeWidgetEnabled !== false) setSummary(data);
+            })
+            .catch(() => {
+                if (!cancelled) setSummary(null);
+            });
+        return () => { cancelled = true; };
+    }, []);
+    if (!summary) return null;
+    return (
+        <AchievementsHomeWidget
+            summary={summary}
+            onOpen={() => {
+                window.history.pushState({}, '', portalUrl('/achievements'));
+                window.dispatchEvent(new PopStateEvent('popstate'));
+            }}
+        />
+    );
+};
 
 type PosterCardProps = {
     item: { title: string; thumb?: string; plexUrl: string; tags?: string[]; year?: number | string; parentTitle?: string };
@@ -524,6 +551,9 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                         )}
                     </div>
                 );
+            case 'achievements':
+                if (!sessionInfo?.navFeatures?.achievements) return null;
+                return <AchievementsHomeWidgetConnected />;
             default:
                 return null;
         }

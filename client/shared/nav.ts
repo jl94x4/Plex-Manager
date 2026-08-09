@@ -5,6 +5,7 @@ export type NavFeatureFlags = {
     scanner?: boolean;
     mediaAutomation?: boolean;
     posterSets?: boolean;
+    achievements?: boolean;
     request?: boolean;
     requestsQueue?: boolean;
     /** When false, Downloads is hidden from non-admins. Default/undefined = visible. */
@@ -17,6 +18,7 @@ export const DEFAULT_NAV_ORDER = [
     'discover',
     'request',
     'analytics',
+    'achievements',
     'users',
     'downloads',
     'upgrader',
@@ -42,6 +44,7 @@ export const NAV_ITEM_LABELS: Record<string, string> = {
     discover: 'Dashboard',
     request: 'Discover & Request',
     analytics: 'Analytics',
+    achievements: 'Achievements',
     users: 'Users',
     downloads: 'Downloads',
     upgrader: 'Upgrader',
@@ -288,6 +291,7 @@ export const filterNavOrder = (
     const scannerEnabled = !!features.scanner;
     const mediaAutomationEnabled = !!features.mediaAutomation;
     const posterSetsEnabled = !!features.posterSets;
+    const achievementsEnabled = !!features.achievements;
     const requestsQueueEnabled = !!features.requestsQueue;
     const requestEnabled = features.request !== false || requestsQueueEnabled;
     const hidden = new Set(
@@ -308,6 +312,7 @@ export const filterNavOrder = (
         if (key === 'scanner' && !scannerEnabled) return false;
         if (key === 'media-automation' && !mediaAutomationEnabled) return false;
         if (key === 'poster-sets' && !posterSetsEnabled) return false;
+        if (key === 'achievements' && !achievementsEnabled) return false;
         if (key === 'request' && !requestEnabled) return false;
         if (key === 'requests' && !requestsQueueEnabled) return false;
         return true;

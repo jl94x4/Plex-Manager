@@ -38,6 +38,7 @@ import { DiscoverLocaleSelect } from './discovery/i18n/DiscoverLocaleSelect';
 import { useDiscoverI18n } from './discovery/i18n';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
+import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
 import {
     STATUS_PERIODS,
     barsForPeriod,
@@ -7471,8 +7472,10 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         collexionsEnabled: !!sessionInfo?.navFeatures?.collexions,
         scannerHomeWidgetEnabled: !!sessionInfo?.navFeatures?.scannerHomeWidget,
         mediaAutomationHomeWidgetEnabled: !!sessionInfo?.navFeatures?.mediaAutomationHomeWidget,
+        achievementsEnabled: !!sessionInfo?.navFeatures?.achievements,
+        achievementsHomeWidgetEnabled: publicConfig?.achievementsHomeWidgetEnabled !== false,
         mediaServerType: publicConfig?.mediaServerType || 'plex',
-    }), [sessionInfo.session.isAdmin, user, publicConfig?.referralEnabled, publicConfig?.mediaServerType, sessionInfo?.navFeatures?.requestsQueue, sessionInfo?.navFeatures?.collexions, sessionInfo?.navFeatures?.scannerHomeWidget, sessionInfo?.navFeatures?.mediaAutomationHomeWidget]);
+    }), [sessionInfo.session.isAdmin, user, publicConfig?.referralEnabled, publicConfig?.mediaServerType, publicConfig?.achievementsHomeWidgetEnabled, sessionInfo?.navFeatures?.requestsQueue, sessionInfo?.navFeatures?.collexions, sessionInfo?.navFeatures?.scannerHomeWidget, sessionInfo?.navFeatures?.mediaAutomationHomeWidget, sessionInfo?.navFeatures?.achievements]);
 
     const widgetDeps = useMemo(() => ({
         sessionInfo,
@@ -10717,6 +10720,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const firefoxNavBarRef = useRef<HTMLDivElement>(null);
     useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav });
     const [profileOpen, setProfileOpen] = useState(false);
+    const [profileAchievements, setProfileAchievements] = useState<any>(null);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
     const [isInstalledApp, setIsInstalledApp] = useState(() => (
@@ -10731,6 +10735,23 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         && /Firefox/i.test(navigator.userAgent)
         && /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
     const [installDiag, setInstallDiag] = useState<string[] | null>(null);
+
+    useEffect(() => {
+        if (!profileOpen) return;
+        if (!navFeatures?.achievements) {
+            setProfileAchievements(null);
+            return;
+        }
+        let cancelled = false;
+        apiFetch('/api/achievements/me')
+            .then((data) => {
+                if (!cancelled) setProfileAchievements(data);
+            })
+            .catch(() => {
+                if (!cancelled) setProfileAchievements(null);
+            });
+        return () => { cancelled = true; };
+    }, [profileOpen, navFeatures?.achievements]);
 
     useEffect(() => {
         const handleBeforeInstallPrompt = (event: Event) => {
@@ -10872,6 +10893,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'status': { label: 'Status', icon: Activity, route: 'status', adminOnly: false },
         'logs': { label: 'Logs', icon: FileText, route: 'logs', adminOnly: true },
         'analytics': { label: 'Analytics', icon: BarChart3, route: 'analytics', adminOnly: false },
+        'achievements': { label: 'Achievements', icon: Trophy, route: 'achievements', adminOnly: false },
         'downloads': { label: 'Downloads', icon: DownloadCloud, route: 'downloads', adminOnly: false },
         'mediastack': { label: 'Calendar', icon: Calendar, route: 'mediastack', adminOnly: false },
         'maintenance': { label: 'Cleaner', icon: Shield, route: 'maintenance', adminOnly: true },
@@ -11176,7 +11198,20 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                             </div>
                         </div>
 
-                        <div className="p-4">
+                        <div className="p-4 space-y-4">
+                            {navFeatures?.achievements && profileAchievements?.showOnProfile !== false && (
+                                <ProfileBadgeRack
+                                    earned={profileAchievements?.earned || []}
+                                    level={profileAchievements?.level}
+                                    xp={profileAchievements?.xp}
+                                    max={16}
+                                    onOpenAll={() => {
+                                        setProfileOpen(false);
+                                        onNavigate('achievements' as any);
+                                    }}
+                                />
+                            )}
+                            <div>
                             <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-muted font-bold">
                                 <Palette className="w-3.5 h-3.5 text-plex" />
                                 Theme
@@ -11205,13 +11240,14 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     { label: 'Aurora', value: 'aurora' },
                                 ]}
                             />
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => {
                                     setProfileOpen(false);
                                     onLogout();
                                 }}
-                                className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200 hover:bg-red-500/20 hover:border-red-400/50 transition-colors"
+                                className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200 hover:bg-red-500/20 hover:border-red-400/50 transition-colors"
                             >
                                 <LogOut className="w-4 h-4" />
                                 Logout

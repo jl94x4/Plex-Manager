@@ -11,7 +11,8 @@ export type MainGridWidgetId =
     | 'support'
     | 'libraryStats'
     | 'collexions'
-    | 'analytics';
+    | 'analytics'
+    | 'achievements';
 
 export type RecentlyAddedWidgetId = 'recentMovies' | 'recentShows' | 'recentMusic';
 
@@ -54,6 +55,7 @@ export const MAIN_GRID_WIDGET_META: Record<MainGridWidgetId, { label: string; co
     libraryStats: { label: 'Server Library Size', column: 'right' },
     collexions: { label: 'ColleXions', column: 'right', adminOnly: true },
     analytics: { label: 'Your Analytics', column: 'right' },
+    achievements: { label: 'Achievements XP', column: 'right' },
 };
 
 export const RECENTLY_ADDED_WIDGET_META: Record<RecentlyAddedWidgetId, string> = {
@@ -76,6 +78,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
         'libraryStats',
         'collexions',
         'analytics',
+        'achievements',
     ],
     recentlyAddedOrder: ['recentMovies', 'recentShows', 'recentMusic'],
     hiddenSections: [],
@@ -201,6 +204,8 @@ export type DashboardLayoutContext = {
     collexionsEnabled?: boolean;
     scannerHomeWidgetEnabled?: boolean;
     mediaAutomationHomeWidgetEnabled?: boolean;
+    achievementsEnabled?: boolean;
+    achievementsHomeWidgetEnabled?: boolean;
     mediaServerType?: string;
 };
 
@@ -223,6 +228,10 @@ export const isMainGridWidgetAvailable = (id: MainGridWidgetId, ctx: DashboardLa
     }
     if (id === 'analytics') {
         if (!['jellyfin', 'emby'].includes(String(ctx.mediaServerType || '').toLowerCase())) return false;
+    }
+    if (id === 'achievements') {
+        if (!ctx.achievementsEnabled) return false;
+        if (ctx.achievementsHomeWidgetEnabled === false) return false;
     }
     return true;
 };

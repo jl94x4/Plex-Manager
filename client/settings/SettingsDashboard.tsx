@@ -27,6 +27,7 @@ import {
     Plus,
     Cpu,
     Image as ImageIcon,
+    Trophy,
 } from 'lucide-react';
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -45,6 +46,7 @@ import { ScannerSettingsPanel, defaultScannerSettings, type ScannerSettings } fr
 import { BroadcastSettingsTab } from './BroadcastSettingsTab';
 import { IntegrationTestButton } from '../shared/IntegrationTestButton';
 import { HomeLayoutSettings } from './HomeLayoutSettings';
+import { AchievementsSettings } from './AchievementsSettings';
 import { NavigationOrderSettings } from './NavigationOrderSettings';
 import { ArrInstancesPanel } from './ArrInstancesPanel';
 import { DISCOVER_LANGUAGE_OPTIONS, DISCOVER_REGION_OPTIONS } from './discoverySettingsOptions';
@@ -172,6 +174,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
     scanner: Activity,
     'media-automation': Cpu,
     'poster-sets': ImageIcon,
+    achievements: Trophy,
     system: Settings,
     contact: Phone,
     broadcast: Radio,
@@ -483,6 +486,10 @@ export const SettingsDashboard: React.FC = () => {
     const [mediaAutomationEnabled, setMediaAutomationEnabled] = useState(false);
     const [mediaAutomationHomeWidgetEnabled, setMediaAutomationHomeWidgetEnabled] = useState(false);
     const [posterSetsEnabled, setPosterSetsEnabled] = useState(false);
+    const [achievementsEnabled, setAchievementsEnabled] = useState(false);
+    const [achievementsLeaderboardEnabled, setAchievementsLeaderboardEnabled] = useState(true);
+    const [achievementsHomeWidgetEnabled, setAchievementsHomeWidgetEnabled] = useState(true);
+    const [achievementsShowOnProfile, setAchievementsShowOnProfile] = useState(true);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
     const [scannerWebhooksVisible, setScannerWebhooksVisible] = useState(true);
     const [scannerManualPathVisible, setScannerManualPathVisible] = useState(true);
@@ -1171,6 +1178,18 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.posterSetsEnabled !== undefined) {
                 setPosterSetsEnabled(!!initialSettings.posterSetsEnabled);
             }
+            if (initialSettings.achievementsEnabled !== undefined) {
+                setAchievementsEnabled(!!initialSettings.achievementsEnabled);
+            }
+            if (initialSettings.achievementsLeaderboardEnabled !== undefined) {
+                setAchievementsLeaderboardEnabled(initialSettings.achievementsLeaderboardEnabled !== false);
+            }
+            if (initialSettings.achievementsHomeWidgetEnabled !== undefined) {
+                setAchievementsHomeWidgetEnabled(initialSettings.achievementsHomeWidgetEnabled !== false);
+            }
+            if (initialSettings.achievementsShowOnProfile !== undefined) {
+                setAchievementsShowOnProfile(initialSettings.achievementsShowOnProfile !== false);
+            }
             if (initialSettings.mediaAutomation && typeof initialSettings.mediaAutomation === 'object') {
                 const saved = initialSettings.mediaAutomation;
                 const fallback = {
@@ -1573,6 +1592,10 @@ export const SettingsDashboard: React.FC = () => {
             mediaAutomationEnabled,
             mediaAutomationHomeWidgetEnabled,
             posterSetsEnabled,
+            achievementsEnabled,
+            achievementsLeaderboardEnabled,
+            achievementsHomeWidgetEnabled,
+            achievementsShowOnProfile,
             mediaAutomation: {
                 ...mediaAutomation,
                 enabled: mediaAutomationEnabled,
@@ -3054,6 +3077,21 @@ export const SettingsDashboard: React.FC = () => {
                         <HomeLayoutSettings layout={dashboardLayout} onChange={updateDashboardLayout} />
                     )}
 
+                    {activeTab === 'achievements' && (
+                        <div className="mb-8 animate-fade-in glass-card-sm p-5">
+                            <AchievementsSettings
+                                achievementsEnabled={achievementsEnabled}
+                                setAchievementsEnabled={setAchievementsEnabled}
+                                achievementsLeaderboardEnabled={achievementsLeaderboardEnabled}
+                                setAchievementsLeaderboardEnabled={setAchievementsLeaderboardEnabled}
+                                achievementsHomeWidgetEnabled={achievementsHomeWidgetEnabled}
+                                setAchievementsHomeWidgetEnabled={setAchievementsHomeWidgetEnabled}
+                                achievementsShowOnProfile={achievementsShowOnProfile}
+                                setAchievementsShowOnProfile={setAchievementsShowOnProfile}
+                            />
+                        </div>
+                    )}
+
                     {activeTab === 'navigation' && (
                         <NavigationOrderSettings
                             navOrder={navOrder}
@@ -3072,6 +3110,7 @@ export const SettingsDashboard: React.FC = () => {
                                 scanner: scannerEnabled,
                                 mediaAutomation: mediaAutomationEnabled,
                                 posterSets: posterSetsEnabled,
+                                achievements: achievementsEnabled,
                                 maintenance: maintenanceExperimentalEnabled,
                             }}
                         />

@@ -1,6 +1,6 @@
 export const SETTINGS_TABS = [
     'plex', 'smtp', 'gotify', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'navigation', 'home-layout',
-    'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
+    'achievements', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
 ] as const;
 
 export type SettingsTabId = typeof SETTINGS_TABS[number];
@@ -30,6 +30,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
 
     { id: 'navigation', tabId: 'navigation', label: 'Navigation', group: 'Portal', keywords: ['menu', 'order', 'sidebar', 'nav', 'downloads', 'members'] },
     { id: 'home-layout', tabId: 'home-layout', label: 'Home Layout', group: 'Portal', keywords: ['dashboard', 'widgets', 'sections', 'home', 'layout', 'reorder', 'hide'] },
+    { id: 'achievements', tabId: 'achievements', label: 'Achievements', group: 'Portal', keywords: ['xp', 'badges', 'leaderboard', 'gamification', 'achievements', 'level'] },
 
     { id: 'plex', tabId: 'plex', label: 'Media Player', group: 'Media Stack', keywords: ['plex', 'jellyfin', 'media', 'player', 'server'] },
     { id: 'plex/connection', tabId: 'plex', sectionId: 'connection', label: 'Media Server Connection', group: 'Media Stack', keywords: ['token', 'server', 'docker', 'url', 'jellyfin', 'plex'] },

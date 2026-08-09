@@ -60,6 +60,7 @@ import {
     spawnCommand,
 } from './lib/media-automation/index.js';
 import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook, startTpdbCacheDailyRefresh } from './lib/poster-sets/index.js';
+import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { loadPosterSetsAudit } from './lib/poster-sets/audit.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
@@ -3360,6 +3361,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         mediaAutomation: !!config.mediaAutomationEnabled,
         mediaAutomationHomeWidget: !!config.mediaAutomationEnabled && !!config.mediaAutomationHomeWidgetEnabled,
         posterSets: !!config.posterSetsEnabled,
+        achievements: !!config.achievementsEnabled,
         // Portal engine unlocks Discover; Seerr URL still works when using Seerr as engine.
         request: portalRequestNav || seerrRequestNav,
         requestsQueue: portalRequestNav || requestAppService.isRequestAppConfigured(config),
@@ -3760,6 +3762,10 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 mediaAutomationHomeWidgetEnabled: !!config.mediaAutomationHomeWidgetEnabled,
                 mediaAutomation: mediaAutomationConfigForApi(config),
                 posterSetsEnabled: !!config.posterSetsEnabled,
+                achievementsEnabled: !!config.achievementsEnabled,
+                achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
+                achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
+                achievementsShowOnProfile: config.achievementsShowOnProfile !== false,
                 collexionsAutostart: !!config.collexionsAutostart,
                 collexionsInternalUrl: config.collexionsInternalUrl || '',
                 collexionsServiceKey: config.collexionsServiceKey ? '********' : '',
@@ -3879,6 +3885,10 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 mediaAutomationHomeWidgetEnabled: false,
                 mediaAutomation: mediaAutomationConfigForApi({}),
                 posterSetsEnabled: false,
+                achievementsEnabled: false,
+                achievementsLeaderboardEnabled: true,
+                achievementsHomeWidgetEnabled: true,
+                achievementsShowOnProfile: true,
                 collexionsAutostart: false,
                 collexionsInternalUrl: '',
                 collexionsServiceKey: '',
@@ -3915,7 +3925,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -4329,6 +4339,18 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         posterSetsEnabled: posterSetsEnabled !== undefined
             ? !!posterSetsEnabled
             : !!existingConfig.posterSetsEnabled,
+        achievementsEnabled: achievementsEnabled !== undefined
+            ? !!achievementsEnabled
+            : !!existingConfig.achievementsEnabled,
+        achievementsLeaderboardEnabled: achievementsLeaderboardEnabled !== undefined
+            ? !!achievementsLeaderboardEnabled
+            : (existingConfig.achievementsLeaderboardEnabled !== false),
+        achievementsHomeWidgetEnabled: achievementsHomeWidgetEnabled !== undefined
+            ? !!achievementsHomeWidgetEnabled
+            : (existingConfig.achievementsHomeWidgetEnabled !== false),
+        achievementsShowOnProfile: achievementsShowOnProfile !== undefined
+            ? !!achievementsShowOnProfile
+            : (existingConfig.achievementsShowOnProfile !== false),
         collexionsEnabled: (() => {
             // Plex-only integration — never leave enabled for Jellyfin/Emby.
             if (normalizedMediaServerType !== 'plex') return false;
@@ -4512,6 +4534,10 @@ app.get('/api/config/public', async (req, res) => {
             trendingBackgrounds: (!!config.useTrendingSlideshow || config.useTrendingSlideshowOnLogin !== false) ? await fetchTmdbTrendingBackgrounds(config.tmdbApiKey) : [],
             announcement: config.announcement || '',
             referralEnabled: !!config.referralEnabled,
+            achievementsEnabled: !!config.achievementsEnabled,
+            achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
+            achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
+            achievementsShowOnProfile: config.achievementsShowOnProfile !== false,
             publicBaseUrl: resolvePublicBaseUrlFromConfig(config) || '',
             appVersion: appVersion,
             use24HourClock: !!config.use24HourClock,
@@ -4541,6 +4567,10 @@ app.get('/api/config/public', async (req, res) => {
             trendingBackgrounds: [],
             announcement: '',
             referralEnabled: false,
+            achievementsEnabled: false,
+            achievementsLeaderboardEnabled: true,
+            achievementsHomeWidgetEnabled: true,
+            achievementsShowOnProfile: true,
             appVersion: appVersion,
             use24HourClock: false,
             allowTemporaryAccess: false,
@@ -13575,6 +13605,50 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         log(`Error fetching personal analytics: ${e.message}`);
         res.status(500).json({ error: 'Analytics error' });
     }
+});
+
+registerAchievementsRoutes(app, {
+    requireAuth,
+    requireMember,
+    requireAdmin,
+    loadFile,
+    CONFIG_PATH,
+    resolveCurrentAdmin,
+    getPlexConnectionUri,
+    resolveLocalPlexAccountId,
+    fetchPlexAccountHistory,
+    shouldObfuscateAnalyticsViewers,
+    resolvePortalAccountId: async (req, config) => {
+        const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
+        if (mediaServerType === 'plex') {
+            const uri = await getPlexConnectionUri(config);
+            if (!uri) return null;
+            return resolveLocalPlexAccountId(config, uri, req.user);
+        }
+        return req.user?.jellyfinId || req.user?.id || null;
+    },
+    fetchJellyfinPlayedItems: async (config, accountId) => {
+        const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
+        if (!baseUrl || !config.jellyfinApiKey || !accountId) return [];
+        const params = new URLSearchParams({
+            Recursive: 'true',
+            Filters: 'IsPlayed',
+            IncludeItemTypes: 'Movie,Episode,Audio',
+            Fields: 'DatePlayed,RunTimeTicks,UserData,SeriesId,SeriesName,AlbumId,Album,ParentId',
+            SortBy: 'DatePlayed',
+            SortOrder: 'Descending',
+            Limit: '5000',
+            EnableUserData: 'true',
+        });
+        const response = await fetchWithTimeout(
+            `${baseUrl}/Users/${encodeURIComponent(accountId)}/Items?${params.toString()}`,
+            { headers: jellyfinHeaders(config.jellyfinApiKey) },
+            20000,
+        );
+        if (!response?.ok) return [];
+        const payload = await response.json().catch(() => null);
+        return Array.isArray(payload?.Items) ? payload.Items : [];
+    },
 });
 
 /** Resolve portal user id / username / plexAccountId → Plex accountID for analytics APIs. */
