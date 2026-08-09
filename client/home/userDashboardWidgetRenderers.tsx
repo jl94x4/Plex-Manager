@@ -612,7 +612,7 @@ const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNod
                 </button>
                 <div
                     ref={scrollRef}
-                    className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar scroll-smooth lg:px-1"
+                    className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar scroll-smooth touch-pan-x overscroll-x-contain lg:px-1"
                 >
                     {children}
                 </div>
