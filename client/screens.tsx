@@ -27,7 +27,7 @@ import {
 } from './shared/skeletons';
 import type { User, PlexConfig, AppSettings, PlexServer, ToastMessage, DeletedUser, AuditEntry, UserStatus } from './shared/types';
 import { ShareWrapUpModal } from './shared/ShareWrapUp';
-import { WrapUpCardGrid, periodLabel } from './shared/WrapUpCards';
+import { WrapUpCardGrid, AchievementsWrapUpSpotlight, periodLabel } from './shared/WrapUpCards';
 import { SetupWizard } from './setup/SetupWizard';
 import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
 import { AuthPageBackground, themeClasses, SlideshowBackground } from './shared/theme';
@@ -7135,6 +7135,9 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     const [shareWrapUpOpen, setShareWrapUpOpen] = useState(false);
     const [recentLimit, setRecentLimit] = useState(24);
     const [detailsItem, setDetailsItem] = useState<any>(null);
+    const [wrapUpAchievements, setWrapUpAchievements] = useState<any>(null);
+    const [wrapUpAchievementsRank, setWrapUpAchievementsRank] = useState<number | null>(null);
+    const [wrapUpAchievementsSeed, setWrapUpAchievementsSeed] = useState(() => Date.now());
 
     const user = sessionInfo.account;
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
@@ -7291,6 +7294,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
             if (!silent) {
                 setTopContentPage(0);
                 setRecentHistoryPage(0);
+                setWrapUpAchievementsSeed(Date.now());
             }
         } catch (e: any) {
             if (gen !== analyticsFetchGenRef.current) return;
@@ -7308,6 +7312,33 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     useEffect(() => {
         void fetchAnalytics();
     }, [fetchAnalytics]);
+
+    useEffect(() => {
+        if (!sessionInfo?.navFeatures?.achievements) {
+            setWrapUpAchievements(null);
+            setWrapUpAchievementsRank(null);
+            return;
+        }
+        if (!sessionInfo?.session?.isAdmin && !user) return;
+        let cancelled = false;
+        Promise.all([
+            apiFetch('/api/achievements/me').catch(() => null),
+            apiFetch('/api/achievements/leaderboard?limit=100').catch(() => null),
+        ]).then(([me, lb]) => {
+            if (cancelled) return;
+            if (me?.enabled) {
+                setWrapUpAchievements(me);
+                const mine = Array.isArray(lb?.entries) ? lb.entries.find((entry: any) => entry?.isMe) : null;
+                const rank = Number(mine?.rank);
+                setWrapUpAchievementsRank(Number.isFinite(rank) && rank > 0 ? rank : null);
+                setWrapUpAchievementsSeed(Date.now());
+            } else {
+                setWrapUpAchievements(null);
+                setWrapUpAchievementsRank(null);
+            }
+        });
+        return () => { cancelled = true; };
+    }, [sessionInfo?.navFeatures?.achievements, sessionInfo?.session?.isAdmin, user]);
 
     usePoll(() => { void fetchAnalytics({ silent: true }); }, 5 * 60 * 1000, { immediate: false });
 
@@ -7797,6 +7828,18 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                                         </h4>
                                         <ActivityHeatmap data={analytics.heatmapData} />
                                     </div>
+                                )}
+                                {wrapUpAchievements && (
+                                    <AchievementsWrapUpSpotlight
+                                        me={wrapUpAchievements}
+                                        rank={wrapUpAchievementsRank}
+                                        seed={wrapUpAchievementsSeed}
+                                        minCardHeight={112}
+                                        onOpenAchievements={() => {
+                                            window.history.pushState({}, '', portalUrl('/achievements'));
+                                            window.dispatchEvent(new PopStateEvent('popstate'));
+                                        }}
+                                    />
                                 )}
                             </div>
                         )}

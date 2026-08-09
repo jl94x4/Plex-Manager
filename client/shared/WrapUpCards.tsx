@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     Trophy, PlayCircle, Tv, Clapperboard, Clock, Calendar, Layers, PieChart, Compass, Coffee,
-    type LucideIcon,
+    Award, Flame, Gauge, Medal, Sparkles, Star, Target, type LucideIcon,
 } from 'lucide-react';
 import { formatStreamingHour } from './format';
 import { portalUrl } from './basePath';
@@ -41,6 +41,10 @@ const FALLBACK_IMAGES = {
     profile: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&q=80&w=600',
     style: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=600',
     habit: 'https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?auto=format&fit=crop&q=80&w=600',
+    achievements: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=600',
+    xp: 'https://images.unsplash.com/photo-1636750570049-aec176ca3784?auto=format&fit=crop&q=80&w=600',
+    streak: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&q=80&w=600',
+    badges: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&q=80&w=600',
 };
 
 export type WrapUpCardDef = {
@@ -81,6 +85,41 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             'wrapUp.uniqueTitles': `${vars?.count ?? 0} unique titles`,
             'wrapUp.unknown': 'Unknown',
             'wrapUp.mixedBag': 'Mixed Bag',
+            'wrapUp.achievementsTitle': 'Achievements',
+            'wrapUp.achievementsHint': 'All-time XP progress',
+            'wrapUp.level': 'Level',
+            'wrapUp.totalXp': 'Total XP',
+            'wrapUp.xpToNext': 'XP to Next Level',
+            'wrapUp.badges': 'Badges',
+            'wrapUp.latestBadge': 'Latest Badge',
+            'wrapUp.achievementsRank': 'Achievements Rank',
+            'wrapUp.currentStreak': 'Current Streak',
+            'wrapUp.longestStreak': 'Longest Streak',
+            'wrapUp.hoursWatched': 'Hours Watched',
+            'wrapUp.activeDays': 'Active Days',
+            'wrapUp.topXpSource': 'Top XP Source',
+            'wrapUp.uniqueCatalog': 'Unique Titles',
+            'wrapUp.intoLevel': '{into} / {need} XP',
+            'wrapUp.pctToLevel': '{pct}% to Lv {level}',
+            'wrapUp.badgesCount': '{earned} / {total}',
+            'wrapUp.badgesPct': '{pct}% complete',
+            'wrapUp.levelXpSummary': 'Lv {level} · {xp} XP',
+            'wrapUp.daysCount': '{count} days',
+            'wrapUp.hoursCount': '{count} hrs',
+            'wrapUp.noBadgesYet': 'None yet',
+            'wrapUp.xpFrom': '{xp} XP from this',
+            'wrapUp.moviesAndShows': '{movies} movies · {shows} shows',
+            'wrapUp.breakdown.uniqueMovies': 'Unique movies',
+            'wrapUp.breakdown.uniqueShows': 'Unique shows',
+            'wrapUp.breakdown.uniqueMusic': 'Unique music',
+            'wrapUp.breakdown.moviePlays': 'Movie plays',
+            'wrapUp.breakdown.episodePlays': 'Episode plays',
+            'wrapUp.breakdown.trackPlays': 'Track plays',
+            'wrapUp.breakdown.totalPlays': 'Total plays',
+            'wrapUp.breakdown.activeDays': 'Active days',
+            'wrapUp.breakdown.longestStreak': 'Longest streak',
+            'wrapUp.breakdown.weekendPlays': 'Weekend plays',
+            'wrapUp.breakdown.hoursWatched': 'Hours watched',
         };
         return fallbacks[key] || key;
     });
@@ -199,8 +238,229 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
     ];
 };
 
+const mulberry32 = (seed: number) => {
+    let a = seed >>> 0 || 1;
+    return () => {
+        a |= 0;
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+};
+
+const shuffleWithSeed = <T,>(items: T[], seed: number): T[] => {
+    const next = [...items];
+    const rand = mulberry32(seed);
+    for (let i = next.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(rand() * (i + 1));
+        [next[i], next[j]] = [next[j], next[i]];
+    }
+    return next;
+};
+
+const achievementsTranslateFallback = (key: string, vars?: Record<string, string | number>) => {
+    const fallbacks: Record<string, string> = {
+        'wrapUp.level': 'Level',
+        'wrapUp.totalXp': 'Total XP',
+        'wrapUp.xpToNext': 'XP to Next Level',
+        'wrapUp.badges': 'Badges',
+        'wrapUp.latestBadge': 'Latest Badge',
+        'wrapUp.achievementsRank': 'Achievements Rank',
+        'wrapUp.currentStreak': 'Current Streak',
+        'wrapUp.longestStreak': 'Longest Streak',
+        'wrapUp.hoursWatched': 'Hours Watched',
+        'wrapUp.activeDays': 'Active Days',
+        'wrapUp.topXpSource': 'Top XP Source',
+        'wrapUp.uniqueCatalog': 'Unique Titles',
+        'wrapUp.intoLevel': `${vars?.into ?? 0} / ${vars?.need ?? 0} XP`,
+        'wrapUp.pctToLevel': `${vars?.pct ?? 0}% to Lv ${vars?.level ?? 0}`,
+        'wrapUp.badgesCount': `${vars?.earned ?? 0} / ${vars?.total ?? 0}`,
+        'wrapUp.badgesPct': `${vars?.pct ?? 0}% complete`,
+        'wrapUp.levelXpSummary': `Lv ${vars?.level ?? 0} · ${vars?.xp ?? 0} XP`,
+        'wrapUp.daysCount': `${vars?.count ?? 0} days`,
+        'wrapUp.hoursCount': `${vars?.count ?? 0} hrs`,
+        'wrapUp.noBadgesYet': 'None yet',
+        'wrapUp.xpFrom': `${vars?.xp ?? 0} XP from this`,
+        'wrapUp.moviesAndShows': `${vars?.movies ?? 0} movies · ${vars?.shows ?? 0} shows`,
+        'wrapUp.notRankedYet': 'Not ranked yet',
+        'wrapUp.breakdown.uniqueMovies': 'Unique movies',
+        'wrapUp.breakdown.uniqueShows': 'Unique shows',
+        'wrapUp.breakdown.uniqueMusic': 'Unique music',
+        'wrapUp.breakdown.moviePlays': 'Movie plays',
+        'wrapUp.breakdown.episodePlays': 'Episode plays',
+        'wrapUp.breakdown.trackPlays': 'Track plays',
+        'wrapUp.breakdown.totalPlays': 'Total plays',
+        'wrapUp.breakdown.activeDays': 'Active days',
+        'wrapUp.breakdown.longestStreak': 'Longest streak',
+        'wrapUp.breakdown.weekendPlays': 'Weekend plays',
+        'wrapUp.breakdown.hoursWatched': 'Hours watched',
+    };
+    return fallbacks[key] || key;
+};
+
+/** Always Level + Total XP; then 3 randomly chosen from the remaining pool (seeded). */
+export const buildAchievementsWrapUpCards = (
+    me: any,
+    opts: { seed?: number; rank?: number | null; t?: DiscoverTranslate } = {},
+): WrapUpCardDef[] => {
+    const translate = opts.t || achievementsTranslateFallback;
+    const lp = me?.levelProgress || {};
+    const stats = me?.stats || {};
+    const breakdown = me?.breakdown || {};
+    const recent = Array.isArray(me?.recentEarned) ? me.recentEarned : [];
+    const latest = recent[0];
+    const level = Number(me?.level) || 1;
+    const xp = Number(me?.xp) || 0;
+    const earnedCount = Number(me?.earnedCount) || 0;
+    const totalBadges = Number(me?.totalBadges) || 0;
+    const into = Number(lp.xpIntoLevel) || 0;
+    const need = Number(lp.xpForNextLevel) || 0;
+    const progressPct = Math.min(100, Math.max(0, Number(lp.progressPct) || 0));
+    const rank = opts.rank != null && Number.isFinite(Number(opts.rank)) ? Number(opts.rank) : null;
+
+    const topBreakdown = Object.entries(breakdown)
+        .map(([key, value]) => [key, Number(value) || 0] as const)
+        .filter(([, value]) => value > 0)
+        .sort((a, b) => b[1] - a[1])[0];
+
+    const pinned: WrapUpCardDef[] = [
+        {
+            metric: 'Achievements Level',
+            label: translate('wrapUp.level'),
+            bgImage: FALLBACK_IMAGES.achievements,
+            icon: Medal,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: level,
+            subValue: translate('wrapUp.intoLevel', { into, need }),
+        },
+        {
+            metric: 'Achievements XP',
+            label: translate('wrapUp.totalXp'),
+            bgImage: FALLBACK_IMAGES.xp,
+            icon: Sparkles,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: xp.toLocaleString(),
+            subValue: translate('wrapUp.pctToLevel', { pct: progressPct, level: level + 1 }),
+        },
+    ];
+
+    const pool: WrapUpCardDef[] = [
+        {
+            metric: 'Achievements XP Next',
+            label: translate('wrapUp.xpToNext'),
+            bgImage: FALLBACK_IMAGES.xp,
+            icon: Target,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: Math.max(0, need - into).toLocaleString(),
+            subValue: translate('wrapUp.intoLevel', { into, need }),
+        },
+        {
+            metric: 'Achievements Badges',
+            label: translate('wrapUp.badges'),
+            bgImage: FALLBACK_IMAGES.badges,
+            icon: Award,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: translate('wrapUp.badgesCount', { earned: earnedCount, total: totalBadges }),
+            subValue: translate('wrapUp.badgesPct', {
+                pct: Math.round(totalBadges ? (earnedCount / totalBadges) * 100 : 0),
+            }),
+        },
+        {
+            metric: 'Achievements Latest Badge',
+            label: translate('wrapUp.latestBadge'),
+            bgImage: FALLBACK_IMAGES.badges,
+            icon: Star,
+            valueClassName: 'text-sm font-bold line-clamp-2 leading-tight',
+            value: latest
+                ? `${latest.icon || '🏅'} ${latest.name || translate('wrapUp.noBadgesYet')}`
+                : translate('wrapUp.noBadgesYet'),
+            subValue: latest?.rarity ? String(latest.rarity) : undefined,
+        },
+        {
+            metric: 'Achievements Current Streak',
+            label: translate('wrapUp.currentStreak'),
+            bgImage: FALLBACK_IMAGES.streak,
+            icon: Flame,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: Number(stats.currentStreak) || 0,
+            subValue: translate('wrapUp.daysCount', { count: Number(stats.currentStreak) || 0 }),
+        },
+        {
+            metric: 'Achievements Longest Streak',
+            label: translate('wrapUp.longestStreak'),
+            bgImage: FALLBACK_IMAGES.streak,
+            icon: Flame,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: Number(stats.longestStreak) || 0,
+            subValue: translate('wrapUp.daysCount', { count: Number(stats.longestStreak) || 0 }),
+        },
+        {
+            metric: 'Achievements Hours',
+            label: translate('wrapUp.hoursWatched'),
+            bgImage: FALLBACK_IMAGES.time,
+            icon: Clock,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: Number(stats.hoursWatched) || 0,
+            subValue: translate('wrapUp.hoursCount', { count: Number(stats.hoursWatched) || 0 }),
+        },
+        {
+            metric: 'Achievements Active Days',
+            label: translate('wrapUp.activeDays'),
+            bgImage: FALLBACK_IMAGES.day,
+            icon: Calendar,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: Number(stats.activeDays) || 0,
+            subValue: translate('wrapUp.daysCount', { count: Number(stats.activeDays) || 0 }),
+        },
+        {
+            metric: 'Achievements Unique',
+            label: translate('wrapUp.uniqueCatalog'),
+            bgImage: FALLBACK_IMAGES.style,
+            icon: Compass,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: (Number(stats.uniqueMovies) || 0) + (Number(stats.uniqueShows) || 0),
+            subValue: translate('wrapUp.moviesAndShows', {
+                movies: Number(stats.uniqueMovies) || 0,
+                shows: Number(stats.uniqueShows) || 0,
+            }),
+        },
+    ];
+
+    if (rank != null && rank > 0) {
+        pool.push({
+            metric: 'Achievements Rank',
+            label: translate('wrapUp.achievementsRank'),
+            bgImage: FALLBACK_IMAGES.rank,
+            icon: Trophy,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: (
+                <><span className="text-plex text-xl mr-0.5">#</span>{rank}</>
+            ),
+            subValue: translate('wrapUp.levelXpSummary', { level, xp: xp.toLocaleString() }),
+        });
+    }
+
+    if (topBreakdown) {
+        const [key, value] = topBreakdown;
+        pool.push({
+            metric: 'Achievements Top XP',
+            label: translate('wrapUp.topXpSource'),
+            bgImage: FALLBACK_IMAGES.profile,
+            icon: Gauge,
+            valueClassName: 'text-sm font-bold line-clamp-2 leading-tight',
+            value: translate(`wrapUp.breakdown.${key}`),
+            subValue: translate('wrapUp.xpFrom', { xp: value }),
+        });
+    }
+
+    const seeded = shuffleWithSeed(pool, Number(opts.seed) || Date.now());
+    return [...pinned, ...seeded.slice(0, 3)];
+};
+
 type WrapUpCardGridProps = {
-    analytics: any;
+    analytics?: any;
+    cards?: WrapUpCardDef[];
     interactive?: boolean;
     onCardClick?: (metric: string) => void;
     minCardHeight?: number;
@@ -224,8 +484,15 @@ const exportSubValue = (card: WrapUpCardDef, analytics: any): React.ReactNode =>
     return card.subValue;
 };
 
+const isLargeMetric = (metric: string) => (
+    metric === 'Server Rank'
+    || metric === 'Total Streams'
+    || metric.startsWith('Achievements')
+);
+
 export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
     analytics,
+    cards: cardsProp,
     interactive = false,
     onCardClick,
     minCardHeight,
@@ -234,7 +501,7 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
     variant = 'default',
 }) => {
     const { t } = useDiscoverI18n();
-    const cards = buildWrapUpCards(analytics, t);
+    const cards = cardsProp || buildWrapUpCards(analytics, t);
     const isExport = variant === 'export';
     const resolvedMinHeight = minCardHeight ?? (isExport ? 128 : 112);
     const gridClass = isExport
@@ -246,7 +513,7 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
             {cards.map((card) => {
                 const Icon = card.icon;
                 const valueClass = isExport
-                    ? (card.metric === 'Server Rank' || card.metric === 'Total Streams'
+                    ? (isLargeMetric(card.metric)
                         ? 'text-2xl font-black leading-normal'
                         : exportValueClassName)
                     : (card.valueClassName || defaultValueClassName);
@@ -315,6 +582,38 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
                     </div>
                 );
             })}
+        </div>
+    );
+};
+
+export const AchievementsWrapUpSpotlight: React.FC<{
+    me: any;
+    rank?: number | null;
+    seed: number;
+    onOpenAchievements?: () => void;
+    minCardHeight?: number;
+}> = ({ me, rank = null, seed, onOpenAchievements, minCardHeight = 112 }) => {
+    const { t } = useDiscoverI18n();
+    const cards = useMemo(
+        () => buildAchievementsWrapUpCards(me, { seed, rank, t }),
+        [me, rank, seed, t],
+    );
+    if (!me || !cards.length) return null;
+    return (
+        <div className="mt-6 pt-6 border-t border-white/10 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+                <h4 className="text-xs uppercase tracking-widest text-muted font-bold flex items-center gap-2">
+                    <Award className="w-4 h-4 text-plex" />
+                    {t('wrapUp.achievementsTitle')}
+                </h4>
+                <p className="text-[10px] text-muted font-semibold">{t('wrapUp.achievementsHint')}</p>
+            </div>
+            <WrapUpCardGrid
+                cards={cards}
+                interactive={!!onOpenAchievements}
+                onCardClick={onOpenAchievements ? () => onOpenAchievements() : undefined}
+                minCardHeight={minCardHeight}
+            />
         </div>
     );
 };
