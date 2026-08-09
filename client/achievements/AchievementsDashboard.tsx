@@ -157,8 +157,13 @@ export const AchievementsDashboard: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const me = await apiFetch('/api/achievements/me');
+            const mePromise = apiFetch('/api/achievements/me');
+            const lbPromise = apiFetch('/api/achievements/leaderboard?limit=25').catch(() => null);
+
+            const me = await mePromise;
             setData(me);
+            setLoading(false);
+
             const newly = Array.isArray(me?.newlyEarnedIds) ? me.newlyEarnedIds : [];
             if (newly.length === 1) {
                 const badge = (me.earned || []).find((b: any) => b.id === newly[0]);
@@ -166,15 +171,15 @@ export const AchievementsDashboard: React.FC = () => {
             } else if (newly.length > 1) {
                 setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
             }
+
             if (me?.leaderboardEnabled) {
-                const lb = await apiFetch('/api/achievements/leaderboard?limit=25');
+                const lb = await lbPromise;
                 setBoard(Array.isArray(lb?.entries) ? lb.entries : []);
             } else {
                 setBoard([]);
             }
         } catch (e: any) {
             setError(e?.message || tAchievements('page.error'));
-        } finally {
             setLoading(false);
         }
     }, []);
