@@ -168,7 +168,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
         return (
             <div
                 onClick={() => openUser(user)}
-                className={`flex flex-col items-center justify-end bg-card/80 border border-border rounded-xl p-4 relative ${isAdmin ? 'cursor-pointer hover:bg-white/5' : ''} transition-all group w-full ${heightClass} ${ringClass}`}
+                className={`flex flex-col items-center justify-end bg-card/80 border border-border rounded-xl p-4 relative ${isAdmin ? 'cursor-pointer hover:bg-black/30 hover:border-plex/40' : ''} transition-all group w-full ${heightClass} ${ringClass}`}
             >
                 {isFirst && <div className="absolute -top-6 text-4xl animate-[crown-pulse_2s_ease-in-out_infinite]">👑</div>}
                 {!isFirst && <div className="absolute -top-4 text-3xl">{rank === 2 ? '🥈' : '🥉'}</div>}
@@ -196,14 +196,26 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
         );
     };
 
-    const chartTooltipStyle = {
-        backgroundColor: '#111315',
-        borderColor: '#ffffff20',
-        borderRadius: '8px',
-        color: '#fff',
-        fontSize: '12px',
-        fontWeight: 'bold' as const,
+    const chartTooltipStyle: React.CSSProperties = {
+        backgroundColor: 'rgba(17, 19, 21, 0.96)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        borderRadius: 8,
+        color: '#f5f5f5',
+        fontSize: 12,
+        fontWeight: 600,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+        padding: '8px 10px',
     };
+    const chartTooltipLabelStyle: React.CSSProperties = {
+        color: '#f5f5f5',
+        marginBottom: 4,
+        fontWeight: 700,
+    };
+    const chartTooltipItemStyle: React.CSSProperties = {
+        color: '#e5e7eb',
+        padding: 0,
+    };
+    const chartCursor = { fill: 'rgba(229, 160, 13, 0.12)' };
 
     const title = (
         <div className="flex flex-col gap-1">
@@ -359,7 +371,10 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                 <XAxis type="number" stroke="#ffffff40" fontSize={10} />
                                 <YAxis type="category" dataKey="name" width={72} stroke="#ffffff40" fontSize={10} />
                                 <RechartsTooltip
+                                    cursor={chartCursor}
                                     contentStyle={chartTooltipStyle}
+                                    labelStyle={chartTooltipLabelStyle}
+                                    itemStyle={chartTooltipItemStyle}
                                     formatter={(value: any) => [`${Number(value).toLocaleString()} XP`, 'XP']}
                                     labelFormatter={(_, payload: any) => payload?.[0]?.payload?.full || ''}
                                 />
@@ -384,7 +399,10 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                 <XAxis type="number" stroke="#ffffff40" fontSize={10} allowDecimals={false} />
                                 <YAxis type="category" dataKey="name" width={72} stroke="#ffffff40" fontSize={10} />
                                 <RechartsTooltip
+                                    cursor={chartCursor}
                                     contentStyle={chartTooltipStyle}
+                                    labelStyle={chartTooltipLabelStyle}
+                                    itemStyle={chartTooltipItemStyle}
                                     formatter={(value: any) => [`Level ${value}`, 'Level']}
                                     labelFormatter={(_, payload: any) => payload?.[0]?.payload?.full || ''}
                                 />
@@ -409,7 +427,10 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                 <XAxis type="number" stroke="#ffffff40" fontSize={10} allowDecimals={false} />
                                 <YAxis type="category" dataKey="name" width={72} stroke="#ffffff40" fontSize={10} />
                                 <RechartsTooltip
+                                    cursor={chartCursor}
                                     contentStyle={chartTooltipStyle}
+                                    labelStyle={chartTooltipLabelStyle}
+                                    itemStyle={chartTooltipItemStyle}
                                     formatter={(value: any) => [`${value} badges`, 'Badges']}
                                     labelFormatter={(_, payload: any) => payload?.[0]?.payload?.full || ''}
                                 />
