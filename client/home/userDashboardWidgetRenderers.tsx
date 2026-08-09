@@ -31,10 +31,13 @@ import { CollexionsHomeWidget } from '../collexions/CollexionsHomeWidget';
 import { ScannerHomeWidget } from '../scanner/ScannerHomeWidget';
 import { MediaAutomationHomeWidget } from '../media-automation/MediaAutomationHomeWidget';
 import { AchievementsHomeWidget } from '../achievements/AchievementsDashboard';
+import { tAchievements } from '../achievements/i18n';
 import { apiFetch } from '../shared/api';
+import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 
 const AchievementsHomeWidgetConnected: React.FC = () => {
     const [summary, setSummary] = useState<any>(null);
+    const [toasts, setToasts] = useState<ToastMessage[]>([]);
     useEffect(() => {
         let cancelled = false;
         let idleId: number | null = null;
@@ -43,7 +46,24 @@ const AchievementsHomeWidgetConnected: React.FC = () => {
         const load = () => {
             apiFetch('/api/achievements/me?view=summary')
                 .then((data) => {
-                    if (!cancelled && data?.homeWidgetEnabled !== false) setSummary(data);
+                    if (cancelled || data?.homeWidgetEnabled === false) {
+                        if (!cancelled) setSummary(null);
+                        return;
+                    }
+                    setSummary(data);
+                    const newly = Array.isArray(data?.newlyEarnedIds) ? data.newlyEarnedIds : [];
+                    if (newly.length === 1) {
+                        const badge = (data.recentEarned || data.earned || []).find((b: any) => b.id === newly[0]);
+                        setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || newly[0] }), 'success'));
+                    } else if (newly.length > 1) {
+                        setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
+                    }
+                    if (newly.length) {
+                        void apiFetch('/api/achievements/me/ack-unlocks', {
+                            method: 'POST',
+                            body: JSON.stringify({ ids: newly }),
+                        }).catch(() => null);
+                    }
                 })
                 .catch(() => {
                     if (!cancelled) setSummary(null);
@@ -67,13 +87,16 @@ const AchievementsHomeWidgetConnected: React.FC = () => {
     }, []);
     if (!summary) return null;
     return (
-        <AchievementsHomeWidget
-            summary={summary}
-            onOpen={() => {
-                window.history.pushState({}, '', portalUrl('/achievements'));
-                window.dispatchEvent(new PopStateEvent('popstate'));
-            }}
-        />
+        <>
+            <ToastContainer toasts={toasts} setToasts={setToasts} />
+            <AchievementsHomeWidget
+                summary={summary}
+                onOpen={() => {
+                    window.history.pushState({}, '', portalUrl('/achievements'));
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                }}
+            />
+        </>
     );
 };
 

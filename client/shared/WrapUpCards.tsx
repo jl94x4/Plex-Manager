@@ -91,6 +91,9 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             'wrapUp.totalXp': 'Total XP',
             'wrapUp.periodXp': 'Period XP',
             'wrapUp.periodXpSub': 'In selected range',
+            'wrapUp.periodXpVsPrior': '{delta} vs prior period',
+            'wrapUp.periodBadges': 'Badges this period',
+            'wrapUp.periodBadgesSub': 'Unlocked in range',
             'wrapUp.xpToNext': 'XP to Next Level',
             'wrapUp.badges': 'Badges',
             'wrapUp.latestBadge': 'Latest Badge',
@@ -267,6 +270,9 @@ const achievementsTranslateFallback = (key: string, vars?: Record<string, string
         'wrapUp.totalXp': 'Total XP',
         'wrapUp.periodXp': 'Period XP',
         'wrapUp.periodXpSub': 'In selected range',
+        'wrapUp.periodXpVsPrior': '{delta} vs prior period',
+        'wrapUp.periodBadges': 'Badges this period',
+        'wrapUp.periodBadgesSub': 'Unlocked in range',
         'wrapUp.xpToNext': 'XP to Next Level',
         'wrapUp.badges': 'Badges',
         'wrapUp.latestBadge': 'Latest Badge',
@@ -357,6 +363,9 @@ export const buildAchievementsWrapUpCards = (
     ];
 
     if (hasPeriodXp) {
+        const delta = me?.periodXpDelta;
+        const hasDelta = delta != null && Number.isFinite(Number(delta));
+        const d = hasDelta ? Number(delta) : 0;
         pinned.push({
             metric: 'Achievements Period XP',
             label: translate('wrapUp.periodXp'),
@@ -364,8 +373,24 @@ export const buildAchievementsWrapUpCards = (
             icon: Target,
             valueClassName: 'text-2xl font-black leading-none',
             value: periodXp.toLocaleString(),
-            subValue: translate('wrapUp.periodXpSub'),
+            subValue: hasDelta
+                ? translate('wrapUp.periodXpVsPrior', {
+                    delta: `${d > 0 ? '+' : ''}${d.toLocaleString()}`,
+                })
+                : translate('wrapUp.periodXpSub'),
         });
+        const periodBadges = Number(me?.periodBadgesEarned);
+        if (Number.isFinite(periodBadges) && periodBadges > 0) {
+            pinned.push({
+                metric: 'Achievements Period Badges',
+                label: translate('wrapUp.periodBadges'),
+                bgImage: FALLBACK_IMAGES.badges,
+                icon: Award,
+                valueClassName: 'text-2xl font-black leading-none',
+                value: periodBadges,
+                subValue: translate('wrapUp.periodBadgesSub'),
+            });
+        }
     }
 
     const pool: WrapUpCardDef[] = [

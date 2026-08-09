@@ -3800,6 +3800,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 achievementsDisabledBadgeIds: Array.isArray(config.achievementsDisabledBadgeIds)
                     ? config.achievementsDisabledBadgeIds.map(String).filter(Boolean)
                     : [],
+                achievementsMinPercentComplete: Math.min(100, Math.max(0, Number(config.achievementsMinPercentComplete) || 0)),
                 watchHistorySource: config.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex',
                 tautulliConfigured: !!(config.tautulliUrl && config.tautulliApiKey),
                 collexionsAutostart: !!config.collexionsAutostart,
@@ -3927,6 +3928,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 achievementsShowOnProfile: true,
                 achievementsXpWeights: null,
                 achievementsDisabledBadgeIds: [],
+                achievementsMinPercentComplete: 0,
                 watchHistorySource: 'plex',
                 tautulliConfigured: false,
                 collexionsAutostart: false,
@@ -3965,7 +3967,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -4401,6 +4403,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             : (Array.isArray(existingConfig.achievementsDisabledBadgeIds)
                 ? existingConfig.achievementsDisabledBadgeIds.map(String).filter(Boolean)
                 : []),
+        achievementsMinPercentComplete: achievementsMinPercentComplete !== undefined
+            ? Math.min(100, Math.max(0, Number(achievementsMinPercentComplete) || 0))
+            : Math.min(100, Math.max(0, Number(existingConfig.achievementsMinPercentComplete) || 0)),
         watchHistorySource: (() => {
             const raw = watchHistorySource !== undefined
                 ? watchHistorySource

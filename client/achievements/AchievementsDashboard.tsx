@@ -2,13 +2,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Award, Calendar, ChevronLeft, ChevronRight, Clapperboard, Clock, Disc3,
     Film, Flame, Lock, Music2, Sparkles, Trophy, X, Info, Medal, Target,
-    Gauge, PlayCircle, type LucideIcon,
+    Gauge, PlayCircle, ChevronDown, type LucideIcon,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { tAchievements } from './i18n';
+import { groupBadgesIntoFamilies, type BadgeFamily } from './badgeFamilies';
 
 const LEADERBOARD_PAGE_SIZE = 10;
 const LEADERBOARD_FETCH_LIMIT = 100;
@@ -80,6 +81,75 @@ export const BadgeTile: React.FC<{
                 {!earned && <Lock className="w-3.5 h-3.5 text-muted shrink-0 mt-0.5" />}
             </div>
         </button>
+    );
+};
+
+export const LadderFamilyCard: React.FC<{
+    family: BadgeFamily;
+    expanded: boolean;
+    onToggle: () => void;
+}> = ({ family, expanded, onToggle }) => {
+    const focus = family.focus;
+    const next = family.next;
+    const complete = family.earnedCount >= family.totalCount && family.totalCount > 0;
+    const progressPct = next ? Math.min(100, Number(next.progressPct) || 0) : 100;
+    return (
+        <div className={`rounded-xl border transition-colors ${complete ? 'border-plex/30 bg-plex/5' : rarityClass(focus?.rarity)}`}>
+            <button type="button" onClick={onToggle} className="w-full text-left p-3.5">
+                <div className="flex items-start gap-2.5">
+                    <span className="text-2xl leading-none">{family.icon}</span>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                                <p className="text-sm font-bold truncate">{family.label}</p>
+                                <p className="text-[11px] text-muted mt-0.5 line-clamp-1">
+                                    {complete
+                                        ? tAchievements('ladder.complete')
+                                        : next
+                                            ? tAchievements('ladder.nextAt', {
+                                                name: next.name || '',
+                                                threshold: next.threshold ?? 0,
+                                            })
+                                            : (focus?.description || '')}
+                                </p>
+                            </div>
+                            <ChevronDown className={`w-4 h-4 text-muted shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                        </div>
+                        <div className="mt-2 flex items-center justify-between gap-2 text-[10px] font-mono text-muted">
+                            <span>{tAchievements('ladder.tiers', { earned: family.earnedCount, total: family.totalCount })}</span>
+                            <span className="tabular-nums">
+                                {family.currentValue.toLocaleString()}
+                                {next ? ` / ${Number(next.threshold || 0).toLocaleString()}` : ''}
+                            </span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 rounded-full bg-black/40 overflow-hidden">
+                            <div className="h-full rounded-full bg-plex" style={{ width: `${progressPct}%` }} />
+                        </div>
+                    </div>
+                </div>
+            </button>
+            {expanded && (
+                <div className="px-3 pb-3 grid grid-cols-1 gap-1.5 border-t border-white/5 pt-2">
+                    {family.tiers.map((tier) => (
+                        <div
+                            key={tier.id}
+                            className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${
+                                tier.earned ? 'bg-plex/10 text-text' : 'bg-black/20 text-muted'
+                            }`}
+                        >
+                            <span>{tier.icon || '▫️'}</span>
+                            <span className="min-w-0 flex-1 truncate font-semibold">{tier.name}</span>
+                            <span className="font-mono tabular-nums shrink-0">{tier.threshold}</span>
+                            {tier.earned ? (
+                                <span className="text-plex text-[10px] font-bold shrink-0">{tAchievements('badge.earned')}</span>
+                            ) : (
+                                <Lock className="w-3 h-3 shrink-0 opacity-50" />
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
     );
 };
 
@@ -436,6 +506,8 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
     const [error, setError] = useState<string | null>(null);
     const [category, setCategory] = useState('all');
     const [showEarnedOnly, setShowEarnedOnly] = useState(false);
+    const [expandLadders, setExpandLadders] = useState(false);
+    const [expandedFamilies, setExpandedFamilies] = useState<Record<string, boolean>>({});
     const [breakdownOpen, setBreakdownOpen] = useState(false);
     const [optOutBusy, setOptOutBusy] = useState(false);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -503,6 +575,12 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
         if (showEarnedOnly) list = list.filter((b: any) => b.earned);
         return list;
     }, [data, category, showEarnedOnly]);
+
+    const families = useMemo(() => {
+        const grouped = groupBadgesIntoFamilies(badges);
+        if (!showEarnedOnly) return grouped;
+        return grouped.filter((f) => f.earnedCount > 0);
+    }, [badges, showEarnedOnly]);
 
     const boardPageCount = Math.max(1, Math.ceil(board.length / LEADERBOARD_PAGE_SIZE));
     const safeBoardPage = Math.min(boardPage, boardPageCount - 1);
@@ -734,13 +812,33 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                     <input type="checkbox" checked={showEarnedOnly} onChange={(e) => setShowEarnedOnly(e.target.checked)} />
                     {tAchievements('page.earnedOnly')}
                 </label>
+                <label className="flex items-center gap-2 text-xs text-muted">
+                    <input type="checkbox" checked={expandLadders} onChange={(e) => setExpandLadders(e.target.checked)} />
+                    {tAchievements('ladder.showAllBadges')}
+                </label>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {badges.map((badge: any) => (
-                    <BadgeTile key={badge.id} badge={badge} />
-                ))}
-            </div>
+            {expandLadders ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {badges.map((badge: any) => (
+                        <BadgeTile key={badge.id} badge={badge} />
+                    ))}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {families.map((family) => (
+                        <LadderFamilyCard
+                            key={family.key}
+                            family={family}
+                            expanded={!!expandedFamilies[family.key]}
+                            onToggle={() => setExpandedFamilies((prev) => ({
+                                ...prev,
+                                [family.key]: !prev[family.key],
+                            }))}
+                        />
+                    ))}
+                </div>
+            )}
 
             <XpBreakdownModal
                 open={breakdownOpen}
