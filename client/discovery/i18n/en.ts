@@ -117,6 +117,8 @@ export const en = {
         achievementsHint: 'All-time XP progress',
         level: 'Level',
         totalXp: 'Total XP',
+        periodXp: 'Period XP',
+        periodXpSub: 'In selected range',
         xpToNext: 'XP to Next Level',
         badges: 'Badges',
         latestBadge: 'Latest Badge',

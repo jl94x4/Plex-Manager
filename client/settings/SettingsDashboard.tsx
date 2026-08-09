@@ -490,6 +490,8 @@ export const SettingsDashboard: React.FC = () => {
     const [achievementsLeaderboardEnabled, setAchievementsLeaderboardEnabled] = useState(true);
     const [achievementsHomeWidgetEnabled, setAchievementsHomeWidgetEnabled] = useState(true);
     const [achievementsShowOnProfile, setAchievementsShowOnProfile] = useState(true);
+    const [achievementsXpWeights, setAchievementsXpWeights] = useState<Record<string, number>>({});
+    const [achievementsDisabledBadgeIds, setAchievementsDisabledBadgeIds] = useState<string[]>([]);
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
     const [tautulliConfigured, setTautulliConfigured] = useState(false);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
@@ -1192,6 +1194,16 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.achievementsShowOnProfile !== undefined) {
                 setAchievementsShowOnProfile(initialSettings.achievementsShowOnProfile !== false);
             }
+            if (initialSettings.achievementsXpWeights && typeof initialSettings.achievementsXpWeights === 'object') {
+                setAchievementsXpWeights({ ...initialSettings.achievementsXpWeights });
+            } else {
+                setAchievementsXpWeights({});
+            }
+            if (Array.isArray(initialSettings.achievementsDisabledBadgeIds)) {
+                setAchievementsDisabledBadgeIds(initialSettings.achievementsDisabledBadgeIds.map(String).filter(Boolean));
+            } else {
+                setAchievementsDisabledBadgeIds([]);
+            }
             if (initialSettings.watchHistorySource !== undefined) {
                 setWatchHistorySource(initialSettings.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex');
             }
@@ -1606,6 +1618,8 @@ export const SettingsDashboard: React.FC = () => {
             achievementsLeaderboardEnabled,
             achievementsHomeWidgetEnabled,
             achievementsShowOnProfile,
+            achievementsXpWeights: Object.keys(achievementsXpWeights).length ? achievementsXpWeights : null,
+            achievementsDisabledBadgeIds,
             watchHistorySource,
             mediaAutomation: {
                 ...mediaAutomation,
@@ -3102,6 +3116,10 @@ export const SettingsDashboard: React.FC = () => {
                                 watchHistorySource={watchHistorySource}
                                 setWatchHistorySource={setWatchHistorySource}
                                 tautulliConfigured={tautulliConfigured || !!(tautulliUrl && tautulliApiKey)}
+                                achievementsXpWeights={achievementsXpWeights}
+                                setAchievementsXpWeights={setAchievementsXpWeights}
+                                achievementsDisabledBadgeIds={achievementsDisabledBadgeIds}
+                                setAchievementsDisabledBadgeIds={setAchievementsDisabledBadgeIds}
                             />
                         </div>
                     )}

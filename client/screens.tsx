@@ -7344,7 +7344,8 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         let cancelled = false;
         const load = async () => {
             try {
-                const me = await apiFetch('/api/achievements/me').catch(() => null);
+                const daysQs = analyticsDays === 'all' ? 'all' : String(analyticsDays || 30);
+                const me = await apiFetch(`/api/achievements/me?view=summary&days=${encodeURIComponent(daysQs)}`).catch(() => null);
                 if (cancelled) return;
                 if (!me?.enabled) {
                     setWrapUpAchievements(null);
@@ -7377,6 +7378,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         sessionInfo?.session?.isAdmin,
         user,
         analyticsLoading,
+        analyticsDays,
         // All-time snapshot — only gate on presence, not each analytics object identity.
         !!analytics,
     ]);
@@ -10894,7 +10896,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             return;
         }
         let cancelled = false;
-        apiFetch('/api/achievements/me')
+        apiFetch('/api/achievements/me?view=summary')
             .then((data) => {
                 if (!cancelled) setProfileAchievements(data);
             })

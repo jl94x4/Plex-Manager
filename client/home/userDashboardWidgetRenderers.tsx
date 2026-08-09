@@ -41,7 +41,7 @@ const AchievementsHomeWidgetConnected: React.FC = () => {
         let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
         const load = () => {
-            apiFetch('/api/achievements/me')
+            apiFetch('/api/achievements/me?view=summary')
                 .then((data) => {
                     if (!cancelled && data?.homeWidgetEnabled !== false) setSummary(data);
                 })

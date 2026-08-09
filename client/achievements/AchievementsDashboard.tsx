@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Award, ChevronLeft, ChevronRight, Lock, Sparkles, Trophy, X, Info, Medal,
+    Award, ChevronLeft, ChevronRight, Lock, Sparkles, Trophy, X, Info, Medal, Target,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -179,10 +179,16 @@ export const AchievementsDashboard: React.FC = () => {
 
             const newly = Array.isArray(me?.newlyEarnedIds) ? me.newlyEarnedIds : [];
             if (newly.length === 1) {
-                const badge = (me.earned || []).find((b: any) => b.id === newly[0]);
+                const badge = (me.earned || me.badges || []).find((b: any) => b.id === newly[0]);
                 setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || newly[0] }), 'success'));
             } else if (newly.length > 1) {
                 setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
+            }
+            if (newly.length) {
+                void apiFetch('/api/achievements/me/ack-unlocks', {
+                    method: 'POST',
+                    body: JSON.stringify({ ids: newly }),
+                }).catch(() => null);
             }
 
             if (me?.leaderboardEnabled) {
@@ -299,6 +305,34 @@ export const AchievementsDashboard: React.FC = () => {
                     {tAchievements('page.toNext', { into: lp.xpIntoLevel || 0, need: lp.xpForNextLevel || 0 })}
                 </p>
             </div>
+
+            {Array.isArray(data?.nextUnlocks) && data.nextUnlocks.length > 0 && (
+                <div className="glass-card p-5 space-y-3">
+                    <h2 className="text-sm font-bold text-text uppercase tracking-widest flex items-center gap-2">
+                        <Target className="w-4 h-4 text-plex" />
+                        {tAchievements('page.nextUnlocks')}
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {data.nextUnlocks.map((badge: any) => (
+                            <div key={badge.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 min-w-0">
+                                <div className="flex items-start gap-2">
+                                    <span className="text-xl leading-none">{badge.icon || '🏅'}</span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-bold truncate">{badge.name}</p>
+                                        <p className="text-[11px] text-muted line-clamp-2 mt-0.5">{badge.description}</p>
+                                        <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
+                                            <div className="h-full rounded-full bg-plex" style={{ width: `${Math.min(100, Number(badge.progressPct) || 0)}%` }} />
+                                        </div>
+                                        <p className="mt-1 text-[10px] text-muted font-mono">
+                                            {badge.progress ?? 0} / {badge.threshold ?? 0}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {data?.leaderboardEnabled && (
                 <div className="glass-card p-5 space-y-4">
@@ -431,6 +465,7 @@ export const AchievementsHomeWidget: React.FC<{
     if (!summary) return null;
     const lp = summary.levelProgress || {};
     const recent = (summary.recentEarned || summary.earned?.slice?.(0, 6) || []) as any[];
+    const next = (Array.isArray(summary.nextUnlocks) ? summary.nextUnlocks.slice(0, 2) : []) as any[];
     return (
         <button
             type="button"
@@ -450,6 +485,23 @@ export const AchievementsHomeWidget: React.FC<{
             <div className="h-2 rounded-full bg-black/40 overflow-hidden mb-3">
                 <div className="h-full bg-plex rounded-full" style={{ width: `${lp.progressPct || 0}%` }} />
             </div>
+            {next.length > 0 && (
+                <div className="mb-3 space-y-1.5">
+                    <p className="text-[10px] uppercase tracking-widest text-muted font-bold">{tAchievements('home.next')}</p>
+                    {next.map((badge) => (
+                        <div key={badge.id} className="flex items-center gap-2 min-w-0">
+                            <span className="text-base leading-none">{badge.icon || '🏅'}</span>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-[11px] font-semibold truncate">{badge.name}</p>
+                                <div className="mt-0.5 h-1 rounded-full bg-black/40 overflow-hidden">
+                                    <div className="h-full bg-plex/80 rounded-full" style={{ width: `${Math.min(100, Number(badge.progressPct) || 0)}%` }} />
+                                </div>
+                            </div>
+                            <span className="text-[10px] text-muted font-mono shrink-0">{badge.progress ?? 0}/{badge.threshold ?? 0}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
             <div className="flex flex-wrap gap-1.5">
                 {recent.map((b) => (
                     <span key={b.id} className="w-8 h-8 rounded-lg border border-white/10 bg-black/30 flex items-center justify-center text-base" title={b.name}>

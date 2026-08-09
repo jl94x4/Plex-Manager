@@ -89,6 +89,8 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             'wrapUp.achievementsHint': 'All-time XP progress',
             'wrapUp.level': 'Level',
             'wrapUp.totalXp': 'Total XP',
+            'wrapUp.periodXp': 'Period XP',
+            'wrapUp.periodXpSub': 'In selected range',
             'wrapUp.xpToNext': 'XP to Next Level',
             'wrapUp.badges': 'Badges',
             'wrapUp.latestBadge': 'Latest Badge',
@@ -263,6 +265,8 @@ const achievementsTranslateFallback = (key: string, vars?: Record<string, string
     const fallbacks: Record<string, string> = {
         'wrapUp.level': 'Level',
         'wrapUp.totalXp': 'Total XP',
+        'wrapUp.periodXp': 'Period XP',
+        'wrapUp.periodXpSub': 'In selected range',
         'wrapUp.xpToNext': 'XP to Next Level',
         'wrapUp.badges': 'Badges',
         'wrapUp.latestBadge': 'Latest Badge',
@@ -299,7 +303,7 @@ const achievementsTranslateFallback = (key: string, vars?: Record<string, string
     return fallbacks[key] || key;
 };
 
-/** Always Level + Total XP; then 3 randomly chosen from the remaining pool (seeded). */
+/** Always Level + Total XP; pin Period XP when present; fill remaining from seeded pool. */
 export const buildAchievementsWrapUpCards = (
     me: any,
     opts: { seed?: number; rank?: number | null; t?: DiscoverTranslate } = {},
@@ -312,6 +316,13 @@ export const buildAchievementsWrapUpCards = (
     const latest = recent[0];
     const level = Number(me?.level) || 1;
     const xp = Number(me?.xp) || 0;
+    const periodXpRaw = me?.periodXp;
+    const periodDays = me?.periodDays;
+    const hasPeriodXp = periodXpRaw != null
+        && Number.isFinite(Number(periodXpRaw))
+        && periodDays != null
+        && String(periodDays) !== 'all';
+    const periodXp = hasPeriodXp ? Number(periodXpRaw) : 0;
     const earnedCount = Number(me?.earnedCount) || 0;
     const totalBadges = Number(me?.totalBadges) || 0;
     const into = Number(lp.xpIntoLevel) || 0;
@@ -344,6 +355,18 @@ export const buildAchievementsWrapUpCards = (
             subValue: translate('wrapUp.pctToLevel', { pct: progressPct, level: level + 1 }),
         },
     ];
+
+    if (hasPeriodXp) {
+        pinned.push({
+            metric: 'Achievements Period XP',
+            label: translate('wrapUp.periodXp'),
+            bgImage: FALLBACK_IMAGES.xp,
+            icon: Target,
+            valueClassName: 'text-2xl font-black leading-none',
+            value: periodXp.toLocaleString(),
+            subValue: translate('wrapUp.periodXpSub'),
+        });
+    }
 
     const pool: WrapUpCardDef[] = [
         {
@@ -454,8 +477,9 @@ export const buildAchievementsWrapUpCards = (
         });
     }
 
+    const rotateCount = Math.max(0, 5 - pinned.length);
     const seeded = shuffleWithSeed(pool, Number(opts.seed) || Date.now());
-    return [...pinned, ...seeded.slice(0, 3)];
+    return [...pinned, ...seeded.slice(0, rotateCount)];
 };
 
 type WrapUpCardGridProps = {

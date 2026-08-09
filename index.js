@@ -3793,6 +3793,12 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
                 achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
                 achievementsShowOnProfile: config.achievementsShowOnProfile !== false,
+                achievementsXpWeights: config.achievementsXpWeights && typeof config.achievementsXpWeights === 'object'
+                    ? config.achievementsXpWeights
+                    : null,
+                achievementsDisabledBadgeIds: Array.isArray(config.achievementsDisabledBadgeIds)
+                    ? config.achievementsDisabledBadgeIds.map(String).filter(Boolean)
+                    : [],
                 watchHistorySource: config.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex',
                 tautulliConfigured: !!(config.tautulliUrl && config.tautulliApiKey),
                 collexionsAutostart: !!config.collexionsAutostart,
@@ -3918,6 +3924,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 achievementsLeaderboardEnabled: true,
                 achievementsHomeWidgetEnabled: true,
                 achievementsShowOnProfile: true,
+                achievementsXpWeights: null,
+                achievementsDisabledBadgeIds: [],
                 watchHistorySource: 'plex',
                 tautulliConfigured: false,
                 collexionsAutostart: false,
@@ -3956,7 +3964,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -4382,6 +4390,16 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         achievementsShowOnProfile: achievementsShowOnProfile !== undefined
             ? !!achievementsShowOnProfile
             : (existingConfig.achievementsShowOnProfile !== false),
+        achievementsXpWeights: achievementsXpWeights !== undefined
+            ? (achievementsXpWeights && typeof achievementsXpWeights === 'object' ? achievementsXpWeights : null)
+            : (existingConfig.achievementsXpWeights && typeof existingConfig.achievementsXpWeights === 'object'
+                ? existingConfig.achievementsXpWeights
+                : null),
+        achievementsDisabledBadgeIds: achievementsDisabledBadgeIds !== undefined
+            ? (Array.isArray(achievementsDisabledBadgeIds) ? achievementsDisabledBadgeIds.map(String).filter(Boolean) : [])
+            : (Array.isArray(existingConfig.achievementsDisabledBadgeIds)
+                ? existingConfig.achievementsDisabledBadgeIds.map(String).filter(Boolean)
+                : []),
         watchHistorySource: (() => {
             const raw = watchHistorySource !== undefined
                 ? watchHistorySource
@@ -13960,6 +13978,7 @@ registerAchievementsRoutes(app, {
         return tags;
     },
     fetchTautulliUserHistoryItems,
+    fetchTautulliTimezone,
     resolvePortalAccountId: async (req, config) => {
         const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
         if (mediaServerType === 'plex') {

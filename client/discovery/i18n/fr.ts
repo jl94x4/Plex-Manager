@@ -119,6 +119,8 @@ export const fr: DeepPartial<EnCatalog> = {
         achievementsHint: 'Progression XP (tout le temps)',
         level: 'Niveau',
         totalXp: 'XP totale',
+        periodXp: 'XP de la période',
+        periodXpSub: 'Sur la plage sélectionnée',
         xpToNext: 'XP jusqu’au prochain niveau',
         badges: 'Badges',
         latestBadge: 'Dernier badge',
