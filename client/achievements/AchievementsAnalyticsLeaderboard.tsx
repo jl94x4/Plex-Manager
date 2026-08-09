@@ -16,6 +16,7 @@ type LeaderboardEntry = {
     level: number;
     earnedCount: number;
     isMe?: boolean;
+    thumb?: string | null;
 };
 
 type Props = {
@@ -50,7 +51,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
             setLoading(true);
             setError(null);
             try {
-                const data = await apiFetch('/api/achievements/leaderboard?limit=50');
+                const data = await apiFetch('/api/achievements/leaderboard?limit=100');
                 if (cancelled) return;
                 setEnabled(data?.enabled !== false);
                 setEntries(Array.isArray(data?.entries) ? data.entries : []);
@@ -78,7 +79,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
     );
 
     const top3 = byXp.slice(0, 3);
-    const rest = byXp.slice(3, 10);
+    const rest = byXp.slice(3, 12);
     const maxXp = Math.max(...byXp.map((u) => u.xp || 0), 1);
 
     const highlights = useMemo(() => {
@@ -129,7 +130,10 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
         [byBadges],
     );
 
-    const thumbFor = (username: string) => resolveThumbForUsername?.(username) ?? null;
+    const thumbFor = (entry: LeaderboardEntry | null | undefined) => {
+        if (!entry) return null;
+        return entry.thumb || resolveThumbForUsername?.(entry.username) || null;
+    };
 
     const getRankDelta = (username: string, currentRank: number) => {
         const prev = prevRef.current;
@@ -147,7 +151,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
         onUserClick({
             id: entry.accountId,
             username: entry.username,
-            thumb: thumbFor(entry.username),
+            thumb: thumbFor(entry),
         });
     };
 
@@ -170,7 +174,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                 {!isFirst && <div className="absolute -top-4 text-3xl">{rank === 2 ? '🥈' : '🥉'}</div>}
 
                 <img
-                    src={resolveAvatar(thumbFor(user.username), 80, 80)}
+                    src={resolveAvatar(thumbFor(user), 80, 80)}
                     alt={user.username}
                     onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
                     className={`rounded-full object-cover mb-2 border-2 ${isFirst ? 'w-20 h-20 border-yellow-500' : 'w-16 h-16 border-border'} bg-card`}
@@ -201,14 +205,21 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
         fontWeight: 'bold' as const,
     };
 
+    const title = (
+        <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-bold text-text uppercase tracking-wider flex items-center gap-2">
+                <Trophy className="text-plex w-5 h-5" /> Hall of Fame
+            </h2>
+            <p className="text-xs text-muted">Ranked by XP · levels · badges</p>
+        </div>
+    );
+
     if (loading) {
         return (
             <div className="w-full flex flex-col gap-4">
-                <h2 className="text-xl font-bold text-text uppercase tracking-wider flex items-center gap-2">
-                    <Trophy className="text-plex w-5 h-5" /> Achievements Leaderboard
-                </h2>
+                {title}
                 <div className="glass-card p-10 flex items-center justify-center gap-3 text-muted text-sm">
-                    <Loader2 className="w-5 h-5 animate-spin text-plex" /> Loading XP rankings…
+                    <Loader2 className="w-5 h-5 animate-spin text-plex" /> Syncing XP for all portal users…
                 </div>
             </div>
         );
@@ -217,9 +228,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
     if (error) {
         return (
             <div className="w-full flex flex-col gap-4">
-                <h2 className="text-xl font-bold text-text uppercase tracking-wider flex items-center gap-2">
-                    <Trophy className="text-plex w-5 h-5" /> Achievements Leaderboard
-                </h2>
+                {title}
                 <p className="text-sm text-red-300">{error}</p>
             </div>
         );
@@ -228,13 +237,11 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
     if (!enabled || !entries.length) {
         return (
             <div className="w-full flex flex-col gap-4">
-                <h2 className="text-xl font-bold text-text uppercase tracking-wider flex items-center gap-2">
-                    <Trophy className="text-plex w-5 h-5" /> Achievements Leaderboard
-                </h2>
+                {title}
                 <p className="text-sm text-muted">
                     {!enabled
                         ? 'Leaderboard is turned off in Settings → Achievements.'
-                        : 'No XP rankings yet — users need to open Achievements once so history can be scored.'}
+                        : 'No XP rankings yet — watch history will populate as soon as the leaderboard syncs.'}
                 </p>
             </div>
         );
@@ -242,32 +249,9 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
 
     return (
         <div className="w-full flex flex-col gap-6">
-            <h2 className="text-xl font-bold text-text uppercase tracking-wider flex items-center gap-2">
-                <Trophy className="text-plex w-5 h-5" /> Achievements Leaderboard
-            </h2>
+            {title}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {highlights.map((h) => {
-                    const Icon = h.icon;
-                    return (
-                        <button
-                            key={h.key}
-                            type="button"
-                            disabled={!h.user || !isAdmin}
-                            onClick={() => openUser(h.user)}
-                            className={`text-left rounded-xl border p-4 transition-colors ${h.accent} ${h.user && isAdmin ? 'hover:brightness-110 cursor-pointer' : 'cursor-default'}`}
-                        >
-                            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] font-bold opacity-80 mb-2">
-                                <Icon className="w-3.5 h-3.5" /> {h.label}
-                            </div>
-                            <p className="text-lg font-black truncate">{h.user?.username || '—'}</p>
-                            <p className="text-sm font-mono font-bold mt-0.5">{h.value}</p>
-                            {h.sub ? <p className="text-[11px] text-muted mt-0.5 font-mono">{h.sub}</p> : null}
-                        </button>
-                    );
-                })}
-            </div>
-
+            {/* Same podium + ranked list layout as the classic plays Hall of Fame */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {top3.length > 0 && (
                     <div className="lg:col-span-1 flex flex-col justify-center h-full pt-8 lg:pt-0">
@@ -295,9 +279,9 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                 <div className="absolute left-0 top-0 bottom-0 bg-plex/10" style={{ width: `${pct}%` }} />
                                 <div className="w-6 text-center font-bold text-muted group-hover:text-text z-10">#{rank}</div>
                                 <img
-                                    src={resolveAvatar(thumbFor(user.username), 40, 40)}
+                                    src={resolveAvatar(thumbFor(user), 40, 40)}
                                     onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
-                                    className="w-8 h-8 rounded-full border border-border z-10 bg-card flex-shrink-0"
+                                    className="w-8 h-8 rounded-full border border-border z-10 bg-card flex-shrink-0 object-cover"
                                     alt=""
                                 />
                                 <div className="flex-1 flex items-center gap-2 z-10 min-w-0">
@@ -314,19 +298,53 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                             {delta.type === 'down' && <span className="text-red-400 text-xs font-bold">↓{delta.val}</span>}
                                         </div>
                                     )}
-                                    <div className="min-w-[5.5rem] sm:min-w-[7.5rem] text-right font-mono text-xs sm:text-sm whitespace-nowrap">
+                                    <div className="min-w-[5.5rem] sm:min-w-[8rem] text-right font-mono text-xs sm:text-sm whitespace-nowrap">
                                         <span className="text-plex font-bold">{user.xp.toLocaleString()}</span>
                                         <span className="text-muted hidden sm:inline"> XP</span>
-                                        <span className="block text-[10px] text-muted">Lv {user.level} · {user.earnedCount}</span>
+                                        <span className="block text-[10px] text-muted">Lv {user.level} · {user.earnedCount} badges</span>
                                     </div>
                                 </div>
                             </div>
                         );
                     })}
-                    {!rest.length && (
+                    {!rest.length && byXp.length <= 3 && (
                         <p className="text-sm text-muted px-1">Only a few ranked members so far — podium above has the top spots.</p>
                     )}
                 </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {highlights.map((h) => {
+                    const Icon = h.icon;
+                    return (
+                        <button
+                            key={h.key}
+                            type="button"
+                            disabled={!h.user || !isAdmin}
+                            onClick={() => openUser(h.user)}
+                            className={`text-left rounded-xl border p-3.5 transition-colors ${h.accent} ${h.user && isAdmin ? 'hover:brightness-110 cursor-pointer' : 'cursor-default'}`}
+                        >
+                            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] font-bold opacity-80 mb-2">
+                                <Icon className="w-3.5 h-3.5" /> {h.label}
+                            </div>
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                {h.user ? (
+                                    <img
+                                        src={resolveAvatar(thumbFor(h.user), 40, 40)}
+                                        alt=""
+                                        onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
+                                        className="w-9 h-9 rounded-full border border-white/15 object-cover bg-card shrink-0"
+                                    />
+                                ) : null}
+                                <div className="min-w-0">
+                                    <p className="text-base font-black truncate">{h.user?.username || '—'}</p>
+                                    <p className="text-sm font-mono font-bold mt-0.5">{h.value}</p>
+                                    {h.sub ? <p className="text-[11px] text-muted mt-0.5 font-mono">{h.sub}</p> : null}
+                                </div>
+                            </div>
+                        </button>
+                    );
+                })}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

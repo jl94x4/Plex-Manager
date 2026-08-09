@@ -13151,6 +13151,36 @@ const fetchPlexAccountHistory = async (uri, config, accountID, { maxItems = 2500
     return historyItems;
 };
 
+/** Full-server Plex history (no account filter) — used by achievements portal-wide backfill. */
+const fetchAllPlexHistory = async (uri, config, { maxItems = 150000 } = {}) => {
+    const pageSize = 5000;
+    let historyItems = [];
+    let start = 0;
+
+    while (start < maxItems) {
+        const pageRes = await fetch(
+            `${uri}/status/sessions/history/all?X-Plex-Token=${config.plexToken}&sort=viewedAt:desc&includeGuids=1&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`,
+            { headers: plexClientHeaders(config.plexToken) },
+        ).then((r) => r.json()).catch(() => null);
+
+        const pageContainer = pageRes?.MediaContainer;
+        const pageItems = Array.isArray(pageContainer?.Metadata) ? pageContainer.Metadata : [];
+        if (pageItems.length === 0) break;
+
+        historyItems = historyItems.concat(pageItems);
+        start += pageItems.length;
+
+        const totalSize = Number(pageContainer.totalSize || 0);
+        if ((totalSize > 0 && start >= totalSize) || pageItems.length < pageSize) break;
+    }
+
+    if (historyItems.length >= maxItems) {
+        log(`Achievements history fetch reached safety cap (${maxItems}).`);
+    }
+
+    return historyItems;
+};
+
 app.get('/api/plex/analytics', requireAuth, requireMember, async (req, res) => {
     try {
         const statsData = await loadFile(ANALYTICS_CACHE_PATH, {});
@@ -13614,11 +13644,15 @@ registerAchievementsRoutes(app, {
     requireAdmin,
     loadFile,
     CONFIG_PATH,
+    USERS_PATH,
     resolveCurrentAdmin,
     getPlexConnectionUri,
     resolveLocalPlexAccountId,
     fetchPlexAccountHistory,
+    fetchAllPlexHistory,
+    fetchPlexServerAccounts,
     shouldObfuscateAnalyticsViewers,
+    log,
     resolvePortalAccountId: async (req, config) => {
         const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
         if (mediaServerType === 'plex') {
