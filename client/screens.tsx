@@ -6357,19 +6357,24 @@ const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | str
                         </div>
                     </div>
                 );
-            case 'Top Library':
-                const maxLibPlays = analytics.allLibraries?.[0]?.plays || 1;
+            case 'Top Library': {
+                const libs = (Array.isArray(analytics.allLibraries) && analytics.allLibraries.length)
+                    ? analytics.allLibraries
+                    : (Array.isArray(analytics.topLibraries) ? analytics.topLibraries : []);
+                const maxLibPlays = libs[0]?.plays || 1;
                 return (
                     <div className="flex flex-col items-center justify-center text-center p-6 max-h-[80vh] overflow-hidden flex-1">
                         <Layers className="w-16 h-16 text-plex mb-4 drop-shadow-lg shrink-0" />
-                        <h2 className="text-3xl font-black text-white mb-2 line-clamp-1 shrink-0">{analytics.favoriteLibrary || 'None'}</h2>
+                        <h2 className="text-3xl font-black text-white mb-2 line-clamp-1 shrink-0">{analytics.favoriteLibrary || libs[0]?.title || 'None'}</h2>
                         <p className="text-muted mb-6 uppercase tracking-widest text-xs font-bold shrink-0">Library Breakdown</p>
 
                         <div className="w-full flex flex-col gap-3 overflow-y-auto pr-2 pb-2 custom-scrollbar">
-                            {analytics.allLibraries?.map((lib: any, i: number) => {
+                            {libs.length === 0 ? (
+                                <p className="text-sm text-muted">No library metadata on these plays yet.</p>
+                            ) : libs.map((lib: any, i: number) => {
                                 const percent = (lib.plays / maxLibPlays) * 100;
                                 return (
-                                    <div key={i} className="flex flex-col gap-1 w-full text-left">
+                                    <div key={lib.id || i} className="flex flex-col gap-1 w-full text-left">
                                         <div className="flex justify-between items-end">
                                             <span className={`font-bold text-sm truncate pr-2 ${i === 0 ? 'text-plex' : 'text-gray-300'}`}>{i + 1}. {lib.title}</span>
                                             <span className={`font-black text-xs whitespace-nowrap ${i === 0 ? 'text-plex' : 'text-gray-400'}`}>{lib.plays} plays</span>
@@ -6378,11 +6383,12 @@ const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | str
                                             <div className={`h-full rounded-full transition-all duration-1000 ${i === 0 ? 'bg-plex shadow-[0_0_8px_rgba(229,160,13,0.8)]' : 'bg-gray-400'}`} style={{ width: `${percent}%` }}></div>
                                         </div>
                                     </div>
-                                )
+                                );
                             })}
                         </div>
                     </div>
                 );
+            }
             case 'Media Profile': {
                 const total = analytics.totalPlays || 1;
                 const movies = analytics.moviesCount || 0;
@@ -7276,7 +7282,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     const analyticsFetchGenRef = useRef(0);
     const analyticsLoadingGenRef = useRef(0);
 
-    const wrapUpClientCacheKey = (days: number | string) => `smp.wrapup.analytics.v1:${days}`;
+    const wrapUpClientCacheKey = (days: number | string) => `smp.wrapup.analytics.v2:${days}`;
     const readWrapUpClientCache = (days: number | string) => {
         try {
             const raw = sessionStorage.getItem(wrapUpClientCacheKey(days));

@@ -884,6 +884,66 @@ const personalAnalyticsDaysKey = (raw) => {
     const days = parseInt(String(raw || '30'), 10);
     return Number.isFinite(days) && days > 0 ? String(days) : '30';
 };
+
+/**
+ * Normalize library section identity from Plex/Tautulli history rows.
+ * PMS history sometimes omits librarySectionID; Tautulli may use section_id / section_title.
+ * Falls back to media-type buckets so Wrap-Up Top Library is never empty when plays exist.
+ */
+const resolveHistoryLibraryBucket = (item, sectionsMap = {}) => {
+    const rawId = item?.librarySectionID ?? item?.librarySectionId ?? item?.section_id ?? item?.library_id ?? null;
+    const id = rawId != null && !['', 'null', 'undefined'].includes(String(rawId).trim().toLowerCase())
+        ? String(rawId).trim()
+        : null;
+    const titled = String(
+        item?.librarySectionTitle
+        || item?.section_title
+        || item?.library_name
+        || item?.section_name
+        || '',
+    ).trim();
+    if (id) {
+        const mapped = sectionsMap[id]
+            || sectionsMap[Number(id)]
+            || (Number.isFinite(Number(id)) ? sectionsMap[String(Number(id))] : null)
+            || null;
+        return {
+            id,
+            title: titled || mapped || `Library ${id}`,
+        };
+    }
+    if (titled) return { id: `name:${titled.toLowerCase()}`, title: titled };
+    const type = String(item?.type || '').toLowerCase();
+    if (type === 'movie') return { id: 'type:movie', title: 'Movies' };
+    if (type === 'episode' || type === 'show') return { id: 'type:show', title: 'TV Shows' };
+    if (type === 'track' || type === 'album' || type === 'artist') return { id: 'type:music', title: 'Music' };
+    return null;
+};
+
+const bumpHistoryLibraryCount = (libraryCounts, item, sectionsMap = {}) => {
+    const bucket = resolveHistoryLibraryBucket(item, sectionsMap);
+    if (!bucket) return;
+    if (!libraryCounts[bucket.id]) {
+        libraryCounts[bucket.id] = { id: bucket.id, title: bucket.title, plays: 0 };
+    } else if (bucket.title && libraryCounts[bucket.id].title?.startsWith?.('Library ')) {
+        libraryCounts[bucket.id].title = bucket.title;
+    }
+    libraryCounts[bucket.id].plays++;
+};
+
+const buildLibrarySectionsMap = (sectionsRes) => {
+    const sectionsMap = {};
+    const dirs = sectionsRes?.MediaContainer?.Directory;
+    if (!Array.isArray(dirs)) return sectionsMap;
+    for (const section of dirs) {
+        if (section?.key == null || !section?.title) continue;
+        const key = String(section.key);
+        sectionsMap[key] = section.title;
+        const asNum = Number(section.key);
+        if (Number.isFinite(asNum)) sectionsMap[asNum] = section.title;
+    }
+    return sectionsMap;
+};
 import {
     CONFIG_DIR,
     CONFIG_PATH,
@@ -12934,11 +12994,7 @@ const aggregateAnalyticsWindow = (historyItems, { afterTs = 0, beforeTs = null }
             userCounts[item.accountID].plays++;
         }
 
-        if (item.librarySectionID) {
-            const libTitle = sectionsMap[item.librarySectionID] || `Library ${item.librarySectionID}`;
-            if (!libraryCounts[item.librarySectionID]) libraryCounts[item.librarySectionID] = { id: item.librarySectionID, title: libTitle, plays: 0 };
-            libraryCounts[item.librarySectionID].plays++;
-        }
+        bumpHistoryLibraryCount(libraryCounts, item, sectionsMap);
 
         const contentKey = item.type === 'episode' ? (item.grandparentKey || item.parentKey || item.ratingKey) : item.type === 'track' ? (item.parentKey || item.grandparentKey || item.ratingKey) : item.ratingKey;
         const contentTitle = item.type === 'episode' ? (item.grandparentTitle || item.parentTitle || item.title) : item.type === 'track' ? (item.parentTitle || item.grandparentTitle || item.title) : item.title;
@@ -13574,10 +13630,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             return { totalPlays: 0, topLibraries: [], topWatched: [], topMusic: [], recentHistory: [] };
         }
 
-        const sectionsMap = {};
-        if (sectionsRes && sectionsRes.MediaContainer && sectionsRes.MediaContainer.Directory) {
-            sectionsRes.MediaContainer.Directory.forEach(s => sectionsMap[s.key] = s.title);
-        }
+        const sectionsMap = buildLibrarySectionsMap(sectionsRes);
 
         let totalPlays = 0;
         const libraryCounts = {};
@@ -13630,11 +13683,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             else if (item.type === 'episode') showsCount++;
             else if (item.type === 'track') musicCount++;
 
-            if (item.librarySectionID) {
-                const libTitle = sectionsMap[item.librarySectionID] || `Library ${item.librarySectionID}`;
-                if (!libraryCounts[item.librarySectionID]) libraryCounts[item.librarySectionID] = { id: item.librarySectionID, title: libTitle, plays: 0 };
-                libraryCounts[item.librarySectionID].plays++;
-            }
+            bumpHistoryLibraryCount(libraryCounts, item, sectionsMap);
 
             const rawContentKey = item.type === 'episode'
                 ? (item.grandparentRatingKey || item.grandparentKey || item.parentKey || item.ratingKey)
@@ -13924,7 +13973,7 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         }
 
         const daysKey = personalAnalyticsDaysKey(req.query.days);
-        const cacheKey = `v3:${accountID}:${daysKey}`;
+        const cacheKey = `v4:${accountID}:${daysKey}`;
         const lite = String(req.query.lite || '') === '1' || String(req.query.fields || '') === 'recent';
         const cached = !lite ? personalAnalyticsCache.get(cacheKey) : null;
         const cacheFresh = cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS;
@@ -14274,10 +14323,7 @@ app.get('/api/plex/analytics/user/:id', requireAdmin, async (req, res) => {
             return res.json({ totalPlays: 0, topLibraries: [], topWatched: [], topMusic: [], recentHistory: [] });
         }
 
-        const sectionsMap = {};
-        if (sectionsRes && sectionsRes.MediaContainer && sectionsRes.MediaContainer.Directory) {
-            sectionsRes.MediaContainer.Directory.forEach(s => sectionsMap[s.key] = s.title);
-        }
+        const sectionsMap = buildLibrarySectionsMap(sectionsRes);
 
         let cutoffDate = 0;
         if (req.query.days && req.query.days !== 'all') {
@@ -14319,11 +14365,7 @@ app.get('/api/plex/analytics/user/:id', requireAdmin, async (req, res) => {
             }
 
             // Library aggregation
-            if (item.librarySectionID) {
-                const libTitle = sectionsMap[item.librarySectionID] || `Library ${item.librarySectionID}`;
-                if (!libraryCounts[item.librarySectionID]) libraryCounts[item.librarySectionID] = { id: item.librarySectionID, title: libTitle, plays: 0 };
-                libraryCounts[item.librarySectionID].plays++;
-            }
+            bumpHistoryLibraryCount(libraryCounts, item, sectionsMap);
 
             // Content aggregation
             const contentKey = item.type === 'episode' ? (item.grandparentKey || item.parentKey || item.ratingKey) : item.type === 'track' ? (item.parentKey || item.grandparentKey || item.ratingKey) : item.ratingKey;
@@ -16894,10 +16936,7 @@ async function calculateAnalyticsStats() {
             accountsRes.MediaContainer.Account.forEach(acc => accountsMap[acc.id] = { name: acc.name, thumb: acc.thumb });
         }
 
-        const sectionsMap = {};
-        if (sectionsRes && sectionsRes.MediaContainer && sectionsRes.MediaContainer.Directory) {
-            sectionsRes.MediaContainer.Directory.forEach(s => sectionsMap[s.key] = s.title);
-        }
+        const sectionsMap = buildLibrarySectionsMap(sectionsRes);
 
         const devicesMap = {};
         if (devicesRes && devicesRes.MediaContainer && devicesRes.MediaContainer.Device) {
