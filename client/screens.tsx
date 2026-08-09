@@ -7276,17 +7276,48 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     const analyticsFetchGenRef = useRef(0);
     const analyticsLoadingGenRef = useRef(0);
 
+    const wrapUpClientCacheKey = (days: number | string) => `smp.wrapup.analytics.v1:${days}`;
+    const readWrapUpClientCache = (days: number | string) => {
+        try {
+            const raw = sessionStorage.getItem(wrapUpClientCacheKey(days));
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed?.payload || typeof parsed.at !== 'number') return null;
+            // Keep session warm for up to 6 hours; server SWR still refreshes.
+            if (Date.now() - parsed.at > 6 * 60 * 60 * 1000) return null;
+            return parsed.payload;
+        } catch {
+            return null;
+        }
+    };
+    const writeWrapUpClientCache = (days: number | string, payload: any) => {
+        try {
+            if (!payload || payload.error) return;
+            sessionStorage.setItem(wrapUpClientCacheKey(days), JSON.stringify({ at: Date.now(), payload }));
+        } catch {
+            /* quota / private mode */
+        }
+    };
+
     const fetchAnalytics = useCallback(async ({ silent = false } = {}) => {
         if (!sessionInfo?.session?.isAdmin && !user) {
             if (!silent) setAnalyticsLoading(false);
             return;
         }
         const gen = ++analyticsFetchGenRef.current;
+        const cachedLocal = !isJellyfinPortal ? readWrapUpClientCache(analyticsDays) : null;
         try {
             if (!silent) {
                 analyticsLoadingGenRef.current = gen;
-                setAnalyticsLoading(true);
-                setAnalyticsError(null);
+                if (cachedLocal) {
+                    // Instant paint from last visit while network refresh runs.
+                    setAnalytics(cachedLocal);
+                    setAnalyticsLoading(false);
+                    setAnalyticsError(null);
+                } else {
+                    setAnalyticsLoading(true);
+                    setAnalyticsError(null);
+                }
             }
             const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
             const timeoutId = controller
@@ -7302,6 +7333,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
             }
             if (gen !== analyticsFetchGenRef.current) return;
             setAnalytics(res);
+            writeWrapUpClientCache(analyticsDays, res);
             if (!silent) {
                 setTopContentPage(0);
                 setRecentHistoryPage(0);
@@ -7310,13 +7342,16 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         } catch (e: any) {
             if (gen !== analyticsFetchGenRef.current) return;
             if (!silent) {
-                const aborted = e?.name === 'AbortError' || /aborted/i.test(String(e?.message || ''));
-                const message = aborted
-                    ? 'Wrap-Up timed out — try again in a moment.'
-                    : (e?.message || 'Failed to load your analytics');
-                setAnalyticsError(message);
-                setAnalytics(null);
-                setToast({ id: Date.now(), message, type: 'error' });
+                // Keep stale client cache visible if the refresh failed.
+                if (!cachedLocal) {
+                    const aborted = e?.name === 'AbortError' || /aborted/i.test(String(e?.message || ''));
+                    const message = aborted
+                        ? 'Wrap-Up timed out — try again in a moment.'
+                        : (e?.message || 'Failed to load your analytics');
+                    setAnalyticsError(message);
+                    setAnalytics(null);
+                    setToast({ id: Date.now(), message, type: 'error' });
+                }
             }
         } finally {
             // Clear loading for the request that turned it on, even if a silent poll superseded it.
@@ -7827,15 +7862,15 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                 renderWrapUp={() => (
                     <>
                         {/* Personal Wrap-Up */}
-                        {(sessionInfo.session.isAdmin || user) && analyticsLoading && (
+                        {(sessionInfo.session.isAdmin || user) && analyticsLoading && !analytics && (
                             <WrapUpCardsSkeleton />
                         )}
-                        {(sessionInfo.session.isAdmin || user) && !analyticsLoading && analyticsError && (
+                        {(sessionInfo.session.isAdmin || user) && analyticsError && !analytics && (
                             <div className="glass-card p-4 md:p-5 shadow-xl border border-red-500/30 bg-red-500/5">
                                 <p className="text-red-300 text-sm font-medium">{analyticsError}</p>
                             </div>
                         )}
-                        {(sessionInfo.session.isAdmin || user) && !analyticsLoading && analytics && (
+                        {(sessionInfo.session.isAdmin || user) && analytics && (
                             <div className="glass-card p-4 md:p-5 shadow-xl">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 md:mb-4">
                                     <h3 className="text-xl font-bold text-text">{t('wrapUp.title')}</h3>

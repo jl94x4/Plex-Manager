@@ -878,6 +878,7 @@ const plexMetadataCache = new Map();
 // Personal Wrap-Up (`/api/plex/analytics/me`) — serve last payload instantly while refreshing.
 const PERSONAL_ANALYTICS_CACHE_MS = 10 * 60 * 1000;
 const personalAnalyticsCache = new Map(); // key -> { at, payload }
+const personalAnalyticsRefreshJobs = new Map(); // key -> Promise
 const personalAnalyticsDaysKey = (raw) => {
     if (raw === 'all') return 'all';
     const days = parseInt(String(raw || '30'), 10);
@@ -13508,83 +13509,37 @@ app.get('/api/plex/analytics/day', requireAuth, requireMember, async (req, res) 
     }
 });
 
-app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) => {
-    try {
-        const config = await loadFile(CONFIG_PATH, null);
-        if (!config || !config.plexToken || !config.serverIdentifier) return res.status(503).json({ error: 'Plex not configured' });
-
-        const uri = await getPlexConnectionUri(config);
-        if (!uri) return res.status(503).json({ error: 'Cannot connect to Plex' });
-
-        req.user.isAdmin = await resolveCurrentAdmin(req.user, config);
-        const accountID = await resolveLocalPlexAccountId(config, uri, req.user);
-
-        if (!accountID) {
-            return res.json({ totalPlays: 0, topLibraries: [], topWatched: [], topMusic: [], recentHistory: [] });
-        }
-
-        const daysKey = personalAnalyticsDaysKey(req.query.days);
-        const cacheKey = `v2:${accountID}:${daysKey}`;
-        const lite = String(req.query.lite || '') === '1' || String(req.query.fields || '') === 'recent';
-        const cached = !lite ? personalAnalyticsCache.get(cacheKey) : null;
-        const cacheFresh = cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS;
-
-        // Dynamic theme only needs a recent poster — one history page, no full wrap-up work.
-        if (lite) {
-            const useTautulliHistory = isTautulliWatchHistorySource(config);
-            const { list: plexAccountsForHistory } = await fetchPlexServerAccounts(uri, config);
-            const plexAccountNameForHistory = plexAccountsForHistory.find((a) => String(a.id) === String(accountID))?.name || null;
-            const portalUserForHistory = (await loadFile(USERS_PATH, [])).find((u) => String(u.plexAccountId || '') === String(accountID));
-            let historyItems = [];
-            if (useTautulliHistory) {
-                historyItems = await fetchTautulliUserHistoryItems(config, {
-                    username: req.user?.username || portalUserForHistory?.username,
-                    email: req.user?.email || portalUserForHistory?.email,
-                    plexAccountName: plexAccountNameForHistory,
-                    maxItems: 40,
-                });
-                if (!historyItems.length) {
-                    historyItems = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 40 });
-                }
-            } else {
-                historyItems = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 40 });
-            }
-            const recentHistory = historyItems.slice(0, 20).map((item) => {
-                const thumb = item.type === 'episode'
-                    ? (item.grandparentThumb || item.parentThumb || item.thumb)
-                    : item.type === 'track'
-                        ? (item.parentThumb || item.grandparentThumb || item.thumb)
-                        : item.thumb;
-                return {
-                    title: item.type === 'episode' ? (item.grandparentTitle || item.parentTitle || item.title) : item.type === 'track' ? (item.parentTitle || item.grandparentTitle || item.title) : item.title,
-                    episodeTitle: item.type === 'episode' || item.type === 'track' ? item.title : null,
-                    viewedAt: item.viewedAt,
-                    thumb,
-                    thumbUrl: thumb ? plexImageUrl(thumb) : null,
-                    type: item.type,
-                };
-            });
-            return res.json({ recentHistory, lite: true });
-        }
-
-        if (cacheFresh) {
-            return res.json({ ...cached.payload, fromCache: true });
-        }
-
+const buildPersonalWrapUpAnalyticsPayload = async ({
+    req,
+    config,
+    uri,
+    accountID,
+    daysKey,
+}) => {
         const useTautulliHistory = isTautulliWatchHistorySource(config);
         const { list: plexAccountsForHistory } = await fetchPlexServerAccounts(uri, config);
         const plexAccountNameForHistory = plexAccountsForHistory.find((a) => String(a.id) === String(accountID))?.name || null;
         const portalUserForHistory = (await loadFile(USERS_PATH, [])).find((u) => String(u.plexAccountId || '') === String(accountID));
 
-        // Heatmap always needs ~365d; period stats filter later. Never scrape all-time.
+        // Scope history to the selected Wrap-Up period (heatmap title already matches the days filter).
+        // Previously Math.min(yearAgo, cutoff) always pulled ~365d even for Last 7 Days.
         const yearAgo = Math.floor(Date.now() / 1000) - (365 * 24 * 60 * 60);
         let cutoffDate = 0;
         if (daysKey !== 'all') {
             const days = parseInt(daysKey, 10) || 30;
             cutoffDate = Math.floor(Date.now() / 1000) - (days * 24 * 60 * 60);
         }
-        const historyAfterUnixSec = daysKey === 'all' ? 0 : Math.min(yearAgo, cutoffDate || yearAgo);
-        const historyMaxItems = daysKey === 'all' ? 60000 : 40000;
+        const historyAfterUnixSec = daysKey === 'all' ? yearAgo : (cutoffDate || yearAgo);
+        const daysNum = daysKey === 'all' ? 365 : (parseInt(daysKey, 10) || 30);
+        const historyMaxItems = daysKey === 'all'
+            ? 60000
+            : daysNum <= 7
+                ? 2500
+                : daysNum <= 30
+                    ? 8000
+                    : daysNum <= 90
+                        ? 16000
+                        : 30000;
 
         let historyItems = [];
         if (useTautulliHistory) {
@@ -13611,9 +13566,7 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         const sectionsRes = await fetch(`${uri}/library/sections?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
 
         if (!historyItems.length) {
-            const emptyPayload = { totalPlays: 0, topLibraries: [], topWatched: [], topMusic: [], recentHistory: [] };
-            personalAnalyticsCache.set(cacheKey, { at: Date.now(), payload: emptyPayload });
-            return res.json(emptyPayload);
+            return { totalPlays: 0, topLibraries: [], topWatched: [], topMusic: [], recentHistory: [] };
         }
 
         const sectionsMap = {};
@@ -13750,7 +13703,12 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
             return c;
         });
         try {
-            topWatched = await hydratePersonalTopWatchedItems(uri, config, config.serverIdentifier, topWatched);
+            const hydratePromise = hydratePersonalTopWatchedItems(uri, config, config.serverIdentifier, topWatched);
+            topWatched = await Promise.race([
+                hydratePromise,
+                new Promise((resolve) => setTimeout(() => resolve(topWatched), 1200)),
+            ]);
+            void hydratePromise.catch(() => null);
         } catch (e) {
             log(`Most Watched metadata hydrate failed: ${e.message}`);
         }
@@ -13940,8 +13898,108 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
                 return h;
             })
         };
+
+        return payload;
+};
+
+
+app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, null);
+        if (!config || !config.plexToken || !config.serverIdentifier) return res.status(503).json({ error: 'Plex not configured' });
+
+        const uri = await getPlexConnectionUri(config);
+        if (!uri) return res.status(503).json({ error: 'Cannot connect to Plex' });
+
+        req.user.isAdmin = await resolveCurrentAdmin(req.user, config);
+        const accountID = await resolveLocalPlexAccountId(config, uri, req.user);
+
+        if (!accountID) {
+            return res.json({ totalPlays: 0, topLibraries: [], topWatched: [], topMusic: [], recentHistory: [] });
+        }
+
+        const daysKey = personalAnalyticsDaysKey(req.query.days);
+        const cacheKey = `v3:${accountID}:${daysKey}`;
+        const lite = String(req.query.lite || '') === '1' || String(req.query.fields || '') === 'recent';
+        const cached = !lite ? personalAnalyticsCache.get(cacheKey) : null;
+        const cacheFresh = cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS;
+
+        // Dynamic theme only needs a recent poster — one history page, no full wrap-up work.
+        if (lite) {
+            const useTautulliHistory = isTautulliWatchHistorySource(config);
+            const { list: plexAccountsForHistory } = await fetchPlexServerAccounts(uri, config);
+            const plexAccountNameForHistory = plexAccountsForHistory.find((a) => String(a.id) === String(accountID))?.name || null;
+            const portalUserForHistory = (await loadFile(USERS_PATH, [])).find((u) => String(u.plexAccountId || '') === String(accountID));
+            let historyItems = [];
+            if (useTautulliHistory) {
+                historyItems = await fetchTautulliUserHistoryItems(config, {
+                    username: req.user?.username || portalUserForHistory?.username,
+                    email: req.user?.email || portalUserForHistory?.email,
+                    plexAccountName: plexAccountNameForHistory,
+                    maxItems: 40,
+                });
+                if (!historyItems.length) {
+                    historyItems = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 40 });
+                }
+            } else {
+                historyItems = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 40 });
+            }
+            const recentHistory = historyItems.slice(0, 20).map((item) => {
+                const thumb = item.type === 'episode'
+                    ? (item.grandparentThumb || item.parentThumb || item.thumb)
+                    : item.type === 'track'
+                        ? (item.parentThumb || item.grandparentThumb || item.thumb)
+                        : item.thumb;
+                return {
+                    title: item.type === 'episode' ? (item.grandparentTitle || item.parentTitle || item.title) : item.type === 'track' ? (item.parentTitle || item.grandparentTitle || item.title) : item.title,
+                    episodeTitle: item.type === 'episode' || item.type === 'track' ? item.title : null,
+                    viewedAt: item.viewedAt,
+                    thumb,
+                    thumbUrl: thumb ? plexImageUrl(thumb) : null,
+                    type: item.type,
+                };
+            });
+            return res.json({ recentHistory, lite: true });
+        }
+
+        if (cacheFresh) {
+            return res.json({ ...cached.payload, fromCache: true, stale: false });
+        }
+
+        // Stale-while-revalidate: paint instantly from last payload while we rebuild.
+        if (cached?.payload) {
+            res.json({ ...cached.payload, fromCache: true, stale: true });
+            if (!personalAnalyticsRefreshJobs.has(cacheKey)) {
+                const job = (async () => {
+                    try {
+                        const fresh = await buildPersonalWrapUpAnalyticsPayload({
+                            req,
+                            config,
+                            uri,
+                            accountID,
+                            daysKey,
+                        });
+                        personalAnalyticsCache.set(cacheKey, { at: Date.now(), payload: fresh });
+                    } catch (e) {
+                        log(`Personal analytics background refresh failed: ${e.message}`);
+                    } finally {
+                        personalAnalyticsRefreshJobs.delete(cacheKey);
+                    }
+                })();
+                personalAnalyticsRefreshJobs.set(cacheKey, job);
+            }
+            return;
+        }
+
+        const payload = await buildPersonalWrapUpAnalyticsPayload({
+            req,
+            config,
+            uri,
+            accountID,
+            daysKey,
+        });
         personalAnalyticsCache.set(cacheKey, { at: Date.now(), payload });
-        res.json(payload);
+        return res.json(payload);
     } catch (e) {
         log(`Error fetching personal analytics: ${e.message}`);
         res.status(500).json({ error: 'Analytics error' });
