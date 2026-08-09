@@ -3,12 +3,21 @@ import {
     Award, ChevronLeft, ChevronRight, Lock, Sparkles, Trophy, X, Info, Medal,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
+import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { tAchievements } from './i18n';
 
 const LEADERBOARD_PAGE_SIZE = 10;
 const LEADERBOARD_FETCH_LIMIT = 100;
+
+const resolveLeaderboardAvatar = (thumb: string | null | undefined, width = 64, height = 64) => {
+    if (!thumb) return logoUrl();
+    if (thumb.startsWith('http://') || thumb.startsWith('https://') || thumb.startsWith('/api/')) {
+        return resolvePortalAssetUrl(thumb);
+    }
+    return portalUrl(`/api/plex/image?path=${encodeURIComponent(thumb)}&width=${width}&height=${height}`);
+};
 
 const rarityClass = (rarity: string) => {
     if (rarity === 'legendary') return 'border-amber-400/50 bg-amber-500/10 text-amber-100';
@@ -316,16 +325,28 @@ export const AchievementsDashboard: React.FC = () => {
                                             entry.isMe ? 'border-plex/50 bg-plex/10' : 'border-white/5 bg-black/20'
                                         }`}
                                     >
-                                        <p className="font-mono font-bold text-plex text-sm">#{entry.rank}</p>
-                                        <p className="text-sm font-bold truncate mt-0.5">
-                                            {entry.username}{entry.isMe ? ' (you)' : ''}
-                                        </p>
-                                        <p className="text-[10px] text-muted font-mono mt-1 leading-snug">
-                                            Lv {entry.level} · {Number(entry.xp).toLocaleString()} XP
-                                        </p>
-                                        <p className="text-[10px] text-muted font-mono">
-                                            {entry.earnedCount} badges
-                                        </p>
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                            <img
+                                                src={resolveLeaderboardAvatar(entry.thumb, 72, 72)}
+                                                alt=""
+                                                className={`w-10 h-10 rounded-full object-cover bg-black/40 shrink-0 border ${
+                                                    entry.isMe ? 'border-plex/60' : 'border-white/10'
+                                                }`}
+                                                onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-mono font-bold text-plex text-sm">#{entry.rank}</p>
+                                                <p className="text-sm font-bold truncate mt-0.5">
+                                                    {entry.username}{entry.isMe ? ' (you)' : ''}
+                                                </p>
+                                                <p className="text-[10px] text-muted font-mono mt-1 leading-snug truncate">
+                                                    Lv {entry.level} · {Number(entry.xp).toLocaleString()} XP
+                                                </p>
+                                                <p className="text-[10px] text-muted font-mono truncate">
+                                                    {entry.earnedCount} badges
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
