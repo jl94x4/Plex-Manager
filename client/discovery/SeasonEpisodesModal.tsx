@@ -38,16 +38,28 @@ type Props = {
     onClose: () => void;
 };
 
-const formatAirDate = (value?: string | null) => {
+const formatAirDate = (value?: string | null, locale = 'en') => {
     if (!value) return null;
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return null;
-    return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    return parsed.toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const episodeCode = (seasonNumber?: number, episodeNumber?: number) => {
     if (seasonNumber == null || episodeNumber == null) return null;
     return `S${String(seasonNumber).padStart(2, '0')}E${String(episodeNumber).padStart(2, '0')}`;
+};
+
+const formatSeasonName = (
+    name: string | undefined,
+    seasonNumber: number,
+    t: ReturnType<typeof useDiscoverI18n>['t'],
+) => {
+    const raw = String(name || '').trim();
+    if (raw === 'Specials') return t('common.specials');
+    const seasonMatch = raw.match(/^Season\s+(\d+)$/i);
+    if (seasonMatch) return t('common.seasonN', { number: seasonMatch[1] });
+    return raw || t('common.seasonN', { number: seasonNumber });
 };
 
 export const SeasonEpisodesModal: React.FC<Props> = ({
@@ -113,7 +125,7 @@ export const SeasonEpisodesModal: React.FC<Props> = ({
     const episodes = Array.isArray(season?.episodes) ? season.episodes : [];
     const headerPoster = season?.posterPath || showPosterPath;
     const headerPosterUrl = resolveTmdbImageUrl(headerPoster, 'w185');
-    const displaySeasonName = season?.name || seasonName;
+    const displaySeasonName = formatSeasonName(season?.name || seasonName, seasonNumber, t);
     const totalEpisodes = episodes.length || episodeCount || 0;
 
     return (
@@ -191,7 +203,7 @@ export const SeasonEpisodesModal: React.FC<Props> = ({
                             <div className="divide-y divide-border/40">
                                 {episodes.map((episode) => {
                                     const code = episodeCode(episode.seasonNumber ?? seasonNumber, episode.episodeNumber);
-                                    const airDate = formatAirDate(episode.airDate);
+                                    const airDate = formatAirDate(episode.airDate, locale);
                                     const stillUrl = episode.stillPath
                                         ? `https://image.tmdb.org/t/p/w300${episode.stillPath}`
                                         : '';

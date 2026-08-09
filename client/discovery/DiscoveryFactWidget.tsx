@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Lightbulb, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { usePoll } from '../shared/usePoll';
+import { useDiscoverI18n } from './i18n';
 
 type FactResponse = {
     facts?: string[];
@@ -61,6 +62,7 @@ export const DiscoveryFactWidget: React.FC<{
     mediaType: 'movie' | 'tv';
     mediaId: number;
 }> = ({ mediaType, mediaId }) => {
+    const { t } = useDiscoverI18n();
     const [facts, setFacts] = useState<string[]>([]);
     const [index, setIndex] = useState(0);
     const [loading, setLoading] = useState(true);
@@ -131,7 +133,7 @@ export const DiscoveryFactWidget: React.FC<{
             </div>
             <div className="flex-1 min-w-0 flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-plex">Did you know?</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-plex">{t('facts.didYouKnow')}</span>
                     {facts.length > 1 && (
                         <button
                             type="button"
@@ -139,7 +141,7 @@ export const DiscoveryFactWidget: React.FC<{
                             className="inline-flex items-center gap-1 text-[10px] font-bold text-muted hover:text-plex transition-colors"
                         >
                             <RefreshCw className="w-3 h-3" />
-                            Another
+                            {t('facts.another')}
                         </button>
                     )}
                 </div>

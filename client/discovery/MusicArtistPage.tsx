@@ -4,7 +4,7 @@ import { apiFetch } from '../shared/api';
 import { resolvePortalAssetUrl } from '../shared/basePath';
 import { MusicRequestModal } from './MusicRequestModal';
 import { discoveryTheme } from './discoveryThemeClasses';
-import { translateDiscoverStatus, useDiscoverI18n } from './i18n';
+import { translateDiscoverAvailabilityDetail, translateDiscoverStatus, useDiscoverI18n } from './i18n';
 import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { mediaStatusPanelClass } from './DiscoverStatusOverlay';
 
@@ -233,7 +233,7 @@ export const MusicArtistPage: React.FC<{
                             <div className="mt-4 flex justify-center sm:justify-start">
                                 <span
                                     className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-black uppercase tracking-wide ${mediaStatusPanelClass(availability.kind)}`}
-                                    title={availability.detail || availability.label}
+                                    title={availability.detail ? translateDiscoverAvailabilityDetail(t, availability.detail) : translateDiscoverStatus(t, availability.label)}
                                 >
                                     {translateDiscoverStatus(t, availability.label) || availability.label}
                                 </span>

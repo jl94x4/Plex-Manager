@@ -11,6 +11,7 @@ import {
     seasonStatusBadgeClass,
 } from './requestSeasonUtils';
 import { resolveTmdbImageUrl } from './tmdbImageUrl';
+import { translateDiscoverStatus, useDiscoverI18n } from './i18n';
 
 type Props = {
     open: boolean;
@@ -47,18 +48,30 @@ const emptyQualityForm = (): QualityFormState => ({
     loading: false,
 });
 
-const formatBytes = (bytes?: number | null) => {
+const formatBytes = (bytes?: number | null, freeLabel = 'free') => {
     const n = Number(bytes);
     if (!Number.isFinite(n) || n <= 0) return '';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
     const i = Math.min(sizes.length - 1, Math.max(0, Math.floor(Math.log(n) / Math.log(k))));
-    return `${parseFloat((n / Math.pow(k, i)).toFixed(1))} ${sizes[i]} free`;
+    return `${parseFloat((n / Math.pow(k, i)).toFixed(1))} ${sizes[i]} ${freeLabel}`;
 };
 
-const rootFolderLabel = (folder: { path: string; freeSpace?: number | null }) => {
-    const free = formatBytes(folder.freeSpace);
+const rootFolderLabel = (folder: { path: string; freeSpace?: number | null }, freeLabel = 'free') => {
+    const free = formatBytes(folder.freeSpace, freeLabel);
     return free ? `${folder.path} (${free})` : folder.path;
+};
+
+const formatSeasonName = (
+    name: string | undefined,
+    seasonNumber: number,
+    t: ReturnType<typeof useDiscoverI18n>['t'],
+) => {
+    const raw = String(name || '').trim();
+    if (raw === 'Specials') return t('common.specials');
+    const seasonMatch = raw.match(/^Season\s+(\d+)$/i);
+    if (seasonMatch) return t('common.seasonN', { number: seasonMatch[1] });
+    return raw || t('common.seasonN', { number: seasonNumber });
 };
 
 export const RequestModal: React.FC<Props> = ({
@@ -72,6 +85,7 @@ export const RequestModal: React.FC<Props> = ({
     onSuccess,
     onError,
 }) => {
+    const { t } = useDiscoverI18n();
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [options, setOptions] = useState<RequestOptionsPayload | null>(null);
@@ -191,10 +205,10 @@ export const RequestModal: React.FC<Props> = ({
                 if (timer) window.clearTimeout(timer);
             }
         } catch (e: any) {
-            onErrorRef.current(e?.message || 'Failed to load request options');
+            onErrorRef.current(e?.message || t('request.loadFailed'));
             updateQualityForm(quality, { serviceOptions: null, loading: false, loaded: false });
         }
-    }, [applyServiceDefaults, mediaType, updateQualityForm]);
+    }, [applyServiceDefaults, mediaType, t, updateQualityForm]);
 
     const qualityFormsRef = useRef(qualityForms);
     qualityFormsRef.current = qualityForms;
@@ -308,11 +322,11 @@ export const RequestModal: React.FC<Props> = ({
             if (gen === loadGenRef.current) setLoading(false);
         } catch (e: any) {
             if (gen !== loadGenRef.current) return;
-            onErrorRef.current(e?.message || 'Failed to load request options');
+            onErrorRef.current(e?.message || t('request.loadFailed'));
             setOptions(null);
             if (gen === loadGenRef.current) setLoading(false);
         }
-    }, [mediaId, mediaType]);
+    }, [mediaId, mediaType, t]);
 
     // Load *arr routing options only when the member opens Advanced.
     useEffect(() => {
@@ -393,15 +407,15 @@ export const RequestModal: React.FC<Props> = ({
         const label = mediaType === 'tv' ? 'TV' : 'movie';
         const hints: string[] = [];
         if (selectedQualities.has('hd')) {
-            const hint = formatQuotaHint(options.quota?.standard, label);
+            const hint = formatQuotaHint(options.quota?.standard, label, t);
             if (hint) hints.push(hint);
         }
         if (selectedQualities.has('4k')) {
-            const hint = formatQuotaHint(options.quota?.fourK, `4K ${label}`);
+            const hint = formatQuotaHint(options.quota?.fourK, `4K ${label}`, t);
             if (hint) hints.push(hint);
         }
         return hints;
-    }, [options, selectedQualities, mediaType]);
+    }, [options, selectedQualities, mediaType, t]);
 
     const canSubmitRequest = !!options?.canRequest
         && selectedQualities.size > 0
@@ -588,11 +602,11 @@ export const RequestModal: React.FC<Props> = ({
 
         const qualities = [...selectedQualities].filter((q) => (q === 'hd' ? hdAllowed : fourKAllowed));
         if (!qualities.length) {
-            onError('Select at least one available quality.');
+            onError(t('request.selectQuality'));
             return;
         }
         if (mediaType === 'tv' && selectedSeasons.length === 0) {
-            onError('Select at least one season to request.');
+            onError(t('request.selectSeason'));
             return;
         }
         // Only enforce Advanced fields when the member opened Advanced and options loaded.
@@ -600,7 +614,7 @@ export const RequestModal: React.FC<Props> = ({
             for (const quality of qualities) {
                 const form = qualityForms[quality];
                 if (form.loaded && !form.rootFolder) {
-                    onError(`Select a root folder for the ${quality === '4k' ? '4K' : 'HD'} request.`);
+                    onError(t('request.selectRootFolder', { quality: quality === '4k' ? '4K' : 'HD' }));
                     setAdvancedQuality(quality);
                     setShowAdvanced(true);
                     return;
@@ -617,7 +631,7 @@ export const RequestModal: React.FC<Props> = ({
                 const label = quality === '4k' ? '4K' : 'HD';
                 try {
                     const body = buildRequestBody(quality);
-                    if (!body) throw new Error('Invalid request');
+                    if (!body) throw new Error(t('request.invalidRequest'));
                     const res = await apiFetch('/api/discovery/request', {
                         method: 'POST',
                         body: JSON.stringify(body),
@@ -625,22 +639,25 @@ export const RequestModal: React.FC<Props> = ({
                     if (res?.error) throw new Error(res.error);
                     successes.push(label);
                 } catch (e: any) {
-                    failures.push(`${label}: ${e?.message || 'Failed'}`);
+                    failures.push(`${label}: ${e?.message || t('status.failed')}`);
                 }
             }
 
             if (successes.length && !failures.length) {
                 onSuccessRef.current(
                     mediaType === 'tv'
-                        ? `Series request submitted (${successes.join(' + ')})!`
-                        : `Movie request submitted (${successes.join(' + ')})!`,
+                        ? t('request.submittedSeries', { qualities: successes.join(' + ') })
+                        : t('request.submittedMovie', { qualities: successes.join(' + ') }),
                 );
                 onCloseRef.current();
             } else if (successes.length && failures.length) {
-                onSuccessRef.current(`Submitted ${successes.join(' + ')}. Failed: ${failures.join('; ')}`);
+                onSuccessRef.current(t('request.submittedPartial', {
+                    successes: successes.join(' + '),
+                    failures: failures.join('; '),
+                }));
                 onCloseRef.current();
             } else {
-                onErrorRef.current(failures.join('; ') || 'Failed to submit request');
+                onErrorRef.current(failures.join('; ') || t('request.submitFailed'));
             }
         } finally {
             setSubmitting(false);
@@ -649,7 +666,7 @@ export const RequestModal: React.FC<Props> = ({
 
     if (!open) return null;
 
-    const displayTitle = options?.title || fallbackTitle || 'Request media';
+    const displayTitle = options?.title || fallbackTitle || t('request.requestMedia');
     const overview = (options?.overview || fallbackOverview || '').trim();
     const posterUrl = resolveTmdbImageUrl(options?.posterPath || fallbackPosterPath, 'w342');
     const showAdvancedSection = !!options?.canRequestAdvanced;
@@ -670,7 +687,7 @@ export const RequestModal: React.FC<Props> = ({
     const seasonsSection = mediaType === 'tv' && (options?.seasons?.length || 0) > 0 ? (
         <div>
             <div className="flex items-center justify-between gap-3 mb-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-white/40">Seasons</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-white/40">{t('request.seasons')}</p>
                 {requestableSeasons.length > 0 && (
                     <div className="flex flex-wrap gap-x-2 gap-y-1 justify-end">
                         <button
@@ -678,7 +695,7 @@ export const RequestModal: React.FC<Props> = ({
                             onClick={selectAllRequestable}
                             className="text-[11px] font-bold text-plex hover:text-plex-hover transition-colors"
                         >
-                            Select all
+                            {t('request.selectAll')}
                         </button>
                         <span className="text-white/20">·</span>
                         <button
@@ -686,7 +703,7 @@ export const RequestModal: React.FC<Props> = ({
                             onClick={deselectAllSeasons}
                             className="text-[11px] font-bold text-plex hover:text-plex-hover transition-colors"
                         >
-                            Deselect all
+                            {t('request.deselectAll')}
                         </button>
                         <span className="text-white/20">·</span>
                         <button
@@ -694,7 +711,7 @@ export const RequestModal: React.FC<Props> = ({
                             onClick={selectMissingOnly}
                             className="text-[11px] font-bold text-plex hover:text-plex-hover transition-colors"
                         >
-                            Missing only
+                            {t('request.missingOnly')}
                         </button>
                     </div>
                 )}
@@ -734,15 +751,15 @@ export const RequestModal: React.FC<Props> = ({
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                     <span className="text-sm font-bold text-white truncate">
-                                        {season.name}
+                                        {formatSeasonName(season.name, seasonNumber, t)}
                                     </span>
                                     <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${seasonStatusBadgeClass(season.statusLabel, season.requestable)}`}>
-                                        {season.statusLabel}
+                                        {translateDiscoverStatus(t, season.statusLabel)}
                                     </span>
                                 </div>
                                 {season.episodeCount > 0 && (
                                     <p className="text-xs text-white/45 mt-0.5">
-                                        {season.episodeCount} episode{season.episodeCount === 1 ? '' : 's'}
+                                        {t('common.episodeCount', { count: season.episodeCount })}
                                     </p>
                                 )}
                             </div>
@@ -758,7 +775,7 @@ export const RequestModal: React.FC<Props> = ({
         <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-4 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
             <button
                 type="button"
-                aria-label="Close request modal"
+                aria-label={t('request.closeAria')}
                 className="absolute inset-0 bg-black/80 backdrop-blur-sm"
                 onClick={() => { if (!submitting) onClose(); }}
             />
@@ -786,7 +803,7 @@ export const RequestModal: React.FC<Props> = ({
                                     <Tv className="w-4 h-4 text-plex" />
                                 )}
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-plex">
-                                    Request {mediaType === 'movie' ? 'Movie' : 'Series'}
+                                    {mediaType === 'movie' ? t('request.requestMovie') : t('request.requestSeries')}
                                 </span>
                             </div>
                             <h2 id="request-modal-title" className="text-xl sm:text-2xl font-black text-white leading-tight">
@@ -820,10 +837,10 @@ export const RequestModal: React.FC<Props> = ({
                     {loading ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-10">
                             <Loader2 className="w-7 h-7 text-plex animate-spin" />
-                            <p className="text-sm text-white/45">Loading seasons and request options…</p>
+                            <p className="text-sm text-white/45">{t('request.loadingOptions')}</p>
                         </div>
                     ) : !options ? (
-                        <p className="text-sm text-muted text-center py-8">Unable to load request options.</p>
+                        <p className="text-sm text-muted text-center py-8">{t('request.unableToLoad')}</p>
                     ) : (
                         <>
                             {options.blockReason && !options.canRequest && (
@@ -840,22 +857,22 @@ export const RequestModal: React.FC<Props> = ({
 
                             {hdQuotaBlocked && selectedQualities.has('hd') && (
                                 <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                                    You have used all {options.quota?.standard?.limit} HD requests for this period.
+                                    {t('request.quotaUsed', { count: options.quota?.standard?.limit || 0, quality: 'HD' })}
                                 </div>
                             )}
 
                             {fourKQuotaBlocked && selectedQualities.has('4k') && (
                                 <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                                    You have used all {options.quota?.fourK?.limit} 4K requests for this period.
+                                    {t('request.quotaUsed', { count: options.quota?.fourK?.limit || 0, quality: '4K' })}
                                 </div>
                             )}
 
                             {showQualityPicker && (
                                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                                     <p className="text-xs font-bold uppercase tracking-wider text-white/40 mb-3">
-                                        Quality
+                                        {t('request.quality')}
                                         <span className="ml-2 font-medium normal-case tracking-normal text-white/30">
-                                            Select HD, UHD, or both
+                                            {t('request.selectHdUhd')}
                                         </span>
                                     </p>
                                     <div className="grid grid-cols-2 gap-2">
@@ -867,10 +884,10 @@ export const RequestModal: React.FC<Props> = ({
                                                 serverName: hdServerName,
                                                 allowed: hdAllowed,
                                                 blockedHint: options?.libraryQualities?.hd
-                                                    ? 'Already in library'
+                                                    ? t('request.alreadyInLibrary')
                                                     : hdQuotaBlocked
-                                                        ? 'HD quota used up'
-                                                        : 'HD requests unavailable',
+                                                        ? t('request.hdQuotaUsedUp')
+                                                        : t('request.hdUnavailable'),
                                             },
                                             {
                                                 key: '4k' as QualityKey,
@@ -879,12 +896,12 @@ export const RequestModal: React.FC<Props> = ({
                                                 serverName: fourKServerName,
                                                 allowed: fourKAllowed,
                                                 blockedHint: options?.libraryQualities?.['4k']
-                                                    ? 'Already in library'
+                                                    ? t('request.alreadyInLibrary')
                                                     : fourKQuotaBlocked
-                                                        ? '4K quota used up'
+                                                        ? t('request.fourKQuotaUsedUp')
                                                         : (!options?.canRequest4k
-                                                            ? '4K requests disabled in settings'
-                                                            : 'No 4K server configured'),
+                                                            ? t('request.fourKDisabled')
+                                                            : t('request.noFourKServer')),
                                             },
                                         ]).map((entry) => {
                                             const selected = selectedQualities.has(entry.key);
@@ -929,8 +946,8 @@ export const RequestModal: React.FC<Props> = ({
                             {options.canRequest && !showAdvancedSection && (
                                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/70">
                                     {mediaType === 'tv'
-                                        ? 'Choose seasons and quality below. An admin will review it unless auto-approval is enabled.'
-                                        : 'Submit a request for this movie. An admin will review it unless auto-approval is enabled.'}
+                                        ? t('request.chooseTv')
+                                        : t('request.chooseMovie')}
                                 </div>
                             )}
 
@@ -958,14 +975,14 @@ export const RequestModal: React.FC<Props> = ({
                                         className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
                                     >
                                         <span className="min-w-0 flex flex-col gap-0.5">
-                                            <span className="text-xs font-bold uppercase tracking-wider text-white/50">Advanced</span>
+                                            <span className="text-xs font-bold uppercase tracking-wider text-white/50">{t('request.advanced')}</span>
                                             {!showAdvanced ? (
                                                 <span className="text-[11px] font-medium normal-case tracking-normal text-white/35 truncate">
                                                     {activeForm.loaded && activeForm.profileId != null
                                                         ? ((activeForm.serviceOptions?.profiles || [])
                                                             .find((profile) => Number(profile.id) === Number(activeForm.profileId))
-                                                            ?.name || 'Quality profile')
-                                                        : 'Optional — uses *arr defaults when closed'}
+                                                            ?.name || t('request.qualityProfile'))
+                                                        : t('request.optionalArrDefaults')}
                                                 </span>
                                             ) : null}
                                         </span>
@@ -979,7 +996,7 @@ export const RequestModal: React.FC<Props> = ({
                                             {advancedLoading ? (
                                                 <div className="flex items-center gap-2 py-6 justify-center text-white/50 text-sm">
                                                     <Loader2 className="w-4 h-4 animate-spin text-plex" />
-                                                    Loading server options…
+                                                    {t('request.loadingServerOptions')}
                                                 </div>
                                             ) : (
                                                 <>
@@ -996,7 +1013,7 @@ export const RequestModal: React.FC<Props> = ({
                                                                             : 'bg-transparent border-transparent text-white/40 hover:text-white/70'
                                                                     }`}
                                                                 >
-                                                                    {q === '4k' ? '4K options' : 'HD options'}
+                                                                    {q === '4k' ? t('request.fourKOptions') : t('request.hdOptions')}
                                                                 </button>
                                                             ))}
                                                         </div>
@@ -1007,12 +1024,12 @@ export const RequestModal: React.FC<Props> = ({
                                                             {(filteredServers.length > 0) && (
                                                                 <div>
                                                                     <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
-                                                                        Destination Server
+                                                                        {t('request.destinationServer')}
                                                                     </label>
                                                                     {filteredServers.length === 1 ? (
                                                                         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white/80">
                                                                             {filteredServers[0].isDefault
-                                                                                ? `${filteredServers[0].name} (Default)`
+                                                                                ? `${filteredServers[0].name} (${t('common.default')})`
                                                                                 : filteredServers[0].name}
                                                                         </p>
                                                                     ) : (
@@ -1029,7 +1046,7 @@ export const RequestModal: React.FC<Props> = ({
                                                                             }}
                                                                             options={filteredServers.map((server) => ({
                                                                                 value: String(server.id),
-                                                                                label: server.isDefault ? `${server.name} (Default)` : server.name,
+                                                                                label: server.isDefault ? `${server.name} (${t('common.default')})` : server.name,
                                                                             }))}
                                                                         />
                                                                     )}
@@ -1038,7 +1055,7 @@ export const RequestModal: React.FC<Props> = ({
 
                                                             <div>
                                                                 <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
-                                                                    Quality Profile
+                                                                    {t('request.qualityProfile')}
                                                                 </label>
                                                                 {(activeForm.serviceOptions?.profiles || []).length > 0 ? (
                                                                     <CustomSelect
@@ -1053,14 +1070,14 @@ export const RequestModal: React.FC<Props> = ({
                                                                     />
                                                                 ) : (
                                                                     <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-                                                                        No quality profiles returned from Sonarr/Radarr for this server.
+                                                                        {t('request.noQualityProfiles')}
                                                                     </p>
                                                                 )}
                                                             </div>
 
                                                             <div>
                                                                 <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
-                                                                    Root Folder
+                                                                    {t('request.rootFolder')}
                                                                 </label>
                                                                 {(activeForm.serviceOptions?.rootFolders || []).length > 0 ? (
                                                                     <CustomSelect
@@ -1070,12 +1087,12 @@ export const RequestModal: React.FC<Props> = ({
                                                                         })}
                                                                         options={(activeForm.serviceOptions?.rootFolders || []).map((folder) => ({
                                                                             value: folder.path,
-                                                                            label: rootFolderLabel(folder),
+                                                                            label: rootFolderLabel(folder, t('storage.free')),
                                                                         }))}
                                                                     />
                                                                 ) : (
                                                                     <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-                                                                        No root folders returned from Sonarr/Radarr for this server.
+                                                                        {t('request.noRootFolders')}
                                                                     </p>
                                                                 )}
                                                             </div>
@@ -1084,7 +1101,7 @@ export const RequestModal: React.FC<Props> = ({
 
                                                     <div className={showRoutingFields || bothQualitiesSelected ? '' : 'pt-3'}>
                                                         <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
-                                                            Tags
+                                                            {t('request.tags')}
                                                         </label>
                                                         <div className="flex flex-wrap gap-1.5 mb-2 min-h-[1.5rem]">
                                                             {selectedTagLabels.map((tag) => (
@@ -1121,7 +1138,7 @@ export const RequestModal: React.FC<Props> = ({
                                                                         removeTag(activeForm.selectedTags[activeForm.selectedTags.length - 1]);
                                                                     }
                                                                 }}
-                                                                placeholder="Type a tag and press Enter"
+                                                                placeholder={t('request.tagPlaceholder')}
                                                                 className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-plex/40"
                                                             />
                                                             {tagCreating && (
@@ -1144,7 +1161,7 @@ export const RequestModal: React.FC<Props> = ({
                                                             )}
                                                         </div>
                                                         <p className="text-[11px] text-white/35 mt-1.5">
-                                                            Match an existing tag or create one in Radarr/Sonarr when portal Arr credentials allow it.
+                                                            {t('request.tagHint')}
                                                         </p>
                                                     </div>
                                                 </>
@@ -1167,7 +1184,7 @@ export const RequestModal: React.FC<Props> = ({
                         disabled={submitting}
                         className="flex-1 py-3 rounded-xl border border-white/10 text-white/70 font-bold hover:bg-white/5 transition-colors disabled:opacity-50"
                     >
-                        Cancel
+                        {t('common.cancel')}
                     </button>
                     {!options?.canRequest && !loading ? (
                         <button
@@ -1175,7 +1192,7 @@ export const RequestModal: React.FC<Props> = ({
                             onClick={onClose}
                             className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors"
                         >
-                            Close
+                            {t('common.close')}
                         </button>
                     ) : (
                         <button
@@ -1186,10 +1203,10 @@ export const RequestModal: React.FC<Props> = ({
                         >
                             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                             {submitting
-                                ? 'Submitting…'
+                                ? t('request.submitting')
                                 : selectedQualities.size > 1
-                                    ? 'Submit HD + 4K'
-                                    : 'Submit Request'}
+                                    ? t('request.submitHd4k')
+                                    : t('request.submit')}
                         </button>
                     )}
                 </div>

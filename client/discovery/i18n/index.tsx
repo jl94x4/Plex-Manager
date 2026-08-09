@@ -72,6 +72,80 @@ export const translateDiscoverStatus = (t: DiscoverTranslate, label?: string | n
         Open: 'status.open',
         Resolved: 'status.resolved',
         All: 'status.all',
+        'In Lidarr': 'status.inLidarr',
+        'Request Movie': 'request.requestMovie',
+        'Request Series': 'request.requestSeries',
+        'Request Seasons': 'request.requestSeasons',
+        'All Seasons Requested': 'request.allSeasonsRequested',
+    };
+    const key = map[raw];
+    return key ? t(key) : raw;
+};
+
+/** Map internal English availability detail text to translated UI copy. */
+export const translateDiscoverAvailabilityDetail = (t: DiscoverTranslate, detail?: string | null): string => {
+    const raw = String(detail || '').trim();
+    if (!raw) return '';
+
+    const exactMap: Record<string, string> = {
+        'Something went wrong fulfilling this request. You can retry from My Requests.': 'availability.fulfillmentFailed',
+        'Your request is approved. New episodes will download as they air.': 'availability.requestApprovedFutureEpisodes',
+    };
+    const exactKey = exactMap[raw];
+    if (exactKey) return t(exactKey);
+
+    const sentenceParts = raw.split('. ');
+    if (sentenceParts.length > 1) {
+        return sentenceParts
+            .map((part, index) => translateDiscoverAvailabilityDetail(
+                t,
+                index < sentenceParts.length - 1 && !part.endsWith('.') ? `${part}.` : part,
+            ))
+            .join(' ');
+    }
+
+    const seasonsInLibrary = raw.match(/^Seasons ([\d,\s]+) in library$/);
+    if (seasonsInLibrary) return t('availability.seasonsInLibrary', { seasons: seasonsInLibrary[1].trim() });
+    const seasonCountInLibrary = raw.match(/^(\d+) seasons in library$/);
+    if (seasonCountInLibrary) return t('availability.seasonCountInLibrary', { count: Number(seasonCountInLibrary[1]) });
+    const seasonsUpToDate = raw.match(/^Seasons ([\d,\s]+) up to date$/);
+    if (seasonsUpToDate) return t('availability.seasonsUpToDate', { seasons: seasonsUpToDate[1].trim() });
+    const seasonUpToDate = raw.match(/^Season ([\d,\s]+) up to date$/);
+    if (seasonUpToDate) return t('availability.seasonUpToDate', { seasons: seasonUpToDate[1].trim() });
+    const seasonCountUpToDate = raw.match(/^(\d+) seasons up to date$/);
+    if (seasonCountUpToDate) return t('availability.seasonCountUpToDate', { count: Number(seasonCountUpToDate[1]) });
+    const stillRequestable = raw.match(/^(\d+) seasons? still requestable\.$/);
+    if (stillRequestable) return t('availability.stillRequestable', { count: Number(stillRequestable[1]) });
+    const missingEpisodes = raw.match(/^(\d+) seasons? missing episodes in your library\.$/);
+    if (missingEpisodes) return t('availability.missingEpisodes', { count: Number(missingEpisodes[1]) });
+
+    const map: Record<string, string> = {
+        'All requested seasons are available.': 'availability.allRequestedSeasonsAvailable',
+        'This title cannot be requested.': 'availability.titleCannotRequest',
+        'Something went wrong fulfilling this request. You can retry from My Requests.': 'availability.fulfillmentFailed',
+        'Your request was declined by an admin.': 'availability.declinedByAdmin',
+        'Episodes are still downloading or importing.': 'availability.episodesDownloading',
+        'Some episodes are on disk; more are scheduled to air.': 'availability.someEpisodesScheduled',
+        'This series is in your library and still airing.': 'availability.seriesStillAiring',
+        'Part of this series is already in your library.': 'availability.partSeriesInLibrary',
+        'All aired episodes are on disk (verified via Sonarr).': 'availability.allAiredOnDisk',
+        'All aired episodes are in your library.': 'availability.allAiredInLibrary',
+        'New episodes will be added as they air.': 'availability.newEpisodesAdded',
+        'Your request is being downloaded or imported.': 'availability.requestDownloading',
+        'Approved — waiting for downloads to finish.': 'availability.approvedWaitingDownloads',
+        'Your request is approved. New episodes will download as they air.': 'availability.requestApprovedFutureEpisodes',
+        'Your request was sent to the media server and is waiting to download.': 'availability.requestSentMediaServer',
+        'Approved and sent to your media server.': 'availability.approvedSentMediaServer',
+        'Waiting for an admin to approve your request.': 'availability.waitingAdmin',
+        'This movie is already in your media library.': 'availability.movieAlreadyInLibrary',
+        'Part of this title may already be in your library.': 'availability.partTitleInLibrary',
+        'Albums are downloading or importing.': 'availability.albumsDownloading',
+        'This artist is monitored in your music library.': 'availability.artistMonitored',
+        'This artist is already in your music library.': 'availability.artistAlreadyInLibrary',
+        'Some albums from this artist are already in your library.': 'availability.someAlbumsInLibrary',
+        'Your artist request was sent to Lidarr.': 'availability.artistRequestSent',
+        'This series is in your media library.': 'availability.seriesInLibrary',
+        'Request is awaiting processing.': 'availability.requestAwaitingProcessing',
     };
     const key = map[raw];
     return key ? t(key) : raw;

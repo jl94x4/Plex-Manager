@@ -9,7 +9,7 @@ import {
     XCircle,
 } from 'lucide-react';
 import type { MediaAvailabilityState } from './discoverAvailability';
-import { useDiscoverI18n, translateDiscoverStatus } from './i18n';
+import { useDiscoverI18n, translateDiscoverAvailabilityDetail, translateDiscoverStatus } from './i18n';
 
 const badgeClass = 'absolute top-2 right-2 rounded-full p-1 shadow-lg backdrop-blur-sm z-10 border flex items-center justify-center';
 
@@ -17,7 +17,9 @@ export const DiscoverStatusOverlay: React.FC<{ state: MediaAvailabilityState }> 
     const { t } = useDiscoverI18n();
     if (state.kind === 'none') return null;
 
-    const title = translateDiscoverStatus(t, state.detail || state.label) || state.label;
+    const title = state.detail
+        ? translateDiscoverAvailabilityDetail(t, state.detail)
+        : (translateDiscoverStatus(t, state.label) || state.label);
 
     if (state.kind === 'available') {
         return (
@@ -124,7 +126,7 @@ export const MediaStatusPanel: React.FC<{
             <div className="min-w-0">
                 <p className="text-sm font-bold">{translateDiscoverStatus(t, state.label)}</p>
                 {state.detail && (
-                    <p className="text-xs opacity-80 mt-0.5 leading-relaxed">{state.detail}</p>
+                    <p className="text-xs opacity-80 mt-0.5 leading-relaxed">{translateDiscoverAvailabilityDetail(t, state.detail)}</p>
                 )}
             </div>
             {(onRetry || onViewRequests || libraryAction || arrAction) && (

@@ -5,6 +5,7 @@ import { ModalPortal } from '../shared/ModalPortal';
 import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import { CustomSelect } from '../shared/ui';
 import { formatQuotaHint } from './requestSeasonUtils';
+import { useDiscoverI18n } from './i18n';
 
 type AlbumTarget = {
     mbid: string;
@@ -33,13 +34,13 @@ type ServiceOptions = {
     tags: { id: number; label: string }[];
 };
 
-const formatBytes = (bytes?: number | null) => {
+const formatBytes = (bytes?: number | null, freeLabel = 'free') => {
     const n = Number(bytes);
     if (!Number.isFinite(n) || n <= 0) return '';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.min(sizes.length - 1, Math.max(0, Math.floor(Math.log(n) / Math.log(k))));
-    return `${parseFloat((n / Math.pow(k, i)).toFixed(1))} ${sizes[i]} free`;
+    return `${parseFloat((n / Math.pow(k, i)).toFixed(1))} ${sizes[i]} ${freeLabel}`;
 };
 
 export const MusicRequestModal: React.FC<Props> = ({
@@ -53,6 +54,7 @@ export const MusicRequestModal: React.FC<Props> = ({
     onSuccess,
     onError,
 }) => {
+    const { t } = useDiscoverI18n();
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [options, setOptions] = useState<any>(null);
@@ -81,11 +83,11 @@ export const MusicRequestModal: React.FC<Props> = ({
             if (gen === loadGenRef.current) setLoading(false);
         } catch (e: any) {
             if (gen !== loadGenRef.current) return;
-            onError(e?.message || 'Failed to load request options');
+            onError(e?.message || t('request.loadFailed'));
             setOptions(null);
             setLoading(false);
         }
-    }, [mbid, album?.mbid, onError]);
+    }, [mbid, album?.mbid, onError, t]);
 
     useEffect(() => {
         if (!open) return;
@@ -135,10 +137,10 @@ export const MusicRequestModal: React.FC<Props> = ({
                 method: 'POST',
                 body: JSON.stringify(body),
             });
-            onSuccess(`Request submitted for ${options?.title || fallbackTitle || 'artist'}.`);
+            onSuccess(t('request.submittedFor', { title: options?.title || fallbackTitle || t('music.artist').toLowerCase() }));
             onClose();
         } catch (e: any) {
-            onError(e?.message || 'Failed to submit request');
+            onError(e?.message || t('request.submitFailed'));
         } finally {
             setSubmitting(false);
         }
@@ -147,21 +149,21 @@ export const MusicRequestModal: React.FC<Props> = ({
     if (!open) return null;
 
     const title = options?.title
-        || (album ? `${fallbackTitle || 'Artist'} — ${album.title}` : fallbackTitle)
-        || 'Artist';
+        || (album ? `${fallbackTitle || t('music.artist')} — ${album.title}` : fallbackTitle)
+        || t('music.artist');
     const overview = options?.overview || fallbackOverview || '';
     const posterUrl = album?.coverUrl || options?.posterUrl || options?.posterPath || fallbackPosterUrl || null;
-    const quotaHint = options?.quota ? formatQuotaHint(options.quota, false) : '';
+    const quotaHint = options?.quota ? formatQuotaHint(options.quota, t('mediaType.music'), t) : '';
 
     return (
         <ModalPortal open={open}>
             <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4">
-                <button type="button" className="absolute inset-0 bg-black/70" onClick={onClose} aria-label="Close" />
+                <button type="button" className="absolute inset-0 bg-black/70" onClick={onClose} aria-label={t('common.close')} />
                 <div className="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-border bg-background shadow-2xl">
                     <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 border-b border-border bg-background/95 backdrop-blur">
                         <div className="flex items-center gap-2 min-w-0">
                             <Music className="w-4 h-4 text-plex shrink-0" />
-                            <h2 className="font-black text-sm truncate">{album ? 'Request album' : 'Request artist'}</h2>
+                            <h2 className="font-black text-sm truncate">{album ? t('request.requestAlbum') : t('request.requestArtist')}</h2>
                         </div>
                         <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 text-muted">
                             <X className="w-4 h-4" />
@@ -174,7 +176,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                 {posterUrl ? (
                                     <img src={posterUrl} alt="" className="w-full h-full object-cover" />
                                 ) : (
-                                    <NoPosterPlaceholder className="w-full h-full" label="No art" />
+                                    <NoPosterPlaceholder className="w-full h-full" label={t('music.noArt')} />
                                 )}
                             </div>
                             <div className="min-w-0">
@@ -188,7 +190,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                 <Loader2 className="w-6 h-6 animate-spin" />
                             </div>
                         ) : !options ? (
-                            <p className="text-sm text-red-400">Unable to load request options.</p>
+                            <p className="text-sm text-red-400">{t('request.unableToLoad')}</p>
                         ) : (
                             <>
                                 {options.blockReason && (
@@ -205,7 +207,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                         onClick={() => setShowAdvanced((v) => !v)}
                                         className="text-xs font-bold text-plex hover:underline self-start"
                                     >
-                                        {showAdvanced ? 'Hide advanced' : 'Advanced options'}
+                                        {showAdvanced ? t('request.hideAdvanced') : t('request.advancedOptions')}
                                     </button>
                                 )}
                                 {showAdvanced && options.canRequestAdvanced && (
@@ -217,7 +219,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                         ) : serviceOptions ? (
                                             <>
                                                 <CustomSelect
-                                                    label="Lidarr server"
+                                                    label={t('music.lidarrServer')}
                                                     value={serverId != null ? String(serverId) : ''}
                                                     onChange={(v) => setServerId(Number(v) || null)}
                                                     options={(options.servers || []).map((s: any) => ({
@@ -226,7 +228,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                                     }))}
                                                 />
                                                 <CustomSelect
-                                                    label="Quality profile"
+                                                    label={t('request.qualityProfile')}
                                                     value={profileId != null ? String(profileId) : ''}
                                                     onChange={(v) => setProfileId(Number(v) || null)}
                                                     options={(serviceOptions.profiles || []).map((p) => ({
@@ -235,19 +237,19 @@ export const MusicRequestModal: React.FC<Props> = ({
                                                     }))}
                                                 />
                                                 <CustomSelect
-                                                    label="Root folder"
+                                                    label={t('request.rootFolder')}
                                                     value={rootFolder}
                                                     onChange={setRootFolder}
                                                     options={(serviceOptions.rootFolders || []).map((f) => ({
                                                         value: f.path,
                                                         label: f.freeSpace != null
-                                                            ? `${f.path} (${formatBytes(f.freeSpace)})`
+                                                            ? `${f.path} (${formatBytes(f.freeSpace, t('storage.free'))})`
                                                             : f.path,
                                                     }))}
                                                 />
                                             </>
                                         ) : (
-                                            <p className="text-xs text-muted">Could not load Lidarr options.</p>
+                                            <p className="text-xs text-muted">{t('music.lidarrOptionsFailed')}</p>
                                         )}
                                     </div>
                                 )}
@@ -258,7 +260,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                     className="w-full py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                                 >
                                     {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                                    {submitting ? 'Submitting…' : 'Submit request'}
+                                    {submitting ? t('request.submitting') : t('request.submit')}
                                 </button>
                             </>
                         )}
