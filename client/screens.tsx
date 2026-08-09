@@ -7274,6 +7274,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     }, []);
 
     const analyticsFetchGenRef = useRef(0);
+    const analyticsLoadingGenRef = useRef(0);
 
     const fetchAnalytics = useCallback(async ({ silent = false } = {}) => {
         if (!sessionInfo?.session?.isAdmin && !user) {
@@ -7283,12 +7284,22 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         const gen = ++analyticsFetchGenRef.current;
         try {
             if (!silent) {
+                analyticsLoadingGenRef.current = gen;
                 setAnalyticsLoading(true);
                 setAnalyticsError(null);
             }
-            const res = isJellyfinPortal
-                ? buildJellyfinHomeAnalytics(await apiFetch(`/api/jellystat/analytics?days=${analyticsDays}`))
-                : await apiFetch(`/api/plex/analytics/me?days=${analyticsDays}`);
+            const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timeoutId = controller
+                ? window.setTimeout(() => controller.abort(), 90_000)
+                : null;
+            let res: any;
+            try {
+                res = isJellyfinPortal
+                    ? buildJellyfinHomeAnalytics(await apiFetch(`/api/jellystat/analytics?days=${analyticsDays}`, controller ? { signal: controller.signal } : undefined))
+                    : await apiFetch(`/api/plex/analytics/me?days=${analyticsDays}`, controller ? { signal: controller.signal } : undefined);
+            } finally {
+                if (timeoutId != null) window.clearTimeout(timeoutId);
+            }
             if (gen !== analyticsFetchGenRef.current) return;
             setAnalytics(res);
             if (!silent) {
@@ -7299,13 +7310,20 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         } catch (e: any) {
             if (gen !== analyticsFetchGenRef.current) return;
             if (!silent) {
-                const message = e?.message || 'Failed to load your analytics';
+                const aborted = e?.name === 'AbortError' || /aborted/i.test(String(e?.message || ''));
+                const message = aborted
+                    ? 'Wrap-Up timed out — try again in a moment.'
+                    : (e?.message || 'Failed to load your analytics');
                 setAnalyticsError(message);
                 setAnalytics(null);
                 setToast({ id: Date.now(), message, type: 'error' });
             }
         } finally {
-            if (gen === analyticsFetchGenRef.current && !silent) setAnalyticsLoading(false);
+            // Clear loading for the request that turned it on, even if a silent poll superseded it.
+            if (!silent && analyticsLoadingGenRef.current === gen) {
+                analyticsLoadingGenRef.current = 0;
+                setAnalyticsLoading(false);
+            }
         }
     }, [user, sessionInfo?.session?.isAdmin, analyticsDays, isJellyfinPortal]);
 
@@ -7313,6 +7331,8 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         void fetchAnalytics();
     }, [fetchAnalytics]);
 
+    // Defer achievements spotlight until Wrap-Up analytics is ready so /me + leaderboard
+    // do not compete with the heavy /api/plex/analytics/me request on first paint.
     useEffect(() => {
         if (!sessionInfo?.navFeatures?.achievements) {
             setWrapUpAchievements(null);
@@ -7320,25 +7340,46 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
             return;
         }
         if (!sessionInfo?.session?.isAdmin && !user) return;
+        if (analyticsLoading || !analytics) return;
         let cancelled = false;
-        Promise.all([
-            apiFetch('/api/achievements/me').catch(() => null),
-            apiFetch('/api/achievements/leaderboard?limit=100').catch(() => null),
-        ]).then(([me, lb]) => {
-            if (cancelled) return;
-            if (me?.enabled) {
+        const load = async () => {
+            try {
+                const me = await apiFetch('/api/achievements/me').catch(() => null);
+                if (cancelled) return;
+                if (!me?.enabled) {
+                    setWrapUpAchievements(null);
+                    setWrapUpAchievementsRank(null);
+                    return;
+                }
                 setWrapUpAchievements(me);
-                const mine = Array.isArray(lb?.entries) ? lb.entries.find((entry: any) => entry?.isMe) : null;
-                const rank = Number(mine?.rank);
-                setWrapUpAchievementsRank(Number.isFinite(rank) && rank > 0 ? rank : null);
                 setWrapUpAchievementsSeed(Date.now());
-            } else {
-                setWrapUpAchievements(null);
-                setWrapUpAchievementsRank(null);
+                // Rank is optional; never block Wrap-Up on leaderboard/backfill.
+                if (me.leaderboardEnabled && !me.leaderboardOptOut) {
+                    const lb = await apiFetch('/api/achievements/leaderboard?limit=100').catch(() => null);
+                    if (cancelled) return;
+                    const mine = Array.isArray(lb?.entries) ? lb.entries.find((entry: any) => entry?.isMe) : null;
+                    const rank = Number(mine?.rank);
+                    setWrapUpAchievementsRank(Number.isFinite(rank) && rank > 0 ? rank : null);
+                } else {
+                    setWrapUpAchievementsRank(null);
+                }
+            } catch {
+                if (!cancelled) {
+                    setWrapUpAchievements(null);
+                    setWrapUpAchievementsRank(null);
+                }
             }
-        });
+        };
+        void load();
         return () => { cancelled = true; };
-    }, [sessionInfo?.navFeatures?.achievements, sessionInfo?.session?.isAdmin, user]);
+    }, [
+        sessionInfo?.navFeatures?.achievements,
+        sessionInfo?.session?.isAdmin,
+        user,
+        analyticsLoading,
+        // All-time snapshot — only gate on presence, not each analytics object identity.
+        !!analytics,
+    ]);
 
     usePoll(() => { void fetchAnalytics({ silent: true }); }, 5 * 60 * 1000, { immediate: false });
 
