@@ -34,6 +34,7 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
             type: 'http',
             groupId: null,
             isCritical: true,
+            visibleToUsers: true,
             description: ''
         };
         const newConfig = { ...localConfig, services: [...localConfig.services, newService] };
@@ -122,6 +123,9 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
                     <h4 className="font-bold text-xl text-text">Monitored Services</h4>
                     <button onClick={addService} className="px-4 py-2 bg-plex text-background hover:bg-plex-hover rounded-md text-sm font-bold transition-colors shadow-lg">Add Service</button>
                 </div>
+                <p className="text-xs text-muted mb-4">
+                    Use <span className="text-text font-semibold">Users: Visible / Hidden</span> to control whether a service appears on the member or public Status page. Admins always see every service. New *arr and download clients default to Hidden.
+                </p>
                 <div className="flex flex-col gap-6">
                     {localConfig.services.map((service: any) => (
                         <div key={service.id} className="flex flex-col gap-3 pb-6 border-b border-border/40 last:border-b-0 last:pb-0">
@@ -159,7 +163,15 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
                                         />
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+                                <div className="flex items-center gap-2 flex-shrink-0 ml-auto flex-wrap justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => updateService(service.id, 'visibleToUsers', service.visibleToUsers === false)}
+                                        className={`px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-2 ${service.visibleToUsers !== false ? 'bg-plex/20 text-plex hover:bg-plex/30' : 'bg-white/10 text-muted hover:bg-white/20'}`}
+                                        title={service.visibleToUsers !== false ? 'Shown on the member/public Status page' : 'Admin-only — hidden from members and the public Status page'}
+                                    >
+                                        Users: {service.visibleToUsers !== false ? 'Visible' : 'Hidden'}
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => updateService(service.id, 'isCritical', !service.isCritical)}

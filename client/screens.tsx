@@ -8225,7 +8225,14 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                                         <div className="flex items-center gap-3 min-w-0">
                                                             <StatusServiceIcon service={service} />
                                                             <div className="min-w-0">
-                                                                <h4 className="font-bold text-text text-lg truncate">{service.name}</h4>
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <h4 className="font-bold text-text text-lg truncate">{service.name}</h4>
+                                                                    {isAdmin && service.visibleToUsers === false ? (
+                                                                        <span className="shrink-0 rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted" title="Hidden from members and the public Status page">
+                                                                            Admin only
+                                                                        </span>
+                                                                    ) : null}
+                                                                </div>
                                                                 {service.description && <p className="text-xs text-muted truncate">{service.description}</p>}
                                                             </div>
                                                         </div>
@@ -8285,9 +8292,16 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                     title={service.name}
                                     subtitle={`${periodLabel} history`}
                                     badge={(
-                                        <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted">
-                                            {periodLabel}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            {isAdmin && service.visibleToUsers === false ? (
+                                                <span className="rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted" title="Hidden from members and the public Status page">
+                                                    Admin only
+                                                </span>
+                                            ) : null}
+                                            <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted">
+                                                {periodLabel}
+                                            </span>
+                                        </div>
                                     )}
                                 >
                                     <div className="overflow-x-auto rounded-xl border border-white/5">

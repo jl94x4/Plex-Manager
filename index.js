@@ -1068,18 +1068,18 @@ const createDefaultStatusConfig = (config = {}) => {
         { id: 'external', name: 'External Services', order: 3 },
     ];
     const services = [];
-    const addService = (id, name, url, groupId, description = '') => {
+    const addService = (id, name, url, groupId, description = '', { visibleToUsers = true } = {}) => {
         if (!url) return;
-        services.push({ id, name, url, type: 'web', groupId, description });
+        services.push({ id, name, url, type: 'web', groupId, description, visibleToUsers: visibleToUsers !== false });
     };
 
     const publicDomain = resolvePublicBaseUrlFromConfig(config);
-    if (publicDomain) addService('portal', 'Server Portal', `${publicDomain}/api/health`, 'core', 'Portal API health');
+    if (publicDomain) addService('portal', 'Server Portal', `${publicDomain}/api/health`, 'core', 'Portal API health', { visibleToUsers: true });
 
     const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
     if (mediaServerType !== 'plex') {
         const mediaLabel = mediaServerType === 'emby' ? 'Emby' : 'Jellyfin';
-        addService(mediaServerType, mediaLabel, config.jellyfinUrl, 'media', `${mediaLabel} media server`);
+        addService(mediaServerType, mediaLabel, config.jellyfinUrl, 'media', `${mediaLabel} media server`, { visibleToUsers: true });
         if (mediaServerType === 'jellyfin') {
             const analyticsProvider = normalizeJellyfinAnalyticsProvider(config.jellyfinAnalyticsProvider, config);
             addService(
@@ -1087,12 +1087,13 @@ const createDefaultStatusConfig = (config = {}) => {
                 analyticsProvider === 'jellyglance' ? 'JellyGlance' : 'Jellystat',
                 analyticsProvider === 'jellyglance' ? config.jellyglanceUrl : config.jellystatUrl,
                 'media',
-                'Jellyfin analytics'
+                'Jellyfin analytics',
+                { visibleToUsers: true },
             );
         }
     } else {
-        addService('plex', 'Plex', config.plexServerUrl || publicDomain, 'media', 'Plex Media Server');
-        addService('tautulli', 'Tautulli', config.tautulliUrl, 'media', 'Plex analytics');
+        addService('plex', 'Plex', config.plexServerUrl || publicDomain, 'media', 'Plex Media Server', { visibleToUsers: true });
+        addService('tautulli', 'Tautulli', config.tautulliUrl, 'media', 'Plex analytics', { visibleToUsers: true });
     }
 
     getArrInstances(config, { enabledOnly: true }).forEach((instance) => {
@@ -1104,7 +1105,8 @@ const createDefaultStatusConfig = (config = {}) => {
             lidarr: 'Music automation',
             bazarr: 'Subtitle automation',
         }[instance.type] || 'Media automation');
-        addService(`arr-${instance.id}`, label, instance.url, 'downloads', description);
+        // Arr apps default admin-only on the public Status page.
+        addService(`arr-${instance.id}`, label, instance.url, 'downloads', description, { visibleToUsers: false });
     });
     (Array.isArray(config.downloadClients) ? config.downloadClients : []).forEach((client) => {
         if (client?.enabled === false || !client?.url) return;
@@ -1117,10 +1119,11 @@ const createDefaultStatusConfig = (config = {}) => {
             clientId: client.id,
             groupId: 'downloads',
             description: `${downloadClientLabel(client.type)} download client`,
+            visibleToUsers: false,
         });
     });
     if (config.requestAppType && config.requestAppType !== 'none') {
-        addService(config.requestAppType, config.requestAppType === 'jellyseerr' ? 'Jellyseerr' : 'Seerr', config.requestAppUrl, 'external', 'Requests portal');
+        addService(config.requestAppType, config.requestAppType === 'jellyseerr' ? 'Jellyseerr' : 'Seerr', config.requestAppUrl, 'external', 'Requests portal', { visibleToUsers: true });
     }
 
     return { groups, services, announcement: null };
@@ -1141,6 +1144,7 @@ const syncIntegrationServicesInStatusConfig = (config = {}) => {
                 lidarr: 'Music automation',
                 bazarr: 'Subtitle automation',
             }[instance.type] || 'Media automation'),
+            visibleToUsers: false,
         }));
     const downloadServices = (Array.isArray(config.downloadClients) ? config.downloadClients : [])
         .filter((client) => client?.enabled !== false && client?.url)
@@ -1153,6 +1157,7 @@ const syncIntegrationServicesInStatusConfig = (config = {}) => {
             clientId: client.id,
             groupId: 'downloads',
             description: `${downloadClientLabel(client.type)} download client`,
+            visibleToUsers: false,
         }));
     const managedServices = [...arrServices, ...downloadServices];
     const existingById = new Map((statusConfig.services || []).map((service) => [service.id, service]));
@@ -1163,6 +1168,7 @@ const syncIntegrationServicesInStatusConfig = (config = {}) => {
     });
     const mergedManaged = managedServices.map((service) => {
         const existing = existingById.get(service.id);
+        // Preserve admin toggles (visibleToUsers / isCritical) from existing config.
         return existing ? {
             ...existing,
             name: service.name,
@@ -1176,6 +1182,9 @@ const syncIntegrationServicesInStatusConfig = (config = {}) => {
     });
     statusConfig.services = [...unmanaged, ...mergedManaged];
 };
+
+/** Public/member Status page: omit admin-only services. Missing flag stays visible for back-compat. */
+const isStatusServiceVisibleToUsers = (service) => service?.visibleToUsers !== false;
 
 // --- Helper Functions ---
 const log = (message) => console.log(`[${new Date().toISOString()}] ${message}`);
@@ -11125,24 +11134,43 @@ app.get('/api/public/plex/stats', publicReadRateLimit, async (req, res) => {
 app.get('/api/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 app.get('/api/status', publicReadRateLimit, async (req, res) => {
     const config = await loadFile(CONFIG_PATH, {});
-    if (!isPublicStatusVisible(config)) {
-        const token = req.cookies.session;
-        if (!token) return res.status(401).json({ error: 'Status monitor requires login.' });
+    let sessionUser = null;
+    let viewerIsAdmin = false;
+    const token = req.cookies?.session;
+    if (token) {
         try {
-            req.user = jwt.verify(token, JWT_SECRET);
+            sessionUser = jwt.verify(token, JWT_SECRET);
+            viewerIsAdmin = await resolveCurrentAdmin(getSessionActor(sessionUser), config);
         } catch (e) {
-            return res.status(401).json({ error: 'Status monitor requires login.' });
+            sessionUser = null;
+            viewerIsAdmin = false;
         }
     }
-    const publicServices = (statusConfig.services || []).map(service => ({
+    if (!isPublicStatusVisible(config) && !sessionUser) {
+        return res.status(401).json({ error: 'Status monitor requires login.' });
+    }
+
+    const allServices = Array.isArray(statusConfig.services) ? statusConfig.services : [];
+    const allowedServices = viewerIsAdmin
+        ? allServices
+        : allServices.filter(isStatusServiceVisibleToUsers);
+    const allowedIds = new Set(allowedServices.map((service) => String(service.id)));
+    const publicServices = allowedServices.map((service) => ({
         id: service.id,
         name: service.name,
         groupId: service.groupId,
         type: service.type || 'web',
         clientType: service.clientType || null,
-        description: service.description || ''
+        description: service.description || '',
+        ...(viewerIsAdmin ? {
+            visibleToUsers: isStatusServiceVisibleToUsers(service),
+            isCritical: service.isCritical !== false,
+        } : {}),
     }));
-    const groups = (statusConfig.groups || []).map(group => ({ id: group.id, name: group.name, order: group.order }));
+    const usedGroupIds = new Set(publicServices.map((service) => String(service.groupId || '')));
+    const groups = (statusConfig.groups || [])
+        .filter((group) => usedGroupIds.has(String(group.id)))
+        .map((group) => ({ id: group.id, name: group.name, order: group.order }));
 
     // Downsample recentChecks for the public payload (keep full resolution on disk).
     const slimHealth = {};
@@ -11151,6 +11179,7 @@ app.get('/api/status', publicReadRateLimit, async (req, res) => {
             slimHealth[key] = record;
             continue;
         }
+        if (!allowedIds.has(String(key))) continue;
         if (!record || typeof record !== 'object') continue;
         const recent = Array.isArray(record.recentChecks) ? record.recentChecks : [];
         const bucketMs = 5 * 60 * 1000;
@@ -11222,7 +11251,10 @@ app.post('/api/status/config', requireAuth, requireAdmin, async (req, res) => {
                 clientType: service.clientType ? String(service.clientType) : undefined,
                 clientId: service.clientId ? String(service.clientId) : undefined,
                 groupId: String(service.groupId || 'core'),
-                description: String(service.description || '')
+                description: String(service.description || ''),
+                isCritical: service.isCritical !== false,
+                // Default visible when unset so older configs keep showing on the public page.
+                visibleToUsers: service.visibleToUsers !== false,
             });
         }
         statusConfig = { services: sanitizedServices, groups, announcement: announcement || null };
