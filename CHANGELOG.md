@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.0](https://github.com/jl94x4/Server-Manager-Portal/compare/v1.8.0...v1.9.0) (2026-08-09)
+
+
+### Features
+
+* add Emby polish, JellyGlance option, and NZBGet support ([af8da51](https://github.com/jl94x4/Server-Manager-Portal/commit/af8da5176524a8f8e33b47da96f4f7573aa44ecf))
+* **downloads:** sticky client filter and persistent active-only view ([dd3873a](https://github.com/jl94x4/Server-Manager-Portal/commit/dd3873a0a811183a7396dcafa541b9179823b6c7))
+* add Discord release notification workflow ([0ffcd0f](https://github.com/jl94x4/Server-Manager-Portal/commit/0ffcd0f))
+* add manual run support to Discord Notify ([43c0cc7](https://github.com/jl94x4/Server-Manager-Portal/commit/43c0cc7))
+
+
+### Bug Fixes
+
+* revoke inactive users immediately instead of rolling expiry ([f0a7ed8](https://github.com/jl94x4/Server-Manager-Portal/commit/f0a7ed8dfac66b612b3730d63f149c68835ed65a))
+* **ui:** hide temporary access on login until public config confirms it ([cd76c81](https://github.com/jl94x4/Server-Manager-Portal/commit/cd76c81a0dc44f256fa7c776d32900ec1a29612d))
+
+
+### Miscellaneous
+
+* delete leftover `config.backup-20260804-180230` directory ([9d19c5e](https://github.com/jl94x4/Server-Manager-Portal/commit/9d19c5ee078bea0fa433260381d0b848baab2318))
+
 ## [1.8.0](https://github.com/jl94x4/Server-Manager-Portal/compare/v1.7.0...v1.8.0) (2026-07-25)
 
 
