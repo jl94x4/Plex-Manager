@@ -14299,15 +14299,43 @@ const checkAndCleanupInactive = async (config) => {
     const uri = await getPlexConnectionUri(config);
     if (!uri) return;
 
+    // History queries need the *local* Plex account id, not plex.tv user id.
+    const { list: plexAccounts } = await fetchPlexServerAccounts(uri, config);
+    const norm = (v) => String(v || '').trim().toLowerCase();
+    const resolveHistoryAccountId = (user) => {
+        if (user?.plexAccountId) return String(user.plexAccountId);
+        const byName = plexAccounts.find((a) => norm(a.name) === norm(user?.username));
+        if (byName) return String(byName.id);
+        if (user?.email) {
+            const byEmail = plexAccounts.find((a) => (
+                norm(a.name) === norm(user.email) || norm(a.email) === norm(user.email)
+            ));
+            if (byEmail) return String(byEmail.id);
+        }
+        return null;
+    };
+
+    const logoPath = path.join(process.cwd(), 'static', 'logo.png');
+    let hasLogo = false;
+    try {
+        await fs.access(logoPath);
+        hasLogo = true;
+    } catch (e) { /* optional logo */ }
+
     for (const user of users) {
-        const plexUserId = user.plexId || user.id;
-        if (user.isAdmin || user.exemptFromCleanup || !plexUserId) continue;
+        if (user.isAdmin || user.exemptFromCleanup) continue;
         // Only consider users with active access; pending/revoked users aren't relevant.
         if (user.plexAccessStatus !== 'active') continue;
 
+        const accountId = resolveHistoryAccountId(user);
+        if (!accountId) {
+            log(`[INACTIVE CLEANUP] Skipping ${user.email || user.username}: no local Plex account id for history lookup.`);
+            continue;
+        }
+
         try {
             // Get last session from Plex directly
-            const historyRes = await fetch(`${uri}/status/sessions/history/all?X-Plex-Token=${config.plexToken}&accountID=${plexUserId}&sort=viewedAt:desc&limit=1`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
+            const historyRes = await fetch(`${uri}/status/sessions/history/all?X-Plex-Token=${config.plexToken}&accountID=${accountId}&sort=viewedAt:desc&limit=1`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
 
             let lastWatchedMs = 0;
             if (historyRes && historyRes.MediaContainer && historyRes.MediaContainer.Metadata && historyRes.MediaContainer.Metadata.length > 0) {
@@ -14322,14 +14350,48 @@ const checkAndCleanupInactive = async (config) => {
             if ((lastWatchedMs > 0 && lastWatchedMs < cutoffMs) || (lastWatchedMs === 0 && joinedAtMs < cutoffMs)) {
                 log(`[INACTIVE CLEANUP] User ${user.email} last watched: ${lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : 'Never'}. Removing access.`);
 
-                // Set expiry date to now so the main revocation loop catches them
-                user.expiryDate = new Date().toISOString();
+                // Revoke immediately. Previously we stamped expiryDate=now and relied on
+                // checkAndRevoke (days < 0 only, and it runs *before* this job), which left
+                // users active forever while the displayed expiry rolled forward each day.
+                const revoked = await revokePlexAccess(user, config);
+                if (!revoked) {
+                    log(`[INACTIVE CLEANUP] Failed to revoke Plex access for ${user.email || user.username}; will retry next run.`);
+                    continue;
+                }
+
+                user.plexAccessStatus = 'revoked';
+                // Show as expired in the Users list without re-stamping every run.
+                const days = getDaysUntilExpiry(user.expiryDate);
+                if (days === null || days >= 0) {
+                    const past = new Date();
+                    past.setHours(0, 0, 0, 0);
+                    past.setDate(past.getDate() - 1);
+                    const y = past.getFullYear();
+                    const m = String(past.getMonth() + 1).padStart(2, '0');
+                    const d = String(past.getDate()).padStart(2, '0');
+                    user.expiryDate = `${y}-${m}-${d}T12:00:00.000Z`;
+                }
                 usersUpdated = true;
 
                 await appendAuditLog('user_inactive_cleanup', { username: 'System', email: 'system@local' }, user, {
                     reason: `Inactive for > ${thresholdDays} days`,
-                    lastWatched: lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : 'Never'
+                    lastWatched: lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : 'Never',
+                    accountId,
                 });
+
+                if (alertRuleEnabled(config, 'accessRevoked')) {
+                    await sendGotifyAlert(
+                        config,
+                        'Portal access revoked',
+                        `${user.username || user.email} was revoked after inactive cleanup.`,
+                        8,
+                    ).catch((e) => log(`Failed to send Gotify inactive-cleanup alert: ${e.message}`));
+                }
+
+                if (!user.expiryEmailSent) {
+                    const emailSent = await sendExpiryEmail(config, user, hasLogo);
+                    if (emailSent) user.expiryEmailSent = true;
+                }
             }
         } catch (e) {
             log(`Failed to check history for user ${user.email}: ${e.message}`);
