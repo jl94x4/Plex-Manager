@@ -494,6 +494,9 @@ export const SettingsDashboard: React.FC = () => {
     const [achievementsDisabledBadgeIds, setAchievementsDisabledBadgeIds] = useState<string[]>([]);
     const [achievementsMinPercentComplete, setAchievementsMinPercentComplete] = useState(0);
     const [achievementsSeasons, setAchievementsSeasons] = useState<import('./AchievementsSettings').AchievementsSeason[]>([]);
+    const [requestAvailableNotifyEnabled, setRequestAvailableNotifyEnabled] = useState(true);
+    const [requestAvailableNotifyEmail, setRequestAvailableNotifyEmail] = useState(true);
+    const [requestAvailableNotifyInApp, setRequestAvailableNotifyInApp] = useState(true);
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
     const [tautulliConfigured, setTautulliConfigured] = useState(false);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
@@ -1224,6 +1227,9 @@ export const SettingsDashboard: React.FC = () => {
             } else {
                 setAchievementsSeasons([]);
             }
+            setRequestAvailableNotifyEnabled(initialSettings.requestAvailableNotifyEnabled !== false);
+            setRequestAvailableNotifyEmail(initialSettings.requestAvailableNotifyEmail !== false);
+            setRequestAvailableNotifyInApp(initialSettings.requestAvailableNotifyInApp !== false);
             if (initialSettings.watchHistorySource !== undefined) {
                 setWatchHistorySource(initialSettings.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex');
             }
@@ -1642,6 +1648,9 @@ export const SettingsDashboard: React.FC = () => {
             achievementsDisabledBadgeIds,
             achievementsMinPercentComplete,
             achievementsSeasons,
+            requestAvailableNotifyEnabled,
+            requestAvailableNotifyEmail,
+            requestAvailableNotifyInApp,
             watchHistorySource,
             mediaAutomation: {
                 ...mediaAutomation,
@@ -2934,6 +2943,36 @@ export const SettingsDashboard: React.FC = () => {
                                         <p className="text-xs text-muted">When a member’s Plex watchlist syncs, create portal requests for new titles.</p>
                                         <SettingsToggleRow title="Auto-request movies from watchlist" checked={portalAutoRequestMovies} onChange={setPortalAutoRequestMovies} border={false} />
                                         <SettingsToggleRow title="Auto-request series from watchlist" checked={portalAutoRequestTv} onChange={setPortalAutoRequestTv} border={false} />
+                                    </div>
+
+                                    <div id={getSettingsSectionElementId('request-available-notify')} className="scroll-mt-24 space-y-3">
+                                        <h4 className="text-sm font-bold text-text uppercase tracking-wider">Request available notifications</h4>
+                                        <p className="text-xs text-muted max-w-2xl">
+                                            When a portal request finishes downloading and becomes available, notify the requester (email via SMTP + in-app bell). Members can still opt out in their profile preferences.
+                                        </p>
+                                        <SettingsToggleRow
+                                            title="Enable notifications"
+                                            description="Master switch for request-available alerts (portal engine)."
+                                            checked={requestAvailableNotifyEnabled}
+                                            onChange={setRequestAvailableNotifyEnabled}
+                                            border={false}
+                                        />
+                                        <div className={requestAvailableNotifyEnabled ? 'space-y-0' : 'space-y-0 opacity-50 pointer-events-none'}>
+                                            <SettingsToggleRow
+                                                title="Email"
+                                                description="Send SMTP email when a request becomes available. Requires SMTP under Integrations."
+                                                checked={requestAvailableNotifyEmail}
+                                                onChange={setRequestAvailableNotifyEmail}
+                                                border={false}
+                                            />
+                                            <SettingsToggleRow
+                                                title="In-app bell"
+                                                description="Show an unread notification in the portal nav for the requester."
+                                                checked={requestAvailableNotifyInApp}
+                                                onChange={setRequestAvailableNotifyInApp}
+                                                border={false}
+                                            />
+                                        </div>
                                     </div>
 
                                     <div id={getSettingsSectionElementId('portal-quotas')} className="scroll-mt-24 space-y-4">

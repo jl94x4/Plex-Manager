@@ -13,6 +13,10 @@ export interface User {
     exemptFromCleanup?: boolean;
     isTrial?: boolean;
     optOutNewsletter?: boolean;
+    /** Email when a portal request becomes available (default on). */
+    notifyRequestAvailableEmail?: boolean;
+    /** In-app bell when a portal request becomes available (default on). */
+    notifyRequestAvailableInApp?: boolean;
     lastLogin?: string;
     /** Plex library section ids shared with this user. Empty/absent = all libraries. */
     libraryIds?: string[] | null;

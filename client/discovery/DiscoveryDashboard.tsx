@@ -65,7 +65,11 @@ const DiscoveryDashboardInner: React.FC<{
     useEffect(() => {
         const handlePopState = () => refreshPath();
         window.addEventListener('popstate', handlePopState);
-        return () => window.removeEventListener('popstate', handlePopState);
+        window.addEventListener('portal-discovery-navigate', handlePopState);
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+            window.removeEventListener('portal-discovery-navigate', handlePopState);
+        };
     }, [refreshPath]);
 
     useEffect(() => {

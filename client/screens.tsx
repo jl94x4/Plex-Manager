@@ -7,6 +7,7 @@ import { SettingsDashboard } from './settings/SettingsDashboard';
 import { LibraryMaintenancePanel } from './maintenance/LibraryMaintenancePanel';
 import { appConfirm } from './shared/confirm';
 import { apiFetch } from './shared/api';
+import { InAppNotificationsBell } from './shared/InAppNotificationsBell';
 import { getPublicOrigin, logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath } from './shared/basePath';
 import { formatDate, getDaysUntilExpiry, getAccessProgressPct, addMonths, addYears, formatTime, formatEventName, formatDateTime, hexToRgb, formatSizeCeil, formatStreamingHour } from './shared/format';
 import { CustomSelect, ConfirmModal, StyledCheckbox, ScrollReveal } from './shared/ui';
@@ -7259,6 +7260,14 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
     const [optOutNewsletter, setOptOutNewsletter] = useState(user?.optOutNewsletter || false);
+    const [notifyRequestAvailableEmail, setNotifyRequestAvailableEmail] = useState(user?.notifyRequestAvailableEmail !== false);
+    const [notifyRequestAvailableInApp, setNotifyRequestAvailableInApp] = useState(user?.notifyRequestAvailableInApp !== false);
+
+    useEffect(() => {
+        setNotifyRequestAvailableEmail(user?.notifyRequestAvailableEmail !== false);
+        setNotifyRequestAvailableInApp(user?.notifyRequestAvailableInApp !== false);
+        setOptOutNewsletter(!!user?.optOutNewsletter);
+    }, [user?.notifyRequestAvailableEmail, user?.notifyRequestAvailableInApp, user?.optOutNewsletter]);
 
     useEffect(() => {
         setDashboardLayoutDraft(normalizeSectionLayout(publicConfig?.dashboardLayout));
@@ -7351,6 +7360,42 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
             });
             setOptOutNewsletter(newValue);
             setToast({ id: 3, message: 'Newsletter preferences updated!', type: 'success' });
+            refreshSession();
+        } catch (e: any) {
+            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleToggleRequestAvailableEmail = async () => {
+        setIsLoading(true);
+        try {
+            const newValue = !notifyRequestAvailableEmail;
+            await apiFetch('/api/users/preferences', {
+                method: 'POST',
+                body: JSON.stringify({ notifyRequestAvailableEmail: newValue }),
+            });
+            setNotifyRequestAvailableEmail(newValue);
+            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
+            refreshSession();
+        } catch (e: any) {
+            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleToggleRequestAvailableInApp = async () => {
+        setIsLoading(true);
+        try {
+            const newValue = !notifyRequestAvailableInApp;
+            await apiFetch('/api/users/preferences', {
+                method: 'POST',
+                body: JSON.stringify({ notifyRequestAvailableInApp: newValue }),
+            });
+            setNotifyRequestAvailableInApp(newValue);
+            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
             refreshSession();
         } catch (e: any) {
             setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
@@ -7839,6 +7884,8 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         daysLeft,
         progressPct,
         optOutNewsletter,
+        notifyRequestAvailableEmail,
+        notifyRequestAvailableInApp,
         serverStats,
         serverDataLoading,
         analytics,
@@ -7852,6 +7899,8 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         bazarrWidgets,
         handleRelink,
         handleToggleNewsletter,
+        handleToggleRequestAvailableEmail,
+        handleToggleRequestAvailableInApp,
         onViewAdmin,
         onViewSettings,
         onViewLogs,
@@ -7865,6 +7914,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         RebuildLibraryCacheButton,
     }), [
         sessionInfo, publicConfig, user, isRevoked, isExpiringSoon, daysLeft, progressPct, optOutNewsletter,
+        notifyRequestAvailableEmail, notifyRequestAvailableInApp,
         serverStats, serverDataLoading, analytics, analyticsLoading, analyticsDays, analyticsDaysOpen,
         showQualityBadges, dashboardData, bazarrWidgets, onViewAdmin, onViewSettings, onViewLogs, onViewCollexions, onViewScanner, onViewMediaAutomation, onViewRequests, onPendingRequestsChange,
     ]);
@@ -11053,7 +11103,10 @@ export const MaintenanceDashboard: React.FC = () => {
 
 interface NavigationProps {
     currentRoute: string;
-    onNavigate: (route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about') => void;
+    onNavigate: (
+        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about',
+        options?: { hash?: string; reviewId?: number; path?: string },
+    ) => void;
     onLogout: () => void;
     isAdmin: boolean;
     serverName: string;
@@ -11435,6 +11488,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     <span className="font-bold text-text uppercase tracking-widest text-sm truncate">{serverName}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                    <InAppNotificationsBell
+                        onNavigate={(route, options) => onNavigate(route as any, options)}
+                        buttonClassName="relative w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted hover:border-plex/50 hover:text-text transition-all"
+                    />
                     <DiscoverLocaleSelect showLabel={false} className="w-[6.75rem]" />
                     <div className="relative" ref={mobileThemeRef}>
                         <button
@@ -11515,6 +11572,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 {sidebarIdentityPosition !== 'top' && renderServerIdentity('bottom')}
 
                 <div className="mt-2 pt-2 border-t border-white/10 shrink-0">
+                    <div className="mb-2 flex items-center justify-end">
+                        <InAppNotificationsBell
+                            onNavigate={(route, options) => onNavigate(route as any, options)}
+                            buttonClassName="relative w-9 h-9 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-muted hover:text-text hover:border-plex/40 hover:bg-white/10 transition-all"
+                        />
+                    </div>
                     <button
                         type="button"
                         onClick={() => setProfileOpen(true)}

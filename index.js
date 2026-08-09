@@ -1099,6 +1099,12 @@ import {
     getPortalRequestDefaults,
     clearPortalArrServiceOptionsCache,
 } from './lib/portal-request/index.js';
+import { notifyRequestBecameAvailable } from './lib/notifications/requestAvailable.js';
+import {
+    listInAppNotificationsForUser,
+    countUnreadInAppNotifications,
+    markInAppNotificationsRead,
+} from './lib/notifications/inAppStore.js';
 const PLEX_API = 'https://plex.tv/api';
 
 // --- Status App Global State ---
@@ -3306,7 +3312,11 @@ app.post('/api/auth/logout', requireAuth, (req, res) => {
 app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) => {
     if (blockIfImpersonating(req, res)) return;
     try {
-        const { optOutNewsletter } = req.body;
+        const {
+            optOutNewsletter,
+            notifyRequestAvailableEmail,
+            notifyRequestAvailableInApp,
+        } = req.body || {};
         const users = await loadFile(USERS_PATH, []);
         const localUser = findLocalUserForSession(users, req.user);
         const userIndex = localUser ? users.findIndex(u => normalized(u.id) === normalized(localUser.id)) : -1;
@@ -3315,18 +3325,60 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const oldPref = !!users[userIndex].optOutNewsletter;
-        users[userIndex].optOutNewsletter = !!optOutNewsletter;
-        await saveFile(USERS_PATH, users);
-
-        if (oldPref !== !!optOutNewsletter) {
-            await appendAuditLog(optOutNewsletter ? 'newsletter_opt_out' : 'newsletter_opt_in', req.user, req.user);
+        if (optOutNewsletter !== undefined) {
+            const oldPref = !!users[userIndex].optOutNewsletter;
+            users[userIndex].optOutNewsletter = !!optOutNewsletter;
+            if (oldPref !== !!optOutNewsletter) {
+                await appendAuditLog(optOutNewsletter ? 'newsletter_opt_out' : 'newsletter_opt_in', req.user, req.user);
+            }
         }
+        if (notifyRequestAvailableEmail !== undefined) {
+            users[userIndex].notifyRequestAvailableEmail = !!notifyRequestAvailableEmail;
+        }
+        if (notifyRequestAvailableInApp !== undefined) {
+            users[userIndex].notifyRequestAvailableInApp = !!notifyRequestAvailableInApp;
+        }
+        await saveFile(USERS_PATH, users);
 
         res.json({ success: true, user: sanitizeUserForApi(users[userIndex]) });
     } catch (e) {
         log(`Error updating preferences: ${e.message}`);
         res.status(500).json({ error: 'Failed to update preferences' });
+    }
+});
+
+app.get('/api/notifications', requireAuth, requireMember, async (req, res) => {
+    try {
+        const users = await loadFile(USERS_PATH, []);
+        const localUser = findLocalUserForSession(users, req.user);
+        if (!localUser?.id) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const limit = Math.max(1, Math.min(100, Number(req.query?.limit) || 30));
+        const items = await listInAppNotificationsForUser(localUser.id, { limit });
+        const unread = await countUnreadInAppNotifications(localUser.id);
+        res.json({ items, unread });
+    } catch (e) {
+        log(`Error listing notifications: ${e.message}`);
+        res.status(500).json({ error: 'Failed to load notifications' });
+    }
+});
+
+app.post('/api/notifications/read', requireAuth, requireMember, async (req, res) => {
+    if (blockIfImpersonating(req, res)) return;
+    try {
+        const users = await loadFile(USERS_PATH, []);
+        const localUser = findLocalUserForSession(users, req.user);
+        if (!localUser?.id) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const markAll = !!req.body?.all;
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).filter(Boolean) : null;
+        const result = await markInAppNotificationsRead(localUser.id, markAll ? null : ids);
+        res.json({ success: true, ...result });
+    } catch (e) {
+        log(`Error marking notifications read: ${e.message}`);
+        res.status(500).json({ error: 'Failed to update notifications' });
     }
 });
 
@@ -3862,6 +3914,9 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                     : [],
                 achievementsMinPercentComplete: Math.min(100, Math.max(0, Number(config.achievementsMinPercentComplete) || 0)),
                 achievementsSeasons: Array.isArray(config.achievementsSeasons) ? config.achievementsSeasons : [],
+                requestAvailableNotifyEnabled: config.requestAvailableNotifyEnabled !== false,
+                requestAvailableNotifyEmail: config.requestAvailableNotifyEmail !== false,
+                requestAvailableNotifyInApp: config.requestAvailableNotifyInApp !== false,
                 watchHistorySource: config.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex',
                 tautulliConfigured: !!(config.tautulliUrl && config.tautulliApiKey),
                 collexionsAutostart: !!config.collexionsAutostart,
@@ -3991,6 +4046,9 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 achievementsDisabledBadgeIds: [],
                 achievementsMinPercentComplete: 0,
                 achievementsSeasons: [],
+                requestAvailableNotifyEnabled: true,
+                requestAvailableNotifyEmail: true,
+                requestAvailableNotifyInApp: true,
                 watchHistorySource: 'plex',
                 tautulliConfigured: false,
                 collexionsAutostart: false,
@@ -4029,7 +4087,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -4471,6 +4529,15 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         achievementsSeasons: achievementsSeasons !== undefined
             ? (Array.isArray(achievementsSeasons) ? achievementsSeasons : [])
             : (Array.isArray(existingConfig.achievementsSeasons) ? existingConfig.achievementsSeasons : []),
+        requestAvailableNotifyEnabled: requestAvailableNotifyEnabled !== undefined
+            ? !!requestAvailableNotifyEnabled
+            : (existingConfig.requestAvailableNotifyEnabled !== false),
+        requestAvailableNotifyEmail: requestAvailableNotifyEmail !== undefined
+            ? !!requestAvailableNotifyEmail
+            : (existingConfig.requestAvailableNotifyEmail !== false),
+        requestAvailableNotifyInApp: requestAvailableNotifyInApp !== undefined
+            ? !!requestAvailableNotifyInApp
+            : (existingConfig.requestAvailableNotifyInApp !== false),
         watchHistorySource: (() => {
             const raw = watchHistorySource !== undefined
                 ? watchHistorySource
@@ -7064,6 +7131,17 @@ const getPortalRequestService = (config) => createPortalRequestService({
         const blocklist = getPortalBlocklistService(config);
         return blocklist.isBlocked(mediaType, tmdbId);
     },
+    onBecameAvailable: async ({ record, prevMediaStatus }) => notifyRequestBecameAvailable({
+        config,
+        record,
+        prevMediaStatus,
+        loadUsers: () => loadFile(USERS_PATH, []),
+        sendEmail,
+        hasEmailBeenSent,
+        logEmailSent,
+        resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
+        log,
+    }),
 });
 
 const getPortalWatchlistService = (config) => createPortalWatchlistService({
@@ -15105,7 +15183,7 @@ const runPortalRequestStatusSync = async (reason = 'scheduled') => {
         job.nextRun = new Date(Date.now() + REQUEST_STATUS_SYNC_INTERVAL_MS).toISOString();
         markTaskEnd(job, null);
         if (summary?.updated > 0 || reason === 'manual') {
-            log(`[RequestStatusSync] ${reason}: checked=${summary.checked} updated=${summary.updated} available=${summary.available} downloading=${summary.downloading} errors=${summary.errors}`);
+            log(`[RequestStatusSync] ${reason}: checked=${summary.checked} updated=${summary.updated} available=${summary.available} downloading=${summary.downloading} notified=${summary.notified || 0} errors=${summary.errors}`);
         }
         return summary;
     } catch (error) {

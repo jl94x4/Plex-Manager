@@ -308,7 +308,7 @@ export const MainApp: React.FC = () => {
         setShowWhatsNew(false);
     }, [publicConfig?.appVersion]);
 
-    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number }) => {
+    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
         if (route === 'logs') {
             setCurrentRoute('settings');
             window.history.pushState({}, '', portalUrl('/settings#logs'));
@@ -336,10 +336,16 @@ export const MainApp: React.FC = () => {
             if (route === 'requests') {
                 path = options?.reviewId ? `/requests?review=${options.reviewId}` : '/requests';
             }
-            if (route === 'discovery') path = '/discovery';
+            if (route === 'discovery') {
+                const custom = String(options?.path || '').trim();
+                path = custom.startsWith('/discovery') ? custom : '/discovery';
+            }
             if (route === 'about') path = '/about';
             if (options?.hash) path += options.hash;
             window.history.pushState({}, '', portalUrl(path));
+            if (route === 'discovery') {
+                window.dispatchEvent(new Event('portal-discovery-navigate'));
+            }
         }
     }, []);
 

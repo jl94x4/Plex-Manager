@@ -146,6 +146,10 @@ export type UserDashboardWidgetDeps = {
     bazarrWidgets: any;
     handleRelink: () => void;
     handleToggleNewsletter: () => void;
+    handleToggleRequestAvailableEmail?: () => void;
+    handleToggleRequestAvailableInApp?: () => void;
+    notifyRequestAvailableEmail?: boolean;
+    notifyRequestAvailableInApp?: boolean;
     onViewAdmin: () => void;
     onViewSettings?: () => void;
     onViewLogs?: () => void;
@@ -305,6 +309,10 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
         setAnalyticsDaysOpen,
         handleRelink,
         handleToggleNewsletter,
+        handleToggleRequestAvailableEmail,
+        handleToggleRequestAvailableInApp,
+        notifyRequestAvailableEmail = true,
+        notifyRequestAvailableInApp = true,
         onViewAdmin,
         onViewSettings,
         onViewLogs,
@@ -457,15 +465,41 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                 return (
                     <div className="glass-card p-4 md:p-5 shadow-lg flex flex-col">
                         <p className="text-muted text-xs uppercase tracking-widest font-semibold mb-3 flex-shrink-0">Preferences</p>
-                        <div className="flex items-center justify-between gap-4">
-                            <div>
-                                <p className="text-text font-bold text-sm">Weekly Newsletter</p>
-                                <p className="text-muted text-xs mt-1 leading-relaxed">Automated library updates delivered to your inbox</p>
+                        <div className="flex flex-col gap-4">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-text font-bold text-sm">Weekly Newsletter</p>
+                                    <p className="text-muted text-xs mt-1 leading-relaxed">Automated library updates delivered to your inbox</p>
+                                </div>
+                                <button onClick={handleToggleNewsletter} aria-label="Toggle newsletter"
+                                    className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${!optOutNewsletter ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                    <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${!optOutNewsletter ? 'translate-x-8' : 'translate-x-1'}`} />
+                                </button>
                             </div>
-                            <button onClick={handleToggleNewsletter} aria-label="Toggle newsletter"
-                                className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${!optOutNewsletter ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
-                                <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${!optOutNewsletter ? 'translate-x-8' : 'translate-x-1'}`} />
-                            </button>
+                            {handleToggleRequestAvailableEmail && (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-text font-bold text-sm">Request available email</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">Email when a request finishes and is ready to watch</p>
+                                    </div>
+                                    <button onClick={handleToggleRequestAvailableEmail} aria-label="Toggle request available email"
+                                        className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableEmail ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableEmail ? 'translate-x-8' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            )}
+                            {handleToggleRequestAvailableInApp && (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-text font-bold text-sm">Request available in-app</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">Show a bell notification when your request is available</p>
+                                    </div>
+                                    <button onClick={handleToggleRequestAvailableInApp} aria-label="Toggle request available in-app"
+                                        className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableInApp ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableInApp ? 'translate-x-8' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
