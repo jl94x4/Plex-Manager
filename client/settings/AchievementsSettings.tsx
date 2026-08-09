@@ -5,6 +5,15 @@ import { apiFetch } from '../shared/api';
 
 export type AchievementsXpWeights = Record<string, number>;
 
+export type AchievementsSeason = {
+    id: string;
+    name: string;
+    activeFrom: string;
+    activeUntil: string;
+    badgeIds: string[];
+    spotlight: boolean;
+};
+
 type CatalogBadge = {
     id: string;
     name: string;
@@ -30,7 +39,18 @@ type Props = {
     setAchievementsDisabledBadgeIds: (v: string[]) => void;
     achievementsMinPercentComplete: number;
     setAchievementsMinPercentComplete: (v: number) => void;
+    achievementsSeasons: AchievementsSeason[];
+    setAchievementsSeasons: (v: AchievementsSeason[]) => void;
 };
+
+const emptySeason = (): AchievementsSeason => ({
+    id: `season-${Date.now().toString(36)}`,
+    name: '',
+    activeFrom: '',
+    activeUntil: '',
+    badgeIds: [],
+    spotlight: true,
+});
 
 export const AchievementsSettings: React.FC<Props> = ({
     achievementsEnabled,
@@ -50,6 +70,8 @@ export const AchievementsSettings: React.FC<Props> = ({
     setAchievementsDisabledBadgeIds,
     achievementsMinPercentComplete,
     setAchievementsMinPercentComplete,
+    achievementsSeasons,
+    setAchievementsSeasons,
 }) => {
     const [weightLabels, setWeightLabels] = useState<Record<string, string>>({});
     const [defaultWeights, setDefaultWeights] = useState<AchievementsXpWeights>({});
@@ -62,6 +84,8 @@ export const AchievementsSettings: React.FC<Props> = ({
     const [backfillBusy, setBackfillBusy] = useState(false);
     const [insights, setInsights] = useState<any>(null);
     const [insightsBusy, setInsightsBusy] = useState(false);
+    const [seasonDraft, setSeasonDraft] = useState<AchievementsSeason | null>(null);
+    const [seasonBadgeQuery, setSeasonBadgeQuery] = useState('');
 
     useEffect(() => {
         if (!achievementsEnabled) return;
@@ -160,6 +184,12 @@ export const AchievementsSettings: React.FC<Props> = ({
         });
     }, [catalog, badgeQuery, badgeCategory]);
 
+    const seasonBadgeMatches = useMemo(() => {
+        const q = seasonBadgeQuery.trim().toLowerCase();
+        if (!q) return catalog.slice(0, 40);
+        return catalog.filter((b) => b.name.toLowerCase().includes(q) || b.id.toLowerCase().includes(q)).slice(0, 40);
+    }, [catalog, seasonBadgeQuery]);
+
     const setWeight = (key: string, raw: string) => {
         const n = Number(raw);
         const value = Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0;
@@ -171,6 +201,36 @@ export const AchievementsSettings: React.FC<Props> = ({
         if (next.has(id)) next.delete(id);
         else next.add(id);
         setAchievementsDisabledBadgeIds([...next]);
+    };
+
+    const saveSeasonDraft = () => {
+        if (!seasonDraft) return;
+        const name = seasonDraft.name.trim();
+        if (!name) return;
+        const normalized: AchievementsSeason = {
+            ...seasonDraft,
+            name,
+            id: seasonDraft.id || `season-${Date.now().toString(36)}`,
+            badgeIds: [...new Set(seasonDraft.badgeIds.map(String).filter(Boolean))],
+        };
+        const idx = achievementsSeasons.findIndex((s) => s.id === normalized.id);
+        if (idx >= 0) {
+            const next = [...achievementsSeasons];
+            next[idx] = normalized;
+            setAchievementsSeasons(next);
+        } else {
+            setAchievementsSeasons([...achievementsSeasons, normalized]);
+        }
+        setSeasonDraft(null);
+        setSeasonBadgeQuery('');
+    };
+
+    const toggleSeasonBadge = (badgeId: string) => {
+        if (!seasonDraft) return;
+        const set = new Set(seasonDraft.badgeIds.map(String));
+        if (set.has(badgeId)) set.delete(badgeId);
+        else set.add(badgeId);
+        setSeasonDraft({ ...seasonDraft, badgeIds: [...set] });
     };
 
     return (
@@ -256,6 +316,152 @@ export const AchievementsSettings: React.FC<Props> = ({
                             }}
                         />
                     </div>
+                </div>
+
+                <div className="py-4 border-b border-border/60 space-y-3">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-text">Season manager</p>
+                            <SettingHint>
+                                Define seasonal windows that gate listed badges and optionally spotlight them on the Achievements page. Dates use MM-DD (or YYYY-MM-DD).
+                            </SettingHint>
+                        </div>
+                        <button
+                            type="button"
+                            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-border hover:border-plex/40 shrink-0"
+                            onClick={() => {
+                                setSeasonDraft(emptySeason());
+                                setSeasonBadgeQuery('');
+                            }}
+                        >
+                            Add season
+                        </button>
+                    </div>
+                    {achievementsSeasons.length === 0 && !seasonDraft && (
+                        <p className="text-xs text-muted">No seasons configured yet.</p>
+                    )}
+                    <div className="space-y-2">
+                        {achievementsSeasons.map((season) => (
+                            <div key={season.id} className="rounded-lg border border-border/50 bg-background/40 px-3 py-2.5 flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-text truncate">{season.name}</p>
+                                    <p className="text-[11px] text-muted font-mono mt-0.5">
+                                        {(season.activeFrom || '…')} → {(season.activeUntil || '…')}
+                                        {' · '}{season.badgeIds.length} badge{season.badgeIds.length === 1 ? '' : 's'}
+                                        {season.spotlight === false ? ' · no spotlight' : ''}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        className="text-xs font-semibold text-plex hover:underline"
+                                        onClick={() => {
+                                            setSeasonDraft({ ...season, badgeIds: [...season.badgeIds] });
+                                            setSeasonBadgeQuery('');
+                                        }}
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="text-xs font-semibold text-muted hover:text-red-300"
+                                        onClick={() => setAchievementsSeasons(achievementsSeasons.filter((s) => s.id !== season.id))}
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {seasonDraft && (
+                        <div className="rounded-xl border border-plex/30 bg-plex/5 p-3 space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <label className="space-y-1">
+                                    <span className="text-[11px] text-muted font-semibold">Name</span>
+                                    <input
+                                        className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex"
+                                        value={seasonDraft.name}
+                                        onChange={(e) => setSeasonDraft({ ...seasonDraft, name: e.target.value })}
+                                        placeholder="Halloween 2026"
+                                    />
+                                </label>
+                                <label className="flex items-center gap-2 pt-5">
+                                    <input
+                                        type="checkbox"
+                                        checked={seasonDraft.spotlight !== false}
+                                        onChange={(e) => setSeasonDraft({ ...seasonDraft, spotlight: e.target.checked })}
+                                    />
+                                    <span className="text-xs text-text">Show spotlight strip</span>
+                                </label>
+                                <label className="space-y-1">
+                                    <span className="text-[11px] text-muted font-semibold">Active from</span>
+                                    <input
+                                        className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex font-mono"
+                                        value={seasonDraft.activeFrom}
+                                        onChange={(e) => setSeasonDraft({ ...seasonDraft, activeFrom: e.target.value })}
+                                        placeholder="10-01"
+                                    />
+                                </label>
+                                <label className="space-y-1">
+                                    <span className="text-[11px] text-muted font-semibold">Active until</span>
+                                    <input
+                                        className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex font-mono"
+                                        value={seasonDraft.activeUntil}
+                                        onChange={(e) => setSeasonDraft({ ...seasonDraft, activeUntil: e.target.value })}
+                                        placeholder="10-31"
+                                    />
+                                </label>
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-[11px] text-muted font-semibold">
+                                    Badges in season ({seasonDraft.badgeIds.length})
+                                </p>
+                                <input
+                                    type="search"
+                                    value={seasonBadgeQuery}
+                                    onChange={(e) => setSeasonBadgeQuery(e.target.value)}
+                                    placeholder="Search badges to include…"
+                                    className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex"
+                                />
+                                <div className="max-h-40 overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40">
+                                    {seasonBadgeMatches.map((badge) => {
+                                        const on = seasonDraft.badgeIds.includes(badge.id);
+                                        return (
+                                            <label key={badge.id} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-white/5 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={on}
+                                                    onChange={() => toggleSeasonBadge(badge.id)}
+                                                />
+                                                <span className="w-5 text-center shrink-0">{badge.icon || '🏅'}</span>
+                                                <span className="text-xs text-text truncate">{badge.name}</span>
+                                            </label>
+                                        );
+                                    })}
+                                    {!seasonBadgeMatches.length && (
+                                        <p className="p-2 text-[11px] text-muted">No matching badges.</p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    className="text-xs font-semibold text-muted hover:text-text"
+                                    onClick={() => { setSeasonDraft(null); setSeasonBadgeQuery(''); }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-plex/40 bg-plex/15 text-plex disabled:opacity-50"
+                                    disabled={!seasonDraft.name.trim()}
+                                    onClick={saveSeasonDraft}
+                                >
+                                    Save season
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="py-4 border-b border-border/60 space-y-3">

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Award, Calendar, ChevronLeft, ChevronRight, Clapperboard, Clock, Disc3,
     Film, Flame, Lock, Music2, Sparkles, Trophy, X, Info, Medal, Target,
-    Gauge, PlayCircle, ChevronDown, Share2, Bell, BellOff, type LucideIcon,
+    Gauge, PlayCircle, ChevronDown, Share2, Bell, BellOff, Pin, type LucideIcon,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -11,6 +11,8 @@ import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { ShareAchievementsModal } from '../shared/ShareAchievements';
 import { tAchievements } from './i18n';
 import { groupBadgesIntoFamilies, type BadgeFamily } from './badgeFamilies';
+import { BadgeDetailDrawer } from './BadgeDetailDrawer';
+import { UnlockCelebration } from './UnlockCelebration';
 
 const LEADERBOARD_PAGE_SIZE = 10;
 const LEADERBOARD_FETCH_LIMIT = 100;
@@ -89,7 +91,8 @@ export const LadderFamilyCard: React.FC<{
     family: BadgeFamily;
     expanded: boolean;
     onToggle: () => void;
-}> = ({ family, expanded, onToggle }) => {
+    onBadgeClick?: (badge: any) => void;
+}> = ({ family, expanded, onToggle, onBadgeClick }) => {
     const focus = family.focus;
     const next = family.next;
     const complete = family.earnedCount >= family.totalCount && family.totalCount > 0;
@@ -132,9 +135,14 @@ export const LadderFamilyCard: React.FC<{
             {expanded && (
                 <div className="px-3 pb-3 grid grid-cols-1 gap-1.5 border-t border-white/5 pt-2">
                     {family.tiers.map((tier) => (
-                        <div
+                        <button
+                            type="button"
                             key={tier.id}
-                            className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs ${
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onBadgeClick?.(tier);
+                            }}
+                            className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-left w-full hover:ring-1 hover:ring-plex/30 ${
                                 tier.earned ? 'bg-plex/10 text-text' : 'bg-black/20 text-muted'
                             }`}
                         >
@@ -146,7 +154,7 @@ export const LadderFamilyCard: React.FC<{
                             ) : (
                                 <Lock className="w-3 h-3 shrink-0 opacity-50" />
                             )}
-                        </div>
+                        </button>
                     ))}
                 </div>
             )}
@@ -514,6 +522,9 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
     const [optOutBusy, setOptOutBusy] = useState(false);
     const [notifyBusy, setNotifyBusy] = useState(false);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
+    const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
+    const [pinBusy, setPinBusy] = useState(false);
+    const [celebrationBadges, setCelebrationBadges] = useState<any[]>([]);
 
     const sessionThumb = useMemo(() => {
         const session = sessionInfo?.session || {};
@@ -541,8 +552,13 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
 
             const newly = Array.isArray(me?.newlyEarnedIds) ? me.newlyEarnedIds : [];
             if (newly.length && me?.notifyOnUnlock !== false) {
+                const unlocked = newly.map((id: string) => (
+                    (me.earned || me.badges || []).find((b: any) => b.id === id)
+                    || { id, name: id, icon: '🏅' }
+                ));
+                setCelebrationBadges(unlocked);
                 if (newly.length === 1) {
-                    const badge = (me.earned || me.badges || []).find((b: any) => b.id === newly[0]);
+                    const badge = unlocked[0];
                     setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || newly[0] }), 'success'));
                 } else {
                     setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
@@ -605,6 +621,64 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
         const below = myIdx < board.length - 1 ? board[myIdx + 1] : null;
         return { above, below, me };
     }, [board]);
+
+    const pinnedIds = useMemo(
+        () => (Array.isArray(data?.pinnedBadgeIds) ? data.pinnedBadgeIds.map(String) : []),
+        [data?.pinnedBadgeIds],
+    );
+
+    const pinnedBadges = useMemo(() => {
+        if (!pinnedIds.length) return [] as any[];
+        const pool = [
+            ...(Array.isArray(data?.badges) ? data.badges : []),
+            ...(Array.isArray(data?.nextUnlocks) ? data.nextUnlocks : []),
+            ...(Array.isArray(data?.earned) ? data.earned : []),
+        ];
+        return pinnedIds.map((id) => pool.find((b: any) => String(b?.id) === id)).filter(Boolean);
+    }, [data, pinnedIds]);
+
+    const spotlightSeasons = useMemo(() => {
+        const seasons = Array.isArray(data?.activeSeasons) ? data.activeSeasons : [];
+        if (!seasons.length) return [] as any[];
+        const pool = Array.isArray(data?.badges) ? data.badges : [];
+        return seasons.map((season: any) => ({
+            ...season,
+            badges: (Array.isArray(season.badgeIds) ? season.badgeIds : [])
+                .map((id: string) => pool.find((b: any) => String(b?.id) === String(id)))
+                .filter(Boolean)
+                .slice(0, 6),
+        })).filter((s: any) => s.badges.length > 0 || s.name);
+    }, [data]);
+
+    const selectedLocalBadge = useMemo(() => {
+        if (!selectedBadgeId) return null;
+        const pool = [
+            ...(Array.isArray(data?.badges) ? data.badges : []),
+            ...(Array.isArray(data?.nextUnlocks) ? data.nextUnlocks : []),
+            ...(Array.isArray(data?.earned) ? data.earned : []),
+        ];
+        return pool.find((b: any) => String(b?.id) === selectedBadgeId) || null;
+    }, [data, selectedBadgeId]);
+
+    const togglePin = async (badgeId: string) => {
+        const id = String(badgeId);
+        const next = pinnedIds.includes(id)
+            ? pinnedIds.filter((x) => x !== id)
+            : [...pinnedIds, id].slice(0, 3);
+        setPinBusy(true);
+        try {
+            const res = await apiFetch('/api/achievements/me/pins', {
+                method: 'POST',
+                body: JSON.stringify({ ids: next }),
+            });
+            const saved = Array.isArray(res?.pinnedBadgeIds) ? res.pinnedBadgeIds.map(String) : next;
+            setData((prev: any) => (prev ? { ...prev, pinnedBadgeIds: saved } : prev));
+        } catch {
+            setToasts((prev) => pushToast(prev, tAchievements('drawer.pinFailed'), 'error'));
+        } finally {
+            setPinBusy(false);
+        }
+    };
 
     const myRank = rivals.me?.rank ?? null;
 
@@ -726,6 +800,74 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                 </p>
             </div>
 
+            {spotlightSeasons.length > 0 && (
+                <div className="glass-card p-5 space-y-4">
+                    <h2 className="text-sm font-bold text-text uppercase tracking-widest flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-plex" />
+                        {tAchievements('season.spotlight')}
+                    </h2>
+                    {spotlightSeasons.map((season: any) => (
+                        <div key={season.id || season.name} className="space-y-2">
+                            <div className="flex items-baseline justify-between gap-2">
+                                <p className="text-sm font-bold text-text">{season.name}</p>
+                                {(season.activeFrom || season.activeUntil) && (
+                                    <p className="text-[10px] text-muted font-mono shrink-0">
+                                        {season.activeFrom || '…'} → {season.activeUntil || '…'}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                {(season.badges || []).map((badge: any) => (
+                                    <BadgeTile
+                                        key={badge.id}
+                                        badge={badge}
+                                        compact
+                                        onClick={() => setSelectedBadgeId(String(badge.id))}
+                                    />
+                                ))}
+                                {!(season.badges || []).length && (
+                                    <p className="text-xs text-muted col-span-full">{tAchievements('season.emptyBadges')}</p>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {pinnedBadges.length > 0 && (
+                <div className="glass-card p-5 space-y-3">
+                    <h2 className="text-sm font-bold text-text uppercase tracking-widest flex items-center gap-2">
+                        <Pin className="w-4 h-4 text-plex" />
+                        {tAchievements('page.pinnedGoals')}
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {pinnedBadges.map((badge: any) => (
+                            <button
+                                type="button"
+                                key={badge.id}
+                                onClick={() => setSelectedBadgeId(String(badge.id))}
+                                className="rounded-xl border border-plex/30 bg-plex/5 px-3 py-2.5 min-w-0 text-left hover:border-plex/50"
+                            >
+                                <div className="flex items-start gap-2">
+                                    <span className="text-xl leading-none">{badge.icon || '🏅'}</span>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-bold truncate">{badge.name}</p>
+                                        <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
+                                            <div className="h-full rounded-full bg-plex" style={{ width: `${Math.min(100, Number(badge.progressPct) || (badge.earned ? 100 : 0))}%` }} />
+                                        </div>
+                                        <p className="mt-1 text-[10px] text-muted font-mono">
+                                            {badge.earned
+                                                ? tAchievements('badge.earned')
+                                                : `${badge.progress ?? 0} / ${badge.threshold ?? 0}`}
+                                        </p>
+                                    </div>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {Array.isArray(data?.nextUnlocks) && data.nextUnlocks.length > 0 && (
                 <div className="glass-card p-5 space-y-3">
                     <h2 className="text-sm font-bold text-text uppercase tracking-widest flex items-center gap-2">
@@ -734,11 +876,19 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         {data.nextUnlocks.map((badge: any) => (
-                            <div key={badge.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 min-w-0">
+                            <button
+                                type="button"
+                                key={badge.id}
+                                onClick={() => setSelectedBadgeId(String(badge.id))}
+                                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 min-w-0 text-left hover:border-plex/40"
+                            >
                                 <div className="flex items-start gap-2">
                                     <span className="text-xl leading-none">{badge.icon || '🏅'}</span>
                                     <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-bold truncate">{badge.name}</p>
+                                        <p className="text-sm font-bold truncate flex items-center gap-1.5">
+                                            {badge.name}
+                                            {pinnedIds.includes(String(badge.id)) && <Pin className="w-3 h-3 text-plex shrink-0" />}
+                                        </p>
                                         <p className="text-[11px] text-muted line-clamp-2 mt-0.5">{badge.description}</p>
                                         <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
                                             <div className="h-full rounded-full bg-plex" style={{ width: `${Math.min(100, Number(badge.progressPct) || 0)}%` }} />
@@ -748,7 +898,7 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                         </p>
                                     </div>
                                 </div>
-                            </div>
+                            </button>
                         ))}
                     </div>
                 </div>
@@ -903,7 +1053,11 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
             {expandLadders ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {badges.map((badge: any) => (
-                        <BadgeTile key={badge.id} badge={badge} />
+                        <BadgeTile
+                            key={badge.id}
+                            badge={badge}
+                            onClick={() => setSelectedBadgeId(String(badge.id))}
+                        />
                     ))}
                 </div>
             ) : (
@@ -917,6 +1071,7 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                 ...prev,
                                 [family.key]: !prev[family.key],
                             }))}
+                            onBadgeClick={(badge) => setSelectedBadgeId(String(badge.id))}
                         />
                     ))}
                 </div>
@@ -933,6 +1088,20 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                 totalBadges={data?.totalBadges}
                 nextUnlocks={data?.nextUnlocks}
             />
+            <BadgeDetailDrawer
+                badgeId={selectedBadgeId}
+                localBadge={selectedLocalBadge}
+                pinnedIds={pinnedIds}
+                onClose={() => setSelectedBadgeId(null)}
+                onTogglePin={(id) => { void togglePin(id); }}
+                pinBusy={pinBusy}
+            />
+            {celebrationBadges.length > 0 && (
+                <UnlockCelebration
+                    badges={celebrationBadges}
+                    onClose={() => setCelebrationBadges([])}
+                />
+            )}
             {shareOpen && (
                 <ModalPortal open={shareOpen}>
                     <ShareAchievementsModal
@@ -958,7 +1127,14 @@ export const AchievementsHomeWidget: React.FC<{
     if (!summary) return null;
     const lp = summary.levelProgress || {};
     const recent = (summary.recentEarned || summary.earned?.slice?.(0, 6) || []) as any[];
-    const next = (Array.isArray(summary.nextUnlocks) ? summary.nextUnlocks.slice(0, 2) : []) as any[];
+    const pinnedIds = Array.isArray(summary.pinnedBadgeIds) ? summary.pinnedBadgeIds.map(String) : [];
+    const nextPool = Array.isArray(summary.nextUnlocks) ? summary.nextUnlocks : [];
+    const earnedPool = Array.isArray(summary.earned) ? summary.earned : [];
+    const pinned = pinnedIds
+        .map((id: string) => nextPool.find((b: any) => String(b?.id) === id) || earnedPool.find((b: any) => String(b?.id) === id))
+        .filter(Boolean)
+        .slice(0, 3);
+    const next = (pinned.length ? pinned : nextPool.slice(0, 2)) as any[];
     return (
         <button
             type="button"
@@ -980,17 +1156,21 @@ export const AchievementsHomeWidget: React.FC<{
             </div>
             {next.length > 0 && (
                 <div className="mb-3 space-y-1.5">
-                    <p className="text-[10px] uppercase tracking-widest text-muted font-bold">{tAchievements('home.next')}</p>
+                    <p className="text-[10px] uppercase tracking-widest text-muted font-bold">
+                        {pinned.length ? tAchievements('page.pinnedGoals') : tAchievements('home.next')}
+                    </p>
                     {next.map((badge) => (
                         <div key={badge.id} className="flex items-center gap-2 min-w-0">
                             <span className="text-base leading-none">{badge.icon || '🏅'}</span>
                             <div className="min-w-0 flex-1">
                                 <p className="text-[11px] font-semibold truncate">{badge.name}</p>
                                 <div className="mt-0.5 h-1 rounded-full bg-black/40 overflow-hidden">
-                                    <div className="h-full bg-plex/80 rounded-full" style={{ width: `${Math.min(100, Number(badge.progressPct) || 0)}%` }} />
+                                    <div className="h-full bg-plex/80 rounded-full" style={{ width: `${Math.min(100, Number(badge.progressPct) || (badge.earned ? 100 : 0))}%` }} />
                                 </div>
                             </div>
-                            <span className="text-[10px] text-muted font-mono shrink-0">{badge.progress ?? 0}/{badge.threshold ?? 0}</span>
+                            <span className="text-[10px] text-muted font-mono shrink-0">
+                                {badge.earned ? tAchievements('badge.earned') : `${badge.progress ?? 0}/${badge.threshold ?? 0}`}
+                            </span>
                         </div>
                     ))}
                 </div>

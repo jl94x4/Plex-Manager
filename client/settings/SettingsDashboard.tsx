@@ -493,6 +493,7 @@ export const SettingsDashboard: React.FC = () => {
     const [achievementsXpWeights, setAchievementsXpWeights] = useState<Record<string, number>>({});
     const [achievementsDisabledBadgeIds, setAchievementsDisabledBadgeIds] = useState<string[]>([]);
     const [achievementsMinPercentComplete, setAchievementsMinPercentComplete] = useState(0);
+    const [achievementsSeasons, setAchievementsSeasons] = useState<import('./AchievementsSettings').AchievementsSeason[]>([]);
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
     const [tautulliConfigured, setTautulliConfigured] = useState(false);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
@@ -1211,6 +1212,18 @@ export const SettingsDashboard: React.FC = () => {
             } else {
                 setAchievementsMinPercentComplete(0);
             }
+            if (Array.isArray(initialSettings.achievementsSeasons)) {
+                setAchievementsSeasons(initialSettings.achievementsSeasons.map((s: any) => ({
+                    id: String(s.id || `season-${Math.random().toString(36).slice(2, 8)}`),
+                    name: String(s.name || ''),
+                    activeFrom: String(s.activeFrom || ''),
+                    activeUntil: String(s.activeUntil || ''),
+                    badgeIds: Array.isArray(s.badgeIds) ? s.badgeIds.map(String).filter(Boolean) : [],
+                    spotlight: s.spotlight !== false,
+                })).filter((s: any) => s.name));
+            } else {
+                setAchievementsSeasons([]);
+            }
             if (initialSettings.watchHistorySource !== undefined) {
                 setWatchHistorySource(initialSettings.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex');
             }
@@ -1628,6 +1641,7 @@ export const SettingsDashboard: React.FC = () => {
             achievementsXpWeights: Object.keys(achievementsXpWeights).length ? achievementsXpWeights : null,
             achievementsDisabledBadgeIds,
             achievementsMinPercentComplete,
+            achievementsSeasons,
             watchHistorySource,
             mediaAutomation: {
                 ...mediaAutomation,
@@ -3130,6 +3144,8 @@ export const SettingsDashboard: React.FC = () => {
                                 setAchievementsDisabledBadgeIds={setAchievementsDisabledBadgeIds}
                                 achievementsMinPercentComplete={achievementsMinPercentComplete}
                                 setAchievementsMinPercentComplete={setAchievementsMinPercentComplete}
+                                achievementsSeasons={achievementsSeasons}
+                                setAchievementsSeasons={setAchievementsSeasons}
                             />
                         </div>
                     )}

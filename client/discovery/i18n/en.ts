@@ -182,6 +182,7 @@ export const en = {
         chipFresh: 'New Movies',
         chipFreshTv: 'New Series',
         achievementsNext: 'Next unlock: {name} ({progress})',
+        achievementsPinned: 'Pinned: {name} ({progress})',
     },
     home: {
         forYou: 'For you',

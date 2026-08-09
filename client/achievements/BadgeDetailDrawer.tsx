@@ -1,0 +1,206 @@
+import React, { useEffect, useState } from 'react';
+import { Pin, PinOff, Users, X, Lock, Calendar } from 'lucide-react';
+import { apiFetch } from '../shared/api';
+import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
+import { ModalPortal } from '../shared/ModalPortal';
+import { tAchievements } from './i18n';
+
+const rarityClass = (rarity: string) => {
+    if (rarity === 'legendary') return 'border-amber-400/50 bg-amber-500/10 text-amber-100';
+    if (rarity === 'epic') return 'border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-100';
+    if (rarity === 'rare') return 'border-sky-400/40 bg-sky-500/10 text-sky-100';
+    return 'border-white/10 bg-white/[0.03] text-text';
+};
+
+const resolveAvatar = (thumb: string | null | undefined) => {
+    if (!thumb) return logoUrl();
+    if (thumb.startsWith('http://') || thumb.startsWith('https://') || thumb.startsWith('/api/')) {
+        return resolvePortalAssetUrl(thumb);
+    }
+    return portalUrl(`/api/plex/image?path=${encodeURIComponent(thumb)}&width=64&height=64`);
+};
+
+type Props = {
+    badgeId: string | null;
+    localBadge?: any;
+    pinnedIds: string[];
+    onClose: () => void;
+    onTogglePin: (badgeId: string) => void;
+    pinBusy?: boolean;
+};
+
+export const BadgeDetailDrawer: React.FC<Props> = ({
+    badgeId,
+    localBadge,
+    pinnedIds,
+    onClose,
+    onTogglePin,
+    pinBusy,
+}) => {
+    const [detail, setDetail] = useState<any>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!badgeId) {
+            setDetail(null);
+            setError(null);
+            return;
+        }
+        let cancelled = false;
+        setLoading(true);
+        setError(null);
+        apiFetch(`/api/achievements/badge/${encodeURIComponent(badgeId)}`)
+            .then((data) => {
+                if (!cancelled) setDetail(data);
+            })
+            .catch((e: any) => {
+                if (!cancelled) {
+                    setDetail(null);
+                    setError(e?.message || tAchievements('drawer.error'));
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [badgeId]);
+
+    if (!badgeId) return null;
+
+    const badge = detail || localBadge || { id: badgeId };
+    const earned = detail?.you?.earned ?? !!localBadge?.earned;
+    const earnedAt = detail?.you?.earnedAt || localBadge?.earnedAt || null;
+    const progress = detail?.you?.progress ?? localBadge?.progress ?? 0;
+    const progressPct = detail?.you?.progressPct ?? localBadge?.progressPct ?? 0;
+    const threshold = detail?.threshold ?? localBadge?.threshold ?? 0;
+    const pinned = pinnedIds.includes(String(badgeId));
+    const unlockCount = Number(detail?.unlockCount) || 0;
+    const totalUsers = Math.max(1, Number(detail?.totalUsers) || 1);
+    const rarityPct = Math.round((unlockCount / totalUsers) * 100);
+
+    return (
+        <ModalPortal open={true}>
+            <div className="fixed inset-0 z-[210] flex items-end sm:items-center justify-center p-0 sm:p-5">
+                <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" aria-label="Close" onClick={onClose} />
+                <div className={`relative w-full sm:max-w-lg max-h-[92vh] flex flex-col rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.55)] bg-[#12141a] ${rarityClass(badge.rarity || 'common')}`}>
+                    <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-white/8 shrink-0">
+                        <div className="flex items-start gap-3 min-w-0">
+                            <span className="text-4xl leading-none">{badge.icon || '🏅'}</span>
+                            <div className="min-w-0">
+                                <p className="text-[10px] uppercase tracking-[0.22em] text-muted font-bold mb-1">
+                                    {(badge.rarity || 'common').toString()}
+                                </p>
+                                <h3 className="text-xl font-black text-text truncate">{badge.name || badgeId}</h3>
+                                <p className="text-sm text-muted mt-1 leading-relaxed">{badge.description}</p>
+                            </div>
+                        </div>
+                        <button type="button" onClick={onClose} className="p-2 rounded-xl text-muted hover:text-text hover:bg-white/5 shrink-0">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-5">
+                        {loading && <p className="text-sm text-muted">{tAchievements('drawer.loading')}</p>}
+                        {error && <p className="text-sm text-red-300">{error}</p>}
+
+                        <div>
+                            <div className="flex items-center justify-between gap-2 text-xs mb-2">
+                                <span className="text-muted font-semibold">
+                                    {earned ? tAchievements('badge.earned') : tAchievements('drawer.progress')}
+                                </span>
+                                <span className="font-mono tabular-nums text-text">
+                                    {earned ? '100%' : `${progress} / ${threshold}`}
+                                </span>
+                            </div>
+                            <div className="h-2.5 rounded-full bg-black/45 overflow-hidden border border-white/5">
+                                <div
+                                    className={`h-full rounded-full ${earned ? 'bg-plex' : 'bg-white/30'}`}
+                                    style={{ width: `${Math.min(100, earned ? 100 : Number(progressPct) || 0)}%` }}
+                                />
+                            </div>
+                            {earned && earnedAt && (
+                                <p className="mt-2 text-[11px] text-muted flex items-center gap-1.5">
+                                    <Calendar className="w-3.5 h-3.5" />
+                                    {tAchievements('drawer.earnedAt', { date: new Date(earnedAt).toLocaleString() })}
+                                </p>
+                            )}
+                            {!earned && (
+                                <p className="mt-2 text-[11px] text-muted flex items-center gap-1.5">
+                                    <Lock className="w-3.5 h-3.5" />
+                                    {tAchievements('drawer.locked')}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="rounded-xl border border-white/10 bg-black/25 px-3.5 py-3">
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1">
+                                {tAchievements('drawer.rarity')}
+                            </p>
+                            <p className="text-sm text-text font-semibold">
+                                {tAchievements('drawer.holders', { count: unlockCount, pct: rarityPct })}
+                            </p>
+                        </div>
+
+                        {Array.isArray(detail?.seasons) && detail.seasons.length > 0 && (
+                            <div className="rounded-xl border border-white/10 bg-black/25 px-3.5 py-3 space-y-1">
+                                <p className="text-[10px] uppercase tracking-widest font-bold text-muted">
+                                    {tAchievements('drawer.seasons')}
+                                </p>
+                                {detail.seasons.map((s: any) => (
+                                    <p key={s.id} className="text-xs text-text">
+                                        {s.name}
+                                        {s.activeFrom || s.activeUntil
+                                            ? ` · ${s.activeFrom || '…'} → ${s.activeUntil || '…'}`
+                                            : ''}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+
+                        <div>
+                            <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-2 flex items-center gap-1.5">
+                                <Users className="w-3.5 h-3.5 text-plex" />
+                                {tAchievements('drawer.rivals')}
+                            </p>
+                            <div className="space-y-1.5">
+                                {(detail?.earliestHolders || []).slice(0, 8).map((h: any) => (
+                                    <div key={`${h.accountId}-${h.earnedAt}`} className="flex items-center gap-2.5 rounded-lg border border-white/5 bg-black/20 px-2.5 py-2">
+                                        <img
+                                            src={resolveAvatar(h.thumb)}
+                                            alt=""
+                                            className="w-8 h-8 rounded-full object-cover border border-white/10 bg-black/40"
+                                            onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-semibold truncate">{h.username}</p>
+                                            <p className="text-[10px] text-muted font-mono truncate">
+                                                Lv {h.level} · {h.earnedAt ? new Date(h.earnedAt).toLocaleDateString() : ''}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                                {!loading && !(detail?.earliestHolders || []).length && (
+                                    <p className="text-xs text-muted">{tAchievements('drawer.noHolders')}</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="shrink-0 border-t border-white/8 px-5 py-3 flex items-center gap-2">
+                        <button
+                            type="button"
+                            disabled={pinBusy || (!earned && pinnedIds.length >= 3 && !pinned)}
+                            onClick={() => onTogglePin(String(badgeId))}
+                            className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-white/5 text-sm font-semibold hover:border-plex/40 disabled:opacity-50"
+                        >
+                            {pinned
+                                ? <><PinOff className="w-4 h-4" /> {tAchievements('drawer.unpin')}</>
+                                : <><Pin className="w-4 h-4 text-plex" /> {tAchievements('drawer.pin')}</>}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </ModalPortal>
+    );
+};

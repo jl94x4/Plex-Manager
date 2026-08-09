@@ -688,7 +688,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
-    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'graphs'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'graphs' | 'xp'>('overview');
 
     const [historyPage, setHistoryPage] = useState(1);
     const [historySearch, setHistorySearch] = useState('');
@@ -697,6 +697,9 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
     const [historyLoading, setHistoryLoading] = useState(false);
     const [historySource, setHistorySource] = useState<'tautulli' | 'plex' | null>(null);
     const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
+    const [xpAudit, setXpAudit] = useState<any>(null);
+    const [xpAuditLoading, setXpAuditLoading] = useState(false);
+    const [xpAuditError, setXpAuditError] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -708,12 +711,35 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
         setHistoryData([]);
         setHistorySource(null);
         setExpandedHistoryId(null);
+        setXpAudit(null);
+        setXpAuditError(null);
         apiFetch(`/api/plex/analytics/user/${userId}?days=${days}`)
             .then(res => { if (!cancelled) setData(res); })
             .catch(() => { if (!cancelled) setError(true); })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, [userId, days]);
+
+    useEffect(() => {
+        if (activeTab !== 'xp') return;
+        let cancelled = false;
+        setXpAuditLoading(true);
+        setXpAuditError(null);
+        apiFetch(`/api/achievements/admin/user/${encodeURIComponent(userId)}/audit`)
+            .then((res) => {
+                if (!cancelled) setXpAudit(res);
+            })
+            .catch((e: any) => {
+                if (!cancelled) {
+                    setXpAudit(null);
+                    setXpAuditError(e?.message || 'No achievements snapshot for this user.');
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setXpAuditLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [userId, activeTab]);
 
     useEffect(() => {
         if (activeTab !== 'history') return;
@@ -799,16 +825,99 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
 
                 {/* Tabs */}
                 <div className="flex border-b border-border bg-black/40 px-6 gap-6">
-                    {['overview', 'history', 'graphs'].map(tab => (
-                        <button key={tab} onClick={() => setActiveTab(tab as any)} className={`py-3 px-2 font-bold text-sm uppercase tracking-wider transition-colors border-b-2 ${activeTab === tab ? 'border-plex text-text' : 'border-transparent text-muted hover:text-white'}`}>
-                            {tab}
+                    {(['overview', 'history', 'graphs', 'xp'] as const).map(tab => (
+                        <button key={tab} onClick={() => setActiveTab(tab)} className={`py-3 px-2 font-bold text-sm uppercase tracking-wider transition-colors border-b-2 ${activeTab === tab ? 'border-plex text-text' : 'border-transparent text-muted hover:text-white'}`}>
+                            {tab === 'xp' ? 'XP audit' : tab}
                         </button>
                     ))}
                 </div>
 
                 {/* Content */}
                 <div className="p-6 overflow-y-auto flex-1 min-h-0 flex flex-col gap-8 custom-scrollbar">
-                    {loading ? (
+                    {activeTab === 'xp' ? (
+                        <div className="flex flex-col gap-5 min-h-[320px]">
+                            <div>
+                                <h3 className="text-lg font-bold text-text uppercase tracking-wider flex items-center gap-2">
+                                    <Trophy className="text-plex w-4 h-4" /> Achievements XP audit
+                                </h3>
+                                <p className="text-xs text-muted mt-1">
+                                    Snapshot totals and weighted source breakdown that explain this member’s XP.
+                                </p>
+                            </div>
+                            {xpAuditLoading ? (
+                                <div className="flex justify-center items-center h-40"><Loader isLoading={true} /></div>
+                            ) : xpAuditError || !xpAudit ? (
+                                <div className="flex flex-col items-center justify-center h-40 text-center gap-2">
+                                    <AlertCircle className="w-8 h-8 text-amber-400" />
+                                    <p className="text-muted text-sm">{xpAuditError || 'No achievements data for this user.'}</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                        {[
+                                            { label: 'XP', value: Number(xpAudit.xp || 0).toLocaleString() },
+                                            { label: 'Level', value: String(xpAudit.level || 1) },
+                                            { label: 'Badges', value: `${xpAudit.earnedCount || 0}/${xpAudit.totalBadges || 0}` },
+                                            { label: 'Source', value: String(xpAudit.watchHistorySource || 'plex') },
+                                        ].map((card) => (
+                                            <div key={card.label} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
+                                                <p className="text-[10px] uppercase tracking-widest text-muted font-bold">{card.label}</p>
+                                                <p className="text-lg font-black text-text font-mono mt-1 tabular-nums">{card.value}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="text-[11px] text-muted flex flex-wrap gap-x-4 gap-y-1">
+                                        {xpAudit.updatedAt && <span>Updated {new Date(xpAudit.updatedAt).toLocaleString()}</span>}
+                                        {xpAudit.leaderboardOptOut ? <span className="text-amber-300">Hidden from leaderboard</span> : null}
+                                        {xpAudit.muteUnlockToasts ? <span>Unlock toasts muted</span> : null}
+                                        {Array.isArray(xpAudit.pinnedBadgeIds) && xpAudit.pinnedBadgeIds.length > 0 && (
+                                            <span>Pinned: {xpAudit.pinnedBadgeIds.join(', ')}</span>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-bold text-text mb-2">XP breakdown</h4>
+                                        <div className="space-y-1.5">
+                                            {(Array.isArray(xpAudit.breakdown) ? xpAudit.breakdown : Object.entries(xpAudit.breakdown || {}).map(([key, xp]) => ({ key, xp })))
+                                                .map((row: any) => {
+                                                    const key = row.key || row.metric || row.id;
+                                                    const xp = Number(row.xp ?? row.value ?? row.points ?? 0) || 0;
+                                                    if (!key && !xp) return null;
+                                                    return (
+                                                        <div key={String(key)} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-sm">
+                                                            <span className="text-text truncate">{String(key)}</span>
+                                                            <span className="font-mono text-plex font-bold tabular-nums shrink-0">+{xp.toLocaleString()}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            {!(Array.isArray(xpAudit.breakdown) ? xpAudit.breakdown.length : Object.keys(xpAudit.breakdown || {}).length) && (
+                                                <p className="text-sm text-muted">No breakdown parts stored.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {Array.isArray(xpAudit.recentBadges) && xpAudit.recentBadges.length > 0 && (
+                                        <div>
+                                            <h4 className="text-sm font-bold text-text mb-2">Recent badges</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {xpAudit.recentBadges.map((b: any) => (
+                                                    <span key={b.id} className="text-[11px] rounded-lg border border-white/10 bg-black/25 px-2.5 py-1 font-mono text-muted">
+                                                        {b.id}{b.earnedAt ? ` · ${new Date(b.earnedAt).toLocaleDateString()}` : ''}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {xpAudit.stats && (
+                                        <details className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                                            <summary className="cursor-pointer text-xs font-semibold text-muted hover:text-text">Raw stats</summary>
+                                            <pre className="mt-2 text-[10px] text-muted overflow-x-auto whitespace-pre-wrap font-mono">
+                                                {JSON.stringify(xpAudit.stats, null, 2)}
+                                            </pre>
+                                        </details>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    ) : loading ? (
                         <div className="flex justify-center items-center h-40"><Loader isLoading={true} /></div>
                     ) : (error || !data) ? (
                         <div className="flex flex-col items-center justify-center h-40 text-center gap-2">

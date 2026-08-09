@@ -31,6 +31,7 @@ import { CollexionsHomeWidget } from '../collexions/CollexionsHomeWidget';
 import { ScannerHomeWidget } from '../scanner/ScannerHomeWidget';
 import { MediaAutomationHomeWidget } from '../media-automation/MediaAutomationHomeWidget';
 import { AchievementsHomeWidget } from '../achievements/AchievementsDashboard';
+import { UnlockCelebration } from '../achievements/UnlockCelebration';
 import { tAchievements } from '../achievements/i18n';
 import { apiFetch } from '../shared/api';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
@@ -38,6 +39,7 @@ import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 const AchievementsHomeWidgetConnected: React.FC = () => {
     const [summary, setSummary] = useState<any>(null);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
+    const [celebrationBadges, setCelebrationBadges] = useState<any[]>([]);
     useEffect(() => {
         let cancelled = false;
         let idleId: number | null = null;
@@ -53,8 +55,13 @@ const AchievementsHomeWidgetConnected: React.FC = () => {
                     setSummary(data);
                     const newly = Array.isArray(data?.newlyEarnedIds) ? data.newlyEarnedIds : [];
                     if (newly.length && data?.notifyOnUnlock !== false) {
+                        const unlocked = newly.map((id: string) => (
+                            (data.recentEarned || data.earned || []).find((b: any) => b.id === id)
+                            || { id, name: id, icon: '🏅' }
+                        ));
+                        setCelebrationBadges(unlocked);
                         if (newly.length === 1) {
-                            const badge = (data.recentEarned || data.earned || []).find((b: any) => b.id === newly[0]);
+                            const badge = unlocked[0];
                             setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || newly[0] }), 'success'));
                         } else if (newly.length > 1) {
                             setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
@@ -91,6 +98,12 @@ const AchievementsHomeWidgetConnected: React.FC = () => {
     return (
         <>
             <ToastContainer toasts={toasts} setToasts={setToasts} />
+            {celebrationBadges.length > 0 && (
+                <UnlockCelebration
+                    badges={celebrationBadges}
+                    onClose={() => setCelebrationBadges([])}
+                />
+            )}
             <AchievementsHomeWidget
                 summary={summary}
                 onOpen={() => {
