@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DiscoverHeroHeader } from './DiscoverHeroHeader';
+import { DiscoverAchievementsTeaser } from './DiscoverAchievementsTeaser';
 import { DiscoverHome } from './DiscoverHome';
 import { DiscoverMovies } from './DiscoverMovies';
 import { DiscoverSeries } from './DiscoverSeries';
@@ -355,6 +356,7 @@ const DiscoveryDashboardInner: React.FC<{
     return (
         <div className="discovery-theme w-full flex flex-col gap-4 pb-8">
             <DiscoverHeroHeader {...heroProps} />
+            <DiscoverAchievementsTeaser navigate={navigate} />
 
             {showTabs && (
                 <>

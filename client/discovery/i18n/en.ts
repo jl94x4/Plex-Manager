@@ -181,6 +181,7 @@ export const en = {
         chipSciFiTv: 'Sci-Fi TV',
         chipFresh: 'New Movies',
         chipFreshTv: 'New Series',
+        achievementsNext: 'Next unlock: {name} ({progress})',
     },
     home: {
         forYou: 'For you',

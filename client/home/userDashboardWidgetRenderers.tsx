@@ -52,11 +52,13 @@ const AchievementsHomeWidgetConnected: React.FC = () => {
                     }
                     setSummary(data);
                     const newly = Array.isArray(data?.newlyEarnedIds) ? data.newlyEarnedIds : [];
-                    if (newly.length === 1) {
-                        const badge = (data.recentEarned || data.earned || []).find((b: any) => b.id === newly[0]);
-                        setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || newly[0] }), 'success'));
-                    } else if (newly.length > 1) {
-                        setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
+                    if (newly.length && data?.notifyOnUnlock !== false) {
+                        if (newly.length === 1) {
+                            const badge = (data.recentEarned || data.earned || []).find((b: any) => b.id === newly[0]);
+                            setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || newly[0] }), 'success'));
+                        } else if (newly.length > 1) {
+                            setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
+                        }
                     }
                     if (newly.length) {
                         void apiFetch('/api/achievements/me/ack-unlocks', {

@@ -180,6 +180,7 @@ export const fr: DeepPartial<EnCatalog> = {
         chipSciFiTv: 'Sci-Fi TV',
         chipFresh: 'Nouveaux films',
         chipFreshTv: 'Nouvelles séries',
+        achievementsNext: 'Prochain déblocage : {name} ({progress})',
     },
     home: {
         forYou: 'Pour vous',

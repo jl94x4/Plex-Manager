@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Award, Calendar, ChevronLeft, ChevronRight, Clapperboard, Clock, Disc3,
     Film, Flame, Lock, Music2, Sparkles, Trophy, X, Info, Medal, Target,
-    Gauge, PlayCircle, ChevronDown, type LucideIcon,
+    Gauge, PlayCircle, ChevronDown, Share2, Bell, BellOff, type LucideIcon,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
+import { ShareAchievementsModal } from '../shared/ShareAchievements';
 import { tAchievements } from './i18n';
 import { groupBadgesIntoFamilies, type BadgeFamily } from './badgeFamilies';
 
@@ -509,7 +510,9 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
     const [expandLadders, setExpandLadders] = useState(false);
     const [expandedFamilies, setExpandedFamilies] = useState<Record<string, boolean>>({});
     const [breakdownOpen, setBreakdownOpen] = useState(false);
+    const [shareOpen, setShareOpen] = useState(false);
     const [optOutBusy, setOptOutBusy] = useState(false);
+    const [notifyBusy, setNotifyBusy] = useState(false);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
     const sessionThumb = useMemo(() => {
@@ -537,11 +540,13 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
             setLoading(false);
 
             const newly = Array.isArray(me?.newlyEarnedIds) ? me.newlyEarnedIds : [];
-            if (newly.length === 1) {
-                const badge = (me.earned || me.badges || []).find((b: any) => b.id === newly[0]);
-                setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || newly[0] }), 'success'));
-            } else if (newly.length > 1) {
-                setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
+            if (newly.length && me?.notifyOnUnlock !== false) {
+                if (newly.length === 1) {
+                    const badge = (me.earned || me.badges || []).find((b: any) => b.id === newly[0]);
+                    setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || newly[0] }), 'success'));
+                } else {
+                    setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
+                }
             }
             if (newly.length) {
                 void apiFetch('/api/achievements/me/ack-unlocks', {
@@ -592,6 +597,17 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
         [board, safeBoardPage],
     );
 
+    const rivals = useMemo(() => {
+        const myIdx = board.findIndex((e) => e?.isMe);
+        if (myIdx < 0) return { above: null as any, below: null as any, me: null as any };
+        const me = board[myIdx];
+        const above = myIdx > 0 ? board[myIdx - 1] : null;
+        const below = myIdx < board.length - 1 ? board[myIdx + 1] : null;
+        return { above, below, me };
+    }, [board]);
+
+    const myRank = rivals.me?.rank ?? null;
+
     const toggleOptOut = async () => {
         if (!data) return;
         setOptOutBusy(true);
@@ -606,6 +622,23 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
             /* ignore */
         } finally {
             setOptOutBusy(false);
+        }
+    };
+
+    const toggleNotify = async () => {
+        if (!data) return;
+        setNotifyBusy(true);
+        try {
+            const next = data.notifyOnUnlock === false;
+            await apiFetch('/api/achievements/me/notify', {
+                method: 'POST',
+                body: JSON.stringify({ notifyOnUnlock: next }),
+            });
+            setData((prev: any) => (prev ? { ...prev, notifyOnUnlock: next } : prev));
+        } catch {
+            /* ignore */
+        } finally {
+            setNotifyBusy(false);
         }
     };
 
@@ -644,13 +677,35 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                         })}
                     </p>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => setBreakdownOpen(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-white/5 text-sm font-semibold hover:border-plex/40"
-                >
-                    <Sparkles className="w-4 h-4 text-plex" /> {tAchievements('page.xpBreakdown')}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        disabled={notifyBusy}
+                        onClick={() => { void toggleNotify(); }}
+                        className="inline-flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-white/5 text-sm font-semibold hover:border-plex/40 disabled:opacity-50"
+                    >
+                        {data?.notifyOnUnlock === false
+                            ? <BellOff className="w-4 h-4 text-muted" />
+                            : <Bell className="w-4 h-4 text-plex" />}
+                        {data?.notifyOnUnlock === false
+                            ? tAchievements('page.notifyOff')
+                            : tAchievements('page.notifyOn')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setShareOpen(true)}
+                        className="inline-flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-white/5 text-sm font-semibold hover:border-plex/40"
+                    >
+                        <Share2 className="w-4 h-4 text-plex" /> {tAchievements('page.share')}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setBreakdownOpen(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-white/5 text-sm font-semibold hover:border-plex/40"
+                    >
+                        <Sparkles className="w-4 h-4 text-plex" /> {tAchievements('page.xpBreakdown')}
+                    </button>
+                </div>
             </div>
 
             <div className="glass-card p-5 space-y-3">
@@ -716,6 +771,33 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                         <p className="text-sm text-muted">{tAchievements('page.noRankings')}</p>
                     ) : (
                         <div className="space-y-3">
+                            {(rivals.above || rivals.below || rivals.me) && (
+                                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 space-y-1.5">
+                                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{tAchievements('page.rivals')}</p>
+                                    {rivals.above ? (
+                                        <p className="text-xs text-text">
+                                            {tAchievements('page.rivalAbove', {
+                                                xp: Math.max(0, (Number(rivals.above.xp) || 0) - (Number(rivals.me?.xp) || 0)).toLocaleString(),
+                                                rank: rivals.above.rank,
+                                                name: rivals.above.username,
+                                            })}
+                                        </p>
+                                    ) : rivals.me?.rank === 1 ? (
+                                        <p className="text-xs text-plex font-semibold">You're #1 — defend the crown.</p>
+                                    ) : null}
+                                    {rivals.below ? (
+                                        <p className="text-xs text-muted">
+                                            {tAchievements('page.rivalBelow', {
+                                                xp: Math.max(0, (Number(rivals.me?.xp) || 0) - (Number(rivals.below.xp) || 0)).toLocaleString(),
+                                                rank: rivals.below.rank,
+                                                name: rivals.below.username,
+                                            })}
+                                        </p>
+                                    ) : !rivals.above && !rivals.below ? (
+                                        <p className="text-xs text-muted">{tAchievements('page.rivalNone')}</p>
+                                    ) : null}
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                                 {pageEntries.map((entry) => (
                                     <div
@@ -851,6 +933,20 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                 totalBadges={data?.totalBadges}
                 nextUnlocks={data?.nextUnlocks}
             />
+            {shareOpen && (
+                <ModalPortal open={shareOpen}>
+                    <ShareAchievementsModal
+                        me={{
+                            ...data,
+                            username: sessionInfo?.session?.username || sessionInfo?.account?.username || data?.username,
+                        }}
+                        serverName={sessionInfo?.serverName || 'Server Portal'}
+                        rank={myRank}
+                        onClose={() => setShareOpen(false)}
+                        onToast={(message, type) => setToasts((prev) => pushToast(prev, message, type))}
+                    />
+                </ModalPortal>
+            )}
         </div>
     );
 };

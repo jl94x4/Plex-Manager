@@ -492,6 +492,7 @@ export const SettingsDashboard: React.FC = () => {
     const [achievementsShowOnProfile, setAchievementsShowOnProfile] = useState(true);
     const [achievementsXpWeights, setAchievementsXpWeights] = useState<Record<string, number>>({});
     const [achievementsDisabledBadgeIds, setAchievementsDisabledBadgeIds] = useState<string[]>([]);
+    const [achievementsMinPercentComplete, setAchievementsMinPercentComplete] = useState(0);
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
     const [tautulliConfigured, setTautulliConfigured] = useState(false);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
@@ -1204,6 +1205,12 @@ export const SettingsDashboard: React.FC = () => {
             } else {
                 setAchievementsDisabledBadgeIds([]);
             }
+            if (initialSettings.achievementsMinPercentComplete !== undefined) {
+                const n = Number(initialSettings.achievementsMinPercentComplete);
+                setAchievementsMinPercentComplete(Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 0);
+            } else {
+                setAchievementsMinPercentComplete(0);
+            }
             if (initialSettings.watchHistorySource !== undefined) {
                 setWatchHistorySource(initialSettings.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex');
             }
@@ -1620,6 +1627,7 @@ export const SettingsDashboard: React.FC = () => {
             achievementsShowOnProfile,
             achievementsXpWeights: Object.keys(achievementsXpWeights).length ? achievementsXpWeights : null,
             achievementsDisabledBadgeIds,
+            achievementsMinPercentComplete,
             watchHistorySource,
             mediaAutomation: {
                 ...mediaAutomation,
@@ -3120,6 +3128,8 @@ export const SettingsDashboard: React.FC = () => {
                                 setAchievementsXpWeights={setAchievementsXpWeights}
                                 achievementsDisabledBadgeIds={achievementsDisabledBadgeIds}
                                 setAchievementsDisabledBadgeIds={setAchievementsDisabledBadgeIds}
+                                achievementsMinPercentComplete={achievementsMinPercentComplete}
+                                setAchievementsMinPercentComplete={setAchievementsMinPercentComplete}
                             />
                         </div>
                     )}
