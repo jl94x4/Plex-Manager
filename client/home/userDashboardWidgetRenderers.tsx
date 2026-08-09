@@ -37,14 +37,33 @@ const AchievementsHomeWidgetConnected: React.FC = () => {
     const [summary, setSummary] = useState<any>(null);
     useEffect(() => {
         let cancelled = false;
-        apiFetch('/api/achievements/me')
-            .then((data) => {
-                if (!cancelled && data?.homeWidgetEnabled !== false) setSummary(data);
-            })
-            .catch(() => {
-                if (!cancelled) setSummary(null);
-            });
-        return () => { cancelled = true; };
+        let idleId: number | null = null;
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+        const load = () => {
+            apiFetch('/api/achievements/me')
+                .then((data) => {
+                    if (!cancelled && data?.homeWidgetEnabled !== false) setSummary(data);
+                })
+                .catch(() => {
+                    if (!cancelled) setSummary(null);
+                });
+        };
+
+        // Don't compete with Wrap-Up's heavy /analytics/me on first paint.
+        if (typeof window !== 'undefined' && typeof (window as any).requestIdleCallback === 'function') {
+            idleId = (window as any).requestIdleCallback(load, { timeout: 4000 });
+        } else {
+            timeoutId = setTimeout(load, 2500);
+        }
+
+        return () => {
+            cancelled = true;
+            if (idleId != null && typeof (window as any).cancelIdleCallback === 'function') {
+                (window as any).cancelIdleCallback(idleId);
+            }
+            if (timeoutId != null) clearTimeout(timeoutId);
+        };
     }, []);
     if (!summary) return null;
     return (
