@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Award, ChevronRight, Lock, Sparkles, Trophy, X, Info, Medal,
+    Award, ChevronLeft, ChevronRight, Lock, Sparkles, Trophy, X, Info, Medal,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { tAchievements } from './i18n';
+
+const LEADERBOARD_PAGE_SIZE = 10;
+const LEADERBOARD_FETCH_LIMIT = 100;
 
 const rarityClass = (rarity: string) => {
     if (rarity === 'legendary') return 'border-amber-400/50 bg-amber-500/10 text-amber-100';
@@ -145,6 +148,7 @@ export const XpBreakdownModal: React.FC<{
 export const AchievementsDashboard: React.FC = () => {
     const [data, setData] = useState<any>(null);
     const [board, setBoard] = useState<any[]>([]);
+    const [boardPage, setBoardPage] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [category, setCategory] = useState('all');
@@ -158,7 +162,7 @@ export const AchievementsDashboard: React.FC = () => {
         setError(null);
         try {
             const mePromise = apiFetch('/api/achievements/me');
-            const lbPromise = apiFetch('/api/achievements/leaderboard?limit=25').catch(() => null);
+            const lbPromise = apiFetch(`/api/achievements/leaderboard?limit=${LEADERBOARD_FETCH_LIMIT}`).catch(() => null);
 
             const me = await mePromise;
             setData(me);
@@ -175,8 +179,10 @@ export const AchievementsDashboard: React.FC = () => {
             if (me?.leaderboardEnabled) {
                 const lb = await lbPromise;
                 setBoard(Array.isArray(lb?.entries) ? lb.entries : []);
+                setBoardPage(0);
             } else {
                 setBoard([]);
+                setBoardPage(0);
             }
         } catch (e: any) {
             setError(e?.message || tAchievements('page.error'));
@@ -195,6 +201,16 @@ export const AchievementsDashboard: React.FC = () => {
         if (showEarnedOnly) list = list.filter((b: any) => b.earned);
         return list;
     }, [data, category, showEarnedOnly]);
+
+    const boardPageCount = Math.max(1, Math.ceil(board.length / LEADERBOARD_PAGE_SIZE));
+    const safeBoardPage = Math.min(boardPage, boardPageCount - 1);
+    const pageEntries = useMemo(
+        () => board.slice(
+            safeBoardPage * LEADERBOARD_PAGE_SIZE,
+            safeBoardPage * LEADERBOARD_PAGE_SIZE + LEADERBOARD_PAGE_SIZE,
+        ),
+        [board, safeBoardPage],
+    );
 
     const toggleOptOut = async () => {
         if (!data) return;
@@ -291,23 +307,56 @@ export const AchievementsDashboard: React.FC = () => {
                     {!board.length ? (
                         <p className="text-sm text-muted">{tAchievements('page.noRankings')}</p>
                     ) : (
-                        <div className="space-y-1.5">
-                            {board.map((entry) => (
-                                <div
-                                    key={`${entry.rank}-${entry.username}`}
-                                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${
-                                        entry.isMe ? 'border-plex/50 bg-plex/10' : 'border-white/5 bg-black/20'
-                                    }`}
-                                >
-                                    <span className="w-8 text-center font-mono font-bold text-plex">#{entry.rank}</span>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-bold truncate">{entry.username}{entry.isMe ? ' (you)' : ''}</p>
-                                        <p className="text-[11px] text-muted font-mono">
-                                            Lv {entry.level} · {Number(entry.xp).toLocaleString()} XP · {entry.earnedCount} badges
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                                {pageEntries.map((entry) => (
+                                    <div
+                                        key={`${entry.rank}-${entry.username}`}
+                                        className={`rounded-xl px-3 py-2.5 border min-w-0 ${
+                                            entry.isMe ? 'border-plex/50 bg-plex/10' : 'border-white/5 bg-black/20'
+                                        }`}
+                                    >
+                                        <p className="font-mono font-bold text-plex text-sm">#{entry.rank}</p>
+                                        <p className="text-sm font-bold truncate mt-0.5">
+                                            {entry.username}{entry.isMe ? ' (you)' : ''}
+                                        </p>
+                                        <p className="text-[10px] text-muted font-mono mt-1 leading-snug">
+                                            Lv {entry.level} · {Number(entry.xp).toLocaleString()} XP
+                                        </p>
+                                        <p className="text-[10px] text-muted font-mono">
+                                            {entry.earnedCount} badges
                                         </p>
                                     </div>
+                                ))}
+                            </div>
+                            {board.length > LEADERBOARD_PAGE_SIZE && (
+                                <div className="flex items-center justify-between gap-3 pt-1">
+                                    <button
+                                        type="button"
+                                        disabled={safeBoardPage <= 0}
+                                        onClick={() => setBoardPage((p) => Math.max(0, p - 1))}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted disabled:opacity-40 hover:text-text hover:border-plex/40"
+                                    >
+                                        <ChevronLeft className="w-3.5 h-3.5" />
+                                        {tAchievements('page.prev')}
+                                    </button>
+                                    <span className="text-xs text-muted font-semibold">
+                                        {tAchievements('page.of', {
+                                            page: safeBoardPage + 1,
+                                            total: boardPageCount,
+                                        })}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        disabled={safeBoardPage >= boardPageCount - 1}
+                                        onClick={() => setBoardPage((p) => Math.min(boardPageCount - 1, p + 1))}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted disabled:opacity-40 hover:text-text hover:border-plex/40"
+                                    >
+                                        {tAchievements('page.next')}
+                                        <ChevronRight className="w-3.5 h-3.5" />
+                                    </button>
                                 </div>
-                            ))}
+                            )}
                         </div>
                     )}
                 </div>
