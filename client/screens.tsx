@@ -11036,21 +11036,21 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const renderServerIdentity = (placement: 'top' | 'bottom') => (
         <div className={`flex flex-col items-center w-full shrink-0 ${placement === 'top' ? 'pb-2 mb-2 border-b' : 'pt-2 mt-2 border-t'} border-white/10 group cursor-default`}>
-            <div className={`relative mb-2 ${customLogoUrl ? 'w-24 flex items-center justify-center' : ''}`}>
+            <div className={`relative mb-2 ${customLogoUrl ? 'w-[6.9rem] flex items-center justify-center' : ''}`}>
                 {customLogoUrl ? (
                     <img
                         src={serverIcon}
                         alt="Server Logo"
-                        className="max-w-24 max-h-20 object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)] group-hover:scale-105 transition-transform duration-700 ease-out"
+                        className="max-w-[6.9rem] max-h-[5.75rem] object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)] group-hover:scale-105 transition-transform duration-700 ease-out"
                         onError={(e) => {
                             (e.target as HTMLImageElement).src = logoUrl();
                         }}
                     />
                 ) : (
                     <>
-                        <div className="absolute inset-0 bg-plex blur-[25px] opacity-20 group-hover:opacity-40 transition-opacity duration-700 rounded-full"></div>
+                        <div className="absolute inset-0 bg-plex blur-[29px] opacity-20 group-hover:opacity-40 transition-opacity duration-700 rounded-full"></div>
                         <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-plex via-amber-300 to-orange-600 opacity-60 group-hover:opacity-100 group-hover:rotate-180 transition-all duration-1000 ease-out"></div>
-                        <div className="relative w-20 h-20 rounded-full p-[3px] shadow-2xl bg-card">
+                        <div className="relative w-[5.75rem] h-[5.75rem] rounded-full p-[3px] shadow-2xl bg-card">
                             <div className="w-full h-full rounded-full overflow-hidden bg-background">
                                 <img
                                     src={serverIcon}
@@ -11067,7 +11067,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             </div>
 
             <div className="flex flex-col items-center text-center px-2">
-                <h2 className="text-lg font-black text-text tracking-tight leading-tight line-clamp-2">
+                <h2 className="text-[1.3rem] font-black text-text tracking-tight leading-tight line-clamp-2">
                     {serverName}
                 </h2>
                 <div className="mt-1 flex items-center gap-2">
