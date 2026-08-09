@@ -8005,11 +8005,29 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                                 </div>
                             </div>
                             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 md:gap-3.5 flex-1 min-h-0 content-start">
-                                {analytics.topWatched.slice(topContentPage * topWatchedPageSize, (topContentPage + 1) * topWatchedPageSize).map((item: any) => (
-                                    <a key={item.key} href={item.plexUrl} target="_blank" rel="noreferrer" className="group flex flex-col gap-1.5">
+                                {analytics.topWatched.slice(topContentPage * topWatchedPageSize, (topContentPage + 1) * topWatchedPageSize).map((item: any) => {
+                                    const CardTag: any = item.plexUrl ? 'a' : 'div';
+                                    const cardProps = item.plexUrl
+                                        ? { href: item.plexUrl, target: '_blank', rel: 'noreferrer' }
+                                        : {};
+                                    return (
+                                    <CardTag key={item.key || item.title} {...cardProps} className="group flex flex-col gap-1.5">
                                         <div className="relative rounded-lg overflow-hidden aspect-[2/3] bg-background border border-white/5 transition-[box-shadow,border-color] duration-300 group-hover:shadow-xl group-hover:border-plex/50">
                                             {item.thumbUrl ? (
-                                                <img src={resolvePortalAssetUrl(item.thumbUrl)} alt={item.title} className="w-full h-full object-cover transition-[transform,opacity] duration-300 group-hover:scale-105 group-hover:opacity-80" />
+                                                <>
+                                                    <img
+                                                        src={resolvePortalAssetUrl(item.thumbUrl)}
+                                                        alt={item.title}
+                                                        className="w-full h-full object-cover transition-[transform,opacity] duration-300 group-hover:scale-105 group-hover:opacity-80"
+                                                        onError={(e) => {
+                                                            e.currentTarget.style.display = 'none';
+                                                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                        }}
+                                                    />
+                                                    <div className="hidden absolute inset-0 w-full h-full flex items-center justify-center p-4 text-center bg-white/5">
+                                                        <span className="text-xs font-bold text-muted line-clamp-3">{item.title}</span>
+                                                    </div>
+                                                </>
                                             ) : (
                                                 <div className="w-full h-full flex items-center justify-center p-4 text-center bg-white/5">
                                                     <span className="text-xs font-bold text-muted line-clamp-3">{item.title}</span>
@@ -8020,8 +8038,9 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                                             <p className="text-xs sm:text-sm font-bold text-text truncate group-hover:text-plex transition-colors">{item.title}</p>
                                             <p className="text-[10px] sm:text-xs text-plex font-black mt-0.5 uppercase tracking-wider">{item.plays} plays</p>
                                         </div>
-                                    </a>
-                                ))}
+                                    </CardTag>
+                                    );
+                                })}
                             </div>
                         </div>
                     );

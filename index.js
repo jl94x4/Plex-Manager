@@ -13221,6 +13221,107 @@ const normalizePlexHistoryContentKey = (rawKey) => {
     return value;
 };
 
+const fetchPlexMetadataByPath = async (uri, config, metaPath) => {
+    if (!metaPath) return null;
+    const path = metaPath.startsWith('/library/metadata/')
+        ? metaPath
+        : normalizePlexHistoryContentKey(metaPath);
+    if (!path || !path.startsWith('/library/metadata/')) return null;
+    let data = plexMetadataCache.get(path);
+    if (data) return data;
+    const metaRes = await fetch(`${uri}${path}?X-Plex-Token=${config.plexToken}`, {
+        headers: plexClientHeaders(config.plexToken),
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    data = metaRes?.MediaContainer?.Metadata?.[0] || null;
+    if (data) plexMetadataCache.set(path, data);
+    return data;
+};
+
+const searchPlexLibraryTitle = async (uri, config, title, preferType) => {
+    const q = String(title || '').trim();
+    if (!q) return null;
+    const params = new URLSearchParams({
+        query: q,
+        limit: '8',
+        'X-Plex-Token': config.plexToken,
+    });
+    const hubs = await fetch(`${uri}/hubs/search?${params.toString()}`, {
+        headers: plexClientHeaders(config.plexToken),
+    }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const want = preferType === 'movie' ? 'movie' : preferType === 'show' ? 'show' : null;
+    const all = [];
+    for (const hub of hubs?.MediaContainer?.Hub || []) {
+        for (const m of hub?.Metadata || []) {
+            if (m) all.push(m);
+        }
+    }
+    const normalized = q.toLowerCase();
+    const ranked = all
+        .filter((m) => !want || String(m.type) === want)
+        .sort((a, b) => {
+            const aTitle = String(a.title || '').toLowerCase();
+            const bTitle = String(b.title || '').toLowerCase();
+            const aExact = aTitle === normalized ? 0 : aTitle.includes(normalized) ? 1 : 2;
+            const bExact = bTitle === normalized ? 0 : bTitle.includes(normalized) ? 1 : 2;
+            return aExact - bExact;
+        });
+    return ranked[0] || null;
+};
+
+/** Refresh thumbs + deep links for Most Watched using live Plex metadata (handles rematched keys). */
+const hydratePersonalTopWatchedItems = async (uri, config, serverIdentifier, items = []) => {
+    if (!items.length) return items;
+    const results = new Array(items.length);
+    let cursor = 0;
+    const worker = async () => {
+        while (true) {
+            const idx = cursor++;
+            if (idx >= items.length) return;
+            const item = items[idx];
+            let meta = await fetchPlexMetadataByPath(uri, config, item.key);
+            // History sometimes points at episode/season keys for a show card.
+            if (meta && item.type === 'show') {
+                if (meta.type === 'episode' && meta.grandparentRatingKey) {
+                    meta = await fetchPlexMetadataByPath(uri, config, meta.grandparentRatingKey) || meta;
+                } else if (meta.type === 'season' && meta.parentRatingKey) {
+                    meta = await fetchPlexMetadataByPath(uri, config, meta.parentRatingKey) || meta;
+                }
+            }
+            if (!meta) {
+                meta = await searchPlexLibraryTitle(uri, config, item.title, item.type);
+            }
+            if (meta?.ratingKey) {
+                const key = `/library/metadata/${meta.ratingKey}`;
+                const thumb = meta.thumb || item.thumb || null;
+                const art = meta.art || item.art || null;
+                results[idx] = {
+                    ...item,
+                    key,
+                    title: meta.title || item.title,
+                    thumb,
+                    art,
+                    thumbUrl: thumb ? plexImageUrl(thumb) : null,
+                    artUrl: art ? plexImageUrl(art) : (thumb ? plexImageUrl(thumb) : null),
+                    plexUrl: `https://app.plex.tv/desktop/#!/server/${serverIdentifier}/details?key=${encodeURIComponent(key)}`,
+                    live: true,
+                };
+            } else {
+                // Keep play counts/title, but drop dead posters and Plex deep links that 404.
+                results[idx] = {
+                    ...item,
+                    thumbUrl: null,
+                    artUrl: null,
+                    plexUrl: null,
+                    live: false,
+                };
+            }
+        }
+    };
+    const workerCount = Math.min(6, items.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    return results;
+};
+
 const fetchPlexAccountHistory = async (uri, config, accountID, { maxItems = 250000, afterUnixSec = 0 } = {}) => {
     const pageSize = 5000;
     let historyItems = [];
@@ -13405,7 +13506,7 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         }
 
         const daysKey = personalAnalyticsDaysKey(req.query.days);
-        const cacheKey = `${accountID}:${daysKey}`;
+        const cacheKey = `v2:${accountID}:${daysKey}`;
         const lite = String(req.query.lite || '') === '1' || String(req.query.fields || '') === 'recent';
         const cached = !lite ? personalAnalyticsCache.get(cacheKey) : null;
         const cacheFresh = cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS;
@@ -13560,7 +13661,7 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
             }
 
             const rawContentKey = item.type === 'episode'
-                ? (item.grandparentKey || item.grandparentRatingKey || item.parentKey || item.ratingKey)
+                ? (item.grandparentRatingKey || item.grandparentKey || item.parentKey || item.ratingKey)
                 : item.type === 'track'
                     ? (item.parentKey || item.grandparentKey || item.ratingKey)
                     : (item.ratingKey || item.key);
@@ -13626,10 +13727,15 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         const sortByPlaysThenRecent = (a, b) => (b.plays - a.plays) || ((b.lastViewedAt || 0) - (a.lastViewedAt || 0));
         const allLibraries = Object.values(libraryCounts).sort((a, b) => b.plays - a.plays);
         const topLibraries = allLibraries.slice(0, 5);
-        const topWatched = Object.values(contentCounts).filter(c => c.type !== 'track').sort(sortByPlaysThenRecent).slice(0, 30).map(c => {
+        let topWatched = Object.values(contentCounts).filter(c => c.type !== 'track').sort(sortByPlaysThenRecent).slice(0, 30).map(c => {
             if (c.thumb) c.thumbUrl = plexImageUrl(c.thumb);
             return c;
         });
+        try {
+            topWatched = await hydratePersonalTopWatchedItems(uri, config, config.serverIdentifier, topWatched);
+        } catch (e) {
+            log(`Most Watched metadata hydrate failed: ${e.message}`);
+        }
         const topMusic = Object.values(contentCounts).filter(c => c.type === 'track').sort(sortByPlaysThenRecent).slice(0, 30).map(c => {
             if (c.thumb) c.thumbUrl = plexImageUrl(c.thumb);
             return c;
