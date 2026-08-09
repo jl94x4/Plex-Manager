@@ -117,6 +117,7 @@ export const fr: DeepPartial<EnCatalog> = {
         mixedBag: 'Mélange',
         achievementsTitle: 'Succès',
         achievementsHint: 'Progression XP (tout le temps)',
+        achievementsHintPeriod: 'Tout le temps + période sélectionnée',
         level: 'Niveau',
         totalXp: 'XP totale',
         periodXp: 'XP de la période',

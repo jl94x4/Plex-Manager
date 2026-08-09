@@ -655,7 +655,11 @@ export const AchievementsWrapUpSpotlight: React.FC<{
                     <Award className="w-4 h-4 text-plex" />
                     {t('wrapUp.achievementsTitle')}
                 </h4>
-                <p className="text-[10px] text-muted font-semibold">{t('wrapUp.achievementsHint')}</p>
+                <p className="text-[10px] text-muted font-semibold">
+                    {me?.periodXp != null && me?.periodDays != null && String(me.periodDays) !== 'all'
+                        ? t('wrapUp.achievementsHintPeriod')
+                        : t('wrapUp.achievementsHint')}
+                </p>
             </div>
             <WrapUpCardGrid
                 cards={cards}

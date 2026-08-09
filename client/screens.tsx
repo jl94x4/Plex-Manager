@@ -7366,8 +7366,8 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         void fetchAnalytics();
     }, [fetchAnalytics]);
 
-    // Defer achievements spotlight until Wrap-Up analytics is ready so /me + leaderboard
-    // do not compete with the heavy /api/plex/analytics/me request on first paint.
+    // Achievements Wrap-Up row: paint all-time instantly (snapshot cache), then overlay period XP.
+    // Do not wait for /analytics/me — that double-gated the row behind the slowest Home request.
     useEffect(() => {
         if (!sessionInfo?.navFeatures?.achievements) {
             setWrapUpAchievements(null);
@@ -7375,32 +7375,116 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
             return;
         }
         if (!sessionInfo?.session?.isAdmin && !user) return;
-        if (analyticsLoading || !analytics) return;
+
         let cancelled = false;
+        const daysQs = analyticsDays === 'all' ? 'all' : String(analyticsDays || 30);
+        const cacheKey = `smp.wrapup.achievements.v1:${daysQs}`;
+
+        const readCache = () => {
+            try {
+                const raw = sessionStorage.getItem(cacheKey);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed?.payload || typeof parsed.at !== 'number') return null;
+                if (Date.now() - parsed.at > 6 * 60 * 60 * 1000) return null;
+                return parsed.payload;
+            } catch {
+                return null;
+            }
+        };
+        const writeCache = (payload: any) => {
+            try {
+                if (!payload?.enabled) return;
+                sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), payload }));
+            } catch {
+                /* ignore */
+            }
+        };
+
+        const cached = readCache();
+        if (cached) {
+            setWrapUpAchievements(cached);
+            if (cached._rank != null) setWrapUpAchievementsRank(cached._rank);
+        }
+
+        const loadRank = async (me: any) => {
+            if (!me?.leaderboardEnabled || me.leaderboardOptOut) {
+                if (!cancelled) setWrapUpAchievementsRank(null);
+                return null;
+            }
+            const lb = await apiFetch('/api/achievements/leaderboard?limit=100').catch(() => null);
+            if (cancelled) return null;
+            const mine = Array.isArray(lb?.entries) ? lb.entries.find((entry: any) => entry?.isMe) : null;
+            const rank = Number(mine?.rank);
+            const nextRank = Number.isFinite(rank) && rank > 0 ? rank : null;
+            setWrapUpAchievementsRank(nextRank);
+            return nextRank;
+        };
+
         const load = async () => {
             try {
-                const daysQs = analyticsDays === 'all' ? 'all' : String(analyticsDays || 30);
-                const me = await apiFetch(`/api/achievements/me?view=summary&days=${encodeURIComponent(daysQs)}`).catch(() => null);
+                // Phase 1 — all-time from achievements snapshot (usually instant / cacheable).
+                const me = await apiFetch('/api/achievements/me?view=summary').catch(() => null);
                 if (cancelled) return;
                 if (!me?.enabled) {
                     setWrapUpAchievements(null);
                     setWrapUpAchievementsRank(null);
                     return;
                 }
-                setWrapUpAchievements(me);
-                setWrapUpAchievementsSeed(Date.now());
-                // Rank is optional; never block Wrap-Up on leaderboard/backfill.
-                if (me.leaderboardEnabled && !me.leaderboardOptOut) {
-                    const lb = await apiFetch('/api/achievements/leaderboard?limit=100').catch(() => null);
-                    if (cancelled) return;
-                    const mine = Array.isArray(lb?.entries) ? lb.entries.find((entry: any) => entry?.isMe) : null;
-                    const rank = Number(mine?.rank);
-                    setWrapUpAchievementsRank(Number.isFinite(rank) && rank > 0 ? rank : null);
-                } else {
-                    setWrapUpAchievementsRank(null);
+                setWrapUpAchievements((prev: any) => {
+                    // Keep any period fields we already had from cache until phase 2.
+                    if (prev && (prev.periodXp != null || prev.periodDays != null)) {
+                        return {
+                            ...me,
+                            periodDays: prev.periodDays,
+                            periodXp: prev.periodXp,
+                            periodBreakdown: prev.periodBreakdown,
+                            priorPeriodXp: prev.priorPeriodXp,
+                            periodXpDelta: prev.periodXpDelta,
+                            periodBadgesEarned: prev.periodBadgesEarned,
+                            periodStats: prev.periodStats,
+                        };
+                    }
+                    return me;
+                });
+
+                const rank = await loadRank(me);
+
+                // Phase 2 — period overlay (can scrape history; must not block the row).
+                if (daysQs === 'all') {
+                    writeCache({ ...me, _rank: rank });
+                    return;
                 }
+                const period = await apiFetch(
+                    `/api/achievements/me?view=summary&days=${encodeURIComponent(daysQs)}`,
+                ).catch(() => null);
+                if (cancelled || !period?.enabled) return;
+                const merged = {
+                    ...me,
+                    ...period,
+                    // Prefer phase-1 all-time xp/level; keep period fields from phase 2.
+                    xp: me.xp,
+                    level: me.level,
+                    levelProgress: me.levelProgress,
+                    breakdown: me.breakdown,
+                    stats: me.stats,
+                    earnedCount: me.earnedCount,
+                    totalBadges: me.totalBadges,
+                    recentEarned: me.recentEarned,
+                    nextUnlocks: me.nextUnlocks,
+                    periodDays: period.periodDays,
+                    periodXp: period.periodXp,
+                    periodBreakdown: period.periodBreakdown,
+                    priorPeriodXp: period.priorPeriodXp,
+                    periodXpDelta: period.periodXpDelta,
+                    periodBadgesEarned: period.periodBadgesEarned,
+                    periodStats: period.periodStats,
+                    _rank: rank,
+                };
+                setWrapUpAchievements(merged);
+                writeCache(merged);
             } catch {
-                if (!cancelled) {
+                if (!cancelled && !cached) {
                     setWrapUpAchievements(null);
                     setWrapUpAchievementsRank(null);
                 }
@@ -7412,10 +7496,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         sessionInfo?.navFeatures?.achievements,
         sessionInfo?.session?.isAdmin,
         user,
-        analyticsLoading,
         analyticsDays,
-        // All-time snapshot — only gate on presence, not each analytics object identity.
-        !!analytics,
     ]);
 
     usePoll(() => { void fetchAnalytics({ silent: true }); }, 5 * 60 * 1000, { immediate: false });

@@ -103,6 +103,7 @@ export const de: DeepPartial<EnCatalog> = {
         mixedBag: 'Gemischt',
         achievementsTitle: 'Erfolge',
         achievementsHint: 'XP-Fortschritt (gesamt)',
+        achievementsHintPeriod: 'Gesamt + gewählter Zeitraum',
         level: 'Level',
         totalXp: 'Gesamt-XP',
         periodXp: 'Zeitraum-XP',

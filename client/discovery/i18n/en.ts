@@ -115,6 +115,7 @@ export const en = {
         mixedBag: 'Mixed Bag',
         achievementsTitle: 'Achievements',
         achievementsHint: 'All-time XP progress',
+        achievementsHintPeriod: 'All-time + selected period',
         level: 'Level',
         totalXp: 'Total XP',
         periodXp: 'Period XP',
