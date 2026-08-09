@@ -13653,6 +13653,20 @@ registerAchievementsRoutes(app, {
     fetchPlexServerAccounts,
     shouldObfuscateAnalyticsViewers,
     log,
+    fetchPlexMetadataGenres: async (uri, config, ratingKey) => {
+        if (!uri || !config?.plexToken || !ratingKey) return [];
+        const response = await fetchWithTimeout(
+            `${uri}/library/metadata/${encodeURIComponent(ratingKey)}?X-Plex-Token=${config.plexToken}`,
+            { headers: plexClientHeaders(config.plexToken) },
+            8000,
+        ).catch(() => null);
+        if (!response?.ok) return [];
+        const payload = await response.json().catch(() => null);
+        const meta = payload?.MediaContainer?.Metadata?.[0];
+        if (!meta) return [];
+        const tags = Array.isArray(meta.Genre) ? meta.Genre.map((g) => g?.tag).filter(Boolean) : [];
+        return tags;
+    },
     resolvePortalAccountId: async (req, config) => {
         const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
         if (mediaServerType === 'plex') {
@@ -13669,7 +13683,7 @@ registerAchievementsRoutes(app, {
             Recursive: 'true',
             Filters: 'IsPlayed',
             IncludeItemTypes: 'Movie,Episode,Audio',
-            Fields: 'DatePlayed,RunTimeTicks,UserData,SeriesId,SeriesName,AlbumId,Album,ParentId',
+            Fields: 'DatePlayed,RunTimeTicks,UserData,SeriesId,SeriesName,AlbumId,Album,ParentId,Genres,GenreItems',
             SortBy: 'DatePlayed',
             SortOrder: 'Descending',
             Limit: '5000',
