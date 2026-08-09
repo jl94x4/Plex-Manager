@@ -490,6 +490,8 @@ export const SettingsDashboard: React.FC = () => {
     const [achievementsLeaderboardEnabled, setAchievementsLeaderboardEnabled] = useState(true);
     const [achievementsHomeWidgetEnabled, setAchievementsHomeWidgetEnabled] = useState(true);
     const [achievementsShowOnProfile, setAchievementsShowOnProfile] = useState(true);
+    const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
+    const [tautulliConfigured, setTautulliConfigured] = useState(false);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
     const [scannerWebhooksVisible, setScannerWebhooksVisible] = useState(true);
     const [scannerManualPathVisible, setScannerManualPathVisible] = useState(true);
@@ -1190,6 +1192,14 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.achievementsShowOnProfile !== undefined) {
                 setAchievementsShowOnProfile(initialSettings.achievementsShowOnProfile !== false);
             }
+            if (initialSettings.watchHistorySource !== undefined) {
+                setWatchHistorySource(initialSettings.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex');
+            }
+            if (initialSettings.tautulliConfigured !== undefined) {
+                setTautulliConfigured(!!initialSettings.tautulliConfigured);
+            } else {
+                setTautulliConfigured(!!(initialSettings.tautulliUrl && initialSettings.tautulliApiKey));
+            }
             if (initialSettings.mediaAutomation && typeof initialSettings.mediaAutomation === 'object') {
                 const saved = initialSettings.mediaAutomation;
                 const fallback = {
@@ -1596,6 +1606,7 @@ export const SettingsDashboard: React.FC = () => {
             achievementsLeaderboardEnabled,
             achievementsHomeWidgetEnabled,
             achievementsShowOnProfile,
+            watchHistorySource,
             mediaAutomation: {
                 ...mediaAutomation,
                 enabled: mediaAutomationEnabled,
@@ -3088,6 +3099,9 @@ export const SettingsDashboard: React.FC = () => {
                                 setAchievementsHomeWidgetEnabled={setAchievementsHomeWidgetEnabled}
                                 achievementsShowOnProfile={achievementsShowOnProfile}
                                 setAchievementsShowOnProfile={setAchievementsShowOnProfile}
+                                watchHistorySource={watchHistorySource}
+                                setWatchHistorySource={setWatchHistorySource}
+                                tautulliConfigured={tautulliConfigured || !!(tautulliUrl && tautulliApiKey)}
                             />
                         </div>
                     )}

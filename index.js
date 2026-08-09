@@ -61,6 +61,8 @@ import {
 } from './lib/media-automation/index.js';
 import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook, startTpdbCacheDailyRefresh } from './lib/poster-sets/index.js';
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
+import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
+import { isTautulliWatchHistorySource } from './lib/achievements/index.js';
 import { loadPosterSetsAudit } from './lib/poster-sets/audit.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
@@ -3767,6 +3769,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
                 achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
                 achievementsShowOnProfile: config.achievementsShowOnProfile !== false,
+                watchHistorySource: config.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex',
+                tautulliConfigured: !!(config.tautulliUrl && config.tautulliApiKey),
                 collexionsAutostart: !!config.collexionsAutostart,
                 collexionsInternalUrl: config.collexionsInternalUrl || '',
                 collexionsServiceKey: config.collexionsServiceKey ? '********' : '',
@@ -3890,6 +3894,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 achievementsLeaderboardEnabled: true,
                 achievementsHomeWidgetEnabled: true,
                 achievementsShowOnProfile: true,
+                watchHistorySource: 'plex',
+                tautulliConfigured: false,
                 collexionsAutostart: false,
                 collexionsInternalUrl: '',
                 collexionsServiceKey: '',
@@ -3926,7 +3932,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -4352,6 +4358,12 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         achievementsShowOnProfile: achievementsShowOnProfile !== undefined
             ? !!achievementsShowOnProfile
             : (existingConfig.achievementsShowOnProfile !== false),
+        watchHistorySource: (() => {
+            const raw = watchHistorySource !== undefined
+                ? watchHistorySource
+                : existingConfig.watchHistorySource;
+            return String(raw || '').toLowerCase() === 'tautulli' ? 'tautulli' : 'plex';
+        })(),
         collexionsEnabled: (() => {
             // Plex-only integration — never leave enabled for Jellyfin/Emby.
             if (normalizedMediaServerType !== 'plex') return false;
@@ -4539,6 +4551,7 @@ app.get('/api/config/public', async (req, res) => {
             achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
             achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
             achievementsShowOnProfile: config.achievementsShowOnProfile !== false,
+            watchHistorySource: config.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex',
             publicBaseUrl: resolvePublicBaseUrlFromConfig(config) || '',
             appVersion: appVersion,
             use24HourClock: !!config.use24HourClock,
@@ -4572,6 +4585,7 @@ app.get('/api/config/public', async (req, res) => {
             achievementsLeaderboardEnabled: true,
             achievementsHomeWidgetEnabled: true,
             achievementsShowOnProfile: true,
+            watchHistorySource: 'plex',
             appVersion: appVersion,
             use24HourClock: false,
             allowTemporaryAccess: false,
@@ -12473,6 +12487,67 @@ const fetchTautulliUserHistoryStarts = async (config, tUrl, tautulliUserId, { af
     return startedTimestamps;
 };
 
+/** Full Tautulli history rows mapped to Plex-like items (for achievements / wrap-up). */
+const fetchTautulliUserHistoryItems = async (config, {
+    username,
+    email,
+    plexAccountName,
+    afterUnixSec = 0,
+    maxItems = 100000,
+} = {}) => {
+    if (!config?.tautulliUrl || !config?.tautulliApiKey) return [];
+    const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
+    if (!tUrl) return [];
+
+    const users = await fetchTautulliUsers(config);
+    const tautulliUserId = resolveTautulliUserId(users, { username, email, plexAccountName });
+    if (!tautulliUserId) return [];
+
+    const items = [];
+    let offset = 0;
+    let done = false;
+
+    while (!done && items.length < maxItems) {
+        const length = Math.min(TAUTULLI_HISTORY_PAGE_SIZE, maxItems - items.length);
+        const params = new URLSearchParams({
+            apikey: config.tautulliApiKey,
+            cmd: 'get_history',
+            order_column: 'started',
+            order_dir: 'desc',
+            start: String(offset),
+            length: String(length),
+            user_id: String(tautulliUserId),
+            grouping: '0',
+        });
+
+        const response = await fetch(`${tUrl}/api/v2?${params.toString()}`, { headers: { Accept: 'application/json' } })
+            .then((r) => r.json())
+            .catch(() => null);
+
+        const rows = response?.response?.data?.data;
+        if (!Array.isArray(rows) || rows.length === 0) break;
+
+        for (const row of rows) {
+            const started = Number(row.started || row.date || 0);
+            if (!started) continue;
+            if (afterUnixSec > 0 && started < afterUnixSec) {
+                done = true;
+                break;
+            }
+            items.push(mapTautulliHistoryRowToPlexItem(row));
+            if (items.length >= maxItems) {
+                done = true;
+                break;
+            }
+        }
+
+        if (rows.length < length) break;
+        offset += rows.length;
+    }
+
+    return items;
+};
+
 const tautulliHourStatsMatchPlexPlays = (tautulliCount, plexCount) => {
     if (!tautulliCount || !plexCount) return false;
     if (tautulliCount === plexCount) return true;
@@ -13293,7 +13368,26 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
             return res.json({ totalPlays: 0, topLibraries: [], topWatched: [], topMusic: [], recentHistory: [] });
         }
 
-        const historyItems = await fetchPlexAccountHistory(uri, config, accountID);
+        const useTautulliHistory = isTautulliWatchHistorySource(config);
+        const { list: plexAccountsForHistory } = await fetchPlexServerAccounts(uri, config);
+        const plexAccountNameForHistory = plexAccountsForHistory.find((a) => String(a.id) === String(accountID))?.name || null;
+        const portalUserForHistory = (await loadFile(USERS_PATH, [])).find((u) => String(u.plexAccountId || '') === String(accountID));
+
+        let historyItems = [];
+        if (useTautulliHistory) {
+            historyItems = await fetchTautulliUserHistoryItems(config, {
+                username: req.user?.username || portalUserForHistory?.username,
+                email: req.user?.email || portalUserForHistory?.email,
+                plexAccountName: plexAccountNameForHistory,
+                maxItems: 150000,
+            });
+            if (!historyItems.length) {
+                // Fall back to Plex if Tautulli has no matching user/history.
+                historyItems = await fetchPlexAccountHistory(uri, config, accountID);
+            }
+        } else {
+            historyItems = await fetchPlexAccountHistory(uri, config, accountID);
+        }
         const sectionsRes = await fetch(`${uri}/library/sections?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
 
         if (!historyItems.length) {
@@ -13340,8 +13434,8 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         let musicCount = 0;
 
         const statsTimezone = await fetchTautulliTimezone(config);
-        const { list: plexAccounts } = await fetchPlexServerAccounts(uri, config);
-        const plexAccountName = plexAccounts.find((a) => String(a.id) === String(accountID))?.name || null;
+        const plexAccounts = plexAccountsForHistory;
+        const plexAccountName = plexAccountNameForHistory;
 
         const heatmapData = {};
         const yearAgo = Math.floor(Date.now() / 1000) - (365 * 24 * 60 * 60);
@@ -13667,6 +13761,7 @@ registerAchievementsRoutes(app, {
         const tags = Array.isArray(meta.Genre) ? meta.Genre.map((g) => g?.tag).filter(Boolean) : [];
         return tags;
     },
+    fetchTautulliUserHistoryItems,
     resolvePortalAccountId: async (req, config) => {
         const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
         if (mediaServerType === 'plex') {
