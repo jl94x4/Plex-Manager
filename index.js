@@ -3463,7 +3463,7 @@ const DEFAULT_DASHBOARD_LAYOUT = {
     version: 1,
     sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'],
     mainGridOrder: [
-        'adminBadge', 'quickActions', 'accessStatus', 'announcement', 'referral',
+        'adminBadge', 'quickActions', 'achievements', 'accessStatus', 'announcement', 'referral',
         'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'analytics'
     ],
     recentlyAddedOrder: ['recentMovies', 'recentShows', 'recentMusic'],
@@ -3477,7 +3477,7 @@ const DEFAULT_DASHBOARD_LAYOUT = {
 
 const DASHBOARD_SECTIONS = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'];
 const DASHBOARD_MAIN_GRID_WIDGETS = [
-    'adminBadge', 'accessStatus', 'tempAccessSetup', 'quickActions', 'announcement',
+    'adminBadge', 'accessStatus', 'tempAccessSetup', 'quickActions', 'achievements', 'announcement',
     'referral', 'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'analytics'
 ];
 const DASHBOARD_RECENTLY_ADDED_WIDGETS = ['recentMovies', 'recentShows', 'recentMusic'];
@@ -3552,6 +3552,22 @@ const migrateDashboardSections = (sections) => {
     return next;
 };
 
+const migrateMainGridOrder = (order) => {
+    const list = Array.isArray(order) ? [...order] : [];
+    const achIdx = list.indexOf('achievements');
+    const qaIdx = list.indexOf('quickActions');
+    if (achIdx < 0 || qaIdx < 0) return list;
+    if (achIdx === qaIdx + 1) return list;
+    const analyticsIdx = list.indexOf('analytics');
+    const looksLikeOldDefault =
+        achIdx === list.length - 1
+        || (analyticsIdx >= 0 && achIdx === analyticsIdx + 1);
+    if (!looksLikeOldDefault) return list;
+    const next = list.filter((id) => id !== 'achievements');
+    next.splice(next.indexOf('quickActions') + 1, 0, 'achievements');
+    return next;
+};
+
 const normalizeDashboardLayout = (raw) => {
     const uniqueValid = (values, allowed, fallback, fillMissing = true) => {
         if (!Array.isArray(values)) return [...fallback];
@@ -3612,7 +3628,7 @@ const normalizeDashboardLayout = (raw) => {
     return {
         version: 1,
         sections: migrateDashboardSections(uniqueValid(input.sections, DASHBOARD_SECTIONS, DEFAULT_DASHBOARD_LAYOUT.sections)),
-        mainGridOrder: uniqueValid(input.mainGridOrder, DASHBOARD_MAIN_GRID_WIDGETS, DEFAULT_DASHBOARD_LAYOUT.mainGridOrder),
+        mainGridOrder: migrateMainGridOrder(uniqueValid(input.mainGridOrder, DASHBOARD_MAIN_GRID_WIDGETS, DEFAULT_DASHBOARD_LAYOUT.mainGridOrder)),
         recentlyAddedOrder: uniqueValid(input.recentlyAddedOrder, DASHBOARD_RECENTLY_ADDED_WIDGETS, DEFAULT_DASHBOARD_LAYOUT.recentlyAddedOrder),
         hiddenSections: uniqueValid(input.hiddenSections, DASHBOARD_SECTIONS, [], false),
         hiddenWidgets: uniqueValid(input.hiddenWidgets, DASHBOARD_WIDGETS, [], false),

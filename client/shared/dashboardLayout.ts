@@ -55,7 +55,7 @@ export const MAIN_GRID_WIDGET_META: Record<MainGridWidgetId, { label: string; co
     libraryStats: { label: 'Server Library Size', column: 'right' },
     collexions: { label: 'ColleXions', column: 'right', adminOnly: true },
     analytics: { label: 'Your Analytics', column: 'right' },
-    achievements: { label: 'Achievements XP', column: 'right' },
+    achievements: { label: 'Achievements XP', column: 'left' },
 };
 
 export const RECENTLY_ADDED_WIDGET_META: Record<RecentlyAddedWidgetId, string> = {
@@ -70,6 +70,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     mainGridOrder: [
         'adminBadge',
         'quickActions',
+        'achievements',
         'accessStatus',
         'announcement',
         'referral',
@@ -78,7 +79,6 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
         'libraryStats',
         'collexions',
         'analytics',
-        'achievements',
     ],
     recentlyAddedOrder: ['recentMovies', 'recentShows', 'recentMusic'],
     hiddenSections: [],
@@ -180,12 +180,30 @@ const migrateDashboardSections = (sections: DashboardSectionId[]): DashboardSect
     return next;
 };
 
+/** Move Achievements under Quick Actions when it still sits in the old right-column default. */
+const migrateMainGridOrder = (order: MainGridWidgetId[]): MainGridWidgetId[] => {
+    const achIdx = order.indexOf('achievements');
+    const qaIdx = order.indexOf('quickActions');
+    if (achIdx < 0 || qaIdx < 0) return order;
+    if (achIdx === qaIdx + 1) return order;
+    const analyticsIdx = order.indexOf('analytics');
+    const looksLikeOldDefault =
+        achIdx === order.length - 1
+        || (analyticsIdx >= 0 && achIdx === analyticsIdx + 1);
+    if (!looksLikeOldDefault) return order;
+    const next = order.filter((id) => id !== 'achievements');
+    next.splice(next.indexOf('quickActions') + 1, 0, 'achievements');
+    return next;
+};
+
 export const normalizeDashboardLayout = (raw: unknown): DashboardLayoutConfig => {
     const input = raw && typeof raw === 'object' ? (raw as Partial<DashboardLayoutConfig>) : {};
     return {
         version: 1,
         sections: migrateDashboardSections(uniqueValid(input.sections, ALL_SECTIONS, DEFAULT_DASHBOARD_LAYOUT.sections)),
-        mainGridOrder: uniqueValid(input.mainGridOrder, ALL_MAIN_GRID, DEFAULT_DASHBOARD_LAYOUT.mainGridOrder),
+        mainGridOrder: migrateMainGridOrder(
+            uniqueValid(input.mainGridOrder, ALL_MAIN_GRID, DEFAULT_DASHBOARD_LAYOUT.mainGridOrder),
+        ),
         recentlyAddedOrder: uniqueValid(input.recentlyAddedOrder, ALL_RECENTLY_ADDED, DEFAULT_DASHBOARD_LAYOUT.recentlyAddedOrder),
         hiddenSections: uniqueValid(input.hiddenSections, ALL_SECTIONS, [], false),
         hiddenWidgets: uniqueValid(input.hiddenWidgets, ALL_WIDGETS, [], false),
