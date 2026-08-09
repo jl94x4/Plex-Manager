@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from './api';
+import { isActiveDownloadItem } from './downloadStatus';
 
 export const useDownloadCount = (enabled: boolean, pollSeconds = 15) => {
     const [downloadCount, setDownloadCount] = useState(0);
@@ -12,7 +13,9 @@ export const useDownloadCount = (enabled: boolean, pollSeconds = 15) => {
         }
         try {
             const data = await apiFetch('/api/downloads/status');
-            setDownloadCount(Math.max(0, Number(data?.counts?.total) || 0));
+            const list = Array.isArray(data?.downloads) ? data.downloads : [];
+            const active = list.filter(isActiveDownloadItem).length;
+            setDownloadCount(Math.max(0, active));
         } catch {
             // Keep the last good count during short client outages.
         }

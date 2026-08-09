@@ -13,6 +13,7 @@ import { CustomSelect, ConfirmModal, StyledCheckbox, ScrollReveal } from './shar
 import { PeriodDropdown } from './shared/PeriodDropdown';
 import { ActivityHeatmap } from './shared/ActivityHeatmap';
 import { Loader, Toast, ToastContainer, pushToast } from './shared/toast';
+import { isActiveDownloadItem } from './shared/downloadStatus';
 import { NoPosterPlaceholder } from './shared/NoPosterPlaceholder';
 import {
     ActivityGridSkeleton,
@@ -1835,12 +1836,42 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
     );
 };
 
+const DOWNLOADS_STATUS_FILTER_KEY = 'portal-downloads-status-filter';
+const DOWNLOADS_CLIENT_FILTER_KEY = 'portal-downloads-client-filter';
+
+const downloadClientTypeLabel = (type: string) => ({
+    qbittorrent: 'qBittorrent',
+    transmission: 'Transmission',
+    bittorrent: 'BitTorrent',
+    deluge: 'Deluge',
+    sabnzbd: 'SABnzbd',
+    nzbget: 'NZBGet',
+}[String(type || '').toLowerCase()] || 'Download Client');
+
+const readStoredDownloadFilter = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
+    try {
+        const raw = String(localStorage.getItem(key) || '').trim() as T;
+        return allowed.includes(raw) ? raw : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
 export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [filter, setFilter] = useState<'all' | 'sonarr' | 'radarr' | 'lidarr' | 'unknown'>('all');
-    const [clientFilter, setClientFilter] = useState<string>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active'>(() => (
+        readStoredDownloadFilter(DOWNLOADS_STATUS_FILTER_KEY, ['all', 'active'] as const, 'active')
+    ));
+    const [clientFilter, setClientFilter] = useState<string>(() => {
+        try {
+            return String(localStorage.getItem(DOWNLOADS_CLIENT_FILTER_KEY) || 'all').trim() || 'all';
+        } catch {
+            return 'all';
+        }
+    });
     const [busyAction, setBusyAction] = useState('');
     const [uploadClientId, setUploadClientId] = useState('');
     const [uploadCategory, setUploadCategory] = useState('');
@@ -1866,17 +1897,61 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
         return () => clearInterval(interval);
     }, [load]);
 
+    useEffect(() => {
+        try { localStorage.setItem(DOWNLOADS_STATUS_FILTER_KEY, statusFilter); } catch { /* ignore */ }
+    }, [statusFilter]);
+
+    useEffect(() => {
+        try { localStorage.setItem(DOWNLOADS_CLIENT_FILTER_KEY, clientFilter); } catch { /* ignore */ }
+    }, [clientFilter]);
+
+    const allDownloads = useMemo(
+        () => (Array.isArray(data?.downloads) ? data.downloads : []),
+        [data],
+    );
+
     const downloads = useMemo(() => {
-        const all = Array.isArray(data?.downloads) ? data.downloads : [];
-        const bySource = filter === 'all' ? all : all.filter((item: any) => item.source === filter);
-        return clientFilter === 'all' ? bySource : bySource.filter((item: any) => String(item.clientId) === clientFilter);
-    }, [data, filter, clientFilter]);
+        let list = allDownloads;
+        if (statusFilter === 'active') list = list.filter(isActiveDownloadItem);
+        if (filter !== 'all') list = list.filter((item: any) => item.source === filter);
+        if (clientFilter !== 'all') list = list.filter((item: any) => String(item.clientId) === clientFilter);
+        return list;
+    }, [allDownloads, filter, clientFilter, statusFilter]);
+
+    const sourceCounts = useMemo(() => {
+        const base = statusFilter === 'active' ? allDownloads.filter(isActiveDownloadItem) : allDownloads;
+        return {
+            total: base.length,
+            sonarr: base.filter((item: any) => item.source === 'sonarr').length,
+            radarr: base.filter((item: any) => item.source === 'radarr').length,
+            lidarr: base.filter((item: any) => item.source === 'lidarr').length,
+            unknown: base.filter((item: any) => item.source === 'unknown').length,
+        };
+    }, [allDownloads, statusFilter]);
 
     const torrentClients = useMemo(() => (
         (Array.isArray(data?.clients) ? data.clients : [])
             .filter((entry: any) => !['sabnzbd', 'nzbget'].includes(String(entry?.client?.type || '').toLowerCase()))
             .map((entry: any) => entry.client)
     ), [data]);
+
+    const clientSelectOptions = useMemo(() => {
+        const clients = Array.isArray(data?.clients) ? data.clients : [];
+        return [
+            { label: 'All clients', value: 'all' },
+            ...clients.map((entry: any) => ({
+                label: entry?.client?.name || downloadClientTypeLabel(entry?.client?.type),
+                value: String(entry?.client?.id || ''),
+            })).filter((option: { value: string }) => option.value),
+        ];
+    }, [data]);
+
+    useEffect(() => {
+        if (clientFilter === 'all') return;
+        const known = (Array.isArray(data?.clients) ? data.clients : [])
+            .some((entry: any) => String(entry?.client?.id || '') === clientFilter);
+        if (data && !known) setClientFilter('all');
+    }, [data, clientFilter]);
 
     useEffect(() => {
         if (!uploadClientId && torrentClients.length > 0) setUploadClientId(String(torrentClients[0].id));
@@ -1914,14 +1989,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
             setUploadCategory('');
         }
     }, [uploadCategory, uploadCategoryOptions]);
-    const downloadClientLabel = (type: string) => ({
-        qbittorrent: 'qBittorrent',
-        transmission: 'Transmission',
-        bittorrent: 'BitTorrent',
-        deluge: 'Deluge',
-        sabnzbd: 'SABnzbd',
-        nzbget: 'NZBGet',
-    }[String(type || '').toLowerCase()] || 'Download Client');
+    const downloadClientLabel = downloadClientTypeLabel;
     const downloadClientIcon = (type: string) => {
         const normalized = String(type || '').toLowerCase();
         if (normalized === 'bittorrent') return 'https://cdn.simpleicons.org/bittorrent';
@@ -2083,14 +2151,92 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                 {(['all', 'sonarr', 'radarr', 'lidarr', 'unknown'] as const).map((key) => (
                     <button key={key} type="button" onClick={() => setFilter(key)} className={`rounded-xl border p-4 text-left transition-colors ${filter === key ? 'border-plex bg-plex/10 text-plex' : 'border-white/5 bg-card text-text hover:bg-white/5'}`}>
                         <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{key === 'all' ? 'All' : sourceLabel(key)}</p>
-                        <p className="text-2xl font-black mt-1">{key === 'all' ? data?.counts?.total || 0 : data?.counts?.[key] || 0}</p>
+                        <p className="text-2xl font-black mt-1">{key === 'all' ? sourceCounts.total : sourceCounts[key]}</p>
                     </button>
                 ))}
             </div>
 
+            <div className="sticky top-0 z-20 -mx-1 px-1 py-2 bg-background/90 backdrop-blur-md border-b border-white/5 lg:static lg:border-0 lg:bg-transparent lg:backdrop-blur-none lg:py-0">
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-end rounded-2xl border border-white/10 bg-card/80 p-3 lg:p-4">
+                    <div className="flex-1 min-w-0 sm:max-w-xs">
+                        <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">Client</label>
+                        <CustomSelect
+                            value={clientFilter}
+                            onChange={setClientFilter}
+                            options={clientSelectOptions}
+                        />
+                    </div>
+                    <div className="sm:w-auto">
+                        <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5">Show</p>
+                        <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-1">
+                            {([
+                                { id: 'active', label: 'Active only' },
+                                { id: 'all', label: 'All' },
+                            ] as const).map((option) => {
+                                const selected = statusFilter === option.id;
+                                return (
+                                    <button
+                                        key={option.id}
+                                        type="button"
+                                        onClick={() => setStatusFilter(option.id)}
+                                        className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors ${selected ? 'bg-plex text-background' : 'text-muted hover:text-text'}`}
+                                    >
+                                        {option.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    <p className="text-xs text-muted sm:ml-auto sm:pb-2">
+                        {downloads.length} shown
+                        {statusFilter === 'active' ? ' · hiding completed/seeding' : ''}
+                    </p>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2 bg-card border border-white/5 rounded-2xl p-4 shadow-xl">
-                    <h2 className="text-xl font-bold text-text mb-4">Active Downloads</h2>
+                <div className="order-1 lg:order-2 bg-card border border-white/5 rounded-2xl p-4 shadow-xl">
+                    <h2 className="text-xl font-bold text-text mb-4">Clients</h2>
+                    <div className="space-y-3">
+                        {(data?.clients || []).length === 0 ? (
+                            <p className="text-sm text-muted">No download clients configured in Settings.</p>
+                        ) : data.clients.map((client: any) => {
+                            const activeClientFilter = clientFilter === String(client.client.id);
+                            const clientItems = allDownloads.filter((item: any) => String(item.clientId) === String(client.client.id));
+                            const visibleCount = statusFilter === 'active'
+                                ? clientItems.filter(isActiveDownloadItem).length
+                                : clientItems.length;
+                            return (
+                            <button
+                                key={client.client.id}
+                                type="button"
+                                onClick={() => setClientFilter(activeClientFilter ? 'all' : String(client.client.id))}
+                                className={`w-full rounded-xl border p-3 text-left transition-colors ${activeClientFilter ? 'border-plex bg-plex/10' : 'border-white/5 bg-background/40 hover:bg-white/[0.06]'}`}
+                            >
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <span className="inline-flex w-8 h-8 rounded-lg bg-white/5 border border-white/10 items-center justify-center overflow-hidden shrink-0">
+                                            <img src={downloadClientIcon(client.client.type)} alt="" className="w-5 h-5 object-contain" />
+                                        </span>
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-text truncate">{client.client.name || downloadClientLabel(client.client.type)}</p>
+                                            <p className="text-[11px] text-muted">{downloadClientLabel(client.client.type)} · {visibleCount} download{visibleCount === 1 ? '' : 's'}</p>
+                                        </div>
+                                    </div>
+                                    <span className={`w-2.5 h-2.5 rounded-full ${client.online ? 'bg-green-500' : 'bg-red-500'}`} />
+                                </div>
+                                {client.error && <p className="text-xs text-red-300 mt-2">{client.error}</p>}
+                            </button>
+                        );})}
+                    </div>
+                    {clientFilter !== 'all' && (
+                        <button type="button" onClick={() => setClientFilter('all')} className="mt-3 text-xs font-bold text-plex hover:underline">
+                            Clear client filter
+                        </button>
+                    )}
+                </div>
+                <div className="lg:col-span-2 order-2 lg:order-1 bg-card border border-white/5 rounded-2xl p-4 shadow-xl">
+                    <h2 className="text-xl font-bold text-text mb-4">{statusFilter === 'active' ? 'Active Downloads' : 'Downloads'}</h2>
                     <div className="space-y-3">
                         {downloads.length === 0 ? (
                             <div className="text-center py-12 text-muted bg-background/30 rounded-xl border border-white/5">No downloads for this filter.</div>
@@ -2151,42 +2297,6 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                             </div>
                         );})}
                     </div>
-                </div>
-                <div className="bg-card border border-white/5 rounded-2xl p-4 shadow-xl">
-                    <h2 className="text-xl font-bold text-text mb-4">Clients</h2>
-                    <div className="space-y-3">
-                        {(data?.clients || []).length === 0 ? (
-                            <p className="text-sm text-muted">No download clients configured in Settings.</p>
-                        ) : data.clients.map((client: any) => {
-                            const activeClientFilter = clientFilter === String(client.client.id);
-                            return (
-                            <button
-                                key={client.client.id}
-                                type="button"
-                                onClick={() => setClientFilter(activeClientFilter ? 'all' : String(client.client.id))}
-                                className={`w-full rounded-xl border p-3 text-left transition-colors ${activeClientFilter ? 'border-plex bg-plex/10' : 'border-white/5 bg-background/40 hover:bg-white/[0.06]'}`}
-                            >
-                                <div className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <span className="inline-flex w-8 h-8 rounded-lg bg-white/5 border border-white/10 items-center justify-center overflow-hidden shrink-0">
-                                            <img src={downloadClientIcon(client.client.type)} alt="" className="w-5 h-5 object-contain" />
-                                        </span>
-                                        <div className="min-w-0">
-                                            <p className="font-bold text-text truncate">{client.client.name || downloadClientLabel(client.client.type)}</p>
-                                            <p className="text-[11px] text-muted">{downloadClientLabel(client.client.type)} · {client.count} downloads</p>
-                                        </div>
-                                    </div>
-                                    <span className={`w-2.5 h-2.5 rounded-full ${client.online ? 'bg-green-500' : 'bg-red-500'}`} />
-                                </div>
-                                {client.error && <p className="text-xs text-red-300 mt-2">{client.error}</p>}
-                            </button>
-                        );})}
-                    </div>
-                    {clientFilter !== 'all' && (
-                        <button type="button" onClick={() => setClientFilter('all')} className="mt-3 text-xs font-bold text-plex hover:underline">
-                            Clear client filter
-                        </button>
-                    )}
                 </div>
             </div>
         </div>
