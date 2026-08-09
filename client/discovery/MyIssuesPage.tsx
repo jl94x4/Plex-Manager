@@ -10,6 +10,7 @@ import {
     issueStatusBadgeClass,
 } from './issueUtils';
 import { discoveryTheme } from './discoveryThemeClasses';
+import { translateDiscoverStatus, useDiscoverI18n } from './i18n';
 
 type IssueFilter = 'open' | 'resolved' | 'all';
 
@@ -19,13 +20,14 @@ type Props = {
     onCountsChange?: () => void;
 };
 
-const IssueTypeBadge: React.FC<{ type: string }> = ({ type }) => (
+const IssueTypeBadge: React.FC<{ type: string; t: (key: string) => string }> = ({ type, t }) => (
     <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
-        {type === 'tv' ? 'TV' : 'Movie'}
+        {type === 'tv' ? t('mediaType.tv') : t('mediaType.movie')}
     </span>
 );
 
 export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsChange }) => {
+    const { t } = useDiscoverI18n();
     const [filter, setFilter] = useState<IssueFilter>('open');
     const [issues, setIssues] = useState<PortalIssueItem[]>([]);
     const [counts, setCounts] = useState({
@@ -61,35 +63,35 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
 
             if (countData?.userMapped === false) {
                 setIssues([]);
-                setError('Your portal account is not linked to a Seerr user. Contact your admin.');
+                setError(t('issues.accountNotLinked'));
                 return;
             }
 
             if (listData?.userMapped === false) {
                 setIssues([]);
-                setError(listData?.error || 'Your portal account is not linked to a Seerr user.');
+                setError(listData?.error || t('issues.accountNotLinked'));
                 return;
             }
 
             setIssues(Array.isArray(listData?.results) ? listData.results : []);
         } catch (e: any) {
-            setError(e?.message || 'Failed to load your issues');
+            setError(e?.message || t('issues.loadFailed'));
             setIssues([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [filter]);
+    }, [filter, t]);
 
     useEffect(() => {
         loadData();
     }, [loadData]);
 
     const filterTabs = useMemo(() => ([
-        { id: 'open' as const, label: 'Open', count: counts.open },
-        { id: 'resolved' as const, label: 'Resolved', count: counts.resolved },
-        { id: 'all' as const, label: 'All', count: counts.total },
-    ]), [counts]);
+        { id: 'open' as const, label: t('status.open'), count: counts.open },
+        { id: 'resolved' as const, label: t('status.resolved'), count: counts.resolved },
+        { id: 'all' as const, label: t('status.all'), count: counts.total },
+    ]), [counts, t]);
 
     const openMedia = (item: PortalIssueItem) => {
         if (!item.tmdbId) return;
@@ -104,11 +106,11 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                 : `/api/discovery/my-issues/${item.id}/open`;
             const res = await apiFetch(endpoint, { method: 'POST' });
             if (res?.error) throw new Error(res.error);
-            pushToast?.(res?.message || 'Issue updated.', 'success');
+            pushToast?.(res?.message || t('issues.updated'), 'success');
             await loadData({ silent: true });
             onCountsChange?.();
         } catch (e: any) {
-            pushToast?.(e?.message || 'Failed to update issue', 'error');
+            pushToast?.(e?.message || t('issues.updateFailed'), 'error');
         } finally {
             setActionId(null);
         }
@@ -123,12 +125,12 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                 body: JSON.stringify({ message: commentText.trim() }),
             });
             if (res?.error) throw new Error(res.error);
-            pushToast?.(res?.message || 'Comment added.', 'success');
+            pushToast?.(res?.message || t('issues.commentAdded'), 'success');
             setCommentTarget(null);
             setCommentText('');
             await loadData({ silent: true });
         } catch (e: any) {
-            pushToast?.(e?.message || 'Failed to add comment', 'error');
+            pushToast?.(e?.message || t('issues.commentFailed'), 'error');
         } finally {
             setActionId(null);
         }
@@ -140,12 +142,12 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
         try {
             const res = await apiFetch(`/api/discovery/my-issues/${deleteTarget.id}`, { method: 'DELETE' });
             if (res?.error) throw new Error(res.error);
-            pushToast?.(res?.message || 'Issue deleted.', 'success');
+            pushToast?.(res?.message || t('issues.deleted'), 'success');
             setDeleteTarget(null);
             await loadData({ silent: true });
             onCountsChange?.();
         } catch (e: any) {
-            pushToast?.(e?.message || 'Failed to delete issue', 'error');
+            pushToast?.(e?.message || t('issues.deleteFailed'), 'error');
         } finally {
             setActionId(null);
         }
@@ -155,15 +157,15 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
         <div className="flex flex-col gap-6 w-full pb-12">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 px-2">
                 <div>
-                    <h2 className={discoveryTheme.heading}>My Issues</h2>
+                    <h2 className={discoveryTheme.heading}>{t('issues.title')}</h2>
                     <p className={discoveryTheme.subheading}>
-                        Playback problems you have reported on available media.
+                        {t('issues.subtitle')}
                     </p>
                 </div>
                 {refreshing && (
                     <div className="inline-flex items-center gap-2 text-xs text-muted/70">
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Refreshing…
+                        {t('common.refreshing')}
                     </div>
                 )}
             </div>
@@ -199,23 +201,27 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                 </div>
             ) : issues.length === 0 ? (
                 <div className={`mx-2 ${discoveryTheme.emptyState}`}>
-                    <p className={discoveryTheme.emptyTitle}>No {filter === 'all' ? '' : filter} issues</p>
+                    <p className={discoveryTheme.emptyTitle}>
+                        {filter === 'all'
+                            ? t('issues.emptyTitleAll')
+                            : t('issues.emptyTitle', { filter: translateDiscoverStatus(t, filter) })}
+                    </p>
                     <p className={discoveryTheme.emptyBody}>
-                        Report a playback problem from any available title in Discover.
+                        {t('issues.emptyBody')}
                     </p>
                     <button
                         type="button"
                         onClick={() => navigate('/discovery')}
                         className="mt-4 inline-flex px-4 py-2.5 rounded-xl bg-plex text-black font-bold hover:bg-plex-hover transition-colors"
                     >
-                        Browse Discover
+                        {t('common.browseDiscover')}
                     </button>
                 </div>
             ) : (
                 <div className="flex flex-col gap-3 px-2">
                     {issues.map((item) => {
                         const busy = actionId === item.id;
-                        const location = formatIssueLocation(item);
+                        const location = formatIssueLocation(item, t);
                         const firstComment = item.comments?.[0]?.message;
                         const isOpen = item.statusLabel === 'open';
 
@@ -240,12 +246,12 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                                                <IssueTypeBadge type={item.type} />
+                                                <IssueTypeBadge type={item.type} t={t} />
                                                 <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border bg-white/5 border-border text-muted">
                                                     {item.issueTypeLabel}
                                                 </span>
                                                 <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${issueStatusBadgeClass(item.statusLabel)}`}>
-                                                    {item.statusLabel}
+                                                    {translateDiscoverStatus(t, item.statusLabel)}
                                                 </span>
                                             </div>
                                             <h3 className="text-lg font-black text-text leading-tight group-hover:text-plex transition-colors">
@@ -253,7 +259,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                                 {item.year ? <span className="text-muted font-bold ml-2">{item.year}</span> : null}
                                             </h3>
                                             <p className="text-xs text-muted mt-1">
-                                                Reported {formatIssueRelativeTime(item.createdAt || item.updatedAt)}
+                                                {t('issues.reportedAt', { date: formatIssueRelativeTime(item.createdAt || item.updatedAt, t) })}
                                                 {location ? ` · ${location}` : ''}
                                             </p>
                                             {firstComment && (
@@ -273,7 +279,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                             className={`${requestCardActionBtnClass} border border-border text-text/70 hover:bg-white/5`}
                                         >
                                             <MessageSquare className="w-3.5 h-3.5" />
-                                            Comment
+                                            {t('issues.comment')}
                                         </button>
                                         <button
                                             type="button"
@@ -282,7 +288,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                             className={`${requestCardActionBtnClass} border border-plex/30 text-plex hover:bg-plex/10`}
                                         >
                                             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isOpen ? <CheckCircle className="w-3.5 h-3.5" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                                            {isOpen ? 'Resolve' : 'Reopen'}
+                                            {isOpen ? t('issues.resolve') : t('issues.reopen')}
                                         </button>
                                         {item.commentCount <= 1 && (
                                             <button
@@ -292,7 +298,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                                 className={`${requestCardActionBtnClass} border border-red-500/30 text-red-300 hover:bg-red-500/10`}
                                             >
                                                 <Trash2 className="w-3.5 h-3.5" />
-                                                Delete
+                                                {t('common.delete')}
                                             </button>
                                         )}
                                         <button
@@ -301,7 +307,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                             className={`${requestCardActionBtnClass} border border-border text-text/70 hover:bg-white/5`}
                                         >
                                             {item.type === 'tv' ? <Tv className="w-3.5 h-3.5" /> : <Film className="w-3.5 h-3.5" />}
-                                            View
+                                            {t('common.view')}
                                         </button>
                                     </RequestCardActions>
                                 </div>
@@ -315,21 +321,21 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                 <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
                     <button
                         type="button"
-                        aria-label="Close"
+                        aria-label={t('common.close')}
                         className="absolute inset-0 bg-background/80 backdrop-blur-sm"
                         onClick={() => { if (actionId == null) setCommentTarget(null); }}
                     />
                     <div className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
-                        <h3 className="text-lg font-black text-text mb-2">Add comment</h3>
+                        <h3 className="text-lg font-black text-text mb-2">{t('issues.addComment')}</h3>
                         <p className="text-sm text-muted mb-4">
-                            Update on <span className="text-text font-semibold">{commentTarget.title}</span>
+                            {t('issues.commentBody', { title: commentTarget.title })}
                         </p>
                         <textarea
                             value={commentText}
                             onChange={(e) => setCommentText(e.target.value)}
                             rows={4}
                             className="w-full rounded-xl border border-border bg-background/30 px-3 py-2.5 text-sm text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex resize-y min-h-[6rem] mb-4"
-                            placeholder="Add details for the admin…"
+                            placeholder={t('issues.commentPlaceholder')}
                         />
                         <div className="flex gap-3">
                             <button
@@ -338,7 +344,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                 onClick={() => setCommentTarget(null)}
                                 className="flex-1 py-2.5 rounded-xl border border-border text-text/70 font-bold hover:bg-white/5 transition-colors disabled:opacity-50"
                             >
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button
                                 type="button"
@@ -346,7 +352,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                 onClick={handleComment}
                                 className="flex-1 py-2.5 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors disabled:opacity-50"
                             >
-                                {actionId != null ? 'Sending…' : 'Send Comment'}
+                                {actionId != null ? t('issues.sending') : t('issues.sendComment')}
                             </button>
                         </div>
                     </div>
@@ -357,14 +363,14 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                 <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
                     <button
                         type="button"
-                        aria-label="Close"
+                        aria-label={t('common.close')}
                         className="absolute inset-0 bg-background/80 backdrop-blur-sm"
                         onClick={() => { if (actionId == null) setDeleteTarget(null); }}
                     />
                     <div className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
-                        <h3 className="text-lg font-black text-text mb-2">Delete issue?</h3>
+                        <h3 className="text-lg font-black text-text mb-2">{t('issues.deleteTitle')}</h3>
                         <p className="text-sm text-muted mb-5">
-                            Remove your report for <span className="text-text font-semibold">{deleteTarget.title}</span>?
+                            {t('issues.deleteBody', { title: deleteTarget.title })}
                         </p>
                         <div className="flex gap-3">
                             <button
@@ -373,7 +379,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                 onClick={() => setDeleteTarget(null)}
                                 className="flex-1 py-2.5 rounded-xl border border-border text-text/70 font-bold hover:bg-white/5 transition-colors disabled:opacity-50"
                             >
-                                Keep Issue
+                                {t('issues.keepIssue')}
                             </button>
                             <button
                                 type="button"
@@ -381,7 +387,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                 onClick={handleDelete}
                                 className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-black hover:bg-red-600 transition-colors disabled:opacity-50"
                             >
-                                {actionId != null ? 'Deleting…' : 'Delete'}
+                                {actionId != null ? t('issues.deleting') : t('common.delete')}
                             </button>
                         </div>
                     </div>

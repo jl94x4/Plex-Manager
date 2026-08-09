@@ -28,7 +28,7 @@ export const PersonDetailsPage: React.FC<{
     onSelect: (item: any) => void;
     formatItem: (item: any) => any;
 }> = ({ personId, onBack, onSelect, formatItem }) => {
-    const { locale } = useDiscoverI18n();
+    const { t, locale } = useDiscoverI18n();
     const { preferences } = useDiscoveryPreferences();
     const [person, setPerson] = useState<any>(null);
     const [credits, setCredits] = useState<any[]>([]);
@@ -78,7 +78,7 @@ export const PersonDetailsPage: React.FC<{
     const profileUrl = person.profilePath ? `https://image.tmdb.org/t/p/h632${person.profilePath}` : '';
     const age = person.birthday ? new Date().getFullYear() - new Date(person.birthday).getFullYear() : null;
     const visibleCredits = filterHiddenAvailableItems(credits, preferences.hideAvailableMedia);
-    const biography = person.biography || `We do not have a biography for ${person.name}.`;
+    const biography = person.biography || t('person.noBiography', { name: person.name });
     const { first: bioFirst, rest: bioRest, hasMore: bioHasMore } = splitBiography(biography);
 
     return (
@@ -87,7 +87,7 @@ export const PersonDetailsPage: React.FC<{
                 onClick={onBack}
                 className="flex items-center gap-2 text-muted hover:text-text font-medium transition-colors w-fit"
             >
-                <ArrowLeft className="w-5 h-5" /> Back to Discovery
+                <ArrowLeft className="w-5 h-5" /> {t('person.back')}
             </button>
 
             <div className="flex flex-col md:flex-row gap-8">
@@ -101,7 +101,7 @@ export const PersonDetailsPage: React.FC<{
                         />
                     ) : (
                         <div className="w-full rounded-2xl bg-white/5 border border-border aspect-[2/3] flex items-center justify-center">
-                            <span className="text-muted text-2xl font-bold">No Photo</span>
+                            <span className="text-muted text-2xl font-bold">{t('person.noPhoto')}</span>
                         </div>
                     )}
                 </div>
@@ -120,7 +120,7 @@ export const PersonDetailsPage: React.FC<{
                         )}
                         {person.birthday && (
                             <span className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full border border-white/5">
-                                <Calendar className="w-4 h-4 text-plex" /> {person.birthday} {age ? `(${age} years old)` : ''}
+                                <Calendar className="w-4 h-4 text-plex" /> {person.birthday} {age ? `(${t('person.yearsOld', { count: age })})` : ''}
                             </span>
                         )}
                         {person.placeOfBirth && (
@@ -131,7 +131,7 @@ export const PersonDetailsPage: React.FC<{
                     </div>
 
                     <div className="flex flex-col gap-3 mt-4">
-                        <h2 className="text-2xl font-bold text-text">Biography</h2>
+                        <h2 className="text-2xl font-bold text-text">{t('person.biography')}</h2>
                         <div className="text-muted text-lg leading-relaxed whitespace-pre-line space-y-4">
                             <p>{bioFirst}</p>
                             {bioHasMore && bioExpanded && <p>{bioRest}</p>}
@@ -142,7 +142,7 @@ export const PersonDetailsPage: React.FC<{
                                 onClick={() => setBioExpanded((expanded) => !expanded)}
                                 className="inline-flex items-center gap-1.5 text-sm font-bold text-plex hover:text-plex-hover transition-colors w-fit"
                             >
-                                {bioExpanded ? 'Show less' : 'Read more'}
+                                {bioExpanded ? t('common.showLess') : t('common.readMore')}
                                 <ChevronDown className={`w-4 h-4 transition-transform ${bioExpanded ? 'rotate-180' : ''}`} />
                             </button>
                         )}
@@ -154,7 +154,7 @@ export const PersonDetailsPage: React.FC<{
             {visibleCredits.length > 0 && (
                 <div className="flex flex-col gap-4 mt-12 border-t border-border pt-10">
                     <h2 className="text-2xl font-black text-text flex items-center gap-3">
-                        <Film className="w-6 h-6 text-plex" /> Known For
+                        <Film className="w-6 h-6 text-plex" /> {t('person.knownFor')}
                     </h2>
                     <div className={upgraderPosterGridClass('large')} style={upgraderPosterGridStyle('large')}>
                         {visibleCredits.map((rawItem, idx) => {

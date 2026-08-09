@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../shared/api';
+import { createDiscoverTranslate } from './i18n';
+import { readDiscoverUiLocale } from './i18n/types';
 
 export type DiscoveryMeProfile = {
     configured?: boolean;
@@ -89,7 +91,8 @@ export const useDiscoveryMe = (enabled = true) => {
             });
             setError(null);
         } catch (e: any) {
-            setError(e?.message || 'Failed to load request permissions');
+            const t = createDiscoverTranslate(readDiscoverUiLocale());
+            setError(e?.message || t('request.permissionsLoadFailed'));
             setProfile(DEFAULT_PROFILE);
         } finally {
             setLoading(false);

@@ -1,11 +1,13 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useDiscoverI18n } from './i18n';
 
 interface CarouselProps {
     children: React.ReactNode;
 }
 
 export const Carousel: React.FC<CarouselProps> = ({ children }) => {
+    const { t } = useDiscoverI18n();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [atStart, setAtStart] = useState(true);
     const [atEnd, setAtEnd] = useState(true);
@@ -64,7 +66,7 @@ export const Carousel: React.FC<CarouselProps> = ({ children }) => {
                     onClick={() => scroll('left')}
                     disabled={atStart}
                     className={`p-0.5 transition-colors ${atStart ? 'text-muted/30 cursor-default' : 'hover:text-text'}`}
-                    aria-label="Scroll left"
+                    aria-label={t('common.scrollLeft')}
                 >
                     <ChevronLeft className="w-6 h-6" />
                 </button>
@@ -73,7 +75,7 @@ export const Carousel: React.FC<CarouselProps> = ({ children }) => {
                     onClick={() => scroll('right')}
                     disabled={atEnd}
                     className={`p-0.5 transition-colors ${atEnd ? 'text-muted/30 cursor-default' : 'hover:text-text'}`}
-                    aria-label="Scroll right"
+                    aria-label={t('common.scrollRight')}
                 >
                     <ChevronRight className="w-6 h-6" />
                 </button>

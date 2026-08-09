@@ -558,9 +558,21 @@ export type RequestOptionsPayload = {
     engine?: string;
 };
 
-export const formatQuotaHint = (slot: QuotaSlot | undefined, label: string): string | null => {
+export const formatQuotaHint = (
+    slot: QuotaSlot | undefined,
+    label: string,
+    t?: (key: string, vars?: Record<string, string | number>) => string,
+): string | null => {
     if (!slot || slot.limit === 0) return null;
     const remaining = slot.remaining ?? Math.max(0, slot.limit - slot.used);
+    if (t) {
+        return t('request.quotaLeft', {
+            remaining,
+            limit: slot.limit,
+            label,
+            days: slot.days,
+        });
+    }
     return `${remaining} of ${slot.limit} ${label} requests left (${slot.days}-day window)`;
 };
 

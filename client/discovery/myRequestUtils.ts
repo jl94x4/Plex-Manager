@@ -98,18 +98,20 @@ export const memberRequestDisplayStatus = (item: PortalRequestItem) => {
     return item.statusLabel || 'Unknown';
 };
 
-export const formatRequestRelativeTime = (value?: string | null) => {
-    if (!value) return 'Unknown time';
+type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+export const formatRequestRelativeTime = (value?: string | null, t?: Translate) => {
+    if (!value) return t ? t('common.unknownTime') : 'Unknown time';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value;
     const diffMs = Date.now() - date.getTime();
     const minutes = Math.floor(diffMs / 60000);
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
+    if (minutes < 1) return t ? t('common.justNow') : 'Just now';
+    if (minutes < 60) return t ? t('common.minutesAgo', { count: minutes }) : `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return t ? t('common.hoursAgo', { count: hours }) : `${hours}h ago`;
     const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
+    if (days < 7) return t ? t('common.daysAgo', { count: days }) : `${days}d ago`;
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 

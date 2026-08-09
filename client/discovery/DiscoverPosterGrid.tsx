@@ -4,6 +4,7 @@ import { PosterCardSkeleton } from '../shared/skeletons';
 import { upgraderPosterGridClass, upgraderPosterGridStyle, type UpgraderGridSize } from '../shared/portalLayout';
 import { dedupeDiscoverResults, getDiscoverItemKey } from './discoverItemUtils';
 import { discoveryTheme } from './discoveryThemeClasses';
+import { useDiscoverI18n } from './i18n';
 
 type Props = {
     items: any[];
@@ -22,8 +23,10 @@ export const DiscoverPosterGrid: React.FC<Props> = ({
     onSelect,
     loading = false,
     skeletonCount = 15,
-    emptyMessage = 'No results found.',
+    emptyMessage,
 }) => {
+    const { t } = useDiscoverI18n();
+    const resolvedEmptyMessage = emptyMessage || t('common.noResults');
     const visibleItems = useMemo(() => dedupeDiscoverResults(items), [items]);
     // Enter-animate only the first paint after a loading cycle. Infinite-scroll appends
     // must not remount or re-animate existing posters (that flashed the grid to opacity 0).
@@ -40,7 +43,7 @@ export const DiscoverPosterGrid: React.FC<Props> = ({
                 className={upgraderPosterGridClass(gridSize)}
                 style={upgraderPosterGridStyle(gridSize)}
                 aria-busy="true"
-                aria-label="Loading results"
+                aria-label={t('common.loadingResults')}
             >
                 {[...Array(skeletonCount)].map((_, i) => (
                     <PosterCardSkeleton
@@ -56,8 +59,8 @@ export const DiscoverPosterGrid: React.FC<Props> = ({
     if (visibleItems.length === 0) {
         return (
             <div className={`${discoveryTheme.posterEmpty} discover-content-enter`}>
-                <p className={discoveryTheme.emptyTitle}>{emptyMessage}</p>
-                <p className={discoveryTheme.emptyBody}>Try adjusting your filters or turn off Hide Available Media in settings.</p>
+                <p className={discoveryTheme.emptyTitle}>{resolvedEmptyMessage}</p>
+                <p className={discoveryTheme.emptyBody}>{t('browse.emptyHint')}</p>
             </div>
         );
     }

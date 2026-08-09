@@ -1,5 +1,6 @@
 import React from 'react';
 import type { CombinedRatings } from './mediaDetailUtils';
+import { useDiscoverI18n } from './i18n';
 
 const pillLinkClass = 'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-all hover:brightness-110 hover:scale-[1.02]';
 
@@ -42,6 +43,7 @@ export const MediaRatingPills: React.FC<MediaRatingPillsProps> = ({
     tmdbScore,
     tmdbUrl,
 }) => {
+    const { t } = useDiscoverI18n();
     const rtCritics = Number(ratings?.rt?.criticsScore);
     const rtAudience = Number(ratings?.rt?.audienceScore);
     const imdbScore = ratings?.imdb?.criticsScore;
@@ -75,12 +77,12 @@ export const MediaRatingPills: React.FC<MediaRatingPillsProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     className={className}
-                    title="Rotten Tomatoes Tomatometer"
+                    title={t('ratings.rottenTomatoesTomatometer')}
                 >
                     {content}
                 </a>
             ) : (
-                <span key="rt-critics" className={className} title="Rotten Tomatoes Tomatometer">
+                <span key="rt-critics" className={className} title={t('ratings.rottenTomatoesTomatometer')}>
                     {content}
                 </span>
             ),
@@ -107,12 +109,12 @@ export const MediaRatingPills: React.FC<MediaRatingPillsProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     className={className}
-                    title="Rotten Tomatoes Audience Score"
+                    title={t('ratings.rottenTomatoesAudience')}
                 >
                     {content}
                 </a>
             ) : (
-                <span key="rt-audience" className={className} title="Rotten Tomatoes Audience Score">
+                <span key="rt-audience" className={className} title={t('ratings.rottenTomatoesAudience')}>
                     {content}
                 </span>
             ),
@@ -137,12 +139,12 @@ export const MediaRatingPills: React.FC<MediaRatingPillsProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     className={imdbClass}
-                    title="IMDb rating"
+                    title={t('ratings.imdb')}
                 >
                     {content}
                 </a>
             ) : (
-                <span key="imdb" className={imdbClass} title="IMDb rating">
+                <span key="imdb" className={imdbClass} title={t('ratings.imdb')}>
                     {content}
                 </span>
             ),
@@ -165,12 +167,12 @@ export const MediaRatingPills: React.FC<MediaRatingPillsProps> = ({
                     target="_blank"
                     rel="noopener noreferrer"
                     className={tmdbClass}
-                    title="TMDB user score"
+                    title={t('ratings.tmdb')}
                 >
                     {content}
                 </a>
             ) : (
-                <span key="tmdb" className={tmdbClass} title="TMDB user score">
+                <span key="tmdb" className={tmdbClass} title={t('ratings.tmdb')}>
                     {content}
                 </span>
             ),

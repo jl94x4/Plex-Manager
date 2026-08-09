@@ -22,14 +22,20 @@ type Props = {
     onCountsChange?: () => void;
 };
 
-const RequestTypeBadge: React.FC<{ type: string; showHd: boolean; show4k: boolean }> = ({
+const RequestTypeBadge: React.FC<{
+    type: string;
+    showHd: boolean;
+    show4k: boolean;
+    t: (key: string) => string;
+}> = ({
     type,
     showHd,
     show4k,
+    t,
 }) => (
     <span className="inline-flex items-center gap-1.5">
         <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
-            {type === 'tv' ? 'TV' : (type === 'music' ? 'Music' : 'Movie')}
+            {type === 'tv' ? t('mediaType.tv') : (type === 'music' ? t('mediaType.music') : t('mediaType.movie'))}
         </span>
         {showHd && (
             <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
@@ -99,19 +105,19 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
 
             if (listData?.userMapped === false) {
                 setRequests([]);
-                setError(listData?.error || 'Your portal account is not linked to a Seerr user. Contact your admin.');
+                setError(listData?.error || t('requestsPage.accountNotLinked'));
                 return;
             }
 
             setRequests(Array.isArray(listData?.results) ? listData.results : []);
         } catch (e: any) {
-            setError(e?.message || 'Failed to load your requests');
+            setError(e?.message || t('requestsPage.loadFailed'));
             setRequests([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [filter]);
+    }, [filter, t]);
 
     useEffect(() => {
         loadData();
@@ -157,11 +163,11 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
         try {
             const res = await apiFetch(`/api/discovery/my-requests/${item.id}/retry`, { method: 'POST' });
             if (res?.error) throw new Error(res.error);
-            pushToast?.(res?.message || 'Request retry submitted.', 'success');
+            pushToast?.(res?.message || t('requestsPage.retrySubmitted'), 'success');
             await loadData({ silent: true });
             onCountsChange?.();
         } catch (e: any) {
-            pushToast?.(e?.message || 'Failed to retry request', 'error');
+            pushToast?.(e?.message || t('requestsPage.retryFailed'), 'error');
         } finally {
             setActionId(null);
         }
@@ -225,16 +231,18 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                 </div>
             ) : mergedRequests.length === 0 ? (
                 <div className={`mx-2 ${discoveryTheme.emptyState}`}>
-                    <p className={discoveryTheme.emptyTitle}>No {filter} requests</p>
+                    <p className={discoveryTheme.emptyTitle}>
+                        {t('requestsPage.emptyTitle', { filter: translateDiscoverStatus(t, filter) })}
+                    </p>
                     <p className={discoveryTheme.emptyBody}>
-                        Browse discover and submit a request when you find something to watch.
+                        {t('requestsPage.emptyBody')}
                     </p>
                     <button
                         type="button"
                         onClick={() => navigate('/discovery')}
                         className="mt-4 inline-flex px-4 py-2.5 rounded-xl bg-plex text-black font-bold hover:bg-plex-hover transition-colors"
                     >
-                        Browse Discover
+                        {t('common.browseDiscover')}
                     </button>
                 </div>
             ) : (
@@ -284,6 +292,7 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                                     type={primary.type}
                                                     showHd={multi && showHd}
                                                     show4k={show4k}
+                                                    t={t}
                                                 />
                                                 {!multi && sharedStatus ? (
                                                     <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${memberRequestStatusClass(sharedStatus)}`}>
@@ -296,7 +305,7 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                                 {primary.year ? <span className="text-muted font-bold ml-2">{primary.year}</span> : null}
                                             </h3>
                                             <p className="text-xs text-muted mt-1">
-                                                Requested {formatRequestRelativeTime(requestedAt)}
+                                                {t('requestsPage.requestedAt', { date: formatRequestRelativeTime(requestedAt, t) })}
                                             </p>
                                             {multi ? (
                                                 <div className="mt-2 flex flex-col gap-1.5">
@@ -328,7 +337,7 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                             ) : null}
                                             {primary.type === 'tv' && seasons.length > 0 && (
                                                 <p className="text-xs text-muted mt-2">
-                                                    Seasons: {seasons.join(', ')}
+                                                    {t('requestsPage.seasonsList', { seasons: seasons.join(', ') })}
                                                 </p>
                                             )}
                                             {primary.overview && (
@@ -341,8 +350,8 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                         {cancelable.map((variant) => {
                                             const busy = actionId === variant.id;
                                             const label = multi
-                                                ? `Cancel ${requestQualityLabel(variant)}`
-                                                : 'Cancel';
+                                                ? `${t('requestsPage.cancel')} ${requestQualityLabel(variant)}`
+                                                : t('requestsPage.cancel');
                                             return (
                                                 <button
                                                     key={`cancel-${variant.id}`}
@@ -359,8 +368,8 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                         {retryable.map((variant) => {
                                             const busy = actionId === variant.id;
                                             const label = multi
-                                                ? `Retry ${requestQualityLabel(variant)}`
-                                                : 'Retry';
+                                                ? `${t('requestsPage.retry')} ${requestQualityLabel(variant)}`
+                                                : t('requestsPage.retry');
                                             return (
                                                 <button
                                                     key={`retry-${variant.id}`}
@@ -380,7 +389,7 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                             className={`${requestCardActionBtnClass} border border-border text-text/70 hover:bg-white/5`}
                                         >
                                             {primary.type === 'tv' ? <Tv className="w-3.5 h-3.5" /> : <Film className="w-3.5 h-3.5" />}
-                                            View
+                                            {t('common.view')}
                                         </button>
                                     </RequestCardActions>
                                 </div>
@@ -394,15 +403,17 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                 <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
                     <button
                         type="button"
-                        aria-label="Close"
+                        aria-label={t('common.close')}
                         className="absolute inset-0 bg-background/80 backdrop-blur-sm"
                         onClick={() => { if (actionId == null) setCancelTarget(null); }}
                     />
                     <div className="relative w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
-                        <h3 className="text-lg font-black text-text mb-2">Cancel request?</h3>
+                        <h3 className="text-lg font-black text-text mb-2">{t('requestsPage.cancelTitle')}</h3>
                         <p className="text-sm text-muted mb-5">
-                            Cancel your pending {requestQualityLabel(cancelTarget)} request for{' '}
-                            <span className="text-text font-semibold">{cancelTarget.title}</span>?
+                            {t('requestsPage.cancelBody', {
+                                quality: requestQualityLabel(cancelTarget),
+                                title: cancelTarget.title,
+                            })}
                         </p>
                         <div className="flex gap-3">
                             <button
@@ -411,7 +422,7 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                 onClick={() => setCancelTarget(null)}
                                 className="flex-1 py-2.5 rounded-xl border border-border text-text/70 font-bold hover:bg-white/5 transition-colors disabled:opacity-50"
                             >
-                                Keep Request
+                                {t('requestsPage.keepRequest')}
                             </button>
                             <button
                                 type="button"
@@ -420,7 +431,7 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                 className="flex-1 py-2.5 rounded-xl bg-red-500/90 text-white font-black hover:bg-red-500 transition-colors disabled:opacity-50 inline-flex items-center justify-center gap-2"
                             >
                                 {actionId === cancelTarget.id ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                                Cancel Request
+                                {t('requestsPage.cancelRequest')}
                             </button>
                         </div>
                     </div>

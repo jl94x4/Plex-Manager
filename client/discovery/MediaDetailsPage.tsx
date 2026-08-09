@@ -53,10 +53,13 @@ const formatOrdinalDay = (day: number) => {
     return `${day}th`;
 };
 
-const formatRadarrReleaseDate = (value?: string | null) => {
+const formatRadarrReleaseDate = (value?: string | null, locale = 'en') => {
     if (!value) return null;
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return null;
+    if (locale !== 'en') {
+        return parsed.toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' });
+    }
     const day = parsed.getDate();
     const monthYear = parsed.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     return `${formatOrdinalDay(day)} ${monthYear}`;
@@ -124,7 +127,7 @@ export const MediaDetailsPage: React.FC<{
                         setDetails(res);
                         setLoadError(null);
                     } else if (!seed) {
-                        setLoadError(res.error || 'Failed to load details');
+                        setLoadError(res.error || t('media.loadFailed'));
                     }
                 } finally {
                     if (timer) window.clearTimeout(timer);
@@ -134,8 +137,8 @@ export const MediaDetailsPage: React.FC<{
                 if (!cancelled && !seed) {
                     setLoadError(
                         err?.name === 'AbortError'
-                            ? 'Timed out loading this title. Try again.'
-                            : (err?.message || 'Failed to load details'),
+                            ? t('media.loadTimedOut')
+                            : (err?.message || t('media.loadFailed')),
                     );
                 }
             } finally {
@@ -441,10 +444,10 @@ export const MediaDetailsPage: React.FC<{
                 method: 'POST',
             });
             if (res?.error) throw new Error(res.error);
-            pushToast?.(res?.message || 'Request retry submitted.', 'success');
+            pushToast?.(res?.message || t('media.retrySubmitted'), 'success');
             await refreshDetails();
         } catch (err: any) {
-            pushToast?.(err?.message || 'Failed to retry request', 'error');
+            pushToast?.(err?.message || t('media.retryFailed'), 'error');
         }
     };
 
@@ -464,13 +467,13 @@ export const MediaDetailsPage: React.FC<{
     if (!details) {
         return (
             <div className="w-full h-[80vh] flex flex-col items-center justify-center gap-3 px-6 text-center">
-                <p className="text-lg font-bold text-text">{loadError || 'Could not load this title.'}</p>
+                <p className="text-lg font-bold text-text">{loadError || t('media.couldNotLoad')}</p>
                 <button
                     type="button"
                     onClick={onBack}
                     className="px-4 py-2 rounded-lg border border-border bg-card text-sm font-bold text-text hover:border-plex/40"
                 >
-                    Go back
+                    {t('media.goBack')}
                 </button>
             </div>
         );
@@ -480,6 +483,8 @@ export const MediaDetailsPage: React.FC<{
     const year = (details.releaseDate || details.firstAirDate || '').substring(0, 4);
     const mediaStatus = details.mediaInfo?.status ?? null;
     const requestButton = getRequestButtonState(mediaType, mediaStatus, seasonRows, details.mediaInfo, details);
+    const requestButtonLabel = translateDiscoverStatus(t, requestButton.label);
+    const mediaTypeLabel = mediaType === 'movie' ? t('mediaType.movie') : t('mediaType.tv');
     const seerrMediaId = Number(details.mediaInfo?.id);
     const tmdbId = Number(details.tmdbId ?? details.id);
     const canReportIssue = discoveryMe.permissions?.createIssues !== false
@@ -500,7 +505,9 @@ export const MediaDetailsPage: React.FC<{
     const heroImageUrl = heroBackdropUrl || posterHeroUrl;
     const heroUsesPosterFallback = !heroBackdropUrl && !!posterHeroUrl;
     const voteCountLabel = details.voteCount > 0
-        ? `${details.voteCount >= 1000 ? `${(details.voteCount / 1000).toFixed(1)}k` : details.voteCount} votes`
+        ? t('filters.votes', {
+            count: details.voteCount >= 1000 ? `${(details.voteCount / 1000).toFixed(1)}k` : details.voteCount,
+        })
         : null;
 
     const metaChips: { icon: React.ReactNode; label: string }[] = [];
@@ -538,19 +545,19 @@ export const MediaDetailsPage: React.FC<{
     const visibleRecommendations = filterHiddenAvailableItems(recommendations, preferences.hideAvailableMedia);
     const releaseDateRows = mediaType === 'movie' && radarrReleases
         ? [
-            { key: 'cinema', icon: Ticket, label: 'Cinema', date: formatRadarrReleaseDate(radarrReleases.inCinemas) },
-            { key: 'streaming', icon: Cloud, label: 'Streaming', date: formatRadarrReleaseDate(radarrReleases.digitalRelease) },
-            { key: 'bluray', icon: Disc, label: 'Blu-ray', date: formatRadarrReleaseDate(radarrReleases.physicalRelease) },
+            { key: 'cinema', icon: Ticket, label: t('media.cinema'), date: formatRadarrReleaseDate(radarrReleases.inCinemas, locale) },
+            { key: 'streaming', icon: Cloud, label: t('media.streaming'), date: formatRadarrReleaseDate(radarrReleases.digitalRelease, locale) },
+            { key: 'bluray', icon: Disc, label: t('media.bluRay'), date: formatRadarrReleaseDate(radarrReleases.physicalRelease, locale) },
         ].filter((row) => row.date)
         : mediaType === 'tv'
             ? [
-                { key: 'premiere', icon: Calendar, label: 'First aired', date: formatRadarrReleaseDate(details.firstAirDate) },
-                { key: 'last-aired', icon: Calendar, label: 'Last aired', date: formatRadarrReleaseDate(details.lastAirDate) },
+                { key: 'premiere', icon: Calendar, label: t('media.firstAired'), date: formatRadarrReleaseDate(details.firstAirDate, locale) },
+                { key: 'last-aired', icon: Calendar, label: t('media.lastAired'), date: formatRadarrReleaseDate(details.lastAirDate, locale) },
                 {
                     key: 'next-aired',
                     icon: Cloud,
-                    label: 'Next episode',
-                    date: formatRadarrReleaseDate(details.nextEpisodeToAir?.airDate || details.nextEpisodeToAir?.air_date),
+                    label: t('media.nextEpisode'),
+                    date: formatRadarrReleaseDate(details.nextEpisodeToAir?.airDate || details.nextEpisodeToAir?.air_date, locale),
                 },
             ].filter((row) => row.date)
             : [];
@@ -618,13 +625,13 @@ export const MediaDetailsPage: React.FC<{
                         <div className="light-on-media flex-1 min-w-0 flex flex-col justify-end gap-2 md:hidden">
                             <div className="flex items-center gap-2 flex-wrap">
                                 {mediaType === 'movie' ? <Film className="w-3.5 h-3.5 text-plex" /> : <Tv className="w-3.5 h-3.5 text-plex" />}
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-plex">{mediaType}</span>
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-plex">{mediaTypeLabel}</span>
                                 {details.status && (
                                     <>
                                         <span className="text-white/30">•</span>
                                         <span
                                             className="text-[10px] font-bold text-white/60 uppercase tracking-wide"
-                                            title="TMDB production status (not library availability)"
+                                            title={t('media.tmdbProductionStatus')}
                                         >
                                             {details.status}
                                         </span>
@@ -670,11 +677,11 @@ export const MediaDetailsPage: React.FC<{
                         }`}
                     >
                         {requestButton.variant === 'available' ? (
-                            <><CheckCircle className="w-4 h-4" /> {requestButton.label}</>
+                            <><CheckCircle className="w-4 h-4" /> {requestButtonLabel}</>
                         ) : requestButton.variant === 'pending' ? (
-                            <><Clock className="w-4 h-4" /> {requestButton.label}</>
+                            <><Clock className="w-4 h-4" /> {requestButtonLabel}</>
                         ) : (
-                            <><PlusCircle className="w-4 h-4" /> {requestButton.label}</>
+                            <><PlusCircle className="w-4 h-4" /> {requestButtonLabel}</>
                         )}
                     </button>
                     )}
@@ -738,7 +745,7 @@ export const MediaDetailsPage: React.FC<{
                             rel="noopener noreferrer"
                             className="col-span-2 md:col-span-1 w-full py-2.5 px-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-border text-text transition-colors"
                         >
-                            <Globe className="w-4 h-4" /> Visit Website
+                            <Globe className="w-4 h-4" /> {t('media.visitWebsite')}
                         </a>
                     )}
                     </div>
@@ -748,13 +755,13 @@ export const MediaDetailsPage: React.FC<{
                     <div className="light-on-media hidden md:flex flex-col gap-2.5">
                         <div className="flex items-center gap-2 flex-wrap">
                             {mediaType === 'movie' ? <Film className="w-3.5 h-3.5 text-plex" /> : <Tv className="w-3.5 h-3.5 text-plex" />}
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-plex">{mediaType}</span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-plex">{mediaTypeLabel}</span>
                             {details.status && (
                                 <>
                                     <span className="text-white/30">•</span>
                                     <span
                                         className="text-[10px] font-bold text-white/60 uppercase tracking-wide"
-                                        title="TMDB production status (not library availability)"
+                                        title={t('media.tmdbProductionStatus')}
                                     >
                                         {details.status}
                                     </span>
@@ -881,7 +888,7 @@ export const MediaDetailsPage: React.FC<{
 
                     {details.networks?.length > 0 && (
                         <div className="flex flex-col gap-2">
-                            <SectionHeading>Networks</SectionHeading>
+                            <SectionHeading>{t('home.networks')}</SectionHeading>
                             <div className="flex flex-wrap gap-5 items-center">
                                 {details.networks.map((n: any) => (
                                     <button
@@ -889,7 +896,7 @@ export const MediaDetailsPage: React.FC<{
                                         type="button"
                                         onClick={() => openNetwork(n.id)}
                                         className="flex items-center rounded-lg border border-transparent px-2 py-1.5 transition-all hover:border-border hover:bg-white/5 cursor-pointer"
-                                        title={`Browse ${n.name}`}
+                                        title={t('category.browseName', { name: n.name })}
                                     >
                                         {n.logoPath ? (
                                             <DiscoveryLogo
