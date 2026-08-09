@@ -5976,6 +5976,26 @@ const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | str
         return () => window.removeEventListener('keydown', handleEsc);
     }, [onClose]);
 
+    // Keep background (#main-scroll-container) from eating touch-scroll while the sheet is open.
+    useEffect(() => {
+        const scroller = document.getElementById('main-scroll-container');
+        const prevOverflow = scroller?.style.overflow || '';
+        const prevTouchAction = scroller?.style.touchAction || '';
+        if (scroller) {
+            scroller.style.overflow = 'hidden';
+            scroller.style.touchAction = 'none';
+        }
+        const prevBodyOverscroll = document.body.style.overscrollBehavior;
+        document.body.style.overscrollBehavior = 'none';
+        return () => {
+            if (scroller) {
+                scroller.style.overflow = prevOverflow;
+                scroller.style.touchAction = prevTouchAction;
+            }
+            document.body.style.overscrollBehavior = prevBodyOverscroll;
+        };
+    }, []);
+
     const renderContent = () => {
         switch (metric) {
             case 'Server Rank': {
@@ -6545,17 +6565,28 @@ const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | str
         }
     };
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    return ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-4">
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity" onClick={onClose} />
-            <div className="relative bg-gradient-to-b from-card to-background border border-border/80 shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-plex/0 via-plex to-plex/0 opacity-50"></div>
-                <button onClick={onClose} className="absolute top-4 right-4 text-muted hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-full p-2 transition-all z-20 group">
+            <div
+                className="relative bg-gradient-to-b from-card to-background border border-border/80 shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[min(92dvh,calc(100dvh-4.5rem))] sm:max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-plex/0 via-plex to-plex/0 opacity-50 z-10 pointer-events-none"></div>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="absolute top-4 right-4 text-muted hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 rounded-full p-2 transition-all z-20 group"
+                    aria-label="Close"
+                >
                     <X className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
                 </button>
-                {renderContent()}
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar [-webkit-overflow-scrolling:touch]">
+                    {renderContent()}
+                </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 };
 
