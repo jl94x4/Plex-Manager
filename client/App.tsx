@@ -134,10 +134,7 @@ export const MainApp: React.FC = () => {
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
-<<<<<<< HEAD
     const [publicConfigWarning, setPublicConfigWarning] = useState<string | null>(null);
-=======
->>>>>>> origin/main
     const [releaseNotes, setReleaseNotes] = useState<ReleaseNotes | null>(null);
     const [showWhatsNew, setShowWhatsNew] = useState(false);
     const whatsNewCheckedRef = useRef(false);
