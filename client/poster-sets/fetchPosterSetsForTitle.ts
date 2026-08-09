@@ -72,13 +72,17 @@ const mediuxMediaType = (source: TitleSource, fallback: 'show' | 'movie') =>
 
 const TPDB_EMPTY_HINT = 'ThePosterDB returned no sets for this title; showing MediUX sets instead.';
 const TPDB_NEEDS_LOGIN_HINT = 'ThePosterDB login not configured — add TPDB credentials in Poster Sets → Settings (required for many TV titles), or paste a set URL in Discover.';
-/** Hard wait when TPDB credentials exist — server title search allows ~120s. */
-const TPDB_HARD_MS = 90_000;
+/** Soft “still waiting” paint — server priority-cache / CLI allows ~120s+. */
+const TPDB_SOFT_WAIT_MS = 90_000;
+/** Absolute client wait for TPDB (must exceed server CLI timeout). */
+const TPDB_HARD_MS = 180_000;
 /** Short wait for public-only TPDB search (usually fails fast for TV). */
-const TPDB_PUBLIC_MS = 20_000;
+const TPDB_PUBLIC_MS = 45_000;
 /** MediUX title pages can retry Cloudflare flakes — give them room before painting empty. */
 const MEDIUX_HARD_MS = 90_000;
 const TPDB_RETRY_DELAY_MS = 2500;
+const TPDB_STILL_SEARCHING = 'ThePosterDB is taking longer than usual — still searching…';
+const TPDB_TIMED_OUT = 'ThePosterDB search timed out — showing MediUX sets.';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => {
     window.setTimeout(resolve, ms);
@@ -194,6 +198,7 @@ async function fetchBothSetsProgressive(
         mediaType: options.fallbackMedia,
     };
     const tpdbHardMs = options.tpdbConfigured ? TPDB_HARD_MS : TPDB_PUBLIC_MS;
+    const tpdbSoftWaitMs = options.tpdbConfigured ? TPDB_SOFT_WAIT_MS : Math.min(TPDB_PUBLIC_MS, 20_000);
 
     const preferSets = (sets: PosterSetsSearchSet[]) => prioritizeSetsByFollowedCreators(
         collapseNearDuplicateSets(sets || []).sets,
@@ -253,26 +258,103 @@ async function fetchBothSetsProgressive(
     })();
 
     const tpdbTask = (async () => {
+        const fetchPromise = fetchPosterdbSets(posterdbSource, {
+            tmdbId: linkedTmdbId,
+            titleHint: options.titleHint,
+            yearHint: options.yearHint,
+            mediaType: options.fallbackMedia,
+            tpdbConfigured: options.tpdbConfigured,
+        });
+
+        // Soft wait: paint MediUX / progress without abandoning the in-flight TPDB request.
         posterdbResult = await withTimeout(
-            fetchPosterdbSets(posterdbSource, {
-                tmdbId: linkedTmdbId,
-                titleHint: options.titleHint,
-                yearHint: options.yearHint,
-                mediaType: options.fallbackMedia,
-                tpdbConfigured: options.tpdbConfigured,
-            }),
-            tpdbHardMs,
+            fetchPromise,
+            tpdbSoftWaitMs,
             () => ({
-                ok: false,
+                ok: true,
                 sets: [],
                 titles: [],
                 partialErrors: options.tpdbConfigured
-                    ? ['ThePosterDB search timed out — showing MediUX sets.']
+                    ? [TPDB_STILL_SEARCHING]
                     : [TPDB_NEEDS_LOGIN_HINT],
             }),
         );
         paintMerged();
+
+        // Always finish the real request (server CLI ~120s). Soft wait only early-paints.
+        let final: PosterSetsSearchResult;
+        try {
+            final = await withTimeout(
+                fetchPromise,
+                Math.max(5_000, tpdbHardMs - tpdbSoftWaitMs),
+                () => ({
+                    ok: true,
+                    sets: [],
+                    titles: [],
+                    partialErrors: options.tpdbConfigured
+                        ? [TPDB_TIMED_OUT]
+                        : [TPDB_NEEDS_LOGIN_HINT],
+                }),
+            );
+        } catch {
+            final = {
+                ok: false,
+                sets: [],
+                titles: [],
+                partialErrors: options.tpdbConfigured
+                    ? [TPDB_TIMED_OUT]
+                    : [TPDB_NEEDS_LOGIN_HINT],
+            };
+        }
+
+        // Prefer real sets over the soft “still searching” placeholder.
+        if ((final.sets?.length || 0) > 0
+            || !(posterdbResult.sets?.length)
+            || final.fromCache
+            || (posterdbResult.partialErrors || []).includes(TPDB_STILL_SEARCHING)) {
+            posterdbResult = {
+                ...final,
+                fromCache: Boolean(final.fromCache),
+                partialErrors: (final.sets?.length || 0) > 0
+                    ? (final.partialErrors || []).filter((msg) => (
+                        !msg.includes('taking longer')
+                        && !msg.includes('timed out')
+                        && msg !== TPDB_STILL_SEARCHING
+                        && msg !== TPDB_TIMED_OUT
+                    ))
+                    : (final.partialErrors?.length
+                        ? final.partialErrors.map((msg) => (
+                            msg === TPDB_STILL_SEARCHING ? TPDB_TIMED_OUT : msg
+                        ))
+                        : (options.tpdbConfigured ? [TPDB_TIMED_OUT] : [TPDB_NEEDS_LOGIN_HINT])),
+            };
+            paintMerged();
+        }
+
         options.onTpdbSettled?.(posterdbResult);
+
+        // Late arrival if hard wait gave up — still paint when the request finishes.
+        void fetchPromise.then((late) => {
+            if ((late.sets?.length || 0) === 0) return;
+            if ((posterdbResult.sets?.length || 0) >= (late.sets?.length || 0)
+                && posterdbResult.fromCache === Boolean(late.fromCache)) {
+                // Already painted an equal-or-better result.
+                const alreadyHas = new Set((posterdbResult.sets || []).map((s) => s.id || s.url));
+                const addsNew = (late.sets || []).some((s) => !alreadyHas.has(s.id || s.url));
+                if (!addsNew) return;
+            }
+            posterdbResult = {
+                ...late,
+                fromCache: Boolean(late.fromCache),
+                partialErrors: (late.partialErrors || []).filter((msg) => (
+                    !msg.includes('taking longer')
+                    && !msg.includes('timed out')
+                    && msg !== TPDB_STILL_SEARCHING
+                    && msg !== TPDB_TIMED_OUT
+                )),
+            };
+            paintMerged();
+        }).catch(() => {});
 
         // After a cache hit, await a live merge so new sets appear in the UI (and disk).
         if (posterdbResult.fromCache && options.tpdbConfigured !== false) {

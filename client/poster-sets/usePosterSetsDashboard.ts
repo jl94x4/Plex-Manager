@@ -1756,7 +1756,9 @@ export function usePosterSetsDashboardState() {
             });
             setSearchSets((prev) => {
                 const next = response.sets || [];
-                return next.length > 0 ? next : prev;
+                if (next.length === 0) return prev;
+                // Prefer the richer paint (late TPDB can land after soft timeout).
+                return next.length >= prev.length ? next : prev;
             });
             setSearchSetsPage(1);
             setSearchContext(response.title || title.title);
@@ -1771,7 +1773,15 @@ export function usePosterSetsDashboardState() {
             }
             if (response.partialErrors?.length) {
                 const msg = response.partialErrors[0];
-                if (!msg.includes('ThePosterDB login not configured')) {
+                if (msg.includes('ThePosterDB login not configured')) {
+                    // Inline / settings hint — skip toast.
+                } else if (
+                    msg.includes('taking longer')
+                    || msg.includes('timed out')
+                    || msg.includes('still searching')
+                ) {
+                    toast(msg);
+                } else {
                     toast(msg, 'error');
                 }
             }

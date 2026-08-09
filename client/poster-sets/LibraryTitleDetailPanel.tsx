@@ -324,13 +324,19 @@ export function LibraryTitleDetailPanel({
                     || msg.includes('loaded from local')
                 ) {
                     // Permanent local cache hit — never toast as an error.
+                } else if (
+                    msg.includes('taking longer')
+                    || msg.includes('timed out')
+                    || msg.includes('still searching')
+                    || msg.includes('ThePosterDB returned no sets')
+                    || msg.includes('ThePosterDB search timed out')
+                    || msg.includes('MediUX search timed out')
+                    || msg.includes('Status code: 530')
+                    || msg.includes('Status code: 52')
+                ) {
+                    toast(msg);
                 } else {
-                    const soft = msg.includes('ThePosterDB returned no sets')
-                        || msg.includes('ThePosterDB search timed out')
-                        || msg.includes('MediUX search timed out')
-                        || msg.includes('Status code: 530')
-                        || msg.includes('Status code: 52');
-                    toast(msg, soft ? undefined : 'error');
+                    toast(msg, 'error');
                 }
             }
         } catch (error) {
