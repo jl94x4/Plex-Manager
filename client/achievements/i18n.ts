@@ -94,6 +94,7 @@ const catalogs: Record<DiscoverLocale, Record<string, string>> = {
         'drawer.holders': '{count} members have this · {pct}%',
         'drawer.seasons': 'Season windows',
         'drawer.rivals': 'Who unlocked first',
+        'drawer.firstUnlocker': 'First blood',
         'drawer.noHolders': 'No one has unlocked this yet.',
         'drawer.pin': 'Pin as goal',
         'drawer.unpin': 'Unpin goal',
