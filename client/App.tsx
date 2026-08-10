@@ -573,8 +573,10 @@ export const MainApp: React.FC = () => {
         <DiscoverI18nProvider>
         {/* Viewport-locked shell on all breakpoints so mobile touch-scroll uses one root
             (#main-scroll-container). Nested overflow-x clip otherwise creates competing
-            scrollports and breaks scrolling after opening a nav module (issue #92). */}
-        <div className="relative flex w-full min-w-0 max-w-full h-dvh overflow-hidden">
+            scrollports and breaks scrolling after opening a nav module (issue #92).
+            Use fixed inset-0 (not h-dvh): on iOS Safari/PWA, dvh can leave a gap under
+            the shell so fixed bottom nav docks too high above the home indicator. */}
+        <div className="fixed inset-0 flex w-full min-w-0 max-w-full overflow-hidden">
             <AppAmbientBackground backgroundImageUrl={publicConfig?.backgroundImageUrl} />
             <ConfirmModal
                 isOpen={confirmState.isOpen}

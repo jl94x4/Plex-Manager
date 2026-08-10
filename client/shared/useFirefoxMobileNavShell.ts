@@ -14,6 +14,19 @@ export const isFirefoxMobileClient = () => {
 };
 
 /**
+ * True for iPhone / iPad (incl. iPadOS desktop UA). Used to portal the bottom
+ * nav to `document.body` — Safari's `position:fixed` is trapped by the
+ * `h-dvh`/`overflow` app shell and leaves a large empty gap under the bar.
+ */
+export const isIosMobileClient = () => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    if (/iPad|iPhone|iPod/i.test(ua)) return true;
+    // iPadOS 13+ can report as MacIntel with touch.
+    return navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1;
+};
+
+/**
  * Firefox Android leaves `position:fixed; bottom:0` stranded when the dynamic
  * toolbar shows/hides. Pin the bar so its bottom edge matches the *visual*
  * viewport bottom (layout-viewport coordinates).
