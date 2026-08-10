@@ -229,12 +229,11 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
     const episodeCount = Number(serverStats.episodes) || 0;
     const trackCount = Number(serverStats.tracks) || 0;
 
-    // Only list library types that actually exist / have content — avoid showing
-    // a phantom "Music" row when Plex has no artist libraries (issue #75).
+    // Distinct hues (not adjacent warm tones) so the stacked bar reads clearly — issue #100.
     const segments = [
-        { label: 'Movies', bytes: movies, count: movieCount, countLabel: 'movies', icon: Film, color: 'bg-plex', dot: 'bg-plex' },
-        { label: 'TV Shows', bytes: shows, count: showCount, countLabel: 'shows', icon: Tv, color: 'bg-amber-400', dot: 'bg-amber-400' },
-        { label: 'Music', bytes: music, count: musicCount, countLabel: 'albums', icon: Music, color: 'bg-orange-500', dot: 'bg-orange-500' },
+        { label: 'Movies', bytes: movies, count: movieCount, countLabel: 'movies', icon: Film, color: 'bg-sky-400', dot: 'bg-sky-400' },
+        { label: 'TV Shows', bytes: shows, count: showCount, countLabel: 'shows', icon: Tv, color: 'bg-emerald-400', dot: 'bg-emerald-400' },
+        { label: 'Music', bytes: music, count: musicCount, countLabel: 'albums', icon: Music, color: 'bg-violet-400', dot: 'bg-violet-400' },
     ].filter((segment) => segment.bytes > 0 || segment.count > 0);
 
     if (segments.length === 0) return null;
@@ -255,12 +254,12 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
                 ) : null}
             </div>
 
-            <div className="flex h-1.5 rounded-full overflow-hidden bg-white/5">
+            <div className="flex h-1.5 rounded-full overflow-hidden bg-white/5 gap-px">
                 {segments.map((segment) => (
                     segment.bytes > 0 ? (
                         <div
                             key={segment.label}
-                            className={`${segment.color} transition-all duration-500`}
+                            className={`${segment.color} transition-all duration-500 first:rounded-l-full last:rounded-r-full`}
                             style={{ width: `${pct(segment.bytes)}%` }}
                             title={`${segment.label}: ${formatBytes(segment.bytes)}`}
                         />
