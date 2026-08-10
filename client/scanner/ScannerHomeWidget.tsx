@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Clock3, FolderInput, ListTodo, Radar, RefreshCw, Target } from 'lucide-react';
 import { apiFetch } from '../shared/api';
+import { useDiscoverI18n } from '../discovery/i18n';
 import { usePoll } from '../shared/usePoll';
 import { formatScannerWhen, scannerActionStyles, shortenScannerPath } from './eventMeta';
 import { ScannerSourceBadge } from './ScannerSourceBadge';
@@ -29,6 +30,7 @@ type Props = {
 };
 
 export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
+    const { t } = useDiscoverI18n();
     const [status, setStatus] = useState<ScannerStatus | null>(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
@@ -44,12 +46,12 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
             setStatus(data || null);
         } catch (e: any) {
             if (gen !== loadGenRef.current) return;
-            setError(e?.message || 'Unavailable');
+            setError(e?.message || t('homeDashboard.widgets.scanner.unavailable'));
             setStatus(null);
         } finally {
             if (gen === loadGenRef.current) setLoading(false);
         }
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         void load();
@@ -75,7 +77,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                             </div>
                             <div className="min-w-0">
                                 <p className="text-muted text-[10px] uppercase tracking-widest font-bold">Scanner</p>
-                                <p className="text-text font-bold text-base truncate">Library refresh</p>
+                                <p className="text-text font-bold text-base truncate">{t('homeDashboard.widgets.scanner.subtitle')}</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2 lg:hidden">
@@ -83,7 +85,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                                 type="button"
                                 onClick={() => { void load(); }}
                                 className="p-1.5 rounded-lg text-muted hover:text-text hover:bg-white/5 transition-colors"
-                                title="Refresh"
+                                title={t('homeDashboard.admin.refresh')}
                             >
                                 <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                             </button>
@@ -98,28 +100,28 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                                 <ListTodo className="w-4 h-4 text-amber-300 shrink-0" />
                                 <div>
                                     <p className="text-lg font-black text-amber-50 leading-none">{remaining}</p>
-                                    <p className="text-[9px] uppercase tracking-wider font-bold text-amber-200/80 mt-1">Queued</p>
+                                    <p className="text-[9px] uppercase tracking-wider font-bold text-amber-200/80 mt-1">{t('homeDashboard.widgets.scanner.queued')}</p>
                                 </div>
                             </div>
                             <div className="rounded-xl bg-emerald-500/10 border border-emerald-400/25 px-3 py-2.5 flex items-center gap-2.5">
                                 <CheckCircle2 className="w-4 h-4 text-emerald-300 shrink-0" />
                                 <div>
                                     <p className="text-lg font-black text-emerald-50 leading-none">{processed}</p>
-                                    <p className="text-[9px] uppercase tracking-wider font-bold text-emerald-200/80 mt-1">Processed</p>
+                                    <p className="text-[9px] uppercase tracking-wider font-bold text-emerald-200/80 mt-1">{t('homeDashboard.widgets.scanner.processed')}</p>
                                 </div>
                             </div>
                             <div className="rounded-xl bg-violet-500/10 border border-violet-400/25 px-3 py-2.5 flex items-center gap-2.5">
                                 <Target className="w-4 h-4 text-violet-300 shrink-0" />
                                 <div>
                                     <p className="text-lg font-black text-violet-50 leading-none">{targets}</p>
-                                    <p className="text-[9px] uppercase tracking-wider font-bold text-violet-200/80 mt-1">Targets</p>
+                                    <p className="text-[9px] uppercase tracking-wider font-bold text-violet-200/80 mt-1">{t('homeDashboard.widgets.scanner.targets')}</p>
                                 </div>
                             </div>
                             <div className="rounded-xl bg-sky-500/10 border border-sky-400/25 px-3 py-2.5 flex items-center gap-2.5">
                                 <Clock3 className="w-4 h-4 text-sky-300 shrink-0" />
                                 <div>
                                     <p className="text-lg font-black text-sky-50 leading-none">{status?.minimumAge ?? '—'}</p>
-                                    <p className="text-[9px] uppercase tracking-wider font-bold text-sky-200/80 mt-1">Min age</p>
+                                    <p className="text-[9px] uppercase tracking-wider font-bold text-sky-200/80 mt-1">{t('homeDashboard.widgets.scanner.minAge')}</p>
                                 </div>
                             </div>
                         </div>
@@ -132,13 +134,13 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                                 : 'bg-white/5 border-white/10 text-muted'
                         }`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-400 animate-pulse' : 'bg-muted'}`} />
-                            {active ? 'Armed' : 'Idle'}
+                            {active ? t('homeDashboard.widgets.scanner.armed') : t('homeDashboard.widgets.scanner.idle')}
                         </span>
                         <button
                             type="button"
                             onClick={() => { void load(); }}
                             className="p-2 rounded-lg text-muted hover:text-text hover:bg-white/5 transition-colors"
-                            title="Refresh"
+                            title={t('homeDashboard.admin.refresh')}
                         >
                             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
                         </button>
@@ -148,7 +150,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                                 onClick={onOpen}
                                 className="text-xs font-bold text-sky-300 hover:underline px-1"
                             >
-                                Open
+                                {t('homeDashboard.widgets.scanner.open')}
                             </button>
                         ) : null}
                     </div>
@@ -156,7 +158,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
 
                 <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3 px-0.5">
-                        <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-muted">Latest activity</p>
+                        <p className="text-[10px] uppercase tracking-[0.14em] font-bold text-muted">{t('homeDashboard.widgets.scanner.latestActivity')}</p>
                         {last?.at ? (
                             <p className="text-[11px] text-muted/80 tabular-nums shrink-0">{formatScannerWhen(last.at)}</p>
                         ) : null}
@@ -189,7 +191,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                                         ) : (
                                             <span className="w-1.5 h-1.5 rounded-full bg-red-300 shrink-0" />
                                         )}
-                                        {last.ok ? 'Success' : 'Failed'}
+                                        {last.ok ? t('homeDashboard.widgets.scanner.success') : t('homeDashboard.widgets.scanner.failed')}
                                     </span>
                                     {(last.reason || last.action) ? (
                                         <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${lastStyle.className}`}>
@@ -205,7 +207,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                                             {last.title}
                                         </p>
                                     ) : (
-                                        <p className="text-sm text-muted">No title reported</p>
+                                        <p className="text-sm text-muted">{t('homeDashboard.widgets.scanner.noTitleReported')}</p>
                                     )}
                                     {last.error ? (
                                         <p className="text-xs text-red-200/90 mt-1.5 truncate" title={last.error}>{last.error}</p>
@@ -225,7 +227,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                         </div>
                     ) : (
                         <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-center">
-                            <p className="text-sm text-muted">Waiting for the next webhook or manual scan.</p>
+                            <p className="text-sm text-muted">{t('homeDashboard.widgets.scanner.waitingForScan')}</p>
                         </div>
                     )}
                 </div>
@@ -237,7 +239,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                             : 'bg-white/5 border-white/10 text-muted'
                     }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-400 animate-pulse' : 'bg-muted'}`} />
-                        {active ? 'Armed' : 'Idle'}
+                        {active ? t('homeDashboard.widgets.scanner.armed') : t('homeDashboard.widgets.scanner.idle')}
                         {status?.minimumAge ? ` · ${status.minimumAge}` : ''}
                     </span>
                     {onOpen ? (
@@ -246,7 +248,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                             onClick={onOpen}
                             className="text-xs font-bold text-sky-300 hover:underline"
                         >
-                            Open
+                            {t('homeDashboard.widgets.scanner.open')}
                         </button>
                     ) : null}
                 </div>
