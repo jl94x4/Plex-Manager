@@ -39,7 +39,7 @@ import { useDiscoverGridSize } from './discovery/useDiscoverGridSize';
 import { DiscoverLocaleSelect } from './discovery/i18n/DiscoverLocaleSelect';
 import { useDiscoverI18n } from './discovery/i18n';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
-import { isFirefoxMobileClient, isIosMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
+import { isFirefoxMobileClient, isIosMobileClient, isStandaloneDisplayMode, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
 import { AchievementsAnalyticsLeaderboard } from './achievements/AchievementsAnalyticsLeaderboard';
 import {
@@ -11294,17 +11294,19 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     /** Firefox + iOS: portal bar to body so fixed bottom is not trapped by the app shell. */
     const portalMobileBottomNav = firefoxMobileNav || iosMobileNav;
     const firefoxNavBarRef = useRef<HTMLDivElement>(null);
-    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav });
     const [profileOpen, setProfileOpen] = useState(false);
     const [profileAchievements, setProfileAchievements] = useState<any>(null);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
-    const [isInstalledApp, setIsInstalledApp] = useState(() => (
-        typeof window !== 'undefined'
-        && (window.matchMedia?.('(display-mode: standalone)').matches
-            || window.matchMedia?.('(display-mode: fullscreen)').matches
-            || (navigator as any).standalone === true)
-    ));
+    const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplayMode());
+    /**
+     * iOS Safari *tabs* (not the home-screen PWA): Safari’s bottom chrome already
+     * clears the home indicator. Extra safe-area pad leaves a tall empty band
+     * under the icons. Dock to visualViewport like Firefox instead.
+     */
+    const iosBrowserNav = iosMobileNav && !isInstalledApp;
+    const visualViewportNavDock = firefoxMobileNav || iosBrowserNav;
+    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: visualViewportNavDock });
     const mobileThemeRef = useRef<HTMLDivElement>(null);
     const [mobileThemePos, setMobileThemePos] = useState<{ top: number; right: number } | null>(null);
     const isFirefoxMobile = typeof navigator !== 'undefined'
@@ -11710,32 +11712,32 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 {sidebarIdentityPosition !== 'top' && renderServerIdentity('bottom')}
 
-                <div className="mt-2 pt-2 border-t border-white/10 shrink-0">
-                    <div className="flex items-stretch gap-2">
+                <div className="mt-2 pt-2 border-t border-white/10 shrink-0 w-full min-w-0 overflow-hidden">
+                    <div className="grid grid-cols-[minmax(0,1fr)_2.5rem] gap-1.5 items-stretch w-full min-w-0">
                         <button
                             type="button"
                             onClick={() => setProfileOpen(true)}
-                            className="min-w-0 flex-1 flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-all p-2 text-left"
+                            className="min-w-0 flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-all py-1 px-1.5 text-left"
                         >
                             <img
                                 src={profileIcon}
                                 alt=""
-                                className="w-8 h-8 flex-shrink-0 rounded-full object-cover bg-background/60 border border-white/10"
+                                className="w-7 h-7 flex-shrink-0 rounded-full object-cover bg-background/60 border border-white/10"
                                 onError={(e) => {
                                     (e.target as HTMLImageElement).src = logoUrl();
                                 }}
                             />
-                            <div className="min-w-0 flex-1">
-                                <p className="text-sm font-bold text-text truncate">{profileName}</p>
-                                <p className="text-[10px] uppercase tracking-[0.2em] text-muted">{providerName} Profile</p>
+                            <div className="min-w-0 flex-1 overflow-hidden">
+                                <p className="text-xs font-bold text-text truncate">{profileName}</p>
+                                <p className="text-[9px] uppercase tracking-wider text-muted truncate">{providerName} Profile</p>
                             </div>
-                            <Palette className="w-4 h-4 text-plex flex-shrink-0" />
+                            <Palette className="w-3.5 h-3.5 text-plex flex-shrink-0" />
                         </button>
                         <InAppNotificationsBell
                             onNavigate={(route, options) => onNavigate(route as any, options)}
-                            className="shrink-0 self-stretch flex"
+                            className="min-w-0 w-full self-stretch"
                             placement="up"
-                            buttonClassName="relative h-full aspect-square flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted hover:text-text hover:border-plex/40 hover:bg-white/10 transition-all"
+                            buttonClassName="relative w-full h-full flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted hover:text-text hover:border-plex/40 hover:bg-white/10 transition-all"
                         />
                     </div>
                     <div className="mt-1 flex flex-col items-center gap-0.5">
@@ -11930,8 +11932,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
             {/* Mobile Bottom Nav
                 Chrome / PWA Chromium: plain fixed bottom:0 (do not change).
-                Firefox mobile: portal + visualViewport dock (Firefox-only hook).
-                iOS Safari/PWA: portal + CSS bottom:0 (shell otherwise leaves a gap under the bar). */}
+                Firefox mobile + iOS Safari browser tabs: portal + visualViewport dock.
+                iOS home-screen PWA: portal + CSS bottom:0 + safe-area (home indicator). */}
             {(() => {
                 const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
                 const showMore = normalizedNavOrder.length > maxPrimary;
@@ -11966,16 +11968,21 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         {navButtons}
                     </div>
                 );
+                // Safari tabs already sit above the browser chrome — skip home-indicator pad there.
+                // Standalone / Android keep env(safe-area-inset-bottom).
+                const bottomSafeClass = iosBrowserNav
+                    ? 'pb-0'
+                    : 'pb-[env(safe-area-inset-bottom,0px)]';
 
                 if (portalMobileBottomNav && typeof document !== 'undefined') {
                     // Portal to body so no ancestor creates a fixed containing block.
-                    // Firefox: hook sets top from visualViewport; bleed fills gesture-bar gap.
-                    // iOS: keep CSS bottom:0 (no visualViewport top docking).
+                    // Firefox / iOS Safari tabs: hook sets top from visualViewport; bleed fills gesture-bar gap (Firefox only).
+                    // iOS PWA: keep CSS bottom:0 + safe-area.
                     return ReactDOM.createPortal(
                         <div
-                            ref={firefoxMobileNav ? firefoxNavBarRef : undefined}
-                            className="md:hidden fixed inset-x-0 bottom-0 w-full max-w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom,0px)]"
-                            style={{ bottom: 0 }}
+                            ref={visualViewportNavDock ? firefoxNavBarRef : undefined}
+                            className={`md:hidden fixed inset-x-0 bottom-0 w-full max-w-full nav-shell border-t z-[310] ${bottomSafeClass}`}
+                            style={visualViewportNavDock ? undefined : { bottom: 0 }}
                         >
                             {navInner}
                             {firefoxMobileNav && (
@@ -11991,7 +11998,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 }
 
                 return (
-                    <div className="md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom,0px)]">
+                    <div className={`md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] ${bottomSafeClass}`}>
                         {navInner}
                     </div>
                 );
