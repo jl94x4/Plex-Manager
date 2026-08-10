@@ -13300,60 +13300,107 @@ app.get('/api/tautulli/stats', requireAuth, requireMember, async (req, res) => {
             return res.status(404).json({ error: 'Tautulli is not configured.' });
         }
         const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
-        const response = await fetch(`${tUrl}/api/v2?apikey=${config.tautulliApiKey}&cmd=get_home_stats`, { headers: { 'Accept': 'application/json' } }).then(r => r.json());
+        const apiKey = config.tautulliApiKey;
 
-        if (response && response.response && response.response.data) {
-            const stats = response.response.data;
-            let streamsRecord = 0;
-            let totalPlays = 0;
-            let totalTimeStr = '';
-
-            let tvPlays = 0;
-            let moviePlays = 0;
-            let musicPlays = 0;
-            let totalDurationSec = 0;
-
-            let transcodeRecord = 0;
-            let directPlayRecord = 0;
-            let directStreamRecord = 0;
-
-            const concurrent = stats.find(s => s.stat_id === 'most_concurrent');
-            if (concurrent && concurrent.rows) {
-                const c = concurrent.rows.find(r => r.title === 'Concurrent Streams');
-                if (c) streamsRecord = c.count;
-
-                const tr = concurrent.rows.find(r => r.title === 'Concurrent Transcodes');
-                if (tr) transcodeRecord = tr.count;
-
-                const dp = concurrent.rows.find(r => r.title === 'Concurrent Direct Plays');
-                if (dp) directPlayRecord = dp.count;
-
-                const ds = concurrent.rows.find(r => r.title === 'Concurrent Direct Streams');
-                if (ds) directStreamRecord = ds.count;
+        /**
+         * Bare get_home_stats only returns cards enabled on the Tautulli homepage.
+         * If "Most Concurrent" / "Top Libraries" aren't enabled, every record stays 0
+         * even when period plays from Plex analytics look fine (issue #104).
+         * Request those stats by id, using a long window for peak/lifetime-style records.
+         */
+        const fetchHomeStat = async (statId, { timeRange = 3650, statsCount = 50 } = {}) => {
+            const params = new URLSearchParams({
+                apikey: apiKey,
+                cmd: 'get_home_stats',
+                stat_id: String(statId),
+                stats_count: String(statsCount),
+                time_range: String(Math.max(1, Number(timeRange) || 3650)),
+            });
+            const payload = await fetch(`${tUrl}/api/v2?${params.toString()}`, {
+                headers: { Accept: 'application/json' },
+            }).then((r) => r.json()).catch(() => null);
+            const data = payload?.response?.data;
+            if (Array.isArray(data)) {
+                return data.find((entry) => entry?.stat_id === statId) || data[0] || null;
             }
+            if (data && typeof data === 'object') return data;
+            return null;
+        };
 
-            const libraries = stats.find(s => s.stat_id === 'top_libraries');
-            if (libraries && libraries.rows) {
-                libraries.rows.forEach(lib => {
-                    totalPlays += lib.total_plays || 0;
-                    totalDurationSec += lib.total_duration || 0;
+        const [concurrentStat, librariesStat] = await Promise.all([
+            fetchHomeStat('most_concurrent'),
+            fetchHomeStat('top_libraries', { statsCount: 100 }),
+        ]);
 
-                    if (lib.section_type === 'show') tvPlays += lib.total_plays || 0;
-                    else if (lib.section_type === 'movie') moviePlays += lib.total_plays || 0;
-                    else if (lib.section_type === 'artist') musicPlays += lib.total_plays || 0;
-                });
+        let streamsRecord = 0;
+        let totalPlays = 0;
+        let totalTimeStr = '';
+        let tvPlays = 0;
+        let moviePlays = 0;
+        let musicPlays = 0;
+        let totalDurationSec = 0;
+        let transcodeRecord = 0;
+        let directPlayRecord = 0;
+        let directStreamRecord = 0;
+
+        const concurrentRows = Array.isArray(concurrentStat?.rows) ? concurrentStat.rows : [];
+        for (const row of concurrentRows) {
+            const title = String(row?.title || '').toLowerCase();
+            const count = Number(row?.count) || 0;
+            if (!title) continue;
+            if (title.includes('transcode')) transcodeRecord = Math.max(transcodeRecord, count);
+            else if (title.includes('direct play')) directPlayRecord = Math.max(directPlayRecord, count);
+            else if (title.includes('direct stream')) directStreamRecord = Math.max(directStreamRecord, count);
+            else if (title.includes('concurrent') && title.includes('stream')) {
+                streamsRecord = Math.max(streamsRecord, count);
             }
-
-            if (totalDurationSec > 0) {
-                const days = Math.floor(totalDurationSec / 86400);
-                const hrs = Math.floor((totalDurationSec % 86400) / 3600);
-                if (days > 0) totalTimeStr = `${days} days, ${hrs} hrs`;
-                else totalTimeStr = `${hrs} hrs`;
-            }
-
-            return res.json({ streamsRecord, transcodeRecord, directPlayRecord, directStreamRecord, totalPlays, tvPlays, moviePlays, musicPlays, totalTimeStr });
         }
-        res.status(500).json({ error: 'Invalid response from Tautulli' });
+
+        const libraryRows = Array.isArray(librariesStat?.rows) ? librariesStat.rows : [];
+        for (const lib of libraryRows) {
+            const plays = Number(lib?.total_plays ?? lib?.total_play ?? lib?.plays) || 0;
+            const duration = Number(lib?.total_duration ?? lib?.duration) || 0;
+            totalPlays += plays;
+            totalDurationSec += duration;
+
+            const sectionType = String(
+                lib?.section_type || lib?.sectionType || lib?.media_type || lib?.mediaType || '',
+            ).trim().toLowerCase();
+            if (sectionType === 'show' || sectionType === 'episode' || sectionType === 'tv') {
+                tvPlays += plays;
+            } else if (sectionType === 'movie') {
+                moviePlays += plays;
+            } else if (sectionType === 'artist' || sectionType === 'album' || sectionType === 'track' || sectionType === 'music') {
+                musicPlays += plays;
+            } else {
+                // Title heuristic when section_type is missing/renamed.
+                const name = String(lib?.section_name || lib?.title || '').toLowerCase();
+                if (/\b(tv|show|series|anime)\b/.test(name)) tvPlays += plays;
+                else if (/\b(movie|film|cinema)\b/.test(name)) moviePlays += plays;
+                else if (/\b(music|audio|artist)\b/.test(name)) musicPlays += plays;
+            }
+        }
+
+        if (totalDurationSec > 0) {
+            const days = Math.floor(totalDurationSec / 86400);
+            const hrs = Math.floor((totalDurationSec % 86400) / 3600);
+            const mins = Math.floor((totalDurationSec % 3600) / 60);
+            if (days > 0) totalTimeStr = `${days} days, ${hrs} hrs`;
+            else if (hrs > 0) totalTimeStr = `${hrs} hrs, ${mins} mins`;
+            else totalTimeStr = `${Math.max(1, mins)} mins`;
+        }
+
+        return res.json({
+            streamsRecord,
+            transcodeRecord,
+            directPlayRecord,
+            directStreamRecord,
+            totalPlays,
+            tvPlays,
+            moviePlays,
+            musicPlays,
+            totalTimeStr,
+        });
     } catch (e) {
         log(`Tautulli Error: ${e.message}`);
         res.status(500).json({ error: 'Failed to connect to Tautulli' });
