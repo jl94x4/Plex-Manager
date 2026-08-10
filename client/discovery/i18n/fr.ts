@@ -122,6 +122,9 @@ export const fr: DeepPartial<EnCatalog> = {
         totalXp: 'XP totale',
         periodXp: 'XP de la période',
         periodXpSub: 'Sur la plage sélectionnée',
+        periodXpVsPrior: '{delta} par rapport à la période précédente',
+        periodBadges: 'Badges sur cette période',
+        periodBadgesSub: 'Débloqués sur la plage sélectionnée',
         xpToNext: 'XP jusqu’au prochain niveau',
         badges: 'Badges',
         latestBadge: 'Dernier badge',
@@ -182,6 +185,13 @@ export const fr: DeepPartial<EnCatalog> = {
         chipFreshTv: 'Nouvelles séries',
         achievementsNext: 'Prochain déblocage : {name} ({progress})',
         achievementsPinned: 'Épinglé : {name} ({progress})',
+        achievementFallbackBadge: 'badge',
+        achievementProgressEarned: 'obtenu',
+    },
+    notifications: {
+        title: 'Notifications',
+        markAllRead: 'Tout marquer comme lu',
+        empty: 'Aucune notification pour le moment',
     },
     home: {
         forYou: 'Pour vous',

@@ -99,9 +99,9 @@ export const DiscoverAchievementsTeaser: React.FC<{
                         <Trophy className="w-3.5 h-3.5 text-plex shrink-0" />
                         <span className="truncate">
                             {t(pinned ? 'hero.achievementsPinned' : 'hero.achievementsNext', {
-                                name: next.name || 'badge',
+                                name: next.name || t('hero.achievementFallbackBadge'),
                                 progress: next.earned
-                                    ? 'earned'
+                                    ? t('hero.achievementProgressEarned')
                                     : `${next.progress ?? 0}/${next.threshold ?? 0}`,
                             })}
                         </span>
