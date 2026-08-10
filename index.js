@@ -1105,7 +1105,15 @@ import {
     listInAppNotificationsForUser,
     countUnreadInAppNotifications,
     markInAppNotificationsRead,
+    setInAppNotificationCreatedHook,
 } from './lib/notifications/inAppStore.js';
+import {
+    getVapidPublicKey,
+    upsertWebPushSubscription,
+    removeWebPushSubscription,
+    sendWebPushToUser,
+    isWebPushGloballyEnabled,
+} from './lib/notifications/webPush.js';
 const PLEX_API = 'https://plex.tv/api';
 
 // --- Status App Global State ---
@@ -1502,6 +1510,27 @@ const sendEmail = async (config, to, subject, html, customTransporter = null) =>
         throw error;
     }
 };
+
+// Fan-out browser push for every in-app bell notification (unless skipped).
+setInAppNotificationCreatedHook(async (item) => {
+    if (!item?.userId || item?.meta?.skipWebPush) return;
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!isWebPushGloballyEnabled(config)) return;
+        const users = await loadFile(USERS_PATH, []);
+        const user = users.find((entry) => String(entry?.id) === String(item.userId)) || null;
+        if (user?.notifyWebPush === false) return;
+        await sendWebPushToUser(item.userId, {
+            title: item.title,
+            body: item.body,
+            href: item.href || '/portal',
+            type: item.type,
+            tag: String(item.type || item.id || 'portal'),
+        }, { config, user, log });
+    } catch (error) {
+        log(`[WebPush] in-app fan-out failed: ${error?.message || error}`);
+    }
+});
 
 const sendGotifyAlert = async (config, title, message, priority = undefined) => {
     if (!config.gotifyEnabled || !config.gotifyUrl || !config.gotifyToken) {
@@ -3317,6 +3346,9 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             optOutNewsletter,
             notifyRequestAvailableEmail,
             notifyRequestAvailableInApp,
+            notifyRequestAvailableWebPush,
+            notifyRequestAvailableDiscord,
+            notifyWebPush,
         } = req.body || {};
         const users = await loadFile(USERS_PATH, []);
         const localUser = findLocalUserForSession(users, req.user);
@@ -3338,6 +3370,15 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
         }
         if (notifyRequestAvailableInApp !== undefined) {
             users[userIndex].notifyRequestAvailableInApp = !!notifyRequestAvailableInApp;
+        }
+        if (notifyRequestAvailableWebPush !== undefined) {
+            users[userIndex].notifyRequestAvailableWebPush = !!notifyRequestAvailableWebPush;
+        }
+        if (notifyRequestAvailableDiscord !== undefined) {
+            users[userIndex].notifyRequestAvailableDiscord = !!notifyRequestAvailableDiscord;
+        }
+        if (notifyWebPush !== undefined) {
+            users[userIndex].notifyWebPush = !!notifyWebPush;
         }
         await saveFile(USERS_PATH, users);
 
@@ -3380,6 +3421,60 @@ app.post('/api/notifications/read', requireAuth, requireMember, async (req, res)
     } catch (e) {
         log(`Error marking notifications read: ${e.message}`);
         res.status(500).json({ error: 'Failed to update notifications' });
+    }
+});
+
+app.get('/api/notifications/push/vapid-public-key', requireAuth, requireMember, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!isWebPushGloballyEnabled(config)) {
+            return res.status(404).json({ error: 'Web Push is disabled' });
+        }
+        const publicKey = await getVapidPublicKey();
+        res.json({ publicKey });
+    } catch (e) {
+        log(`Error loading VAPID key: ${e.message}`);
+        res.status(500).json({ error: 'Failed to load push key' });
+    }
+});
+
+app.post('/api/notifications/push/subscribe', requireAuth, requireMember, async (req, res) => {
+    if (blockIfImpersonating(req, res)) return;
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!isWebPushGloballyEnabled(config)) {
+            return res.status(400).json({ error: 'Web Push is disabled' });
+        }
+        const users = await loadFile(USERS_PATH, []);
+        const localUser = findLocalUserForSession(users, req.user);
+        if (!localUser?.id) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const subscription = req.body?.subscription || req.body;
+        await upsertWebPushSubscription(localUser.id, subscription, {
+            userAgent: req.get('user-agent') || '',
+        });
+        res.json({ success: true });
+    } catch (e) {
+        log(`Error saving push subscription: ${e.message}`);
+        res.status(400).json({ error: e.message || 'Failed to save subscription' });
+    }
+});
+
+app.post('/api/notifications/push/unsubscribe', requireAuth, requireMember, async (req, res) => {
+    if (blockIfImpersonating(req, res)) return;
+    try {
+        const users = await loadFile(USERS_PATH, []);
+        const localUser = findLocalUserForSession(users, req.user);
+        if (!localUser?.id) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const endpoint = String(req.body?.endpoint || '').trim();
+        const result = await removeWebPushSubscription(localUser.id, endpoint);
+        res.json({ success: true, ...result });
+    } catch (e) {
+        log(`Error removing push subscription: ${e.message}`);
+        res.status(500).json({ error: 'Failed to remove subscription' });
     }
 });
 
@@ -3918,6 +4013,10 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 requestAvailableNotifyEnabled: config.requestAvailableNotifyEnabled !== false,
                 requestAvailableNotifyEmail: config.requestAvailableNotifyEmail !== false,
                 requestAvailableNotifyInApp: config.requestAvailableNotifyInApp !== false,
+                requestAvailableNotifyWebPush: config.requestAvailableNotifyWebPush !== false,
+                requestAvailableNotifyDiscord: !!config.requestAvailableNotifyDiscord,
+                requestAvailableDiscordWebhookUrl: config.requestAvailableDiscordWebhookUrl ? SECRET_MASK : '',
+                webPushEnabled: config.webPushEnabled !== false,
                 watchHistorySource: config.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex',
                 tautulliConfigured: !!(config.tautulliUrl && config.tautulliApiKey),
                 collexionsAutostart: !!config.collexionsAutostart,
@@ -4050,6 +4149,10 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 requestAvailableNotifyEnabled: true,
                 requestAvailableNotifyEmail: true,
                 requestAvailableNotifyInApp: true,
+                requestAvailableNotifyWebPush: true,
+                requestAvailableNotifyDiscord: false,
+                requestAvailableDiscordWebhookUrl: '',
+                webPushEnabled: true,
                 watchHistorySource: 'plex',
                 tautulliConfigured: false,
                 collexionsAutostart: false,
@@ -4088,7 +4191,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -4539,6 +4642,23 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         requestAvailableNotifyInApp: requestAvailableNotifyInApp !== undefined
             ? !!requestAvailableNotifyInApp
             : (existingConfig.requestAvailableNotifyInApp !== false),
+        requestAvailableNotifyWebPush: requestAvailableNotifyWebPush !== undefined
+            ? !!requestAvailableNotifyWebPush
+            : (existingConfig.requestAvailableNotifyWebPush !== false),
+        requestAvailableNotifyDiscord: requestAvailableNotifyDiscord !== undefined
+            ? !!requestAvailableNotifyDiscord
+            : !!existingConfig.requestAvailableNotifyDiscord,
+        requestAvailableDiscordWebhookUrl: (() => {
+            if (requestAvailableDiscordWebhookUrl === undefined) {
+                return existingConfig.requestAvailableDiscordWebhookUrl || '';
+            }
+            const incoming = String(requestAvailableDiscordWebhookUrl || '').trim();
+            if (!incoming || incoming === SECRET_MASK) return existingConfig.requestAvailableDiscordWebhookUrl || '';
+            return incoming;
+        })(),
+        webPushEnabled: webPushEnabled !== undefined
+            ? !!webPushEnabled
+            : (existingConfig.webPushEnabled !== false),
         watchHistorySource: (() => {
             const raw = watchHistorySource !== undefined
                 ? watchHistorySource
@@ -14686,7 +14806,7 @@ if (BASE_PATH) {
 
 // Chromium Android uses this for WebAPK installability. Firefox deliberately does not
 // register it (a bad SW makes Firefox Install silently no-op).
-const serviceWorkerScript = `/* portal-sw v6 */
+const serviceWorkerScript = `/* portal-sw v7 */
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -14699,6 +14819,39 @@ self.addEventListener('activate', (event) => {
 // Do NOT event.respondWith(fetch(...)): proxying every request breaks
 // cross-origin posters (TMDB), fonts (Google), and Plex/user thumbs.
 self.addEventListener('fetch', () => {});
+
+self.addEventListener('push', (event) => {
+  let data = { title: 'Notification', body: '', href: '/portal', tag: 'portal' };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch (_) {}
+  event.waitUntil(self.registration.showNotification(String(data.title || 'Notification'), {
+    body: String(data.body || ''),
+    tag: String(data.tag || 'portal'),
+    data: { href: String(data.href || '/portal') },
+    renotify: true,
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const href = (event.notification && event.notification.data && event.notification.data.href) || '/portal';
+  event.waitUntil((async () => {
+    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of allClients) {
+      try {
+        if ('focus' in client) {
+          await client.focus();
+          if (href && client.url && 'navigate' in client) {
+            try { await client.navigate(href); } catch (_) {}
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+    if (clients.openWindow) await clients.openWindow(href);
+  })());
+});
 `;
 
 const sendServiceWorker = (_req, res) => {

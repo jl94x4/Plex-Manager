@@ -222,7 +222,7 @@ export const MainApp: React.FC = () => {
         let refreshing = false;
 
         const onControllerChange = () => {
-            // Pick up portal-sw v6 (no fetch proxy) without requiring a manual hard refresh.
+            // Pick up portal-sw v7 (push handlers) without requiring a manual hard refresh.
             if (refreshing || cancelled) return;
             refreshing = true;
             window.location.reload();

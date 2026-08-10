@@ -497,6 +497,10 @@ export const SettingsDashboard: React.FC = () => {
     const [requestAvailableNotifyEnabled, setRequestAvailableNotifyEnabled] = useState(true);
     const [requestAvailableNotifyEmail, setRequestAvailableNotifyEmail] = useState(true);
     const [requestAvailableNotifyInApp, setRequestAvailableNotifyInApp] = useState(true);
+    const [requestAvailableNotifyWebPush, setRequestAvailableNotifyWebPush] = useState(true);
+    const [requestAvailableNotifyDiscord, setRequestAvailableNotifyDiscord] = useState(false);
+    const [requestAvailableDiscordWebhookUrl, setRequestAvailableDiscordWebhookUrl] = useState('');
+    const [webPushEnabled, setWebPushEnabled] = useState(true);
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
     const [tautulliConfigured, setTautulliConfigured] = useState(false);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
@@ -1230,6 +1234,10 @@ export const SettingsDashboard: React.FC = () => {
             setRequestAvailableNotifyEnabled(initialSettings.requestAvailableNotifyEnabled !== false);
             setRequestAvailableNotifyEmail(initialSettings.requestAvailableNotifyEmail !== false);
             setRequestAvailableNotifyInApp(initialSettings.requestAvailableNotifyInApp !== false);
+            setRequestAvailableNotifyWebPush(initialSettings.requestAvailableNotifyWebPush !== false);
+            setRequestAvailableNotifyDiscord(!!initialSettings.requestAvailableNotifyDiscord);
+            setRequestAvailableDiscordWebhookUrl(initialSettings.requestAvailableDiscordWebhookUrl || '');
+            setWebPushEnabled(initialSettings.webPushEnabled !== false);
             if (initialSettings.watchHistorySource !== undefined) {
                 setWatchHistorySource(initialSettings.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex');
             }
@@ -1651,6 +1659,10 @@ export const SettingsDashboard: React.FC = () => {
             requestAvailableNotifyEnabled,
             requestAvailableNotifyEmail,
             requestAvailableNotifyInApp,
+            requestAvailableNotifyWebPush,
+            requestAvailableNotifyDiscord,
+            requestAvailableDiscordWebhookUrl,
+            webPushEnabled,
             watchHistorySource,
             mediaAutomation: {
                 ...mediaAutomation,
@@ -3036,8 +3048,8 @@ export const SettingsDashboard: React.FC = () => {
                             <div id={getSettingsSectionElementId('request-available-notify')} className="scroll-mt-24 space-y-3">
                                 <h4 className="text-sm font-bold text-text uppercase tracking-wider">Request available notifications</h4>
                                 <p className="text-xs text-muted max-w-2xl">
-                                    When a request finishes downloading and becomes available, notify the requester (email via SMTP + in-app bell).
-                                    Works with Portal status sync and Seerr polling. Members can opt out in profile preferences.
+                                    When a request finishes downloading and becomes available, notify the requester.
+                                    Channels: email, in-app bell, browser push, and Discord webhook. Works with Portal and Seerr engines.
                                 </p>
                                 <SettingsToggleRow
                                     title="Enable notifications"
@@ -3061,7 +3073,47 @@ export const SettingsDashboard: React.FC = () => {
                                         onChange={setRequestAvailableNotifyInApp}
                                         border={false}
                                     />
+                                    <SettingsToggleRow
+                                        title="Browser push"
+                                        description="Send a Web Push notification to subscribed browsers/devices."
+                                        checked={requestAvailableNotifyWebPush}
+                                        onChange={setRequestAvailableNotifyWebPush}
+                                        border={false}
+                                    />
+                                    <SettingsToggleRow
+                                        title="Discord webhook"
+                                        description="Post to a Discord channel via incoming webhook when any request becomes available."
+                                        checked={requestAvailableNotifyDiscord}
+                                        onChange={setRequestAvailableNotifyDiscord}
+                                        border={false}
+                                    />
+                                    {requestAvailableNotifyDiscord && (
+                                        <div className="pt-1 pb-3">
+                                            <SettingFieldLabel htmlFor="requestAvailableDiscordWebhookUrl">
+                                                Discord webhook URL
+                                            </SettingFieldLabel>
+                                            <input
+                                                id="requestAvailableDiscordWebhookUrl"
+                                                type="password"
+                                                autoComplete="off"
+                                                className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                                placeholder="https://discord.com/api/webhooks/..."
+                                                value={requestAvailableDiscordWebhookUrl}
+                                                onChange={(e) => setRequestAvailableDiscordWebhookUrl(e.target.value)}
+                                            />
+                                            <p className="text-[11px] text-muted mt-1.5">
+                                                Leave as dots when editing other settings to keep the saved webhook.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
+                                <SettingsToggleRow
+                                    title="Enable Web Push (global)"
+                                    description="Allows members to subscribe their browser for push. Also used for future in-app bell fan-out."
+                                    checked={webPushEnabled}
+                                    onChange={setWebPushEnabled}
+                                    border={false}
+                                />
                             </div>
 
                             <div id={getSettingsSectionElementId('region')} className="scroll-mt-24">

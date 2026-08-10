@@ -148,8 +148,18 @@ export type UserDashboardWidgetDeps = {
     handleToggleNewsletter: () => void;
     handleToggleRequestAvailableEmail?: () => void;
     handleToggleRequestAvailableInApp?: () => void;
+    handleToggleRequestAvailableWebPush?: () => void;
+    handleToggleRequestAvailableDiscord?: () => void;
+    handleToggleWebPush?: () => void;
+    handleEnableBrowserPush?: () => void;
+    handleDisableBrowserPush?: () => void;
     notifyRequestAvailableEmail?: boolean;
     notifyRequestAvailableInApp?: boolean;
+    notifyRequestAvailableWebPush?: boolean;
+    notifyRequestAvailableDiscord?: boolean;
+    notifyWebPush?: boolean;
+    browserPushReady?: boolean;
+    browserPushSupported?: boolean;
     onViewAdmin: () => void;
     onViewSettings?: () => void;
     onViewLogs?: () => void;
@@ -311,8 +321,18 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
         handleToggleNewsletter,
         handleToggleRequestAvailableEmail,
         handleToggleRequestAvailableInApp,
+        handleToggleRequestAvailableWebPush,
+        handleToggleRequestAvailableDiscord,
+        handleToggleWebPush,
+        handleEnableBrowserPush,
+        handleDisableBrowserPush,
         notifyRequestAvailableEmail = true,
         notifyRequestAvailableInApp = true,
+        notifyRequestAvailableWebPush = true,
+        notifyRequestAvailableDiscord = true,
+        notifyWebPush = true,
+        browserPushReady = false,
+        browserPushSupported = false,
         onViewAdmin,
         onViewSettings,
         onViewLogs,
@@ -498,6 +518,71 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                         className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableInApp ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableInApp ? 'translate-x-8' : 'translate-x-1'}`} />
                                     </button>
+                                </div>
+                            )}
+                            {handleToggleRequestAvailableWebPush && (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-text font-bold text-sm">Request available push</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">Browser notification when your request is available</p>
+                                    </div>
+                                    <button onClick={handleToggleRequestAvailableWebPush} aria-label="Toggle request available web push"
+                                        className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableWebPush ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableWebPush ? 'translate-x-8' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            )}
+                            {handleToggleRequestAvailableDiscord && (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-text font-bold text-sm">Request available Discord</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">Include your requests in the server Discord webhook</p>
+                                    </div>
+                                    <button onClick={handleToggleRequestAvailableDiscord} aria-label="Toggle request available Discord"
+                                        className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableDiscord ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableDiscord ? 'translate-x-8' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            )}
+                            {handleToggleWebPush && (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-text font-bold text-sm">Browser push (all alerts)</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">Push for in-app bell notifications on this account</p>
+                                    </div>
+                                    <button onClick={handleToggleWebPush} aria-label="Toggle browser push"
+                                        className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyWebPush ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyWebPush ? 'translate-x-8' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            )}
+                            {browserPushSupported && (handleEnableBrowserPush || handleDisableBrowserPush) && (
+                                <div className="flex flex-col gap-2 pt-1">
+                                    <p className="text-muted text-xs">
+                                        {browserPushReady
+                                            ? 'This browser is subscribed for push notifications.'
+                                            : 'Subscribe this browser to receive push notifications.'}
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {!browserPushReady && handleEnableBrowserPush && (
+                                            <button
+                                                type="button"
+                                                onClick={handleEnableBrowserPush}
+                                                className="px-3 py-2 rounded-lg bg-plex text-background text-xs font-bold hover:bg-plex-hover"
+                                            >
+                                                Enable on this device
+                                            </button>
+                                        )}
+                                        {browserPushReady && handleDisableBrowserPush && (
+                                            <button
+                                                type="button"
+                                                onClick={handleDisableBrowserPush}
+                                                className="px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-xs font-bold text-text hover:bg-white/10"
+                                            >
+                                                Disable on this device
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>

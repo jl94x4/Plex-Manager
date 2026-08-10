@@ -8,6 +8,7 @@ import { LibraryMaintenancePanel } from './maintenance/LibraryMaintenancePanel';
 import { appConfirm } from './shared/confirm';
 import { apiFetch } from './shared/api';
 import { InAppNotificationsBell } from './shared/InAppNotificationsBell';
+import { subscribeWebPush, unsubscribeWebPush, webPushSupported } from './shared/webPushSubscribe';
 import { getPublicOrigin, logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath } from './shared/basePath';
 import { formatDate, getDaysUntilExpiry, getAccessProgressPct, addMonths, addYears, formatTime, formatEventName, formatDateTime, hexToRgb, formatSizeCeil, formatStreamingHour } from './shared/format';
 import { CustomSelect, ConfirmModal, StyledCheckbox, ScrollReveal } from './shared/ui';
@@ -7262,12 +7263,42 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     const [optOutNewsletter, setOptOutNewsletter] = useState(user?.optOutNewsletter || false);
     const [notifyRequestAvailableEmail, setNotifyRequestAvailableEmail] = useState(user?.notifyRequestAvailableEmail !== false);
     const [notifyRequestAvailableInApp, setNotifyRequestAvailableInApp] = useState(user?.notifyRequestAvailableInApp !== false);
+    const [notifyRequestAvailableWebPush, setNotifyRequestAvailableWebPush] = useState(user?.notifyRequestAvailableWebPush !== false);
+    const [notifyRequestAvailableDiscord, setNotifyRequestAvailableDiscord] = useState(user?.notifyRequestAvailableDiscord !== false);
+    const [notifyWebPush, setNotifyWebPush] = useState(user?.notifyWebPush !== false);
+    const [browserPushReady, setBrowserPushReady] = useState(false);
+    const browserPushSupportedFlag = webPushSupported();
 
     useEffect(() => {
         setNotifyRequestAvailableEmail(user?.notifyRequestAvailableEmail !== false);
         setNotifyRequestAvailableInApp(user?.notifyRequestAvailableInApp !== false);
+        setNotifyRequestAvailableWebPush(user?.notifyRequestAvailableWebPush !== false);
+        setNotifyRequestAvailableDiscord(user?.notifyRequestAvailableDiscord !== false);
+        setNotifyWebPush(user?.notifyWebPush !== false);
         setOptOutNewsletter(!!user?.optOutNewsletter);
-    }, [user?.notifyRequestAvailableEmail, user?.notifyRequestAvailableInApp, user?.optOutNewsletter]);
+    }, [
+        user?.notifyRequestAvailableEmail,
+        user?.notifyRequestAvailableInApp,
+        user?.notifyRequestAvailableWebPush,
+        user?.notifyRequestAvailableDiscord,
+        user?.notifyWebPush,
+        user?.optOutNewsletter,
+    ]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            if (!browserPushSupportedFlag) return;
+            try {
+                const reg = await navigator.serviceWorker.getRegistration(portalUrl('/'));
+                const sub = await reg?.pushManager.getSubscription();
+                if (!cancelled) setBrowserPushReady(!!sub);
+            } catch {
+                if (!cancelled) setBrowserPushReady(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [browserPushSupportedFlag]);
 
     useEffect(() => {
         setDashboardLayoutDraft(normalizeSectionLayout(publicConfig?.dashboardLayout));
@@ -7399,6 +7430,86 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
             refreshSession();
         } catch (e: any) {
             setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleToggleRequestAvailableWebPush = async () => {
+        setIsLoading(true);
+        try {
+            const newValue = !notifyRequestAvailableWebPush;
+            await apiFetch('/api/users/preferences', {
+                method: 'POST',
+                body: JSON.stringify({ notifyRequestAvailableWebPush: newValue }),
+            });
+            setNotifyRequestAvailableWebPush(newValue);
+            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
+            refreshSession();
+        } catch (e: any) {
+            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleToggleRequestAvailableDiscord = async () => {
+        setIsLoading(true);
+        try {
+            const newValue = !notifyRequestAvailableDiscord;
+            await apiFetch('/api/users/preferences', {
+                method: 'POST',
+                body: JSON.stringify({ notifyRequestAvailableDiscord: newValue }),
+            });
+            setNotifyRequestAvailableDiscord(newValue);
+            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
+            refreshSession();
+        } catch (e: any) {
+            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleToggleWebPush = async () => {
+        setIsLoading(true);
+        try {
+            const newValue = !notifyWebPush;
+            await apiFetch('/api/users/preferences', {
+                method: 'POST',
+                body: JSON.stringify({ notifyWebPush: newValue }),
+            });
+            setNotifyWebPush(newValue);
+            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
+            refreshSession();
+        } catch (e: any) {
+            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleEnableBrowserPush = async () => {
+        setIsLoading(true);
+        try {
+            await subscribeWebPush();
+            setBrowserPushReady(true);
+            setToast({ id: 3, message: 'Browser push enabled on this device.', type: 'success' });
+        } catch (e: any) {
+            setToast({ id: 3, message: e.message || 'Failed to enable browser push', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDisableBrowserPush = async () => {
+        setIsLoading(true);
+        try {
+            await unsubscribeWebPush();
+            setBrowserPushReady(false);
+            setToast({ id: 3, message: 'Browser push disabled on this device.', type: 'success' });
+        } catch (e: any) {
+            setToast({ id: 3, message: e.message || 'Failed to disable browser push', type: 'error' });
         } finally {
             setIsLoading(false);
         }
@@ -7886,6 +7997,11 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         optOutNewsletter,
         notifyRequestAvailableEmail,
         notifyRequestAvailableInApp,
+        notifyRequestAvailableWebPush,
+        notifyRequestAvailableDiscord,
+        notifyWebPush,
+        browserPushReady,
+        browserPushSupported: browserPushSupportedFlag,
         serverStats,
         serverDataLoading,
         analytics,
@@ -7901,6 +8017,11 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         handleToggleNewsletter,
         handleToggleRequestAvailableEmail,
         handleToggleRequestAvailableInApp,
+        handleToggleRequestAvailableWebPush,
+        handleToggleRequestAvailableDiscord,
+        handleToggleWebPush,
+        handleEnableBrowserPush,
+        handleDisableBrowserPush,
         onViewAdmin,
         onViewSettings,
         onViewLogs,
@@ -7914,7 +8035,8 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         RebuildLibraryCacheButton,
     }), [
         sessionInfo, publicConfig, user, isRevoked, isExpiringSoon, daysLeft, progressPct, optOutNewsletter,
-        notifyRequestAvailableEmail, notifyRequestAvailableInApp,
+        notifyRequestAvailableEmail, notifyRequestAvailableInApp, notifyRequestAvailableWebPush, notifyRequestAvailableDiscord,
+        notifyWebPush, browserPushReady, browserPushSupportedFlag,
         serverStats, serverDataLoading, analytics, analyticsLoading, analyticsDays, analyticsDaysOpen,
         showQualityBadges, dashboardData, bazarrWidgets, onViewAdmin, onViewSettings, onViewLogs, onViewCollexions, onViewScanner, onViewMediaAutomation, onViewRequests, onPendingRequestsChange,
     ]);

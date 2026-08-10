@@ -17,6 +17,12 @@ export interface User {
     notifyRequestAvailableEmail?: boolean;
     /** In-app bell when a portal request becomes available (default on). */
     notifyRequestAvailableInApp?: boolean;
+    /** Browser push for request-available (default on). */
+    notifyRequestAvailableWebPush?: boolean;
+    /** Include this user's requests in Discord webhook posts (default on). */
+    notifyRequestAvailableDiscord?: boolean;
+    /** Master browser push preference for all in-app fan-out (default on). */
+    notifyWebPush?: boolean;
     lastLogin?: string;
     /** Plex library section ids shared with this user. Empty/absent = all libraries. */
     libraryIds?: string[] | null;

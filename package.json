@@ -34,7 +34,8 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
-    "recharts": "^3.9.0"
+    "recharts": "^3.9.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
