@@ -63,6 +63,10 @@ import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDige
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource } from './lib/achievements/index.js';
+import {
+    backfillJoiningDatesFromHistory,
+    getJoiningDateBackfillStatus,
+} from './lib/users/joiningDateFromHistory.js';
 import { loadPosterSetsAudit } from './lib/poster-sets/audit.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 
@@ -7168,6 +7172,112 @@ app.post('/api/sync', requireAdmin, async (req, res) => {
             ).catch((e) => log(`Failed to send Gotify sync failure alert: ${e.message}`));
         }
         res.status(500).json({ error: error.message });
+    }
+});
+
+/** Earliest Plex play for an account (asc sort, single row). */
+const fetchEarliestPlexPlayUnix = async (uri, config, accountID) => {
+    if (!uri || !config?.plexToken || !accountID) return null;
+    const pageRes = await fetch(
+        `${uri}/status/sessions/history/all?accountID=${encodeURIComponent(accountID)}&X-Plex-Token=${config.plexToken}&sort=viewedAt:asc&includeGuids=1&X-Plex-Container-Start=0&X-Plex-Container-Size=1`,
+        { headers: plexClientHeaders(config.plexToken) },
+    ).then((r) => r.json()).catch(() => null);
+    const item = pageRes?.MediaContainer?.Metadata?.[0];
+    const viewedAt = Number(item?.viewedAt) || 0;
+    return viewedAt > 0 ? viewedAt : null;
+};
+
+/** Earliest Tautulli play for a matched user (asc order, single row). */
+const fetchEarliestTautulliPlayUnix = async (config, {
+    username,
+    email,
+    plexAccountName,
+} = {}) => {
+    if (!config?.tautulliUrl || !config?.tautulliApiKey) return null;
+    const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
+    if (!tUrl) return null;
+    const users = await fetchTautulliUsers(config);
+    const tautulliUserId = resolveTautulliUserId(users, { username, email, plexAccountName });
+    if (!tautulliUserId) return null;
+
+    const params = new URLSearchParams({
+        apikey: config.tautulliApiKey,
+        cmd: 'get_history',
+        order_column: 'started',
+        order_dir: 'asc',
+        start: '0',
+        length: '1',
+        user_id: String(tautulliUserId),
+        grouping: '0',
+    });
+    const response = await fetch(`${tUrl}/api/v2?${params.toString()}`, { headers: { Accept: 'application/json' } })
+        .then((r) => r.json())
+        .catch(() => null);
+    const row = response?.response?.data?.data?.[0];
+    const started = Number(row?.started || row?.date || 0);
+    return started > 0 ? started : null;
+};
+
+/** Earliest Jellyfin/Emby DatePlayed (asc sort, single item). */
+const fetchEarliestJellyfinPlayUnix = async (config, accountId) => {
+    const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
+    if (!baseUrl || !config.jellyfinApiKey || !accountId) return null;
+    const params = new URLSearchParams({
+        Recursive: 'true',
+        Filters: 'IsPlayed',
+        IncludeItemTypes: 'Movie,Episode,Audio',
+        Fields: 'DatePlayed,UserData',
+        SortBy: 'DatePlayed',
+        SortOrder: 'Ascending',
+        Limit: '1',
+        EnableUserData: 'true',
+    });
+    const response = await fetchWithTimeout(
+        `${baseUrl}/Users/${encodeURIComponent(accountId)}/Items?${params.toString()}`,
+        { headers: jellyfinHeaders(config.jellyfinApiKey) },
+        15000,
+    ).catch(() => null);
+    if (!response?.ok) return null;
+    const payload = await response.json().catch(() => null);
+    const item = Array.isArray(payload?.Items) ? payload.Items[0] : null;
+    const datePlayed = item?.UserData?.LastPlayedDate || item?.DatePlayed;
+    if (!datePlayed) return null;
+    const ms = Date.parse(datePlayed);
+    if (!Number.isFinite(ms) || ms <= 0) return null;
+    return Math.floor(ms / 1000);
+};
+
+app.get('/api/users/backfill-joining-dates', requireAdmin, async (_req, res) => {
+    res.json(getJoiningDateBackfillStatus());
+});
+
+app.post('/api/users/backfill-joining-dates', requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, null);
+        if (!config) return res.status(400).json({ error: 'App not configured.' });
+        const result = await backfillJoiningDatesFromHistory({
+            loadFile,
+            saveUsers: async (users) => saveFile(USERS_PATH, users),
+            CONFIG_PATH,
+            USERS_PATH,
+            getPlexConnectionUri,
+            fetchPlexServerAccounts,
+            fetchEarliestPlexPlayUnix,
+            fetchEarliestTautulliPlayUnix,
+            fetchEarliestJellyfinPlayUnix,
+            log,
+        }, {
+            overwriteIfEarlier: req.body?.overwriteIfEarlier !== false,
+        });
+        await appendAuditLog('joining_dates_backfilled', req.user || null, null, {
+            updated: result?.updated || 0,
+            processed: result?.processed || 0,
+            source: result?.source || null,
+        }).catch(() => {});
+        res.json(result);
+    } catch (error) {
+        log(`POST /api/users/backfill-joining-dates failed: ${error.message}`);
+        res.status(500).json({ error: error.message || 'Joining date backfill failed' });
     }
 });
 

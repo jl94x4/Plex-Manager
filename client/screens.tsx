@@ -5004,6 +5004,37 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
         }
     };
 
+    const handleBackfillJoiningDates = async () => {
+        if (!isConfigured) {
+            addToast(`Please configure ${mediaServerLabel} settings first.`, 'error');
+            return;
+        }
+        setLoading(true);
+        try {
+            const result = await apiFetch('/api/users/backfill-joining-dates', {
+                method: 'POST',
+                body: JSON.stringify({ overwriteIfEarlier: true }),
+            });
+            const updated = Number(result?.updated) || 0;
+            const processed = Number(result?.processed) || 0;
+            const missing = Number(result?.missing) || 0;
+            if (updated > 0) {
+                addToast(`Updated ${updated} join date${updated === 1 ? '' : 's'} from watch history (${processed} checked).`);
+            } else {
+                addToast(
+                    missing > 0
+                        ? `No join dates updated — ${missing} user${missing === 1 ? '' : 's'} had no first-play history.`
+                        : 'No join dates needed updating.',
+                );
+            }
+            await fetchUsers();
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Failed to backfill join dates.', 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const revokePlexAccess = async (userId: string) => {
         setLoading(true);
         try {
@@ -5297,15 +5328,27 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 icon={<Users className="h-3.5 w-3.5" />}
                 secondaryBlob
                 actions={isConfigured ? (
-                    <button
-                        type="button"
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-sky-300 disabled:opacity-50"
-                        onClick={handleImportUsers}
-                        disabled={isLoading}
-                    >
-                        <RefreshCw className="h-4 w-4" />
-                        Sync {mediaServerLabel} Users
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-sky-300 disabled:opacity-50"
+                            onClick={handleImportUsers}
+                            disabled={isLoading}
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                            Sync {mediaServerLabel} Users
+                        </button>
+                        <button
+                            type="button"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-400/40 bg-sky-500/10 px-4 py-2.5 text-sm font-bold text-sky-100 transition-colors hover:bg-sky-500/20 disabled:opacity-50"
+                            onClick={handleBackfillJoiningDates}
+                            disabled={isLoading}
+                            title="Set Joined from each user's earliest play on this server (only moves dates earlier)"
+                        >
+                            <Calendar className="h-4 w-4" />
+                            Backfill Join Dates
+                        </button>
+                    </div>
                 ) : undefined}
             />
 
