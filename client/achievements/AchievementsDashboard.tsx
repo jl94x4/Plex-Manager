@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Award, Calendar, ChevronLeft, ChevronRight, Clapperboard, Clock, Disc3,
     Film, Flame, Lock, Music2, Sparkles, Trophy, X, Info, Medal, Target,
-    Gauge, PlayCircle, ChevronDown, Share2, Bell, BellOff, Pin, type LucideIcon,
+    Gauge, PlayCircle, ChevronDown, Share2, Bell, BellOff, Pin,
+    ArrowDownRight, ArrowUpRight, Minus, type LucideIcon,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -13,6 +14,7 @@ import { tAchievements } from './i18n';
 import { groupBadgesIntoFamilies, type BadgeFamily } from './badgeFamilies';
 import { BadgeDetailDrawer } from './BadgeDetailDrawer';
 import { UnlockCelebration } from './UnlockCelebration';
+import { LeaderboardDossierModal } from './LeaderboardDossierModal';
 
 const LEADERBOARD_PAGE_SIZE = 10;
 const LEADERBOARD_FETCH_LIMIT = 100;
@@ -533,6 +535,7 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
     const [notifyBusy, setNotifyBusy] = useState(false);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
+    const [dossierQuery, setDossierQuery] = useState<{ accountId?: string | number | null; rank?: number | null } | null>(null);
     const [pinBusy, setPinBusy] = useState(false);
     const [celebrationBadges, setCelebrationBadges] = useState<any[]>([]);
 
@@ -959,10 +962,21 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                 </div>
                             )}
                             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                                {pageEntries.map((entry) => (
-                                    <div
+                                {pageEntries.map((entry) => {
+                                    const delta = Number(entry.rankDelta) || 0;
+                                    const DeltaIcon = delta > 0 ? ArrowUpRight : delta < 0 ? ArrowDownRight : Minus;
+                                    const deltaTone = delta > 0 ? 'text-emerald-300' : delta < 0 ? 'text-rose-300' : 'text-muted/50';
+                                    return (
+                                    <button
+                                        type="button"
                                         key={`${entry.rank}-${entry.username}`}
-                                        className={`rounded-xl px-3 py-2.5 border min-w-0 ${
+                                        onClick={() => setDossierQuery(
+                                            entry.accountId != null
+                                                ? { accountId: entry.accountId }
+                                                : { rank: entry.rank },
+                                        )}
+                                        title={tAchievements('dossier.openHint')}
+                                        className={`rounded-xl px-3 py-2.5 border min-w-0 text-left transition-colors hover:border-plex/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-plex/50 ${
                                             entry.isMe ? 'border-plex/50 bg-plex/10' : 'border-white/5 bg-black/20'
                                         }`}
                                     >
@@ -984,7 +998,10 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                                 }}
                                             />
                                             <div className="min-w-0 flex-1">
-                                                <p className="font-mono font-bold text-plex text-sm">#{entry.rank}</p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="font-mono font-bold text-plex text-sm">#{entry.rank}</p>
+                                                    <DeltaIcon className={`w-3.5 h-3.5 shrink-0 ${deltaTone}`} aria-hidden />
+                                                </div>
                                                 <p className="text-sm font-bold truncate mt-0.5">
                                                     {entry.username}{entry.isMe ? ' (you)' : ''}
                                                 </p>
@@ -996,8 +1013,9 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                                 </p>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    </button>
+                                    );
+                                })}
                             </div>
                             {board.length > LEADERBOARD_PAGE_SIZE && (
                                 <div className="flex items-center justify-between gap-3 pt-1">
@@ -1105,6 +1123,14 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                 onClose={() => setSelectedBadgeId(null)}
                 onTogglePin={(id) => { void togglePin(id); }}
                 pinBusy={pinBusy}
+            />
+            <LeaderboardDossierModal
+                query={dossierQuery}
+                onClose={() => setDossierQuery(null)}
+                onOpenBadge={(badgeId) => {
+                    setDossierQuery(null);
+                    setSelectedBadgeId(badgeId);
+                }}
             />
             {celebrationBadges.length > 0 && (
                 <UnlockCelebration
