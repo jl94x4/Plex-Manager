@@ -60,7 +60,10 @@ export const UnlockCelebration: React.FC<Props> = ({ badges, onClose }) => {
                         />
                     ))}
                 </div>
-                <div className="relative pointer-events-auto w-full max-w-sm rounded-3xl border border-plex/40 bg-[#12141a] shadow-[0_24px_80px_rgba(0,0,0,0.55)] p-6 text-center animate-[achUnlockPop_0.45s_ease-out]">
+                <div
+                    className="relative pointer-events-auto w-full max-w-sm rounded-3xl border border-plex/40 shadow-[0_24px_80px_rgba(0,0,0,0.55)] p-6 text-center animate-[achUnlockPop_0.45s_ease-out]"
+                    style={{ backgroundColor: 'rgb(var(--color-card))' }}
+                >
                     <button
                         type="button"
                         onClick={() => { setVisible(false); onClose(); }}

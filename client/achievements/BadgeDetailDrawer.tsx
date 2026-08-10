@@ -6,10 +6,18 @@ import { ModalPortal } from '../shared/ModalPortal';
 import { tAchievements } from './i18n';
 
 const rarityClass = (rarity: string) => {
-    if (rarity === 'legendary') return 'border-amber-400/50 bg-amber-500/10 text-amber-100';
-    if (rarity === 'epic') return 'border-fuchsia-400/40 bg-fuchsia-500/10 text-fuchsia-100';
-    if (rarity === 'rare') return 'border-sky-400/40 bg-sky-500/10 text-sky-100';
-    return 'border-white/10 bg-white/[0.03] text-text';
+    // Border + text only — translucent bg-* utilities would punch through the solid panel.
+    if (rarity === 'legendary') return 'border-amber-400/60 text-amber-100';
+    if (rarity === 'epic') return 'border-fuchsia-400/50 text-fuchsia-100';
+    if (rarity === 'rare') return 'border-sky-400/50 text-sky-100';
+    return 'border-white/10 text-text';
+};
+
+const rarityWashStyle = (rarity: string): React.CSSProperties => {
+    if (rarity === 'legendary') return { backgroundImage: 'linear-gradient(180deg, rgba(245,158,11,0.18) 0%, transparent 42%)' };
+    if (rarity === 'epic') return { backgroundImage: 'linear-gradient(180deg, rgba(217,70,239,0.16) 0%, transparent 42%)' };
+    if (rarity === 'rare') return { backgroundImage: 'linear-gradient(180deg, rgba(56,189,248,0.14) 0%, transparent 42%)' };
+    return {};
 };
 
 const resolveAvatar = (thumb: string | null | undefined) => {
@@ -83,7 +91,13 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
         <ModalPortal open={true}>
             <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-5 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
                 <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" aria-label="Close" onClick={onClose} />
-                <div className={`relative w-full sm:max-w-lg max-h-[min(92vh,100%)] flex flex-col rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.55)] bg-[#12141a] ${rarityClass(badge.rarity || 'common')}`}>
+                <div
+                    className={`relative w-full sm:max-w-lg max-h-[min(92vh,100%)] flex flex-col rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.55)] ${rarityClass(badge.rarity || 'common')}`}
+                    style={{
+                        backgroundColor: 'rgb(var(--color-card))',
+                        ...rarityWashStyle(badge.rarity || 'common'),
+                    }}
+                >
                     <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-white/8 shrink-0">
                         <div className="flex items-start gap-3 min-w-0">
                             <span className="text-4xl leading-none">{badge.icon || '🏅'}</span>

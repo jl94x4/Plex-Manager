@@ -11817,7 +11817,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         aria-label="Close profile modal"
                         onClick={() => setProfileOpen(false)}
                     />
-                    <div className="absolute left-5 bottom-4 w-[calc(18rem-2.5rem)] max-w-[calc(18rem-2.5rem)] rounded-2xl border border-border bg-card shadow-2xl overflow-hidden animate-fade-in">
+                    <div
+                        className="absolute left-5 bottom-4 w-[calc(18rem-2.5rem)] max-w-[calc(18rem-2.5rem)] rounded-2xl border border-border shadow-2xl overflow-hidden animate-fade-in"
+                        style={{ backgroundColor: 'rgb(var(--color-card))' }}
+                    >
                         <div className="p-4 border-b border-border/70">
                             <div className="flex items-start justify-between gap-2">
                                 <div className="flex items-center gap-2.5 min-w-0">

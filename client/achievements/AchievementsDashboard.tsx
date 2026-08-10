@@ -267,7 +267,10 @@ export const XpBreakdownModal: React.FC<{
         <ModalPortal open={open}>
             <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-5 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
                 <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" aria-label="Close" onClick={onClose} />
-                <div className="relative w-full sm:max-w-3xl max-h-[min(92vh,100%)] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-3xl border border-white/10 bg-[#12141a] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden">
+                <div
+                    className="relative w-full sm:max-w-3xl max-h-[min(92vh,100%)] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-3xl border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden"
+                    style={{ backgroundColor: 'rgb(var(--color-card))' }}
+                >
                     <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-plex/20 via-plex/5 to-transparent" />
 
                     <div className="relative flex items-start justify-between gap-3 px-5 sm:px-7 pt-5 sm:pt-6 pb-4 border-b border-white/8 shrink-0">
