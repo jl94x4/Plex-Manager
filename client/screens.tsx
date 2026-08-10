@@ -3776,19 +3776,6 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
                 const data = await apiFetch(`${isJellyfinPortal ? '/api/jellystat/analytics' : '/api/plex/analytics'}?days=${days}`);
                 if (cancelled) return;
                 setAnalyticsData(data);
-
-                if (isAdmin) {
-                    try {
-                        const tData = isJellyfinPortal ? data.jellystatInsights : await apiFetch('/api/tautulli/stats');
-                        if (cancelled) return;
-                        setTautulliData(tData);
-                    } catch (e) {
-                        // Tautulli/Jellystat might not be configured, ignore the extra panel.
-                        if (!cancelled) setTautulliData(null);
-                    }
-                } else {
-                    setTautulliData(null);
-                }
             } catch (err: any) {
                 if (!cancelled) setError(err.message);
             } finally {
@@ -3797,7 +3784,31 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         };
         fetchAnalytics();
         return () => { cancelled = true; };
-    }, [days, isAdmin, isJellyfinPortal]);
+    }, [days, isJellyfinPortal]);
+
+    // Tautulli/Jellystat extras must not block the main analytics page (slow Tautulli = endless spinner).
+    useEffect(() => {
+        if (!isAdmin || isLoading) {
+            if (!isAdmin) setTautulliData(null);
+            return;
+        }
+        let cancelled = false;
+        const fetchExtras = async () => {
+            try {
+                if (isJellyfinPortal) {
+                    const embedded = (analyticsData as any)?.jellystatInsights || null;
+                    if (!cancelled) setTautulliData(embedded);
+                    return;
+                }
+                const tData = await apiFetch('/api/tautulli/stats');
+                if (!cancelled) setTautulliData(tData);
+            } catch {
+                if (!cancelled) setTautulliData(null);
+            }
+        };
+        fetchExtras();
+        return () => { cancelled = true; };
+    }, [days, isAdmin, isJellyfinPortal, isLoading, (analyticsData as any)?.jellystatInsights]);
 
     useEffect(() => {
         if (isJellyfinPortal && viewTab === 'graphs') setViewTab('overview');

@@ -13374,9 +13374,9 @@ app.get('/api/tautulli/stats', requireAuth, requireMember, async (req, res) => {
                 stats_count: String(statsCount),
                 time_range: String(Math.max(1, Number(timeRange) || 3650)),
             });
-            const payload = await fetch(`${tUrl}/api/v2?${params.toString()}`, {
+            const payload = await fetchWithTimeout(`${tUrl}/api/v2?${params.toString()}`, {
                 headers: { Accept: 'application/json' },
-            }).then((r) => r.json()).catch(() => null);
+            }, 8000).then((r) => r.json()).catch(() => null);
             const data = payload?.response?.data;
             if (Array.isArray(data)) {
                 return data.find((entry) => entry?.stat_id === statId) || data[0] || null;
