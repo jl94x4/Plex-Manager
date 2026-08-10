@@ -920,13 +920,128 @@ const resolveHistoryLibraryBucket = (item, sectionsMap = {}) => {
     return null;
 };
 
+const historyItemHasLibraryIdentity = (item) => {
+    const rawId = item?.librarySectionID ?? item?.librarySectionId ?? item?.section_id ?? item?.library_id ?? null;
+    if (rawId != null && !['', 'null', 'undefined'].includes(String(rawId).trim().toLowerCase())) return true;
+    const titled = String(
+        item?.librarySectionTitle
+        || item?.section_title
+        || item?.library_name
+        || item?.section_name
+        || '',
+    ).trim();
+    return !!titled;
+};
+
+const historyItemRatingKey = (item) => {
+    if (item?.ratingKey != null && String(item.ratingKey).trim()) return String(item.ratingKey).trim();
+    if (item?.key) {
+        const tail = String(item.key).split('/').pop();
+        if (tail && /^\d+$/.test(tail)) return tail;
+    }
+    return null;
+};
+
+/**
+ * Plex `/status/sessions/history/all` often omits librarySectionID, which collapses several
+ * real TV libraries into a single "TV Shows" type bucket. Fill section id/title from
+ * `/library/metadata/{ratingKey}` (cached) before aggregating Top Library.
+ */
+const enrichHistoryItemsLibrarySections = async (
+    uri,
+    config,
+    historyItems,
+    sectionsMap = {},
+    { maxLookups = 400, concurrency = 6, timeoutMs = 4000 } = {},
+) => {
+    if (!uri || !config?.plexToken || !Array.isArray(historyItems) || !historyItems.length) {
+        return historyItems;
+    }
+
+    const toLookup = [];
+    const seen = new Set();
+    for (const item of historyItems) {
+        if (historyItemHasLibraryIdentity(item)) continue;
+        const rk = historyItemRatingKey(item);
+        if (!rk || seen.has(rk)) continue;
+        seen.add(rk);
+        toLookup.push(rk);
+        if (toLookup.length >= maxLookups) break;
+    }
+    if (!toLookup.length) return historyItems;
+
+    const metaByRatingKey = new Map();
+    let cursor = 0;
+    const fetchOne = async (rk) => {
+        const path = `/library/metadata/${rk}`;
+        let data = plexMetadataCache.get(path);
+        if (!data) {
+            const metaRes = await fetch(
+                `${uri}${path}?X-Plex-Token=${encodeURIComponent(config.plexToken)}`,
+                { headers: plexClientHeaders(config.plexToken) },
+            ).then((r) => r.json()).catch(() => null);
+            data = metaRes?.MediaContainer?.Metadata?.[0] || null;
+            if (data) plexMetadataCache.set(path, data);
+        }
+        if (data) metaByRatingKey.set(String(rk), data);
+    };
+
+    const worker = async () => {
+        while (true) {
+            const idx = cursor++;
+            if (idx >= toLookup.length) return;
+            await fetchOne(toLookup[idx]);
+        }
+    };
+
+    const run = Promise.all(
+        Array.from({ length: Math.min(concurrency, toLookup.length) }, () => worker()),
+    );
+    await Promise.race([
+        run,
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+    ]);
+
+    let filled = 0;
+    for (const item of historyItems) {
+        if (historyItemHasLibraryIdentity(item)) continue;
+        const rk = historyItemRatingKey(item);
+        const data = (rk && metaByRatingKey.get(String(rk)))
+            || (item?.grandparentRatingKey != null
+                ? (metaByRatingKey.get(String(item.grandparentRatingKey))
+                    || plexMetadataCache.get(`/library/metadata/${item.grandparentRatingKey}`))
+                : null);
+        if (!data || typeof data !== 'object') continue;
+        const sectionId = data.librarySectionID ?? data.librarySectionId;
+        if (sectionId == null || sectionId === '') continue;
+        item.librarySectionID = sectionId;
+        const mapped = sectionsMap[String(sectionId)]
+            || sectionsMap[Number(sectionId)]
+            || (Number.isFinite(Number(sectionId)) ? sectionsMap[String(Number(sectionId))] : null)
+            || null;
+        item.librarySectionTitle = data.librarySectionTitle || mapped || null;
+        filled += 1;
+    }
+    if (filled > 0) {
+        log(`[Analytics] Filled library section on ${filled} history play(s) via metadata (${toLookup.length} lookup keys).`);
+    }
+    return historyItems;
+};
+
 const bumpHistoryLibraryCount = (libraryCounts, item, sectionsMap = {}) => {
     const bucket = resolveHistoryLibraryBucket(item, sectionsMap);
     if (!bucket) return;
     if (!libraryCounts[bucket.id]) {
         libraryCounts[bucket.id] = { id: bucket.id, title: bucket.title, plays: 0 };
-    } else if (bucket.title && libraryCounts[bucket.id].title?.startsWith?.('Library ')) {
-        libraryCounts[bucket.id].title = bucket.title;
+    } else if (bucket.title) {
+        const current = String(libraryCounts[bucket.id].title || '');
+        const isWeakTitle = current.startsWith('Library ')
+            || current === 'Movies'
+            || current === 'TV Shows'
+            || current === 'Music';
+        if (isWeakTitle && bucket.title !== current) {
+            libraryCounts[bucket.id].title = bucket.title;
+        }
     }
     libraryCounts[bucket.id].plays++;
 };
@@ -14114,6 +14229,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         }
 
         const sectionsMap = buildLibrarySectionsMap(sectionsRes);
+        await enrichHistoryItemsLibrarySections(uri, config, historyItems, sectionsMap);
 
         let totalPlays = 0;
         const libraryCounts = {};
@@ -14807,6 +14923,10 @@ app.get('/api/plex/analytics/user/:id', requireAdmin, async (req, res) => {
         }
 
         const sectionsMap = buildLibrarySectionsMap(sectionsRes);
+        const historyItems = Array.isArray(historyRes.MediaContainer.Metadata)
+            ? historyRes.MediaContainer.Metadata
+            : [];
+        await enrichHistoryItemsLibrarySections(uri, config, historyItems, sectionsMap);
 
         let cutoffDate = 0;
         if (req.query.days && req.query.days !== 'all') {
@@ -14825,7 +14945,7 @@ app.get('/api/plex/analytics/user/:id', requireAdmin, async (req, res) => {
         const hourDistribution = new Array(24).fill(0);
         const statsTimezone = await fetchTautulliTimezone(config);
 
-        historyRes.MediaContainer.Metadata.forEach(item => {
+        historyItems.forEach(item => {
             if (cutoffDate > 0 && item.viewedAt < cutoffDate) return;
             totalPlays++;
 
@@ -17520,6 +17640,11 @@ async function calculateAnalyticsStats() {
         }
 
         const sectionsMap = buildLibrarySectionsMap(sectionsRes);
+        await enrichHistoryItemsLibrarySections(uri, config, historyItems, sectionsMap, {
+            maxLookups: 600,
+            concurrency: 8,
+            timeoutMs: 8000,
+        });
 
         const devicesMap = {};
         if (devicesRes && devicesRes.MediaContainer && devicesRes.MediaContainer.Device) {
