@@ -1106,6 +1106,8 @@ import {
     countUnreadInAppNotifications,
     markInAppNotificationsRead,
     setInAppNotificationCreatedHook,
+    createInAppNotification,
+    getInAppNotificationsAdminSummary,
 } from './lib/notifications/inAppStore.js';
 import {
     getVapidPublicKey,
@@ -1113,7 +1115,14 @@ import {
     removeWebPushSubscription,
     sendWebPushToUser,
     isWebPushGloballyEnabled,
+    getWebPushAdminSummary,
 } from './lib/notifications/webPush.js';
+import { notifyRequestAvailableDiscord } from './lib/notifications/discordWebhook.js';
+import { loadSeerrAvailableNotifyState } from './lib/notifications/seerrAvailablePoll.js';
+import {
+    isRequestAvailableNotifyEnabled,
+    shouldSendRequestAvailableEmail,
+} from './lib/notifications/requestAvailable.js';
 const PLEX_API = 'https://plex.tv/api';
 
 // --- Status App Global State ---
@@ -3491,6 +3500,226 @@ app.post('/api/notifications/push/unsubscribe', requireAuth, requireMember, asyn
     } catch (e) {
         log(`Error removing push subscription: ${e.message}`);
         res.status(500).json({ error: 'Failed to remove subscription' });
+    }
+});
+
+app.get('/api/admin/notifications/status', requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const users = await loadFile(USERS_PATH, []);
+        const inApp = await getInAppNotificationsAdminSummary({ limit: 1 });
+        const push = await getWebPushAdminSummary();
+        let vapidReady = false;
+        try {
+            const key = await getVapidPublicKey();
+            vapidReady = !!key;
+        } catch {
+            vapidReady = false;
+        }
+        let seerrSnapshot = { updatedAt: null, trackedRequests: 0 };
+        try {
+            const state = await loadSeerrAvailableNotifyState();
+            seerrSnapshot = {
+                updatedAt: state.updatedAt || null,
+                trackedRequests: Object.keys(state.byRequestId || {}).length,
+            };
+        } catch {
+            // ignore
+        }
+        const smtpReady = !!(config.smtpHost && config.smtpUser && config.smtpPass);
+        const discordUrl = String(config.requestAvailableDiscordWebhookUrl || '').trim();
+        const gotifyReady = !!(config.gotifyEnabled && config.gotifyUrl && config.gotifyToken);
+        const engine = getRequestEngine(config);
+        const seerrJob = systemJobs.seerrAvailableNotify || null;
+        const portalJob = systemJobs.requestStatusSync || null;
+        res.json({
+            requestAvailable: {
+                enabled: isRequestAvailableNotifyEnabled(config),
+                email: config.requestAvailableNotifyEmail !== false,
+                inApp: config.requestAvailableNotifyInApp !== false,
+                webPush: config.requestAvailableNotifyWebPush !== false,
+                discord: !!config.requestAvailableNotifyDiscord,
+                discordWebhookConfigured: !!discordUrl,
+            },
+            webPush: {
+                enabled: isWebPushGloballyEnabled(config),
+                vapidReady,
+                ...push,
+            },
+            email: {
+                smtpReady,
+                requestAvailableAllowed: shouldSendRequestAvailableEmail(config, null),
+            },
+            discord: {
+                enabled: !!config.requestAvailableNotifyDiscord,
+                webhookConfigured: !!discordUrl,
+            },
+            gotify: {
+                enabled: !!config.gotifyEnabled,
+                configured: gotifyReady,
+            },
+            inApp: {
+                total: inApp.total,
+                unread: inApp.unread,
+                updatedAt: inApp.updatedAt,
+                byType: inApp.byType,
+            },
+            jobs: {
+                requestEngine: engine,
+                seerrAvailableNotify: seerrJob ? {
+                    lastRun: seerrJob.lastRun,
+                    nextRun: seerrJob.nextRun,
+                    running: !!seerrJob.running,
+                    lastDurationMs: seerrJob.lastDurationMs,
+                    lastError: seerrJob.lastError,
+                } : null,
+                requestStatusSync: portalJob ? {
+                    lastRun: portalJob.lastRun,
+                    nextRun: portalJob.nextRun,
+                    running: !!portalJob.running,
+                    lastDurationMs: portalJob.lastDurationMs,
+                    lastError: portalJob.lastError,
+                } : null,
+            },
+            seerrSnapshot,
+            members: Array.isArray(users) ? users.length : 0,
+        });
+    } catch (e) {
+        log(`Error loading notification status: ${e.message}`);
+        res.status(500).json({ error: 'Failed to load notification status' });
+    }
+});
+
+app.get('/api/admin/notifications/recent', requireAdmin, async (req, res) => {
+    try {
+        const limit = Math.max(1, Math.min(200, Number(req.query?.limit) || 50));
+        const users = await loadFile(USERS_PATH, []);
+        const byId = new Map((Array.isArray(users) ? users : []).map((u) => [String(u.id), u]));
+        const summary = await getInAppNotificationsAdminSummary({ limit });
+        const recent = summary.recent.map((item) => {
+            const user = byId.get(String(item.userId));
+            return {
+                id: item.id,
+                userId: item.userId,
+                username: user?.username || null,
+                type: item.type,
+                title: item.title,
+                body: item.body || '',
+                href: item.href || '',
+                readAt: item.readAt || null,
+                createdAt: item.createdAt || null,
+            };
+        });
+        res.json({
+            total: summary.total,
+            unread: summary.unread,
+            updatedAt: summary.updatedAt,
+            byType: summary.byType,
+            items: recent,
+        });
+    } catch (e) {
+        log(`Error listing recent notifications: ${e.message}`);
+        res.status(500).json({ error: 'Failed to load recent notifications' });
+    }
+});
+
+app.post('/api/admin/notifications/test', requireAdmin, async (req, res) => {
+    if (blockIfImpersonating(req, res)) return;
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const users = await loadFile(USERS_PATH, []);
+        const localUser = findLocalUserForSession(users, req.user);
+        if (!localUser?.id) {
+            return res.status(404).json({ error: 'Admin user not found in local users store' });
+        }
+        const channels = Array.isArray(req.body?.channels) && req.body.channels.length
+            ? req.body.channels.map(String)
+            : ['inApp'];
+        const title = String(req.body?.title || 'Test notification').slice(0, 120);
+        const body = String(req.body?.body || 'This is a test from Settings → Notifications.').slice(0, 400);
+        const href = '/portal';
+        const results = { inApp: false, webPush: false, email: false, discord: false, errors: [] };
+
+        if (channels.includes('inApp')) {
+            try {
+                const item = await createInAppNotification({
+                    userId: localUser.id,
+                    type: 'admin_test',
+                    title,
+                    body,
+                    href,
+                    meta: { skipWebPush: true, test: true },
+                });
+                results.inApp = !!item;
+            } catch (error) {
+                results.errors.push(`inApp: ${error?.message || error}`);
+            }
+        }
+
+        if (channels.includes('webPush')) {
+            try {
+                const push = await sendWebPushToUser(localUser.id, {
+                    title,
+                    body,
+                    href,
+                    type: 'admin_test',
+                    tag: `admin-test-${Date.now()}`,
+                }, { config, user: localUser, log });
+                results.webPush = (push?.sent || 0) > 0;
+                if (!results.webPush) {
+                    results.errors.push(`webPush: ${push?.skipped || 'no devices subscribed for this admin'}`);
+                }
+            } catch (error) {
+                results.errors.push(`webPush: ${error?.message || error}`);
+            }
+        }
+
+        if (channels.includes('email')) {
+            try {
+                if (!localUser.email) {
+                    results.errors.push('email: admin account has no email');
+                } else {
+                    const html = `<p>${body}</p><p style="color:#888;font-size:12px;">Sent from Settings → Notifications test.</p>`;
+                    results.email = !!(await sendEmail(config, localUser.email, `[${config.serverName || 'Portal'}] ${title}`, html));
+                }
+            } catch (error) {
+                results.errors.push(`email: ${error?.message || error}`);
+            }
+        }
+
+        if (channels.includes('discord')) {
+            try {
+                results.discord = !!(await notifyRequestAvailableDiscord({
+                    config: {
+                        ...config,
+                        requestAvailableNotifyEnabled: true,
+                        requestAvailableNotifyDiscord: true,
+                    },
+                    user: localUser,
+                    username: localUser.username || 'Admin',
+                    title,
+                    year: null,
+                    mediaType: 'movie',
+                    ctaUrl: resolvePublicBaseUrlFromConfig(config) || href,
+                    log,
+                }));
+                if (!results.discord) {
+                    results.errors.push('discord: webhook not configured or disabled');
+                }
+            } catch (error) {
+                results.errors.push(`discord: ${error?.message || error}`);
+            }
+        }
+
+        res.json({
+            success: results.inApp || results.webPush || results.email || results.discord,
+            userId: localUser.id,
+            username: localUser.username || null,
+            results,
+        });
+    } catch (e) {
+        log(`Error sending notification test: ${e.message}`);
+        res.status(500).json({ error: e.message || 'Failed to send test notification' });
     }
 });
 

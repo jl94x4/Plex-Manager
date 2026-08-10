@@ -1,5 +1,5 @@
 export const SETTINGS_TABS = [
-    'plex', 'smtp', 'gotify', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'navigation', 'home-layout',
+    'plex', 'smtp', 'notifications', 'gotify', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'navigation', 'home-layout',
     'achievements', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
 ] as const;
 
@@ -63,6 +63,11 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'status', tabId: 'status', label: 'Status Monitor', group: 'Media Stack', keywords: ['uptime', 'health', 'services', 'monitor'] },
 
     { id: 'smtp', tabId: 'smtp', label: 'SMTP Alerts', group: 'Comms', keywords: ['mail', 'smtp', 'email', 'alerts', 'test'] },
+    { id: 'notifications', tabId: 'notifications', label: 'Notifications', group: 'Comms', keywords: ['notifications', 'bell', 'web push', 'discord', 'request available', 'vapid', 'in-app', 'test'] },
+    { id: 'notifications/status', tabId: 'notifications', sectionId: 'notifications-status', label: 'Notification Health', group: 'Comms', keywords: ['health', 'status', 'vapid', 'smtp', 'discord', 'job'] },
+    { id: 'notifications/request-available', tabId: 'notifications', sectionId: 'notifications-request-available', label: 'Request Available Alerts', group: 'Comms', keywords: ['request available', 'email', 'in-app', 'push', 'discord'] },
+    { id: 'notifications/test', tabId: 'notifications', sectionId: 'notifications-test', label: 'Send Test Notification', group: 'Comms', keywords: ['test', 'send', 'bell'] },
+    { id: 'notifications/recent', tabId: 'notifications', sectionId: 'notifications-recent', label: 'Recent Notifications', group: 'Comms', keywords: ['history', 'log', 'recent', 'bell'] },
     { id: 'gotify', tabId: 'gotify', label: 'Gotify Alerts', group: 'Comms', keywords: ['gotify', 'push', 'alerts', 'notifications', 'rules', 'self hosted'] },
     { id: 'newsletter', tabId: 'newsletter', label: 'Newsletter', group: 'Comms', keywords: ['digest', 'send', 'frequency', 'weekly', 'monthly'] },
     { id: 'broadcast', tabId: 'broadcast', label: 'Broadcast Email', group: 'Comms', keywords: ['announcement', 'bulk', 'users', 'broadcast'] },

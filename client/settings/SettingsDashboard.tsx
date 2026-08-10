@@ -44,6 +44,7 @@ import { InvitesSettings } from './InvitesSettings';
 import { StatusMonitorSettings } from './StatusMonitorSettings';
 import { ScannerSettingsPanel, defaultScannerSettings, type ScannerSettings } from './ScannerSettingsPanel';
 import { BroadcastSettingsTab } from './BroadcastSettingsTab';
+import { NotificationsSettingsTab } from './NotificationsSettingsTab';
 import { IntegrationTestButton } from '../shared/IntegrationTestButton';
 import { HomeLayoutSettings } from './HomeLayoutSettings';
 import { AchievementsSettings } from './AchievementsSettings';
@@ -158,7 +159,8 @@ const APP_ICONS: Record<string, string> = {
 const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
     plex: Server,
     smtp: Mail,
-    gotify: Bell,
+    notifications: Bell,
+    gotify: Radio,
     newsletter: Newspaper,
     cleanup: Trash2,
     mediastack: Layers,
@@ -2191,9 +2193,39 @@ export const SettingsDashboard: React.FC = () => {
                         </div>
                     )}
 
+                    {activeTab === 'notifications' && (
+                        <NotificationsSettingsTab
+                            requestAvailableNotifyEnabled={requestAvailableNotifyEnabled}
+                            setRequestAvailableNotifyEnabled={setRequestAvailableNotifyEnabled}
+                            requestAvailableNotifyEmail={requestAvailableNotifyEmail}
+                            setRequestAvailableNotifyEmail={setRequestAvailableNotifyEmail}
+                            requestAvailableNotifyInApp={requestAvailableNotifyInApp}
+                            setRequestAvailableNotifyInApp={setRequestAvailableNotifyInApp}
+                            requestAvailableNotifyWebPush={requestAvailableNotifyWebPush}
+                            setRequestAvailableNotifyWebPush={setRequestAvailableNotifyWebPush}
+                            requestAvailableNotifyDiscord={requestAvailableNotifyDiscord}
+                            setRequestAvailableNotifyDiscord={setRequestAvailableNotifyDiscord}
+                            requestAvailableDiscordWebhookUrl={requestAvailableDiscordWebhookUrl}
+                            setRequestAvailableDiscordWebhookUrl={setRequestAvailableDiscordWebhookUrl}
+                            webPushEnabled={webPushEnabled}
+                            setWebPushEnabled={setWebPushEnabled}
+                            onOpenGotify={() => setActiveTab('gotify')}
+                            onOpenSmtp={() => setActiveTab('smtp')}
+                            addToast={addToast}
+                            getSettingsSectionElementId={getSettingsSectionElementId}
+                        />
+                    )}
+
                     {activeTab === 'gotify' && (
                         <div className="mb-8">
                             <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Gotify Push Alerts</h3>
+                            <p className="text-sm text-muted mb-4 max-w-2xl">
+                                Admin automation alerts (expiry, sync, revoke). For member request-available / in-app / web push, use{' '}
+                                <button type="button" className="font-bold text-plex hover:underline" onClick={() => setActiveTab('notifications')}>
+                                    Notifications
+                                </button>
+                                .
+                            </p>
                             <SettingsToggleRow
                                 title="Enable Gotify Alerts"
                                 description="Send admin push alerts for important portal automation events."
@@ -3050,7 +3082,11 @@ export const SettingsDashboard: React.FC = () => {
                                 <h4 className="text-sm font-bold text-text uppercase tracking-wider">Request available notifications</h4>
                                 <p className="text-xs text-muted max-w-2xl">
                                     When a request finishes downloading and becomes available, notify the requester.
-                                    Channels: email, in-app bell, browser push, and Discord webhook. Works with Portal and Seerr engines.
+                                    Full health, test send, and history live under{' '}
+                                    <button type="button" className="font-bold text-plex hover:underline" onClick={() => setActiveTab('notifications')}>
+                                        Settings → Notifications
+                                    </button>
+                                    .
                                 </p>
                                 <SettingsToggleRow
                                     title="Enable notifications"
