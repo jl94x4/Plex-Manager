@@ -8252,8 +8252,24 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                             >
                                 {sessionInfo.session.username}
                             </h1>
-                            {sessionInfo.session.isAdmin && (
-                                <span className="inline-block mt-3 px-3 py-1 rounded-full text-[10px] font-black bg-plex/20 text-plex border border-plex/40 uppercase tracking-widest">Server Admin</span>
+                            {(sessionInfo.session.isAdmin || wrapUpAchievements) && (
+                                <div className="mt-3 flex flex-wrap items-center justify-center md:justify-start gap-2">
+                                    {sessionInfo.session.isAdmin && (
+                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-plex/20 text-plex border border-plex/40 uppercase tracking-widest">
+                                            Server Admin
+                                        </span>
+                                    )}
+                                    {wrapUpAchievements && (
+                                        <>
+                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-black/40 text-text border border-white/20 uppercase tracking-widest backdrop-blur-sm">
+                                                Lv {Number(wrapUpAchievements.level) || 1}
+                                            </span>
+                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-black/40 text-plex border border-plex/35 uppercase tracking-widest backdrop-blur-sm font-mono tabular-nums">
+                                                {(Number(wrapUpAchievements.xp) || 0).toLocaleString()} XP
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
                             )}
                         </div>
                     </div>
