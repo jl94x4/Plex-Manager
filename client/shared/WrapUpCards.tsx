@@ -312,9 +312,10 @@ const achievementsTranslateFallback = (key: string, vars?: Record<string, string
 /** Always Level + Total XP; pin Period XP when present; fill remaining from seeded pool. */
 export const buildAchievementsWrapUpCards = (
     me: any,
-    opts: { seed?: number; rank?: number | null; t?: DiscoverTranslate } = {},
+    opts: { seed?: number; rank?: number | null; t?: DiscoverTranslate; limit?: number } = {},
 ): WrapUpCardDef[] => {
     const translate = opts.t || achievementsTranslateFallback;
+    const cardLimit = Math.max(1, Math.min(12, Number(opts.limit) || 5));
     const lp = me?.levelProgress || {};
     const stats = me?.stats || {};
     const breakdown = me?.breakdown || {};
@@ -502,7 +503,7 @@ export const buildAchievementsWrapUpCards = (
         });
     }
 
-    const rotateCount = Math.max(0, 5 - pinned.length);
+    const rotateCount = Math.max(0, cardLimit - pinned.length);
     const seeded = shuffleWithSeed(pool, Number(opts.seed) || Date.now());
     return [...pinned, ...seeded.slice(0, rotateCount)];
 };
@@ -515,6 +516,8 @@ type WrapUpCardGridProps = {
     minCardHeight?: number;
     className?: string;
     valueClassName?: string;
+    /** Hide cards at/after this index from md+ (mobile-only extras). */
+    desktopMaxCards?: number | null;
     /** Stable layout for html2canvas export — avoids line-clamp/SVG bleed on some browsers */
     variant?: 'default' | 'export';
 };
@@ -547,6 +550,7 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
     minCardHeight,
     className = '',
     valueClassName: defaultValueClassName = 'text-sm font-bold leading-tight',
+    desktopMaxCards = null,
     variant = 'default',
 }) => {
     const { t } = useDiscoverI18n();
@@ -559,7 +563,7 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
 
     return (
         <div className={gridClass}>
-            {cards.map((card) => {
+            {cards.map((card, index) => {
                 const Icon = card.icon;
                 const valueClass = isExport
                     ? (isLargeMetric(card.metric)
@@ -568,12 +572,18 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
                     : (card.valueClassName || defaultValueClassName);
                 const subValue = isExport ? exportSubValue(card, analytics) : card.subValue;
                 const bgImage = resolveCardImage(card.bgImage);
+                const desktopHidden = (
+                    !isExport
+                    && desktopMaxCards != null
+                    && Number.isFinite(desktopMaxCards)
+                    && index >= Number(desktopMaxCards)
+                );
                 return (
                     <div
                         key={card.metric}
                         data-wrap-up-card=""
                         onClick={interactive && onCardClick ? () => onCardClick(card.metric) : undefined}
-                        className={`wrap-up-card rounded-xl relative border border-border/50 flex flex-col ${isExport ? 'isolate' : 'overflow-hidden'} ${interactive ? 'cursor-pointer hover:ring-2 hover:ring-plex/50 transition-all group' : ''}`}
+                        className={`wrap-up-card rounded-xl relative border border-border/50 flex flex-col ${isExport ? 'isolate' : 'overflow-hidden'} ${interactive ? 'cursor-pointer hover:ring-2 hover:ring-plex/50 transition-all group' : ''} ${desktopHidden ? 'md:hidden' : ''}`}
                         style={{ minHeight: `${resolvedMinHeight}px` }}
                     >
                         {isExport ? (
@@ -644,7 +654,8 @@ export const AchievementsWrapUpSpotlight: React.FC<{
 }> = ({ me, rank = null, seed, onOpenAchievements, minCardHeight = 112 }) => {
     const { t } = useDiscoverI18n();
     const cards = useMemo(
-        () => buildAchievementsWrapUpCards(me, { seed, rank, t }),
+        // Build 6 so mobile can fill a 2×3 grid; 6th is another seeded/random pool card.
+        () => buildAchievementsWrapUpCards(me, { seed, rank, t, limit: 6 }),
         [me, rank, seed, t],
     );
     if (!me || !cards.length) return null;
@@ -666,6 +677,7 @@ export const AchievementsWrapUpSpotlight: React.FC<{
                 interactive={!!onOpenAchievements}
                 onCardClick={onOpenAchievements ? () => onOpenAchievements() : undefined}
                 minCardHeight={minCardHeight}
+                desktopMaxCards={5}
             />
         </div>
     );
