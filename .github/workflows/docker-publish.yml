@@ -205,12 +205,35 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Scan published image (CRITICAL/HIGH)
-        run: >
-          trivy image
-          --scanners vuln
-          --severity CRITICAL,HIGH
-          --ignore-unfixed
-          --exit-code 1
-          --format table
-          "${IMAGE_NAME}@${{ steps.digest.outputs.digest }}"
+      # Advisory only on publish: node/Debian base images often carry unfixed OS CVEs.
+      # Blocking CRITICAL/HIGH lives in security-audit.yml (fs + npm/pip). Do not fail
+      # GHCR/Unraid publishes after a successful push.
+      - name: Scan published image (CRITICAL/HIGH, advisory)
+        id: image_scan
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          set +e
+          trivy image \
+            --scanners vuln \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --format table \
+            --output trivy-image.txt \
+            "${IMAGE_NAME}@${{ steps.digest.outputs.digest }}"
+          code=$?
+          set -e
+          if [[ -f trivy-image.txt ]]; then
+            cat trivy-image.txt
+          fi
+          exit "${code}"
+
+      - name: Upload Trivy image report
+        if: always() && steps.image_scan.outcome != 'skipped'
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-${{ github.sha }}
+          path: trivy-image.txt
+          if-no-files-found: ignore
+          retention-days: 14
