@@ -1100,6 +1100,7 @@ import {
     clearPortalArrServiceOptionsCache,
 } from './lib/portal-request/index.js';
 import { notifyRequestBecameAvailable } from './lib/notifications/requestAvailable.js';
+import { syncSeerrRequestAvailableNotifications } from './lib/notifications/seerrAvailablePoll.js';
 import {
     listInAppNotificationsForUser,
     countUnreadInAppNotifications,
@@ -10227,6 +10228,7 @@ app.post('/api/tasks/run/:taskId', requireAdmin, async (req, res) => {
                     case 'autoBackup': await runAutoBackupCycle('manual', { force: true }); break;
                     case 'maintenanceIndex': await buildMaintenanceMediaIndex({ actor: req.user, force: true }); break;
                     case 'requestStatusSync': await runPortalRequestStatusSync('manual'); break;
+                    case 'seerrAvailableNotify': await runSeerrAvailableNotify('manual'); break;
                     case 'discoveryAvailabilityCache':
                         await runDiscoveryAvailabilityCacheRebuild('manual', { alreadyStarted: true });
                         break;
@@ -15085,6 +15087,16 @@ const systemJobs = {
         lastDurationMs: null,
         lastError: null,
     },
+    seerrAvailableNotify: {
+        id: 'seerrAvailableNotify',
+        name: 'Seerr Available Notify',
+        description: 'Polls Seerr for requests becoming available and sends email / in-app notifications (requestEngine=seerr).',
+        lastRun: null,
+        nextRun: null,
+        running: false,
+        lastDurationMs: null,
+        lastError: null,
+    },
     discoveryAvailabilityCache: {
         id: 'discoveryAvailabilityCache',
         name: 'Discovery Availability Cache',
@@ -15124,6 +15136,7 @@ const markTaskEnd = (task, error = null) => {
 };
 
 const REQUEST_STATUS_SYNC_INTERVAL_MS = 60 * 1000;
+const SEERR_AVAILABLE_NOTIFY_INTERVAL_MS = 60 * 1000;
 /** Sonarr/Radarr library badge snapshot — Discover serves from disk; rescans infrequently. */
 const DISCOVERY_AVAILABILITY_CACHE_INTERVAL_MS = 12 * 60 * 60 * 1000;
 /** Full Sonarr/Radarr JSON downloads need far longer than Discover browse (8s). */
@@ -15194,6 +15207,52 @@ const runPortalRequestStatusSync = async (reason = 'scheduled') => {
     }
 };
 
+const runSeerrAvailableNotify = async (reason = 'scheduled') => {
+    const job = systemJobs.seerrAvailableNotify;
+    if (job.running) return null;
+    markTaskStart(job);
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (getRequestEngine(config) !== 'seerr') {
+            job.nextRun = null;
+            markTaskEnd(job, null);
+            return { skipped: true, reason: 'requestEngine is not seerr' };
+        }
+        if (config.requestAvailableNotifyEnabled === false) {
+            job.nextRun = new Date(Date.now() + SEERR_AVAILABLE_NOTIFY_INTERVAL_MS).toISOString();
+            markTaskEnd(job, null);
+            return { skipped: true, reason: 'request available notify disabled' };
+        }
+        const gate = getRequestAppGate(config);
+        if (!gate.ready) {
+            job.nextRun = new Date(Date.now() + SEERR_AVAILABLE_NOTIFY_INTERVAL_MS).toISOString();
+            markTaskEnd(job, null);
+            return { skipped: true, reason: gate.error || 'Request app not configured' };
+        }
+        const summary = await syncSeerrRequestAvailableNotifications({
+            config,
+            listRequests: (cfg, opts) => requestAppService.listRequests(cfg, opts),
+            loadUsers: () => loadFile(USERS_PATH, []),
+            sendEmail,
+            hasEmailBeenSent,
+            logEmailSent,
+            resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
+            log,
+        });
+        job.nextRun = new Date(Date.now() + SEERR_AVAILABLE_NOTIFY_INTERVAL_MS).toISOString();
+        markTaskEnd(job, null);
+        if (summary?.notified > 0 || summary?.stamped > 0 || reason === 'manual') {
+            log(`[SeerrAvailableNotify] ${reason}: scanned=${summary.scanned} checked=${summary.checked} notified=${summary.notified} stamped=${summary.stamped} errors=${summary.errors}`);
+        }
+        return summary;
+    } catch (error) {
+        markTaskEnd(job, error);
+        log(`[SeerrAvailableNotify] failed: ${error.message}`);
+        job.nextRun = new Date(Date.now() + SEERR_AVAILABLE_NOTIFY_INTERVAL_MS).toISOString();
+        return null;
+    }
+};
+
 const runSeerrHistoryImport = async (reason = 'manual') => {
     const job = systemJobs.seerrHistoryImport;
     if (job.running) return null;
@@ -15234,6 +15293,16 @@ const startPortalRequestStatusSyncBackgroundTask = () => {
     setInterval(() => {
         runPortalRequestStatusSync('scheduled').catch(() => {});
     }, REQUEST_STATUS_SYNC_INTERVAL_MS);
+};
+
+const startSeerrAvailableNotifyBackgroundTask = () => {
+    systemJobs.seerrAvailableNotify.nextRun = new Date(Date.now() + 25 * 1000).toISOString();
+    setTimeout(() => {
+        runSeerrAvailableNotify('startup').catch(() => {});
+    }, 25 * 1000);
+    setInterval(() => {
+        runSeerrAvailableNotify('scheduled').catch(() => {});
+    }, SEERR_AVAILABLE_NOTIFY_INTERVAL_MS);
 };
 
 const startDiscoveryAvailabilityCacheBackgroundTask = () => {
@@ -24292,6 +24361,7 @@ app.listen(PORT, BIND_HOST, async () => {
     startAnalyticsStatsBackgroundTask();
     startUpgraderIndexBackgroundTask();
     startPortalRequestStatusSyncBackgroundTask();
+    startSeerrAvailableNotifyBackgroundTask();
     startDiscoveryAvailabilityCacheBackgroundTask();
     startScannerWorker(async () => scannerPortalConfig(await loadFile(CONFIG_PATH, {})));
     void refreshScannerAuthCache();

@@ -2945,36 +2945,6 @@ export const SettingsDashboard: React.FC = () => {
                                         <SettingsToggleRow title="Auto-request series from watchlist" checked={portalAutoRequestTv} onChange={setPortalAutoRequestTv} border={false} />
                                     </div>
 
-                                    <div id={getSettingsSectionElementId('request-available-notify')} className="scroll-mt-24 space-y-3">
-                                        <h4 className="text-sm font-bold text-text uppercase tracking-wider">Request available notifications</h4>
-                                        <p className="text-xs text-muted max-w-2xl">
-                                            When a portal request finishes downloading and becomes available, notify the requester (email via SMTP + in-app bell). Members can still opt out in their profile preferences.
-                                        </p>
-                                        <SettingsToggleRow
-                                            title="Enable notifications"
-                                            description="Master switch for request-available alerts (portal engine)."
-                                            checked={requestAvailableNotifyEnabled}
-                                            onChange={setRequestAvailableNotifyEnabled}
-                                            border={false}
-                                        />
-                                        <div className={requestAvailableNotifyEnabled ? 'space-y-0' : 'space-y-0 opacity-50 pointer-events-none'}>
-                                            <SettingsToggleRow
-                                                title="Email"
-                                                description="Send SMTP email when a request becomes available. Requires SMTP under Integrations."
-                                                checked={requestAvailableNotifyEmail}
-                                                onChange={setRequestAvailableNotifyEmail}
-                                                border={false}
-                                            />
-                                            <SettingsToggleRow
-                                                title="In-app bell"
-                                                description="Show an unread notification in the portal nav for the requester."
-                                                checked={requestAvailableNotifyInApp}
-                                                onChange={setRequestAvailableNotifyInApp}
-                                                border={false}
-                                            />
-                                        </div>
-                                    </div>
-
                                     <div id={getSettingsSectionElementId('portal-quotas')} className="scroll-mt-24 space-y-4">
                                         <h4 className="text-sm font-bold text-text uppercase tracking-wider">Quotas</h4>
                                         <SettingFieldLabel
@@ -3062,6 +3032,37 @@ export const SettingsDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+
+                            <div id={getSettingsSectionElementId('request-available-notify')} className="scroll-mt-24 space-y-3">
+                                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Request available notifications</h4>
+                                <p className="text-xs text-muted max-w-2xl">
+                                    When a request finishes downloading and becomes available, notify the requester (email via SMTP + in-app bell).
+                                    Works with Portal status sync and Seerr polling. Members can opt out in profile preferences.
+                                </p>
+                                <SettingsToggleRow
+                                    title="Enable notifications"
+                                    description="Master switch for request-available alerts (portal or Seerr engine)."
+                                    checked={requestAvailableNotifyEnabled}
+                                    onChange={setRequestAvailableNotifyEnabled}
+                                    border={false}
+                                />
+                                <div className={requestAvailableNotifyEnabled ? 'space-y-0' : 'space-y-0 opacity-50 pointer-events-none'}>
+                                    <SettingsToggleRow
+                                        title="Email"
+                                        description="Send SMTP email when a request becomes available. Requires SMTP under Integrations."
+                                        checked={requestAvailableNotifyEmail}
+                                        onChange={setRequestAvailableNotifyEmail}
+                                        border={false}
+                                    />
+                                    <SettingsToggleRow
+                                        title="In-app bell"
+                                        description="Show an unread notification in the portal nav for the requester."
+                                        checked={requestAvailableNotifyInApp}
+                                        onChange={setRequestAvailableNotifyInApp}
+                                        border={false}
+                                    />
+                                </div>
+                            </div>
 
                             <div id={getSettingsSectionElementId('region')} className="scroll-mt-24">
                                 <SettingFieldLabel
