@@ -134,7 +134,6 @@ COPY collexions/ColleXions.py /app/collexions/ColleXions.py
 COPY collexions/plex_identity.py /app/collexions/plex_identity.py
 RUN python3 -m venv /opt/collexions-venv \
     && /opt/collexions-venv/bin/pip install --no-cache-dir -r /app/collexions/requirements.txt \
-    && /opt/collexions-venv/bin/pip install --no-cache-dir bcrypt werkzeug \
     && chown -R node:node /app/collexions /opt/collexions-venv
 
 # Poster Sets headless worker (MediUX / ThePosterDB) — separate from ColleXions.

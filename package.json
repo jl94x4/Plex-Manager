@@ -51,6 +51,8 @@
       "react": "$react",
       "react-dom": "$react-dom",
       "@types/react": "$@types/react"
-    }
+    },
+    "body-parser": "1.20.6",
+    "vite": "6.4.3"
   }
 }

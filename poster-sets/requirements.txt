@@ -1,3 +1,4 @@
-requests>=2.31.0
-beautifulsoup4>=4.12.0
-plexapi>=4.15.0
+# Pinned for reproducible Docker builds (security audit #109).
+requests==2.34.2
+beautifulsoup4==4.15.0
+plexapi==4.18.2
