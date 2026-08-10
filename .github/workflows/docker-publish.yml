@@ -9,10 +9,15 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: publish-docker-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  IMAGE_NAME: ghcr.io/jl94x4/server-manager-portal
 
 jobs:
   publish:
@@ -70,7 +75,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/jl94x4/server-manager-portal"
+          IMAGE="${IMAGE_NAME}"
           SHA_SHORT="${GITHUB_SHA:0:7}"
           TAGS=("${IMAGE}:sha-${SHA_SHORT}")
 
@@ -108,6 +113,11 @@ jobs:
 
       # Docker Hub base pulls (node:*) occasionally time out on GitHub runners.
       # Retry once before failing the job.
+      #
+      # BuildKit OCI provenance/SBOM attestations stay off on the image push:
+      # GHCR has historically returned "unknown blob" for those indexes, and
+      # Unraid update checks need Docker Schema 2 (oci-mediatypes=false).
+      # Provenance + SBOM are attached afterwards via GitHub artifact attestations.
       - name: Build and push
         id: build
         continue-on-error: true
@@ -115,8 +125,6 @@ jobs:
         with:
           context: .
           push: true
-          # GHCR often fails with "unknown blob" when BuildKit attaches
-          # OCI provenance/SBOM attestations to the pushed index.
           provenance: false
           sbom: false
           tags: ${{ steps.meta.outputs.tags }}
@@ -129,6 +137,7 @@ jobs:
             PACKAGE_VERSION_FLOOR=${{ steps.ver.outputs.floor }}
 
       - name: Retry build and push
+        id: retry
         if: steps.build.outcome == 'failure'
         uses: docker/build-push-action@v6
         with:
@@ -142,3 +151,66 @@ jobs:
             GIT_SHA=${{ github.sha }}
             GITHUB_REF=${{ github.ref }}
             PACKAGE_VERSION_FLOOR=${{ steps.ver.outputs.floor }}
+
+      - name: Resolve image digest
+        id: digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIGEST="${{ steps.build.outputs.digest }}"
+          if [[ -z "${DIGEST}" ]]; then
+            DIGEST="${{ steps.retry.outputs.digest }}"
+          fi
+          if [[ -z "${DIGEST}" ]]; then
+            echo "No image digest from build/retry" >&2
+            exit 1
+          fi
+          echo "digest=${DIGEST}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved digest ${DIGEST}"
+
+      - name: Attest build provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+      # Pin by commit SHA (avoid mutable version tags after the 2026 trivy-action compromise).
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          cache: true
+          version: latest
+
+      - name: Generate SBOM
+        run: >
+          trivy image
+          --format cyclonedx
+          --output sbom.cdx.json
+          "${IMAGE_NAME}@${{ steps.digest.outputs.digest }}"
+
+      - name: Attest SBOM
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          sbom-path: sbom.cdx.json
+          push-to-registry: true
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-sbom-${{ github.sha }}
+          path: sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Scan published image (CRITICAL/HIGH)
+        run: >
+          trivy image
+          --scanners vuln
+          --severity CRITICAL,HIGH
+          --ignore-unfixed
+          --exit-code 1
+          --format table
+          "${IMAGE_NAME}@${{ steps.digest.outputs.digest }}"
