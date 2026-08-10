@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Cpu, ListTodo, RefreshCw, TriangleAlert } from 'lucide-react';
+import { useDiscoverI18n } from '../discovery/i18n';
 import { mediaAutomationApi } from './api';
 import type { MediaAutomationStatus } from './types';
 
 type Props = { onOpen?: () => void };
 
 export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
+    const { t } = useDiscoverI18n();
     const [status, setStatus] = useState<MediaAutomationStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -16,11 +18,11 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
             setStatus(await mediaAutomationApi.status());
             setError('');
         } catch (err: any) {
-            setError(err?.message || 'Media Automation unavailable');
+            setError(err?.message || t('homeDashboard.widgets.mediaAutomation.unavailable'));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         void load();
@@ -32,10 +34,10 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
     const failed = Number(status?.failedJobs || status?.metrics?.failed24h || 0);
     const paused = status ? (status.workerPaused ?? status.paused) !== false : false;
     const stats = [
-        { label: 'Queued', value: status?.queuedJobs ?? 0, icon: ListTodo, className: 'text-amber-300' },
-        { label: 'Active', value: status?.activeJobs ?? 0, icon: Cpu, className: 'text-sky-300' },
-        { label: 'Complete', value: status?.completedJobs ?? 0, icon: CheckCircle2, className: 'text-emerald-300' },
-        { label: 'Failed', value: failed, icon: TriangleAlert, className: 'text-red-300' },
+        { label: t('homeDashboard.widgets.mediaAutomation.queued'), value: status?.queuedJobs ?? 0, icon: ListTodo, className: 'text-amber-300' },
+        { label: t('homeDashboard.widgets.mediaAutomation.active'), value: status?.activeJobs ?? 0, icon: Cpu, className: 'text-sky-300' },
+        { label: t('homeDashboard.widgets.mediaAutomation.complete'), value: status?.completedJobs ?? 0, icon: CheckCircle2, className: 'text-emerald-300' },
+        { label: t('homeDashboard.widgets.mediaAutomation.failed'), value: failed, icon: TriangleAlert, className: 'text-red-300' },
     ];
 
     return (
@@ -47,7 +49,7 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
                     </div>
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Media Automation</p>
-                        <p className="font-bold text-text">{paused ? 'Paused (queue only)' : 'Encoding'}</p>
+                        <p className="font-bold text-text">{paused ? t('homeDashboard.widgets.mediaAutomation.pausedQueueOnly') : t('homeDashboard.widgets.mediaAutomation.encoding')}</p>
                     </div>
                 </div>
                 {error && !status ? (
@@ -65,23 +67,23 @@ export const MediaAutomationHomeWidget: React.FC<Props> = ({ onOpen }) => {
                 <div className="flex flex-wrap items-center justify-between gap-2 lg:justify-end">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase ${paused ? 'border-amber-500/30 text-amber-300' : 'border-emerald-500/30 text-emerald-300'}`}>
-                            {paused ? 'Paused (queue only)' : 'Encoding'}
+                            {paused ? t('homeDashboard.widgets.mediaAutomation.pausedQueueOnly') : t('homeDashboard.widgets.mediaAutomation.encoding')}
                         </span>
                         {dryRun && (
                             <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-200">
-                                Dry-run
+                                {t('homeDashboard.widgets.mediaAutomation.dryRun')}
                             </span>
                         )}
                         {failed > 0 && (
                             <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold uppercase text-red-200">
-                                {failed} failed
+                                {t('homeDashboard.widgets.mediaAutomation.failedCount', { count: failed })}
                             </span>
                         )}
                     </div>
-                    <button type="button" onClick={() => void load()} className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text" title="Refresh">
+                    <button type="button" onClick={() => void load()} className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text" title={t('homeDashboard.admin.refresh')}>
                         <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                     </button>
-                    {onOpen && <button type="button" onClick={onOpen} className="text-xs font-bold text-violet-300 hover:underline">Open</button>}
+                    {onOpen && <button type="button" onClick={onOpen} className="text-xs font-bold text-violet-300 hover:underline">{t('homeDashboard.widgets.mediaAutomation.open')}</button>}
                 </div>
             </div>
         </div>
