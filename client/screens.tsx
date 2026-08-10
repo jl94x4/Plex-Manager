@@ -11711,7 +11711,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 {sidebarIdentityPosition !== 'top' && renderServerIdentity('bottom')}
 
                 <div className="mt-2 pt-2 border-t border-white/10 shrink-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-stretch gap-2">
                         <button
                             type="button"
                             onClick={() => setProfileOpen(true)}
@@ -11733,9 +11733,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         </button>
                         <InAppNotificationsBell
                             onNavigate={(route, options) => onNavigate(route as any, options)}
-                            className="shrink-0"
+                            className="shrink-0 self-stretch flex"
                             placement="up"
-                            buttonClassName="relative w-10 h-10 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted hover:text-text hover:border-plex/40 hover:bg-white/10 transition-all"
+                            buttonClassName="relative h-full aspect-square flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted hover:text-text hover:border-plex/40 hover:bg-white/10 transition-all"
                         />
                     </div>
                     <div className="mt-1 flex flex-col items-center gap-0.5">

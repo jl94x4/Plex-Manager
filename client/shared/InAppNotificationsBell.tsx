@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
 import { apiFetch } from './api';
 import { useDiscoverI18n } from '../discovery/i18n';
@@ -35,6 +36,14 @@ type Props = {
     placement?: 'up' | 'down';
 };
 
+type PanelBox = {
+    left: number;
+    width: number;
+    maxHeight: number;
+    top?: number;
+    bottom?: number;
+};
+
 export const InAppNotificationsBell: React.FC<Props> = ({
     onNavigate,
     className = '',
@@ -46,7 +55,9 @@ export const InAppNotificationsBell: React.FC<Props> = ({
     const [items, setItems] = useState<InAppNotification[]>([]);
     const [unread, setUnread] = useState(0);
     const [loading, setLoading] = useState(false);
-    const rootRef = useRef<HTMLDivElement>(null);
+    const [panelBox, setPanelBox] = useState<PanelBox | null>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
 
     const refresh = useCallback(async () => {
         try {
@@ -67,10 +78,57 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         return () => window.clearInterval(id);
     }, [refresh]);
 
+    const updatePanelBox = useCallback(() => {
+        const button = buttonRef.current;
+        if (!button) return;
+        const rect = button.getBoundingClientRect();
+        const margin = 8;
+        const width = Math.min(320, Math.max(220, window.innerWidth - margin * 2));
+        // Prefer aligning the panel’s right edge with the bell, then clamp into the viewport.
+        let left = rect.right - width;
+        left = Math.min(Math.max(left, margin), window.innerWidth - margin - width);
+
+        if (placement === 'up') {
+            const maxHeight = Math.max(120, Math.min(384, rect.top - margin * 2));
+            setPanelBox({
+                left,
+                width,
+                maxHeight,
+                bottom: window.innerHeight - rect.top + margin,
+            });
+            return;
+        }
+
+        const maxHeight = Math.max(120, Math.min(384, window.innerHeight - rect.bottom - margin * 2));
+        setPanelBox({
+            left,
+            width,
+            maxHeight,
+            top: rect.bottom + margin,
+        });
+    }, [placement]);
+
+    useLayoutEffect(() => {
+        if (!open) {
+            setPanelBox(null);
+            return;
+        }
+        updatePanelBox();
+        const onWin = () => updatePanelBox();
+        window.addEventListener('resize', onWin);
+        window.addEventListener('scroll', onWin, true);
+        return () => {
+            window.removeEventListener('resize', onWin);
+            window.removeEventListener('scroll', onWin, true);
+        };
+    }, [open, updatePanelBox]);
+
     useEffect(() => {
         if (!open) return;
         const onDoc = (event: MouseEvent) => {
-            if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+            const target = event.target as Node;
+            if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+            setOpen(false);
         };
         document.addEventListener('mousedown', onDoc);
         return () => document.removeEventListener('mousedown', onDoc);
@@ -117,9 +175,69 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         onNavigate?.('discovery');
     };
 
+    const panel = open && panelBox && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+                ref={panelRef}
+                className="fixed overflow-hidden rounded-xl border border-border bg-card shadow-2xl z-[400]"
+                style={{
+                    left: panelBox.left,
+                    width: panelBox.width,
+                    maxHeight: panelBox.maxHeight,
+                    top: panelBox.top,
+                    bottom: panelBox.bottom,
+                }}
+            >
+                <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/80">
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('notifications.title')}</p>
+                    {unread > 0 && (
+                        <button
+                            type="button"
+                            onClick={markAllRead}
+                            className="text-[11px] font-semibold text-plex hover:underline"
+                        >
+                            {t('notifications.markAllRead')}
+                        </button>
+                    )}
+                </div>
+                <div className="overflow-y-auto max-h-[inherit] custom-scrollbar" style={{ maxHeight: `calc(${panelBox.maxHeight}px - 2.5rem)` }}>
+                    {loading && !items.length ? (
+                        <p className="px-3 py-6 text-sm text-muted text-center">{t('common.loadingMore')}</p>
+                    ) : !items.length ? (
+                        <p className="px-3 py-6 text-sm text-muted text-center">{t('notifications.empty')}</p>
+                    ) : (
+                        items.map((item) => (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => openItem(item)}
+                                className={`w-full text-left px-3 py-2.5 border-b border-border/40 hover:bg-white/5 transition-colors ${item.readAt ? 'opacity-70' : ''}`}
+                            >
+                                <div className="flex items-start gap-2">
+                                    {!item.readAt && (
+                                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-plex shrink-0" />
+                                    )}
+                                    <div className={`min-w-0 flex-1 ${item.readAt ? 'pl-3.5' : ''}`}>
+                                        <p className="text-sm font-semibold text-text truncate">{item.title}</p>
+                                        {item.body ? (
+                                            <p className="text-xs text-muted mt-0.5 line-clamp-2">{item.body}</p>
+                                        ) : null}
+                                        <p className="text-[10px] text-muted/80 mt-1">{formatRelative(item.createdAt, t)}</p>
+                                    </div>
+                                </div>
+                            </button>
+                        ))
+                    )}
+                </div>
+            </div>,
+            document.body,
+        )
+        : null;
+
     return (
-        <div className={`relative ${className}`} ref={rootRef}>
+        <div className={`relative ${className}`}>
             <button
+                ref={buttonRef}
                 type="button"
                 onClick={() => {
                     setOpen((v) => !v);
@@ -137,55 +255,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                     </span>
                 )}
             </button>
-            {open && (
-                <div
-                    className={`absolute right-0 w-[min(20rem,calc(100vw-2rem))] max-h-[24rem] overflow-hidden rounded-xl border border-border bg-card shadow-2xl z-[90] ${
-                        placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'
-                    }`}
-                >
-                    <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/80">
-                        <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('notifications.title')}</p>
-                        {unread > 0 && (
-                            <button
-                                type="button"
-                                onClick={markAllRead}
-                                className="text-[11px] font-semibold text-plex hover:underline"
-                            >
-                                {t('notifications.markAllRead')}
-                            </button>
-                        )}
-                    </div>
-                    <div className="overflow-y-auto max-h-[20rem] custom-scrollbar">
-                        {loading && !items.length ? (
-                            <p className="px-3 py-6 text-sm text-muted text-center">{t('common.loadingMore')}</p>
-                        ) : !items.length ? (
-                            <p className="px-3 py-6 text-sm text-muted text-center">{t('notifications.empty')}</p>
-                        ) : (
-                            items.map((item) => (
-                                <button
-                                    key={item.id}
-                                    type="button"
-                                    onClick={() => openItem(item)}
-                                    className={`w-full text-left px-3 py-2.5 border-b border-border/40 hover:bg-white/5 transition-colors ${item.readAt ? 'opacity-70' : ''}`}
-                                >
-                                    <div className="flex items-start gap-2">
-                                        {!item.readAt && (
-                                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-plex shrink-0" />
-                                        )}
-                                        <div className={`min-w-0 flex-1 ${item.readAt ? 'pl-3.5' : ''}`}>
-                                            <p className="text-sm font-semibold text-text truncate">{item.title}</p>
-                                            {item.body ? (
-                                                <p className="text-xs text-muted mt-0.5 line-clamp-2">{item.body}</p>
-                                            ) : null}
-                                            <p className="text-[10px] text-muted/80 mt-1">{formatRelative(item.createdAt, t)}</p>
-                                        </div>
-                                    </div>
-                                </button>
-                            ))
-                        )}
-                    </div>
-                </div>
-            )}
+            {panel}
         </div>
     );
 };
