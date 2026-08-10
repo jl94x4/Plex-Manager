@@ -13139,14 +13139,26 @@ const fetchTautulliUsers = async (config) => {
 
 const resolveTautulliUserId = (users, { username, email, plexAccountName }) => {
     const norm = (v) => String(v || '').trim().toLowerCase();
+    const compact = (v) => norm(v).replace(/[\s._-]+/g, '');
     if (!Array.isArray(users) || users.length === 0) return null;
 
-    const candidates = [username, plexAccountName, email].filter(Boolean).map(norm);
-    for (const candidate of candidates) {
+    const candidates = [username, plexAccountName, email]
+        .filter(Boolean)
+        .map(norm);
+    // Email local-part often matches a Tautulli username better than the full address.
+    for (const raw of [email, username, plexAccountName].filter(Boolean)) {
+        const local = String(raw).includes('@') ? String(raw).split('@')[0] : null;
+        if (local) candidates.push(norm(local));
+    }
+    const uniqueCandidates = [...new Set(candidates.filter(Boolean))];
+
+    for (const candidate of uniqueCandidates) {
         const match = users.find((u) =>
             norm(u.username) === candidate
             || norm(u.friendly_name) === candidate
-            || norm(u.email) === candidate,
+            || norm(u.email) === candidate
+            || compact(u.username) === compact(candidate)
+            || compact(u.friendly_name) === compact(candidate),
         );
         if (match?.user_id != null && match.user_id !== '') return String(match.user_id);
     }
