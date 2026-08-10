@@ -183,6 +183,13 @@ export const en = {
         chipFreshTv: 'New Series',
         achievementsNext: 'Next unlock: {name} ({progress})',
         achievementsPinned: 'Pinned: {name} ({progress})',
+        achievementFallbackBadge: 'badge',
+        achievementProgressEarned: 'earned',
+    },
+    notifications: {
+        title: 'Notifications',
+        markAllRead: 'Mark all read',
+        empty: 'No notifications yet',
     },
     home: {
         forYou: 'For you',

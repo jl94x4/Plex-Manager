@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { apiFetch } from './api';
+import { useDiscoverI18n } from '../discovery/i18n';
+import type { DiscoverTranslate } from '../discovery/i18n/types';
 
 export type InAppNotification = {
     id: string;
@@ -12,17 +14,17 @@ export type InAppNotification = {
     createdAt?: string;
 };
 
-const formatRelative = (iso?: string) => {
+const formatRelative = (iso: string | undefined, t: DiscoverTranslate) => {
     if (!iso) return '';
     const ms = Date.now() - new Date(iso).getTime();
     if (!Number.isFinite(ms) || ms < 0) return '';
     const mins = Math.floor(ms / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m`;
+    if (mins < 1) return t('common.justNow');
+    if (mins < 60) return t('common.minutesAgo', { count: mins });
     const hours = Math.floor(mins / 60);
-    if (hours < 48) return `${hours}h`;
+    if (hours < 48) return t('common.hoursAgo', { count: hours });
     const days = Math.floor(hours / 24);
-    return `${days}d`;
+    return t('common.daysAgo', { count: days });
 };
 
 type Props = {
@@ -39,6 +41,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
     buttonClassName = '',
     placement = 'down',
 }) => {
+    const { t } = useDiscoverI18n();
     const [open, setOpen] = useState(false);
     const [items, setItems] = useState<InAppNotification[]>([]);
     const [unread, setUnread] = useState(0);
@@ -123,8 +126,8 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                     if (!open) refresh();
                 }}
                 className={buttonClassName || 'relative text-muted hover:text-text transition-colors'}
-                title="Notifications"
-                aria-label="Notifications"
+                title={t('notifications.title')}
+                aria-label={t('notifications.title')}
                 aria-expanded={open}
             >
                 <Bell className="w-4 h-4" />
@@ -141,22 +144,22 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                     }`}
                 >
                     <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/80">
-                        <p className="text-xs font-bold uppercase tracking-wider text-muted">Notifications</p>
+                        <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('notifications.title')}</p>
                         {unread > 0 && (
                             <button
                                 type="button"
                                 onClick={markAllRead}
                                 className="text-[11px] font-semibold text-plex hover:underline"
                             >
-                                Mark all read
+                                {t('notifications.markAllRead')}
                             </button>
                         )}
                     </div>
                     <div className="overflow-y-auto max-h-[20rem] custom-scrollbar">
                         {loading && !items.length ? (
-                            <p className="px-3 py-6 text-sm text-muted text-center">Loading…</p>
+                            <p className="px-3 py-6 text-sm text-muted text-center">{t('common.loadingMore')}</p>
                         ) : !items.length ? (
-                            <p className="px-3 py-6 text-sm text-muted text-center">No notifications yet</p>
+                            <p className="px-3 py-6 text-sm text-muted text-center">{t('notifications.empty')}</p>
                         ) : (
                             items.map((item) => (
                                 <button
@@ -174,7 +177,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                             {item.body ? (
                                                 <p className="text-xs text-muted mt-0.5 line-clamp-2">{item.body}</p>
                                             ) : null}
-                                            <p className="text-[10px] text-muted/80 mt-1">{formatRelative(item.createdAt)}</p>
+                                            <p className="text-[10px] text-muted/80 mt-1">{formatRelative(item.createdAt, t)}</p>
                                         </div>
                                     </div>
                                 </button>
