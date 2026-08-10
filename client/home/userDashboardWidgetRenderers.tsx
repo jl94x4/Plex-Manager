@@ -35,6 +35,7 @@ import { UnlockCelebration } from '../achievements/UnlockCelebration';
 import { tAchievements } from '../achievements/i18n';
 import { apiFetch } from '../shared/api';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
+import type { DiscoverTranslate } from '../discovery/i18n/types';
 
 const AchievementsHomeWidgetConnected: React.FC = () => {
     const [summary, setSummary] = useState<any>(null);
@@ -125,6 +126,7 @@ type PosterCardProps = {
 };
 
 export type UserDashboardWidgetDeps = {
+    t: DiscoverTranslate;
     sessionInfo: any;
     publicConfig?: any;
     user: any;
@@ -181,7 +183,7 @@ const formatBytes = (bytes: number) => {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 };
 
-const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jellyfin' }> = ({ serverStats, variant = 'plex' }) => {
+const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jellyfin'; t: DiscoverTranslate }> = ({ serverStats, variant = 'plex', t }) => {
     if (variant === 'jellyfin') {
         const totalBytes = Number(serverStats.totalCatalogBytes) || 0;
         const movies = Number(serverStats.movies) || 0;
@@ -190,27 +192,27 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
         return (
             <div className="space-y-4">
                 <div className="rounded-2xl border border-white/5 bg-background/40 p-4 md:p-5">
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Total Catalog</p>
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{t('homeDashboard.totalCatalog')}</p>
                     <p className="text-3xl md:text-4xl font-black text-text mt-1 tracking-tight">{formatBytes(totalBytes)}</p>
                     <p className="text-xs text-muted mt-1.5">
-                        {movies.toLocaleString()} movies · {shows.toLocaleString()} shows · {episodes.toLocaleString()} episodes
+                        {t('homeDashboard.catalogSummary', { movies: movies.toLocaleString(), shows: shows.toLocaleString(), episodes: episodes.toLocaleString() })}
                     </p>
                 </div>
                 <div className="grid grid-cols-3 gap-2.5">
                     <div className="bg-background/60 p-3 rounded-xl border border-white/5 text-center">
                         <Film className="w-5 h-5 text-plex mx-auto mb-1.5 opacity-80" />
                         <p className="text-xl font-black text-text">{movies.toLocaleString()}</p>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted mt-0.5">Movies</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted mt-0.5">{t('mediaType.movies')}</p>
                     </div>
                     <div className="bg-background/60 p-3 rounded-xl border border-white/5 text-center">
                         <Tv className="w-5 h-5 text-plex mx-auto mb-1.5 opacity-80" />
                         <p className="text-xl font-black text-text">{shows.toLocaleString()}</p>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted mt-0.5">Shows</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted mt-0.5">{t('homeDashboard.shows')}</p>
                     </div>
                     <div className="bg-background/60 p-3 rounded-xl border border-white/5 text-center">
                         <Layers className="w-5 h-5 text-plex mx-auto mb-1.5 opacity-80" />
                         <p className="text-xl font-black text-text">{episodes.toLocaleString()}</p>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted mt-0.5">Episodes</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted mt-0.5">{t('homeDashboard.episodes')}</p>
                     </div>
                 </div>
             </div>
@@ -231,23 +233,23 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
 
     // Distinct hues (not adjacent warm tones) so the stacked bar reads clearly — issue #100.
     const segments = [
-        { label: 'Movies', bytes: movies, count: movieCount, countLabel: 'movies', icon: Film, color: 'bg-sky-400', dot: 'bg-sky-400' },
-        { label: 'TV Shows', bytes: shows, count: showCount, countLabel: 'shows', icon: Tv, color: 'bg-emerald-400', dot: 'bg-emerald-400' },
-        { label: 'Music', bytes: music, count: musicCount, countLabel: 'albums', icon: Music, color: 'bg-violet-400', dot: 'bg-violet-400' },
+        { label: t('mediaType.movies'), bytes: movies, count: movieCount, countLabel: t('homeDashboard.moviesLower'), icon: Film, color: 'bg-sky-400', dot: 'bg-sky-400' },
+        { label: t('homeDashboard.tvShows'), bytes: shows, count: showCount, countLabel: t('homeDashboard.showsLower'), icon: Tv, color: 'bg-emerald-400', dot: 'bg-emerald-400' },
+        { label: t('mediaType.music'), bytes: music, count: musicCount, countLabel: t('homeDashboard.albumsLower'), icon: Music, color: 'bg-violet-400', dot: 'bg-violet-400' },
     ].filter((segment) => segment.bytes > 0 || segment.count > 0);
 
     if (segments.length === 0) return null;
 
     const pct = (bytes: number) => Math.max(bytes > 0 ? (bytes / total) * 100 : 0, 0);
     const summaryBits = [
-        episodeCount > 0 ? `${episodeCount.toLocaleString()} episodes` : null,
-        trackCount > 0 ? `${trackCount.toLocaleString()} tracks` : null,
+        episodeCount > 0 ? t('homeDashboard.episodeCountLabel', { count: episodeCount.toLocaleString() }) : null,
+        trackCount > 0 ? t('homeDashboard.trackCountLabel', { count: trackCount.toLocaleString() }) : null,
     ].filter(Boolean);
 
     return (
         <div className="space-y-3">
             <div>
-                <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Total Library</p>
+                <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{t('homeDashboard.totalLibrary')}</p>
                 <p className="text-2xl md:text-3xl font-black text-text mt-1 tracking-tight">{formatBytes(total)}</p>
                 {summaryBits.length > 0 ? (
                     <p className="text-xs text-muted mt-1">{summaryBits.join(' · ')}</p>
@@ -299,6 +301,7 @@ const isActiveShortTermTrial = (user: any, daysLeft: number | null) => (
 
 export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
     const {
+        t,
         sessionInfo,
         publicConfig,
         user,
@@ -370,11 +373,11 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                     <div className="glass-card p-4 md:p-5 shadow-xl flex flex-col justify-center flex-shrink-0">
                         <div className="flex flex-col gap-3 md:gap-4">
                             <div>
-                                <p className="text-muted text-xs uppercase tracking-widest font-semibold mb-3">Access Status</p>
+                                <p className="text-muted text-xs uppercase tracking-widest font-semibold mb-3">{t('homeDashboard.accessStatus')}</p>
                                 <div className="flex flex-wrap items-center gap-3">
                                     <span className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black border uppercase tracking-wider shadow-sm ${isRevoked ? 'bg-red-500/10 border-red-500/30 text-red-400' : isExpiringSoon ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400' : 'bg-green-500/10 border-green-500/30 text-green-400'}`}>
                                         <span className={`w-2 h-2 rounded-full animate-pulse ${isRevoked ? 'bg-red-400' : isExpiringSoon ? 'bg-yellow-400' : 'bg-green-400'}`} />
-                                        {user.plexAccessStatus}{isActiveShortTermTrial(user, daysLeft) && ' · Temp Access'}
+                                        {user.plexAccessStatus}{isActiveShortTermTrial(user, daysLeft) && ` · ${t('homeDashboard.tempAccess')}`}
                                     </span>
                                     {user.expiryDate ? (
                                         <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold bg-white/5 border border-white/10 text-text shadow-sm">
@@ -390,15 +393,15 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                             </div>
                             {isRevoked && daysLeft !== null && daysLeft >= 0 && (
                             <button className="w-full mt-2 px-6 py-2.5 bg-plex text-background rounded-xl font-bold hover:bg-plex-hover transition-colors shadow-lg" onClick={handleRelink}>
-                                    Re-link Account
+                                    {t('homeDashboard.relinkAccount')}
                                 </button>
                             )}
                             {daysLeft !== null && (
                                 <div className="bg-background/40 rounded-xl p-5 border border-white/5 mt-2">
                                     <div className="flex justify-between items-baseline mb-3">
-                                        <span className="text-muted text-xs uppercase tracking-widest font-semibold">Time Remaining</span>
+                                        <span className="text-muted text-xs uppercase tracking-widest font-semibold">{t('homeDashboard.timeRemaining')}</span>
                                         <span className={`font-black text-3xl md:text-4xl leading-none ${isExpired || isRevoked ? 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.3)]' : isExpiringSoon ? 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.3)]' : 'text-plex drop-shadow-[0_0_8px_rgba(229,160,13,0.3)]'}`}>
-                                            {daysLeft}<span className="text-base font-semibold text-muted ml-1.5">{daysLeft === 1 ? 'day' : 'days'}</span>
+                                            {daysLeft}<span className="text-base font-semibold text-muted ml-1.5">{t('homeDashboard.day', { count: daysLeft })}</span>
                                         </span>
                                     </div>
                                     <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden shadow-inner border border-white/5">
@@ -407,12 +410,12 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                         </div>
                                     </div>
                                     {isExpired && (
-                                        <p className="text-red-400/90 text-sm font-medium mt-3 flex items-center gap-2">Expired</p>
+                                        <p className="text-red-400/90 text-sm font-medium mt-3 flex items-center gap-2">{t('homeDashboard.expired')}</p>
                                     )}
                                     {isExpiringSoon && !isExpired && (
                                         <p className="text-yellow-400/90 text-sm font-medium mt-3 flex items-center gap-2">
                                             <AlertTriangle className="w-4 h-4 shrink-0" />
-                                            Expiring soon — contact admin
+                                            {t('homeDashboard.expiringSoonContactAdmin')}
                                         </p>
                                     )}
                                 </div>
@@ -424,7 +427,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                 return (
                     <div className="flex items-center gap-3 text-muted text-sm bg-card p-6 rounded-2xl border border-border shadow-lg flex-shrink-0">
                         <div className="w-5 h-5 rounded-full border-2 border-plex border-t-transparent animate-spin flex-shrink-0" />
-                        Setting up your 3-Day Temporary Access...
+                        {t('homeDashboard.settingUpTempAccess')}
                     </div>
                 );
             case 'quickActions':
@@ -454,7 +457,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                         <div className="flex items-start gap-3">
                             <Megaphone className="w-5 h-5 text-plex mt-0.5 shrink-0" />
                             <div>
-                                <h3 className="text-plex font-bold text-sm uppercase tracking-wider mb-1">Announcement</h3>
+                                <h3 className="text-plex font-bold text-sm uppercase tracking-wider mb-1">{t('homeDashboard.announcement')}</h3>
                                 <p className="text-text whitespace-pre-wrap text-sm leading-relaxed">{publicConfig.announcement}</p>
                             </div>
                         </div>
@@ -469,12 +472,12 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                     <div className="glass-card p-4 md:p-5 shadow-lg">
                         <p className="text-plex font-bold text-base mb-1 flex items-center gap-2">
                             <Gift className="w-4 h-4 shrink-0" />
-                            Invite Friends
+                            {t('homeDashboard.inviteFriends')}
                         </p>
-                        <p className="text-muted text-sm leading-relaxed mb-4">Share this link. They get temporary access, and you get reward days!</p>
+                        <p className="text-muted text-sm leading-relaxed mb-4">{t('homeDashboard.inviteFriendsHint')}</p>
                         <div className="flex flex-col gap-2">
                             <input type="text" readOnly value={referralUrl} className="w-full p-3 rounded-lg border border-border bg-background text-text text-sm outline-none" />
-                            <button onClick={() => { navigator.clipboard.writeText(referralUrl); setToast({ id: 99, message: 'Copied to clipboard!', type: 'success' }); }} className="w-full py-2.5 bg-plex text-background rounded-lg font-bold hover:bg-plex-hover transition-colors shadow-md">Copy Link</button>
+                            <button onClick={() => { navigator.clipboard.writeText(referralUrl); setToast({ id: 99, message: t('homeDashboard.copiedToClipboard'), type: 'success' }); }} className="w-full py-2.5 bg-plex text-background rounded-lg font-bold hover:bg-plex-hover transition-colors shadow-md">{t('homeDashboard.copyLink')}</button>
                         </div>
                     </div>
                     );
@@ -483,14 +486,14 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                 if (!user) return null;
                 return (
                     <div className="glass-card p-4 md:p-5 shadow-lg flex flex-col">
-                        <p className="text-muted text-xs uppercase tracking-widest font-semibold mb-3 flex-shrink-0">Preferences</p>
+                        <p className="text-muted text-xs uppercase tracking-widest font-semibold mb-3 flex-shrink-0">{t('homeDashboard.preferences')}</p>
                         <div className="flex flex-col gap-4">
                             <div className="flex items-center justify-between gap-4">
                                 <div>
-                                    <p className="text-text font-bold text-sm">Weekly Newsletter</p>
-                                    <p className="text-muted text-xs mt-1 leading-relaxed">Automated library updates delivered to your inbox</p>
+                                    <p className="text-text font-bold text-sm">{t('homeDashboard.weeklyNewsletter')}</p>
+                                    <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.weeklyNewsletterHint')}</p>
                                 </div>
-                                <button onClick={handleToggleNewsletter} aria-label="Toggle newsletter"
+                                <button onClick={handleToggleNewsletter} aria-label={t('homeDashboard.toggleNewsletterAria')}
                                     className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${!optOutNewsletter ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
                                     <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${!optOutNewsletter ? 'translate-x-8' : 'translate-x-1'}`} />
                                 </button>
@@ -498,10 +501,10 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                             {handleToggleRequestAvailableEmail && (
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
-                                        <p className="text-text font-bold text-sm">Request available email</p>
-                                        <p className="text-muted text-xs mt-1 leading-relaxed">Email when a request finishes and is ready to watch</p>
+                                        <p className="text-text font-bold text-sm">{t('homeDashboard.requestAvailableEmail')}</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.requestAvailableEmailHint')}</p>
                                     </div>
-                                    <button onClick={handleToggleRequestAvailableEmail} aria-label="Toggle request available email"
+                                    <button onClick={handleToggleRequestAvailableEmail} aria-label={t('homeDashboard.toggleRequestAvailableEmailAria')}
                                         className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableEmail ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableEmail ? 'translate-x-8' : 'translate-x-1'}`} />
                                     </button>
@@ -510,10 +513,10 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                             {handleToggleRequestAvailableInApp && (
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
-                                        <p className="text-text font-bold text-sm">Request available in-app</p>
-                                        <p className="text-muted text-xs mt-1 leading-relaxed">Show a bell notification when your request is available</p>
+                                        <p className="text-text font-bold text-sm">{t('homeDashboard.requestAvailableInApp')}</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.requestAvailableInAppHint')}</p>
                                     </div>
-                                    <button onClick={handleToggleRequestAvailableInApp} aria-label="Toggle request available in-app"
+                                    <button onClick={handleToggleRequestAvailableInApp} aria-label={t('homeDashboard.toggleRequestAvailableInAppAria')}
                                         className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableInApp ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableInApp ? 'translate-x-8' : 'translate-x-1'}`} />
                                     </button>
@@ -522,10 +525,10 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                             {handleToggleRequestAvailableWebPush && (
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
-                                        <p className="text-text font-bold text-sm">Request available push</p>
-                                        <p className="text-muted text-xs mt-1 leading-relaxed">Browser notification when your request is available</p>
+                                        <p className="text-text font-bold text-sm">{t('homeDashboard.requestAvailablePush')}</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.requestAvailablePushHint')}</p>
                                     </div>
-                                    <button onClick={handleToggleRequestAvailableWebPush} aria-label="Toggle request available web push"
+                                    <button onClick={handleToggleRequestAvailableWebPush} aria-label={t('homeDashboard.toggleRequestAvailableWebPushAria')}
                                         className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableWebPush ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableWebPush ? 'translate-x-8' : 'translate-x-1'}`} />
                                     </button>
@@ -534,10 +537,10 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                             {handleToggleRequestAvailableDiscord && (
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
-                                        <p className="text-text font-bold text-sm">Request available Discord</p>
-                                        <p className="text-muted text-xs mt-1 leading-relaxed">Include your requests in the server Discord webhook</p>
+                                        <p className="text-text font-bold text-sm">{t('homeDashboard.requestAvailableDiscord')}</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.requestAvailableDiscordHint')}</p>
                                     </div>
-                                    <button onClick={handleToggleRequestAvailableDiscord} aria-label="Toggle request available Discord"
+                                    <button onClick={handleToggleRequestAvailableDiscord} aria-label={t('homeDashboard.toggleRequestAvailableDiscordAria')}
                                         className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableDiscord ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableDiscord ? 'translate-x-8' : 'translate-x-1'}`} />
                                     </button>
@@ -546,10 +549,10 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                             {handleToggleWebPush && (
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
-                                        <p className="text-text font-bold text-sm">Browser push (all alerts)</p>
-                                        <p className="text-muted text-xs mt-1 leading-relaxed">Push for in-app bell notifications on this account</p>
+                                        <p className="text-text font-bold text-sm">{t('homeDashboard.browserPushAllAlerts')}</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.browserPushAllAlertsHint')}</p>
                                     </div>
-                                    <button onClick={handleToggleWebPush} aria-label="Toggle browser push"
+                                    <button onClick={handleToggleWebPush} aria-label={t('homeDashboard.toggleBrowserPushAria')}
                                         className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyWebPush ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyWebPush ? 'translate-x-8' : 'translate-x-1'}`} />
                                     </button>
@@ -559,8 +562,8 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                 <div className="flex flex-col gap-2 pt-1">
                                     <p className="text-muted text-xs">
                                         {browserPushReady
-                                            ? 'This browser is subscribed for push notifications.'
-                                            : 'Subscribe this browser to receive push notifications.'}
+                                            ? t('homeDashboard.browserPushSubscribed')
+                                            : t('homeDashboard.browserPushSubscribe')}
                                     </p>
                                     <div className="flex flex-wrap gap-2">
                                         {!browserPushReady && handleEnableBrowserPush && (
@@ -569,7 +572,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                                 onClick={handleEnableBrowserPush}
                                                 className="px-3 py-2 rounded-lg bg-plex text-background text-xs font-bold hover:bg-plex-hover"
                                             >
-                                                Enable on this device
+                                                {t('homeDashboard.enableOnThisDevice')}
                                             </button>
                                         )}
                                         {browserPushReady && handleDisableBrowserPush && (
@@ -578,7 +581,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                                 onClick={handleDisableBrowserPush}
                                                 className="px-3 py-2 rounded-lg border border-white/15 bg-white/5 text-xs font-bold text-text hover:bg-white/10"
                                             >
-                                                Disable on this device
+                                                {t('homeDashboard.disableOnThisDevice')}
                                             </button>
                                         )}
                                     </div>
@@ -596,20 +599,20 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                             <div className="mb-3 md:mb-4 flex-shrink-0">
                                 <p className="text-plex font-bold text-base mb-1 flex items-center gap-2">
                                     <Clapperboard className="w-4 h-4 shrink-0" />
-                                    Enjoying your Temporary Access?
+                                    {t('homeDashboard.enjoyingTempAccess')}
                                 </p>
                                 <p className="text-muted text-sm leading-relaxed">
-                                    Once your {daysLeft === 1 ? '1-day' : `${daysLeft}-day`} access ends, you'll lose access. Get in touch with the admin to extend your access!
+                                    {t('homeDashboard.tempAccessEnds', { count: daysLeft || 0 })}
                                 </p>
                             </div>
                         ) : (
                             <div className="mb-3 md:mb-4 flex-shrink-0">
                                 <p className="text-text font-bold text-base mb-1 flex items-center gap-2">
                                     <MessageCircle className="w-4 h-4 shrink-0" />
-                                    Need Help?
+                                    {t('homeDashboard.needHelp')}
                                 </p>
                                 <p className="text-muted text-sm leading-relaxed">
-                                    Contact the owner to extend your access, report an issue, or get support.
+                                    {t('homeDashboard.contactOwnerHint')}
                                 </p>
                             </div>
                         )}
@@ -624,12 +627,12 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                 {publicConfig?.contactEmail && (
                                     <a href={`mailto:${publicConfig.contactEmail}`}
                                         className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border bg-white/5 border-white/10 text-text hover:bg-white/10">
-                                        Email
+                                        {t('homeDashboard.email')}
                                     </a>
                                 )}
                             </div>
                         ) : (
-                            <p className="text-muted text-xs mt-auto">Contact details have not been configured by the server owner yet.</p>
+                            <p className="text-muted text-xs mt-auto">{t('homeDashboard.contactNotConfigured')}</p>
                         )}
                     </div>
                 );
@@ -639,14 +642,14 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                     return (
                         <div className="glass-card p-4 md:p-5 shadow-xl w-full self-start">
                             <div className="flex items-center justify-between mb-3 md:mb-4">
-                                <p className="text-muted text-sm uppercase tracking-widest font-semibold">{mediaServerLabel} Library</p>
+                                <p className="text-muted text-sm uppercase tracking-widest font-semibold">{t('homeDashboard.providerLibrary', { provider: mediaServerLabel })}</p>
                             </div>
                             {serverDataLoading && !serverStats ? (
                                 <LibraryStatsSkeleton />
                             ) : serverStats ? (
-                                <LibraryStatsContent serverStats={serverStats} variant="jellyfin" />
+                                <LibraryStatsContent serverStats={serverStats} variant="jellyfin" t={t} />
                             ) : (
-                                <div className="text-muted text-sm bg-background/50 p-4 rounded-xl border border-white/5">Could not load {mediaServerLabel} library statistics at this time.</div>
+                                <div className="text-muted text-sm bg-background/50 p-4 rounded-xl border border-white/5">{t('homeDashboard.providerLibraryStatsFailed', { provider: mediaServerLabel })}</div>
                             )}
                         </div>
                     );
@@ -654,20 +657,20 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                 return (
                     <div className="glass-card p-4 md:p-5 shadow-xl w-full self-start">
                         <div className="flex items-center justify-between mb-3 md:mb-4">
-                            <p className="text-muted text-sm uppercase tracking-widest font-semibold">Server Library Size</p>
+                            <p className="text-muted text-sm uppercase tracking-widest font-semibold">{t('homeDashboard.serverLibrarySize')}</p>
                             {sessionInfo.session.isAdmin && <RebuildLibraryCacheButton />}
                         </div>
                         {serverDataLoading && !serverStats ? (
                             <LibraryStatsSkeleton />
                         ) : serverStats?.isBuilding ? (
                             <div className="flex flex-col gap-2">
-                                <div className="flex gap-3 items-center text-muted"><div className="w-5 h-5 rounded-full border-2 border-plex border-t-transparent animate-spin" /> Building library size cache in background...</div>
-                                <p className="text-xs text-muted/60">This runs once and may take a few minutes for large libraries. The page will auto-update when ready.</p>
+                                <div className="flex gap-3 items-center text-muted"><div className="w-5 h-5 rounded-full border-2 border-plex border-t-transparent animate-spin" /> {t('homeDashboard.buildingLibraryCache')}</div>
+                                <p className="text-xs text-muted/60">{t('homeDashboard.buildingLibraryCacheHint')}</p>
                             </div>
                         ) : serverStats ? (
-                            <LibraryStatsContent serverStats={serverStats} variant="plex" />
+                            <LibraryStatsContent serverStats={serverStats} variant="plex" t={t} />
                         ) : (
-                            <div className="text-muted text-sm bg-background/50 p-4 rounded-xl border border-white/5">Could not load server statistics at this time.</div>
+                            <div className="text-muted text-sm bg-background/50 p-4 rounded-xl border border-white/5">{t('homeDashboard.serverStatsFailed')}</div>
                         )}
                     </div>
                 );
@@ -680,7 +683,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                         <div className="glass-card p-3 md:p-4 shadow-xl flex flex-col flex-1 min-h-0">
                         <div className="flex items-center justify-between flex-shrink-0">
                             <h2 className="text-lg md:text-xl font-bold text-text flex items-center gap-2">
-                                <Activity className="w-5 h-5 text-plex" /> {analyticsProviderLabel} Activity
+                                <Activity className="w-5 h-5 text-plex" /> {t('homeDashboard.providerActivity', { provider: analyticsProviderLabel })}
                             </h2>
                             <PeriodDropdown
                                 value={analyticsDays}
@@ -694,25 +697,25 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                         {analyticsLoading ? (
                             <div className="flex items-center gap-3 text-muted mt-4">
                                 <div className="w-5 h-5 rounded-full border-2 border-plex border-t-transparent animate-spin" />
-                                Loading {analyticsProviderLabel} activity...
+                                {t('homeDashboard.loadingProviderActivity', { provider: analyticsProviderLabel })}
                             </div>
                         ) : analytics && analytics.totalPlays > 0 ? (
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mt-4">
                                 <div className="bg-background/60 rounded-xl border border-white/5 p-3">
-                                    <p className="text-[10px] text-muted uppercase tracking-widest font-bold">Total Plays</p>
+                                    <p className="text-[10px] text-muted uppercase tracking-widest font-bold">{t('wrapUp.breakdown.totalPlays')}</p>
                                     <p className="text-2xl font-black text-text mt-1">{analytics.totalPlays?.toLocaleString?.() || 0}</p>
                                 </div>
                                 <div className="bg-background/60 rounded-xl border border-white/5 p-3">
-                                    <p className="text-[10px] text-muted uppercase tracking-widest font-bold">Top Library</p>
-                                    <p className="text-sm font-bold text-text mt-1 truncate">{analytics.favoriteLibrary || 'None'}</p>
+                                    <p className="text-[10px] text-muted uppercase tracking-widest font-bold">{t('wrapUp.topLibrary')}</p>
+                                    <p className="text-sm font-bold text-text mt-1 truncate">{analytics.favoriteLibrary || t('wrapUp.none')}</p>
                                 </div>
                                 <div className="bg-background/60 rounded-xl border border-white/5 p-3">
-                                    <p className="text-[10px] text-muted uppercase tracking-widest font-bold">Top Movie</p>
-                                    <p className="text-sm font-bold text-text mt-1 truncate">{analytics.topMovie?.title || 'None'}</p>
+                                    <p className="text-[10px] text-muted uppercase tracking-widest font-bold">{t('wrapUp.topMovie')}</p>
+                                    <p className="text-sm font-bold text-text mt-1 truncate">{analytics.topMovie?.title || t('wrapUp.none')}</p>
                                 </div>
                                 <div className="bg-background/60 rounded-xl border border-white/5 p-3">
-                                    <p className="text-[10px] text-muted uppercase tracking-widest font-bold">Top Show</p>
-                                    <p className="text-sm font-bold text-text mt-1 truncate">{analytics.topBinge?.title || 'None'}</p>
+                                    <p className="text-[10px] text-muted uppercase tracking-widest font-bold">{t('homeDashboard.topShow')}</p>
+                                    <p className="text-sm font-bold text-text mt-1 truncate">{analytics.topBinge?.title || t('wrapUp.none')}</p>
                                 </div>
                             </div>
                         ) : (
@@ -720,8 +723,8 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                 <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3 shadow-inner">
                                     <Clapperboard className="w-6 h-6 text-muted" />
                                 </div>
-                                <h3 className="font-bold text-text mb-1">No {analyticsProviderLabel} activity yet</h3>
-                                <p className="text-muted text-sm max-w-sm">Once {analyticsProviderLabel} records playback activity, your server activity summary will appear right here.</p>
+                                <h3 className="font-bold text-text mb-1">{t('homeDashboard.noProviderActivity', { provider: analyticsProviderLabel })}</h3>
+                                <p className="text-muted text-sm max-w-sm">{t('homeDashboard.noProviderActivityHint', { provider: analyticsProviderLabel })}</p>
                             </div>
                         )}
                     </div>
@@ -770,7 +773,7 @@ export const createPendingRequestsSectionRenderer = (deps: UserDashboardWidgetDe
     };
 };
 
-const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => {
+const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNode; t: DiscoverTranslate }> = ({ title, children, t }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(false);
@@ -810,7 +813,7 @@ const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNod
                     type="button"
                     onClick={() => scroll(-1)}
                     disabled={!canScrollLeft}
-                    aria-label={`Scroll ${title} left`}
+                    aria-label={t('homeDashboard.scrollRowLeft', { title })}
                     className="hidden lg:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 h-10 w-10 items-center justify-center rounded-full bg-black/70 border border-white/10 text-text hover:bg-black/90 hover:border-plex/50 disabled:opacity-0 disabled:pointer-events-none transition-all shadow-lg -ml-1"
                 >
                     <ChevronLeft className="w-5 h-5" />
@@ -825,7 +828,7 @@ const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNod
                     type="button"
                     onClick={() => scroll(1)}
                     disabled={!canScrollRight}
-                    aria-label={`Scroll ${title} right`}
+                    aria-label={t('homeDashboard.scrollRowRight', { title })}
                     className="hidden lg:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 h-10 w-10 items-center justify-center rounded-full bg-black/70 border border-white/10 text-text hover:bg-black/90 hover:border-plex/50 disabled:opacity-0 disabled:pointer-events-none transition-all shadow-lg -mr-1"
                 >
                     <ChevronRight className="w-5 h-5" />
@@ -932,7 +935,7 @@ export const createBazarrToolsSectionRenderer = (deps: UserDashboardWidgetDeps) 
 };
 
 export const createRecentlyAddedWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
-    const { dashboardData, showQualityBadges, DiscoverPosterCard, publicConfig } = deps;
+    const { t, dashboardData, showQualityBadges, DiscoverPosterCard, publicConfig } = deps;
 
     return (id: RecentlyAddedWidgetId): React.ReactNode => {
         if (!dashboardData) return null;
@@ -941,7 +944,7 @@ export const createRecentlyAddedWidgetRenderer = (deps: UserDashboardWidgetDeps)
                 if (!dashboardData.recentMovies?.length) return null;
                 return (
                     <ScrollReveal enabled={!!publicConfig?.useScrollRevealAnimations}>
-                        <RecentlyAddedScrollRow title="Recently Added Movies">
+                        <RecentlyAddedScrollRow title={t('homeDashboard.recentMovies')} t={t}>
                         {dashboardData.recentMovies.map((item: any, idx: number) => (
                             <DiscoverPosterCard
                                 key={idx}
@@ -964,7 +967,7 @@ export const createRecentlyAddedWidgetRenderer = (deps: UserDashboardWidgetDeps)
                 if (!dashboardData.recentShows?.length) return null;
                 return (
                     <ScrollReveal enabled={!!publicConfig?.useScrollRevealAnimations}>
-                        <RecentlyAddedScrollRow title="Recently Added TV Shows">
+                        <RecentlyAddedScrollRow title={t('homeDashboard.recentShows')} t={t}>
                         {dashboardData.recentShows.map((item: any, idx: number) => (
                             <DiscoverPosterCard
                                 key={idx}
@@ -987,7 +990,7 @@ export const createRecentlyAddedWidgetRenderer = (deps: UserDashboardWidgetDeps)
                 if (!dashboardData.recentMusic?.length) return null;
                 return (
                     <ScrollReveal enabled={!!publicConfig?.useScrollRevealAnimations}>
-                        <RecentlyAddedScrollRow title="Recently Added Music">
+                        <RecentlyAddedScrollRow title={t('homeDashboard.recentMusic')} t={t}>
                         {dashboardData.recentMusic.map((item: any, idx: number) => (
                             <DiscoverPosterCard
                                 key={idx}

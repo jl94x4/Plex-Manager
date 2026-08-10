@@ -8036,6 +8036,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     }), [sessionInfo.session.isAdmin, user, publicConfig?.referralEnabled, publicConfig?.mediaServerType, publicConfig?.achievementsHomeWidgetEnabled, sessionInfo?.navFeatures?.requestsQueue, sessionInfo?.navFeatures?.collexions, sessionInfo?.navFeatures?.scannerHomeWidget, sessionInfo?.navFeatures?.mediaAutomationHomeWidget, sessionInfo?.navFeatures?.achievements]);
 
     const widgetDeps = useMemo(() => ({
+        t,
         sessionInfo,
         publicConfig,
         user,
@@ -8083,7 +8084,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         DiscoverPosterCard,
         RebuildLibraryCacheButton,
     }), [
-        sessionInfo, publicConfig, user, isRevoked, isExpiringSoon, daysLeft, progressPct, optOutNewsletter,
+        t, sessionInfo, publicConfig, user, isRevoked, isExpiringSoon, daysLeft, progressPct, optOutNewsletter,
         notifyRequestAvailableEmail, notifyRequestAvailableInApp, notifyRequestAvailableWebPush, notifyRequestAvailableDiscord,
         notifyWebPush, browserPushReady, browserPushSupportedFlag,
         serverStats, serverDataLoading, analytics, analyticsLoading, analyticsDays, analyticsDaysOpen,
