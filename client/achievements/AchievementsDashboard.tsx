@@ -3,7 +3,7 @@ import {
     Award, Calendar, ChevronLeft, ChevronRight, Clapperboard, Clock, Disc3,
     Film, Flame, Lock, Music2, Sparkles, Trophy, X, Info, Medal, Target,
     Gauge, PlayCircle, ChevronDown, Share2, Bell, BellOff, Pin,
-    ArrowDownRight, ArrowUpRight, Minus, type LucideIcon,
+    ArrowDownRight, ArrowUpRight, Minus, Swords, Crosshair, Shield, type LucideIcon,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -934,33 +934,145 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                         <p className="text-sm text-muted">{tAchievements('page.noRankings')}</p>
                     ) : (
                         <div className="space-y-3">
-                            {(rivals.above || rivals.below || rivals.me) && (
-                                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 space-y-1.5">
-                                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{tAchievements('page.rivals')}</p>
-                                    {rivals.above ? (
-                                        <p className="text-xs text-text">
-                                            {tAchievements('page.rivalAbove', {
-                                                xp: Math.max(0, (Number(rivals.above.xp) || 0) - (Number(rivals.me?.xp) || 0)).toLocaleString(),
-                                                rank: rivals.above.rank,
-                                                name: rivals.above.username,
-                                            })}
+                            {(rivals.above || rivals.below || rivals.me) && (() => {
+                                const myXp = Number(rivals.me?.xp) || 0;
+                                const huntXp = rivals.above ? Math.max(0, (Number(rivals.above.xp) || 0) - myXp) : 0;
+                                const defendXp = rivals.below ? Math.max(0, myXp - (Number(rivals.below.xp) || 0)) : 0;
+                                const huntPct = rivals.above
+                                    ? Math.max(4, Math.min(96, Math.round((myXp / Math.max(1, Number(rivals.above.xp) || 1)) * 100)))
+                                    : 100;
+                                const defendPct = rivals.below
+                                    ? Math.max(4, Math.min(96, Math.round(((Number(rivals.below.xp) || 0) / Math.max(1, myXp)) * 100)))
+                                    : 0;
+                                const openRival = (entry: any) => {
+                                    if (!entry) return;
+                                    setDossierQuery(
+                                        entry.accountId != null
+                                            ? { accountId: entry.accountId }
+                                            : { rank: entry.rank },
+                                    );
+                                };
+                                return (
+                                <div className="relative overflow-hidden rounded-2xl border border-plex/25 bg-gradient-to-br from-plex/15 via-black/40 to-black/20 p-3.5 sm:p-4">
+                                    <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-plex/20 blur-3xl" />
+                                    <div className="pointer-events-none absolute -left-6 bottom-0 h-24 w-24 rounded-full bg-rose-500/10 blur-3xl" />
+                                    <div className="relative flex items-center justify-between gap-3 mb-3">
+                                        <p className="text-[10px] uppercase tracking-[0.28em] font-bold text-plex flex items-center gap-1.5">
+                                            <Swords className="w-3.5 h-3.5" />
+                                            {tAchievements('page.rivals')}
                                         </p>
-                                    ) : rivals.me?.rank === 1 ? (
-                                        <p className="text-xs text-plex font-semibold">You're #1 — defend the crown.</p>
-                                    ) : null}
-                                    {rivals.below ? (
-                                        <p className="text-xs text-muted">
-                                            {tAchievements('page.rivalBelow', {
-                                                xp: Math.max(0, (Number(rivals.me?.xp) || 0) - (Number(rivals.below.xp) || 0)).toLocaleString(),
-                                                rank: rivals.below.rank,
-                                                name: rivals.below.username,
-                                            })}
-                                        </p>
-                                    ) : !rivals.above && !rivals.below ? (
-                                        <p className="text-xs text-muted">{tAchievements('page.rivalNone')}</p>
-                                    ) : null}
+                                        {rivals.me?.rank != null && (
+                                            <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/35 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-text">
+                                                <Flame className="w-3 h-3 text-plex" />
+                                                #{rivals.me.rank}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                        {rivals.above ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => openRival(rivals.above)}
+                                                className="group text-left rounded-xl border border-plex/35 bg-plex/10 hover:bg-plex/15 hover:border-plex/55 transition-colors px-3 py-3"
+                                            >
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <img
+                                                        src={avatarForEntry(rivals.above)}
+                                                        alt=""
+                                                        className="w-11 h-11 rounded-full object-cover border border-plex/50 bg-black/40 shrink-0"
+                                                        onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
+                                                    />
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-plex flex items-center gap-1">
+                                                            <Crosshair className="w-3 h-3" />
+                                                            {tAchievements('dossier.hunt')}
+                                                        </p>
+                                                        <p className="text-sm font-black text-text truncate mt-0.5">
+                                                            #{rivals.above.rank} {rivals.above.username}
+                                                        </p>
+                                                        <p className="text-[11px] text-muted font-mono mt-0.5 tabular-nums">
+                                                            Lv {rivals.above.level} · {(Number(rivals.above.xp) || 0).toLocaleString()} XP
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3">
+                                                    <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide">
+                                                        <span className="text-plex">{tAchievements('dossier.xpGapAhead', { xp: huntXp.toLocaleString() })}</span>
+                                                    </div>
+                                                    <div className="mt-1.5 h-2 rounded-full bg-black/50 border border-white/5 overflow-hidden">
+                                                        <div
+                                                            className="h-full rounded-full bg-gradient-to-r from-plex/70 to-plex shadow-[0_0_12px_rgba(229,160,13,0.35)] transition-all"
+                                                            style={{ width: `${huntPct}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ) : rivals.me?.rank === 1 ? (
+                                            <div className="rounded-xl border border-amber-400/35 bg-gradient-to-br from-amber-500/15 to-black/30 px-3 py-3 flex items-center gap-3">
+                                                <span className="inline-flex items-center justify-center w-11 h-11 rounded-full border border-amber-400/40 bg-amber-500/10 text-amber-200 shrink-0">
+                                                    <Shield className="w-5 h-5" />
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-amber-200/80">{tAchievements('dossier.hunt')}</p>
+                                                    <p className="text-sm font-black text-amber-50 mt-0.5">{tAchievements('dossier.holdingCrown')}</p>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-xs text-muted">
+                                                {tAchievements('page.rivalNone')}
+                                            </div>
+                                        )}
+
+                                        {rivals.below ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => openRival(rivals.below)}
+                                                className="group text-left rounded-xl border border-rose-400/25 bg-rose-500/10 hover:bg-rose-500/15 hover:border-rose-400/45 transition-colors px-3 py-3"
+                                            >
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <img
+                                                        src={avatarForEntry(rivals.below)}
+                                                        alt=""
+                                                        className="w-11 h-11 rounded-full object-cover border border-rose-400/40 bg-black/40 shrink-0"
+                                                        onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
+                                                    />
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-[10px] uppercase tracking-[0.22em] font-bold text-rose-200/90 flex items-center gap-1">
+                                                            <Shield className="w-3 h-3" />
+                                                            {tAchievements('dossier.defend')}
+                                                        </p>
+                                                        <p className="text-sm font-black text-text truncate mt-0.5">
+                                                            #{rivals.below.rank} {rivals.below.username}
+                                                        </p>
+                                                        <p className="text-[11px] text-muted font-mono mt-0.5 tabular-nums">
+                                                            Lv {rivals.below.level} · {(Number(rivals.below.xp) || 0).toLocaleString()} XP
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3">
+                                                    <div className="flex items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide">
+                                                        <span className="text-rose-200/90">{tAchievements('dossier.xpGapBehind', { xp: defendXp.toLocaleString() })}</span>
+                                                    </div>
+                                                    <div className="mt-1.5 h-2 rounded-full bg-black/50 border border-white/5 overflow-hidden">
+                                                        <div
+                                                            className="h-full rounded-full bg-gradient-to-r from-rose-400/80 to-rose-300/70 transition-all"
+                                                            style={{ width: `${defendPct}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ) : !rivals.above ? null : (
+                                            <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 flex items-center gap-3">
+                                                <span className="inline-flex items-center justify-center w-11 h-11 rounded-full border border-white/10 bg-white/5 text-muted shrink-0">
+                                                    <Shield className="w-5 h-5" />
+                                                </span>
+                                                <p className="text-sm text-muted">{tAchievements('dossier.noHunter')}</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            )}
+                                );
+                            })()}
                             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                                 {pageEntries.map((entry) => {
                                     const delta = Number(entry.rankDelta) || 0;
