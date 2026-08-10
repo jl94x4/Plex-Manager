@@ -37,13 +37,12 @@ export const isStandaloneDisplayMode = () => {
 };
 
 /**
- * Firefox Android (and iOS Safari *browser* tabs) leave `position:fixed; bottom:0`
- * stranded or padded incorrectly when the dynamic browser chrome shows/hides.
- * Pin the bar so its bottom edge matches the *visual* viewport bottom
- * (layout-viewport coordinates).
+ * Firefox Android leaves `position:fixed; bottom:0` stranded when the dynamic
+ * toolbar shows/hides. Pin the bar so its bottom edge matches the *visual*
+ * viewport bottom (layout-viewport coordinates).
  *
- * Do not enable for Chromium PWAs or iOS standalone — plain CSS `bottom:0`
- * (+ safe-area padding) is correct there.
+ * Chrome / Chromium PWA and iOS (tabs + standalone) must not use this path —
+ * plain CSS `bottom:0` (+ display-mode safe-area on iOS) is correct there.
  */
 export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
     useEffect(() => {

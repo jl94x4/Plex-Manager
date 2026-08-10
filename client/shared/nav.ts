@@ -20,7 +20,6 @@ export const DEFAULT_NAV_ORDER = [
     'discover',
     'request',
     'analytics',
-    'achievements',
     'users',
     'downloads',
     'upgrader',
@@ -31,6 +30,8 @@ export const DEFAULT_NAV_ORDER = [
     'mediastack',
     'requests',
     'status',
+    // After the usual primary/secondary slots so stock mobile bars stay uncrowded.
+    'achievements',
     'maintenance',
     'about',
     'settings',
@@ -38,7 +39,7 @@ export const DEFAULT_NAV_ORDER = [
 ] as const;
 
 /** Mobile bottom bar shows this many items before the "More" overflow menu. */
-export const MOBILE_NAV_PRIMARY_SLOTS = 7;
+export const MOBILE_NAV_PRIMARY_SLOTS = 5;
 
 /** Labels must match the sidebar (`Navigation` in screens.tsx). */
 export const NAV_ITEM_LABELS: Record<string, string> = {
@@ -102,6 +103,8 @@ const LEGACY_DEFAULT_NAV_ORDERS = [
     ['home', 'discover', 'status', 'analytics', 'mediastack', 'request', 'about', 'settings', 'logout'],
     ['home', 'discover', 'status', 'analytics', 'request', 'users', 'downloads', 'mediastack', 'maintenance', 'about', 'settings', 'logout'],
     ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
+    // Achievements landed early in the first opt-in default and crowded the mobile bar.
+    ['home', 'discover', 'request', 'analytics', 'achievements', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
 ];
 
 const sameOrder = (a: string[], b: string[]) => (

@@ -11299,14 +11299,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
     const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplayMode());
-    /**
-     * iOS Safari *tabs* (not the home-screen PWA): Safari’s bottom chrome already
-     * clears the home indicator. Extra safe-area pad leaves a tall empty band
-     * under the icons. Dock to visualViewport like Firefox instead.
-     */
-    const iosBrowserNav = iosMobileNav && !isInstalledApp;
-    const visualViewportNavDock = firefoxMobileNav || iosBrowserNav;
-    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: visualViewportNavDock });
+    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav });
     const mobileThemeRef = useRef<HTMLDivElement>(null);
     const [mobileThemePos, setMobileThemePos] = useState<{ top: number; right: number } | null>(null);
     const isFirefoxMobile = typeof navigator !== 'undefined'
@@ -11340,13 +11333,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             setIsInstalledApp(true);
             setInstallPrompt(null);
             setInstallHelpOpen(false);
+            document.documentElement.classList.add('ios-standalone');
         };
         const syncInstalledState = () => {
             const installed = window.matchMedia?.('(display-mode: standalone)').matches
                 || window.matchMedia?.('(display-mode: fullscreen)').matches
                 || (navigator as any).standalone === true;
             setIsInstalledApp(!!installed);
+            document.documentElement.classList.toggle('ios-standalone', !!installed);
         };
+        syncInstalledState();
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
         window.addEventListener('appinstalled', handleInstalled);
         const standaloneMq = window.matchMedia?.('(display-mode: standalone)');
@@ -11542,7 +11538,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 <span className="relative shrink-0">
                     <Icon className="w-5 h-5" />
                     {badgeCount > 0 && options.mobile && (
-                        <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none">
+                        <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none">
                             {badgeCount > 9 ? '9+' : badgeCount}
                         </span>
                     )}
@@ -11932,8 +11928,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
             {/* Mobile Bottom Nav
                 Chrome / PWA Chromium: plain fixed bottom:0 (do not change).
-                Firefox mobile + iOS Safari browser tabs: portal + visualViewport dock.
-                iOS home-screen PWA: portal + CSS bottom:0 + safe-area (home indicator). */}
+                Firefox mobile: portal + visualViewport dock.
+                iOS: portal + CSS bottom:0; safe-area only in standalone (see .ios-mobile-bottom-nav). */}
             {(() => {
                 const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
                 const showMore = normalizedNavOrder.length > maxPrimary;
@@ -11950,7 +11946,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         {showMore && (
                             <button
                                 type="button"
-                                className={`relative flex flex-col items-center justify-center gap-1 h-full flex-1 min-w-[4.25rem] px-1 text-center text-[0.65rem] transition-colors bg-transparent border-0 ${
+                                className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 ${
                                     mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
                                 }`}
                                 onClick={() => setMobileMoreOpen((open) => !open)}
@@ -11964,25 +11960,24 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     </>
                 );
                 const navInner = (
-                    <div className="flex items-center justify-between w-full h-16 page-x">
+                    <div className="flex items-center justify-between w-full h-14 pt-1 page-x overflow-visible">
                         {navButtons}
                     </div>
                 );
-                // Safari tabs already sit above the browser chrome — skip home-indicator pad there.
-                // Standalone / Android keep env(safe-area-inset-bottom).
-                const bottomSafeClass = iosBrowserNav
-                    ? 'pb-0'
+                // Non-iOS: keep env(safe-area). iOS uses .ios-mobile-bottom-nav (standalone only).
+                const bottomSafeClass = iosMobileNav
+                    ? 'ios-mobile-bottom-nav'
                     : 'pb-[env(safe-area-inset-bottom,0px)]';
 
                 if (portalMobileBottomNav && typeof document !== 'undefined') {
                     // Portal to body so no ancestor creates a fixed containing block.
-                    // Firefox / iOS Safari tabs: hook sets top from visualViewport; bleed fills gesture-bar gap (Firefox only).
-                    // iOS PWA: keep CSS bottom:0 + safe-area.
+                    // Firefox: hook sets top from visualViewport; bleed fills gesture-bar gap.
+                    // iOS: CSS bottom:0; safe-area pad only when installed to home screen.
                     return ReactDOM.createPortal(
                         <div
-                            ref={visualViewportNavDock ? firefoxNavBarRef : undefined}
-                            className={`md:hidden fixed inset-x-0 bottom-0 w-full max-w-full nav-shell border-t z-[310] ${bottomSafeClass}`}
-                            style={visualViewportNavDock ? undefined : { bottom: 0 }}
+                            ref={firefoxMobileNav ? firefoxNavBarRef : undefined}
+                            className={`md:hidden fixed inset-x-0 bottom-0 w-full max-w-full nav-shell border-t z-[310] overflow-visible ${bottomSafeClass}`}
+                            style={{ bottom: 0 }}
                         >
                             {navInner}
                             {firefoxMobileNav && (
@@ -11998,7 +11993,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 }
 
                 return (
-                    <div className={`md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] ${bottomSafeClass}`}>
+                    <div className={`md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] overflow-visible ${bottomSafeClass}`}>
                         {navInner}
                     </div>
                 );

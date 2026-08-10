@@ -199,6 +199,28 @@
     height: 100%;
   }
 
+  /*
+   * iOS bottom nav: in Safari *tabs*, viewport-fit=cover still reports a home-
+   * indicator inset even though Safari’s chrome already clears it — that created
+   * the tall empty band under the icons. Only pad when installed (standalone).
+   */
+  .ios-mobile-bottom-nav {
+    padding-bottom: 0;
+  }
+
+  @media (display-mode: standalone), (display-mode: fullscreen) {
+    .ios-mobile-bottom-nav {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+  }
+
+  @supports (-webkit-touch-callout: none) {
+    /* navigator.standalone fallback when display-mode media isn’t enough */
+    html.ios-standalone .ios-mobile-bottom-nav {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+  }
+
   input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"] {
     color-scheme: dark;
   }
