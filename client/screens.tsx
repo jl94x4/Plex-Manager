@@ -11819,8 +11819,14 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     />
                     <div
                         className="absolute left-5 bottom-4 w-[calc(18rem-2.5rem)] max-w-[calc(18rem-2.5rem)] rounded-2xl border border-border shadow-2xl overflow-hidden animate-fade-in"
-                        style={{ backgroundColor: 'rgb(var(--color-card))' }}
+                        style={{ backgroundColor: '#12141a' }}
                     >
+                        <div
+                            className="absolute inset-0"
+                            style={{ backgroundColor: 'rgb(var(--color-card))' }}
+                            aria-hidden
+                        />
+                        <div className="relative z-[1]">
                         <div className="p-4 border-b border-border/70">
                             <div className="flex items-start justify-between gap-2">
                                 <div className="flex items-center gap-2.5 min-w-0">
@@ -11903,6 +11909,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 <LogOut className="w-4 h-4" />
                                 Logout
                             </button>
+                        </div>
                         </div>
                     </div>
                 </div>

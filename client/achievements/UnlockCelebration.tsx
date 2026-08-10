@@ -61,9 +61,15 @@ export const UnlockCelebration: React.FC<Props> = ({ badges, onClose }) => {
                     ))}
                 </div>
                 <div
-                    className="relative pointer-events-auto w-full max-w-sm rounded-3xl border border-plex/40 shadow-[0_24px_80px_rgba(0,0,0,0.55)] p-6 text-center animate-[achUnlockPop_0.45s_ease-out]"
-                    style={{ backgroundColor: 'rgb(var(--color-card))' }}
+                    className="relative pointer-events-auto w-full max-w-sm rounded-3xl border border-plex/40 shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden text-center animate-[achUnlockPop_0.45s_ease-out]"
+                    style={{ backgroundColor: '#12141a' }}
                 >
+                    <div
+                        className="absolute inset-0"
+                        style={{ backgroundColor: 'rgb(var(--color-card))' }}
+                        aria-hidden
+                    />
+                    <div className="relative z-[1] p-6">
                     <button
                         type="button"
                         onClick={() => { setVisible(false); onClose(); }}
@@ -83,6 +89,7 @@ export const UnlockCelebration: React.FC<Props> = ({ badges, onClose }) => {
                             ? tAchievements('celebrate.more', { count: extras })
                             : tAchievements('celebrate.subtitle')}
                     </p>
+                    </div>
                 </div>
                 <style>{`
                     @keyframes achUnlockFall {

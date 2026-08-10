@@ -6,19 +6,30 @@ import { ModalPortal } from '../shared/ModalPortal';
 import { tAchievements } from './i18n';
 
 const rarityClass = (rarity: string) => {
-    // Border + text only — translucent bg-* utilities would punch through the solid panel.
+    // Border + text only — never set translucent bg on the panel itself.
     if (rarity === 'legendary') return 'border-amber-400/60 text-amber-100';
     if (rarity === 'epic') return 'border-fuchsia-400/50 text-fuchsia-100';
     if (rarity === 'rare') return 'border-sky-400/50 text-sky-100';
     return 'border-white/10 text-text';
 };
 
+/** Soft rarity tint that fades into the same opaque card color (not CSS transparent). */
 const rarityWashStyle = (rarity: string): React.CSSProperties => {
-    if (rarity === 'legendary') return { backgroundImage: 'linear-gradient(180deg, rgba(245,158,11,0.18) 0%, transparent 42%)' };
-    if (rarity === 'epic') return { backgroundImage: 'linear-gradient(180deg, rgba(217,70,239,0.16) 0%, transparent 42%)' };
-    if (rarity === 'rare') return { backgroundImage: 'linear-gradient(180deg, rgba(56,189,248,0.14) 0%, transparent 42%)' };
+    const base = 'rgb(var(--color-card))';
+    if (rarity === 'legendary') {
+        return { backgroundImage: `linear-gradient(180deg, rgba(245,158,11,0.22) 0%, ${base} 45%)` };
+    }
+    if (rarity === 'epic') {
+        return { backgroundImage: `linear-gradient(180deg, rgba(217,70,239,0.20) 0%, ${base} 45%)` };
+    }
+    if (rarity === 'rare') {
+        return { backgroundImage: `linear-gradient(180deg, rgba(56,189,248,0.18) 0%, ${base} 45%)` };
+    }
     return {};
 };
+
+const PANEL_SOLID_BG = 'rgb(var(--color-card))';
+const PANEL_SOLID_FALLBACK = '#12141a';
 
 const resolveAvatar = (thumb: string | null | undefined) => {
     if (!thumb) return logoUrl();
@@ -92,12 +103,21 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
             <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-5 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
                 <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" aria-label="Close" onClick={onClose} />
                 <div
-                    className={`relative w-full sm:max-w-lg max-h-[min(92vh,100%)] flex flex-col rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.55)] ${rarityClass(badge.rarity || 'common')}`}
-                    style={{
-                        backgroundColor: 'rgb(var(--color-card))',
-                        ...rarityWashStyle(badge.rarity || 'common'),
-                    }}
+                    className={`relative isolate w-full sm:max-w-lg max-h-[min(92vh,100%)] flex flex-col rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.55)] ${rarityClass(badge.rarity || 'common')}`}
+                    style={{ backgroundColor: PANEL_SOLID_FALLBACK }}
                 >
+                    {/* Opaque fill first — never use -z so layers stay inside the panel */}
+                    <div
+                        className="absolute inset-0"
+                        style={{ backgroundColor: PANEL_SOLID_BG }}
+                        aria-hidden
+                    />
+                    <div
+                        className="pointer-events-none absolute inset-0"
+                        style={rarityWashStyle(badge.rarity || 'common')}
+                        aria-hidden
+                    />
+                    <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
                     <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-white/8 shrink-0">
                         <div className="flex items-start gap-3 min-w-0">
                             <span className="text-4xl leading-none">{badge.icon || '🏅'}</span>
@@ -212,6 +232,7 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
                                 ? <><PinOff className="w-4 h-4" /> {tAchievements('drawer.unpin')}</>
                                 : <><Pin className="w-4 h-4 text-plex" /> {tAchievements('drawer.pin')}</>}
                         </button>
+                    </div>
                     </div>
                 </div>
             </div>
