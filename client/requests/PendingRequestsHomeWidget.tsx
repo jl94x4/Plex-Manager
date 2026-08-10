@@ -7,19 +7,21 @@ import { RequestApprovalModal } from './RequestApprovalModal';
 import { RequestCardActions, RequestCardShell, requestCardActionBtnClass } from './RequestCardShell';
 import { RequestMetaChips } from './RequestMetaChips';
 import type { PortalRequestItem } from './types';
+import { useDiscoverI18n } from '../discovery/i18n';
+import type { DiscoverTranslate } from '../discovery/i18n/types';
 
-const formatRelativeTime = (value?: string | null) => {
+const formatRelativeTime = (t: DiscoverTranslate, value?: string | null) => {
     if (!value) return '';
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return '';
     const diffMs = Date.now() - date.getTime();
     const minutes = Math.floor(diffMs / 60000);
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return `${minutes}m ago`;
+    if (minutes < 1) return t('common.justNow');
+    if (minutes < 60) return t('common.minutesAgo', { count: minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return t('common.hoursAgo', { count: hours });
     const days = Math.floor(hours / 24);
-    return `${days}d ago`;
+    return t('common.daysAgo', { count: days });
 };
 
 export const PendingRequestsHomeWidget: React.FC<{
@@ -30,6 +32,7 @@ export const PendingRequestsHomeWidget: React.FC<{
     layout?: 'compact' | 'wide';
     showEmpty?: boolean;
 }> = ({ onViewAll, onReviewRequest, onActionComplete, onToast, layout = 'compact', showEmpty = false }) => {
+    const { t } = useDiscoverI18n();
     const isWide = layout === 'wide';
     const [requests, setRequests] = useState<PortalRequestItem[]>([]);
     const [pendingTotal, setPendingTotal] = useState(0);
@@ -58,7 +61,7 @@ export const PendingRequestsHomeWidget: React.FC<{
             }
             setConfigured(true);
             if (data?.connected === false) {
-                setError(data?.error || 'Cannot connect to your request app');
+                setError(data?.error || t('homeDashboard.admin.requestAppConnectFailed'));
                 setRequests([]);
                 setPendingTotal(0);
                 return;
@@ -69,7 +72,7 @@ export const PendingRequestsHomeWidget: React.FC<{
             setRequests(results);
         } catch (e: any) {
             if (gen !== loadGenRef.current) return;
-            setError(e?.message || 'Could not reach your request app');
+            setError(e?.message || t('homeDashboard.admin.requestAppReachFailed'));
             setRequests([]);
         } finally {
             if (gen === loadGenRef.current) {
@@ -77,7 +80,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                 setRefreshing(false);
             }
         }
-    }, [isWide]);
+    }, [isWide, t]);
 
     useEffect(() => {
         void load();
@@ -92,11 +95,11 @@ export const PendingRequestsHomeWidget: React.FC<{
                 method: 'POST',
                 body: JSON.stringify({ title: item.title }),
             });
-            onToast?.(`Approved "${item.title}"`, 'success');
+            onToast?.(t('homeDashboard.admin.approvedToast', { title: item.title }), 'success');
             await load({ silent: true });
             onActionComplete?.();
         } catch (e: any) {
-            onToast?.(e?.message || 'Failed to approve', 'error');
+            onToast?.(e?.message || t('homeDashboard.admin.approveFailed'), 'error');
         } finally {
             setActionId(null);
         }
@@ -112,12 +115,12 @@ export const PendingRequestsHomeWidget: React.FC<{
             <div className={`${cardClass} border-white/10`}>
                 <div className="flex items-start justify-between gap-3">
                     <div>
-                        <p className="text-sm font-semibold text-text">Jellyfin Requests</p>
-                        <p className="text-xs text-muted mt-1">Connect Jellyseerr, Overseerr, or Ombi to show request approvals here.</p>
+                        <p className="text-sm font-semibold text-text">{t('homeDashboard.admin.requestsTitle')}</p>
+                        <p className="text-xs text-muted mt-1">{t('homeDashboard.admin.requestsSetupHint')}</p>
                     </div>
                     {onViewAll && (
                         <button type="button" onClick={onViewAll} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-sm font-semibold text-text hover:bg-white/5 transition-colors">
-                            Open Requests <ChevronRight className="w-4 h-4" />
+                            {t('homeDashboard.admin.openRequests')} <ChevronRight className="w-4 h-4" />
                         </button>
                     )}
                 </div>
@@ -130,7 +133,7 @@ export const PendingRequestsHomeWidget: React.FC<{
             <div className={`${cardClass} min-h-[4.5rem] flex items-center`}>
                 <div className="flex items-center gap-2 text-muted text-sm">
                     <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                    <span>Checking pending requests...</span>
+                    <span>{t('homeDashboard.admin.checkingPendingRequests')}</span>
                 </div>
             </div>
         );
@@ -141,7 +144,7 @@ export const PendingRequestsHomeWidget: React.FC<{
             <div className={`${cardClass} border-red-500/30`}>
                 <div className="flex items-start justify-between gap-3">
                     <div>
-                        <p className="text-sm font-semibold text-text">Pending Requests</p>
+                        <p className="text-sm font-semibold text-text">{t('homeDashboard.admin.pendingRequests')}</p>
                         <p className="text-xs text-red-200 mt-1">{error}</p>
                     </div>
                     <button
@@ -150,7 +153,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border text-xs font-semibold text-muted hover:text-text"
                     >
                         <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                        Retry
+                        {t('common.retry')}
                     </button>
                 </div>
             </div>
@@ -191,7 +194,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                                 {item.year ? <span className="text-muted font-medium"> ({item.year})</span> : null}
                             </p>
                             <p className="text-xs text-muted mt-1 truncate">
-                                {item.requestedBy.displayName} · {formatRelativeTime(item.createdAt)}
+                                {item.requestedBy.displayName} · {formatRelativeTime(t, item.createdAt)}
                                 {item.is4k ? ' · 4K' : ''}
                             </p>
                             <RequestMetaChips
@@ -213,7 +216,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                             className={`${requestCardActionBtnClass} border border-plex/50 bg-background/80 text-plex font-bold hover:bg-plex/15`}
                         >
                             <Pencil className="w-3.5 h-3.5" />
-                            Review
+                            {t('homeDashboard.admin.review')}
                         </button>
                         <button
                             type="button"
@@ -222,7 +225,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                             className={`${requestCardActionBtnClass} bg-plex text-background font-bold hover:bg-plex-hover shadow-sm shadow-black/20`}
                         >
                             {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                            Approve
+                            {t('homeDashboard.admin.approve')}
                         </button>
                     </RequestCardActions>
                 </div>
@@ -247,7 +250,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                         {item.year ? <span className="text-muted font-normal"> ({item.year})</span> : null}
                     </p>
                     <p className="text-[11px] text-muted truncate">
-                        {item.requestedBy.displayName} · {formatRelativeTime(item.createdAt)}
+                        {item.requestedBy.displayName} · {formatRelativeTime(t, item.createdAt)}
                         {item.is4k ? ' · 4K' : ''}
                     </p>
                 </div>
@@ -256,7 +259,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                     disabled={busy}
                     onClick={() => openReview(item)}
                     className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md border border-plex/50 bg-background/90 text-plex hover:bg-plex/15 transition-colors disabled:opacity-50 shadow-sm shadow-black/20"
-                    title="Review"
+                    title={t('homeDashboard.admin.review')}
                 >
                     <Pencil className="w-3.5 h-3.5" />
                 </button>
@@ -265,7 +268,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                     disabled={busy}
                     onClick={() => handleApprove(item)}
                     className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg bg-plex text-background hover:bg-plex-hover transition-colors disabled:opacity-50"
-                    title="Quick approve"
+                    title={t('homeDashboard.admin.quickApprove')}
                 >
                     {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 </button>
@@ -278,10 +281,10 @@ export const PendingRequestsHomeWidget: React.FC<{
         <div className={cardClass}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3 md:mb-4">
                 <div className="min-w-0">
-                    <p className="text-muted text-sm uppercase tracking-widest font-semibold">Pending Requests</p>
+                    <p className="text-muted text-sm uppercase tracking-widest font-semibold">{t('homeDashboard.admin.pendingRequests')}</p>
                     <p className="text-xs text-muted mt-1">
-                        {pendingTotal} awaiting approval
-                        {isWide ? ' — approve from home' : ''}
+                        {t('homeDashboard.admin.awaitingApproval', { count: pendingTotal })}
+                        {isWide ? ` — ${t('homeDashboard.admin.approveFromHome')}` : ''}
                     </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -290,7 +293,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                         onClick={() => load({ silent: true })}
                         disabled={refreshing}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-white/10 text-xs font-semibold text-muted hover:text-text hover:bg-white/5 transition-colors"
-                        title="Refresh"
+                        title={t('homeDashboard.admin.refresh')}
                     >
                         <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
                     </button>
@@ -300,7 +303,7 @@ export const PendingRequestsHomeWidget: React.FC<{
                             onClick={onViewAll}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/10 text-sm font-semibold text-text hover:bg-white/5 transition-colors"
                         >
-                            Open Requests <ChevronRight className="w-4 h-4" />
+                            {t('homeDashboard.admin.openRequests')} <ChevronRight className="w-4 h-4" />
                         </button>
                     )}
                 </div>
@@ -308,7 +311,9 @@ export const PendingRequestsHomeWidget: React.FC<{
 
             {requests.length === 0 ? (
                 <p className="text-sm text-muted">
-                    {pendingTotal > 0 ? `${pendingTotal} pending in your request app — open Requests to review them.` : 'No pending requests right now.'}
+                    {pendingTotal > 0
+                        ? t('homeDashboard.admin.pendingInRequestApp', { count: pendingTotal })
+                        : t('homeDashboard.admin.noPendingRequests')}
                 </p>
             ) : (
                 <div className={isWide ? 'grid grid-cols-1 xl:grid-cols-2 gap-3' : 'space-y-2'}>
