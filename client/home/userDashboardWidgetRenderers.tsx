@@ -361,9 +361,9 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                         <div className="w-14 h-14 md:w-16 md:h-16 bg-plex/10 rounded-full flex items-center justify-center mb-2 md:mb-3 border border-plex/30 shadow-[0_0_15px_rgba(229,160,13,0.15)]">
                             <Shield className="w-7 h-7 md:w-8 md:h-8 text-plex drop-shadow-md" />
                         </div>
-                        <h3 className="text-xl md:text-2xl font-black text-text uppercase tracking-widest mb-1">Server Admin</h3>
+                        <h3 className="text-xl md:text-2xl font-black text-text uppercase tracking-widest mb-1">{t('homeDashboard.admin.serverAdmin')}</h3>
                         <div className="mt-2 inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/40 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)] tracking-widest uppercase">
-                            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" /> VIP UNLIMITED
+                            <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" /> {t('homeDashboard.admin.vipUnlimited')}
                         </div>
                     </div>
                 );
@@ -386,7 +386,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                         </span>
                                     ) : (
                                         <span className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-[11px] font-black bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/40 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.25)] tracking-widest uppercase">
-                                            <Star className="w-4 h-4 text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" /> VIP UNLIMITED
+                                            <Star className="w-4 h-4 text-amber-400 fill-amber-400 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]" /> {t('homeDashboard.admin.vipUnlimited')}
                                         </span>
                                     )}
                                 </div>
@@ -433,19 +433,19 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
             case 'quickActions':
                 return (
                     <div className="glass-card p-3 md:p-4 shadow-xl flex flex-col flex-shrink-0 justify-center gap-2.5">
-                        <p className="text-muted text-xs uppercase tracking-widest font-semibold flex-shrink-0">Quick Actions</p>
+                        <p className="text-muted text-xs uppercase tracking-widest font-semibold flex-shrink-0">{t('homeDashboard.admin.quickActions')}</p>
                         <div className="grid grid-cols-3 gap-2">
                             <button type="button" onClick={() => onViewAdmin()} className="flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-xl font-bold text-[10px] leading-tight text-center transition-all border bg-plex/10 border-plex/30 text-plex hover:bg-plex/20">
                                 <Users size={18} />
-                                <span>Manage Users</span>
+                                <span>{t('homeDashboard.admin.manageUsers')}</span>
                             </button>
                             <button type="button" onClick={() => onViewSettings?.()} className="flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-xl font-bold text-[10px] leading-tight text-center transition-all border bg-white/5 border-white/10 text-text hover:bg-white/10">
                                 <Settings size={18} />
-                                <span>Settings</span>
+                                <span>{t('homeDashboard.admin.settings')}</span>
                             </button>
                             <button type="button" onClick={() => onViewLogs?.()} className="flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-xl font-bold text-[10px] leading-tight text-center transition-all border bg-white/5 border-white/10 text-text hover:bg-white/10">
                                 <Activity size={18} />
-                                <span>System Logs</span>
+                                <span>{t('homeDashboard.admin.systemLogs')}</span>
                             </button>
                         </div>
                     </div>
@@ -739,7 +739,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
 };
 
 export const createPendingRequestsSectionRenderer = (deps: UserDashboardWidgetDeps) => {
-    const { sessionInfo, onViewRequests, onPendingRequestsChange, setToast } = deps;
+    const { t, sessionInfo, onViewRequests, onPendingRequestsChange, setToast } = deps;
 
     return (): React.ReactNode => {
         if (!sessionInfo?.session?.isAdmin) return null;
@@ -748,12 +748,12 @@ export const createPendingRequestsSectionRenderer = (deps: UserDashboardWidgetDe
                 <div className="glass-card p-4 md:p-5 shadow-xl border-white/10">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
-                            <p className="text-sm font-semibold text-text">Jellyfin Requests</p>
-                            <p className="text-xs text-muted mt-1">Connect Jellyseerr, Overseerr, or Ombi in Settings to show request approvals here.</p>
+                            <p className="text-sm font-semibold text-text">{t('homeDashboard.admin.requestsTitle')}</p>
+                            <p className="text-xs text-muted mt-1">{t('homeDashboard.admin.requestsSetupHintWithSettings')}</p>
                         </div>
                         {onViewRequests && (
                             <button type="button" onClick={() => onViewRequests()} className="inline-flex items-center justify-center px-3 py-2 rounded-lg border border-white/10 text-sm font-semibold text-text hover:bg-white/5 transition-colors">
-                                Open Requests
+                                {t('homeDashboard.admin.openRequests')}
                             </button>
                         )}
                     </div>
@@ -857,7 +857,7 @@ export const createMediaAutomationSectionRenderer = (deps: UserDashboardWidgetDe
 };
 
 export const createBazarrToolsSectionRenderer = (deps: UserDashboardWidgetDeps) => {
-    const { sessionInfo, bazarrWidgets } = deps;
+    const { t, sessionInfo, bazarrWidgets } = deps;
     return (): React.ReactNode => {
         if (!sessionInfo.session.isAdmin) return null;
         const instances = Array.isArray(bazarrWidgets?.instances) ? bazarrWidgets.instances : [];
@@ -868,11 +868,13 @@ export const createBazarrToolsSectionRenderer = (deps: UserDashboardWidgetDeps) 
             <div className="glass-card p-4 md:p-5 shadow-xl w-full">
                 <div className="flex items-start justify-between gap-3 mb-4">
                     <div>
-                        <p className="text-muted text-sm uppercase tracking-widest font-semibold">Bazarr Subtitles</p>
+                        <p className="text-muted text-sm uppercase tracking-widest font-semibold">{t('homeDashboard.bazarr.title')}</p>
                         <div className="flex items-center gap-2 mt-1">
                             <span className={`w-2 h-2 rounded-full ${totals.online > 0 ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500'}`} />
                             <span className={`text-[10px] font-bold uppercase tracking-wider ${totals.online > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {totals.online > 0 ? `${totals.online}/${instances.length} online` : 'Unavailable'}
+                                {totals.online > 0
+                                    ? t('homeDashboard.bazarr.onlineCount', { online: totals.online, total: instances.length })
+                                    : t('homeDashboard.bazarr.unavailable')}
                             </span>
                             {primary.version && <span className="text-[10px] font-bold text-muted">v{primary.version}</span>}
                         </div>
@@ -882,7 +884,7 @@ export const createBazarrToolsSectionRenderer = (deps: UserDashboardWidgetDeps) 
                             href={primary.url}
                             target="_blank"
                             rel="noreferrer"
-                            title="Open Bazarr"
+                            title={t('homeDashboard.bazarr.open')}
                             className="p-2 rounded-lg text-muted hover:text-text hover:bg-white/5 transition-colors shrink-0"
                         >
                             <ExternalLink className="w-4 h-4" />
@@ -894,22 +896,22 @@ export const createBazarrToolsSectionRenderer = (deps: UserDashboardWidgetDeps) 
                     <div className="bg-background/60 rounded-xl border border-white/5 p-3">
                         <FileText className="w-4 h-4 text-plex mb-2 opacity-80" />
                         <p className="text-2xl font-black text-text">{Number(totals.wantedEpisodes || 0).toLocaleString()}</p>
-                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted mt-0.5">Wanted Episodes</p>
+                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted mt-0.5">{t('homeDashboard.bazarr.wantedEpisodes')}</p>
                     </div>
                     <div className="bg-background/60 rounded-xl border border-white/5 p-3">
                         <Film className="w-4 h-4 text-plex mb-2 opacity-80" />
                         <p className="text-2xl font-black text-text">{Number(totals.wantedMovies || 0).toLocaleString()}</p>
-                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted mt-0.5">Wanted Movies</p>
+                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted mt-0.5">{t('homeDashboard.bazarr.wantedMovies')}</p>
                     </div>
                     <div className="bg-background/60 rounded-xl border border-white/5 p-3">
                         <Layers className="w-4 h-4 text-plex mb-2 opacity-80" />
                         <p className="text-xl font-black text-text">{Number(totals.providers || 0).toLocaleString()}</p>
-                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted mt-0.5">Providers</p>
+                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted mt-0.5">{t('homeDashboard.bazarr.providers')}</p>
                     </div>
                     <div className="bg-background/60 rounded-xl border border-white/5 p-3">
                         <Activity className="w-4 h-4 text-plex mb-2 opacity-80" />
                         <p className="text-xl font-black text-text">{Number(totals.announcements || 0).toLocaleString()}</p>
-                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted mt-0.5">Announcements</p>
+                        <p className="text-[10px] uppercase tracking-wider font-bold text-muted mt-0.5">{t('homeDashboard.bazarr.announcements')}</p>
                     </div>
                 </div>
 
@@ -919,7 +921,10 @@ export const createBazarrToolsSectionRenderer = (deps: UserDashboardWidgetDeps) 
                             <div key={instance.id} className="flex items-center justify-between gap-2 rounded-lg bg-background/40 border border-white/5 px-3 py-2">
                                 <span className="text-xs font-bold text-text truncate">{instance.name || 'Bazarr'}</span>
                                 <span className="text-[10px] font-bold text-muted">
-                                    {Number(instance.wantedEpisodes || 0).toLocaleString()} episodes · {Number(instance.wantedMovies || 0).toLocaleString()} movies
+                                    {t('homeDashboard.bazarr.instanceWantedSummary', {
+                                        episodes: Number(instance.wantedEpisodes || 0).toLocaleString(),
+                                        movies: Number(instance.wantedMovies || 0).toLocaleString(),
+                                    })}
                                 </span>
                             </div>
                         ))}
@@ -927,7 +932,7 @@ export const createBazarrToolsSectionRenderer = (deps: UserDashboardWidgetDeps) 
                 )}
 
                 {primary.error && (
-                    <p className="text-xs text-red-300 mt-3">Bazarr warning: {primary.error}</p>
+                    <p className="text-xs text-red-300 mt-3">{t('homeDashboard.bazarr.warning', { message: primary.error })}</p>
                 )}
             </div>
         );
