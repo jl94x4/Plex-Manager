@@ -469,7 +469,8 @@ export const AchievementsSettings: React.FC<Props> = ({
                         <div className="min-w-0">
                             <p className="text-sm font-semibold text-text">Leaderboard backfill</p>
                             <SettingHint>
-                                Rebuild XP snapshots for members. Force-run when ranks look stale after history source or weight changes.
+                                Rebuild XP snapshots and force-repair badge unlock times from watch history
+                                (fixes “Who unlocked first” first-run stamps). Use after history source or weight changes.
                             </SettingHint>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
