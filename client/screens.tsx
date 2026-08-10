@@ -1956,7 +1956,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                             </div>
                         </div>
                     </div>
-                    {href && (
+                    {isAdmin && href && (
                         <a
                             href={href}
                             target="_blank"

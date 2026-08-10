@@ -16701,6 +16701,14 @@ app.get('/api/media-stack/summary', requireAuth, requireMember, async (req, res)
         if (data?.error) {
             return res.status(404).json({ error: data.error });
         }
+        // Non-admins must not receive Lidarr/Bazarr host URLs (Calendar "Open" links).
+        if (!req.user?.isAdmin && Array.isArray(data?.tools)) {
+            data.tools = data.tools.map((tool) => {
+                if (!tool || typeof tool !== 'object') return tool;
+                const { url: _url, externalUrl: _externalUrl, ...rest } = tool;
+                return { ...rest, url: '', externalUrl: '' };
+            });
+        }
         res.json(data);
     } catch (e) {
         res.status(500).json({ error: 'Failed to fetch media stack summary' });
@@ -16787,7 +16795,14 @@ app.get('/api/bazarr/widgets', requireAuth, requireMember, async (req, res) => {
             acc.online += entry.online ? 1 : 0;
             return acc;
         }, { wantedEpisodes: 0, wantedMovies: 0, providers: 0, announcements: 0, online: 0 });
-        res.json({ configured: summaries.length > 0, instances: summaries, totals });
+        const payloadInstances = req.user?.isAdmin
+            ? summaries
+            : summaries.map((entry) => {
+                if (!entry || typeof entry !== 'object') return entry;
+                const { url: _url, ...rest } = entry;
+                return { ...rest, url: '' };
+            });
+        res.json({ configured: payloadInstances.length > 0, instances: payloadInstances, totals });
     } catch (e) {
         res.status(500).json({ error: `Failed to load Bazarr widgets: ${e.message}` });
     }
