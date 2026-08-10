@@ -81,9 +81,9 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
 
     return (
         <ModalPortal open={true}>
-            <div className="fixed inset-0 z-[210] flex items-end sm:items-center justify-center p-0 sm:p-5">
+            <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-5 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
                 <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" aria-label="Close" onClick={onClose} />
-                <div className={`relative w-full sm:max-w-lg max-h-[92vh] flex flex-col rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.55)] bg-[#12141a] ${rarityClass(badge.rarity || 'common')}`}>
+                <div className={`relative w-full sm:max-w-lg max-h-[min(92vh,100%)] flex flex-col rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.55)] bg-[#12141a] ${rarityClass(badge.rarity || 'common')}`}>
                     <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-white/8 shrink-0">
                         <div className="flex items-start gap-3 min-w-0">
                             <span className="text-4xl leading-none">{badge.icon || '🏅'}</span>

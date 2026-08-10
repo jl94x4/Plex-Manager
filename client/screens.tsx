@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
@@ -3600,6 +3600,8 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
     const [allUsers, setAllUsers] = useState<any[]>([]);
     const [userSearchQuery, setUserSearchQuery] = useState('');
     const [userSearchOpen, setUserSearchOpen] = useState(false);
+    const userSearchInputRef = useRef<HTMLInputElement>(null);
+    const [userSearchMenuBox, setUserSearchMenuBox] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
     const [contentTab, setContentTab] = useState<'movies' | 'shows' | 'music'>('movies');
     const [viewerPage, setViewerPage] = useState(1);
     const viewersPerPage = 10;
@@ -3713,6 +3715,37 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         for (const u of analyticsData?.topUsers || []) push(u);
         return out.slice(0, 8);
     }, [allUsers, analyticsData?.topUsers, isAdmin, userSearchQuery]);
+
+    useLayoutEffect(() => {
+        if (!userSearchOpen || !userSearchQuery.trim()) {
+            setUserSearchMenuBox(null);
+            return;
+        }
+        const sync = () => {
+            const el = userSearchInputRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const margin = 8;
+            const maxHeight = Math.max(120, Math.min(288, window.innerHeight - rect.bottom - margin * 2));
+            setUserSearchMenuBox({
+                top: Math.round(rect.bottom + 4),
+                left: Math.round(rect.left),
+                width: Math.round(rect.width),
+                maxHeight,
+            });
+        };
+        sync();
+        window.addEventListener('resize', sync);
+        window.addEventListener('scroll', sync, true);
+        const mainScroll = document.getElementById('main-scroll-container');
+        mainScroll?.addEventListener('scroll', sync, { passive: true });
+        return () => {
+            window.removeEventListener('resize', sync);
+            window.removeEventListener('scroll', sync, true);
+            mainScroll?.removeEventListener('scroll', sync);
+        };
+    }, [userSearchOpen, userSearchQuery, userSearchMatches.length]);
+
     useEffect(() => {
         if (!peakDate) {
             setPeakDateData(null);
@@ -4224,6 +4257,7 @@ return (
                                 <div className="relative w-full sm:max-w-sm">
                                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                     <input
+                                        ref={userSearchInputRef}
                                         type="search"
                                         value={userSearchQuery}
                                         onChange={(event) => {
@@ -4247,35 +4281,50 @@ return (
                                         className="w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-3 text-sm text-text outline-none transition focus:border-plex"
                                         autoComplete="off"
                                     />
-                                    {userSearchOpen && userSearchQuery.trim() ? (
-                                        <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-border bg-card shadow-2xl custom-scrollbar">
-                                            {userSearchMatches.length ? userSearchMatches.map((match) => (
-                                                <button
-                                                    key={match.username}
-                                                    type="button"
-                                                    className="flex w-full items-center gap-3 bg-card px-3 py-2.5 text-left transition hover:bg-white/5"
-                                                    onMouseDown={(event) => event.preventDefault()}
-                                                    onClick={() => openUserAnalytics(match)}
-                                                >
-                                                    <img
-                                                        src={resolveUserAvatar(match.thumb, 40, 40)}
-                                                        alt=""
-                                                        className="h-8 w-8 rounded-full object-cover bg-black/40"
-                                                        onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
-                                                    />
-                                                    <span className="min-w-0 flex-1">
-                                                        <span className="block truncate text-sm font-semibold text-text">{match.username}</span>
-                                                        {match.email ? (
-                                                            <span className="block truncate text-[11px] text-muted">{match.email}</span>
-                                                        ) : null}
-                                                    </span>
-                                                    <BarChart3 className="h-4 w-4 shrink-0 text-plex" />
-                                                </button>
-                                            )) : (
-                                                <p className="px-3 py-3 text-sm text-muted">No users match “{userSearchQuery.trim()}”.</p>
-                                            )}
-                                        </div>
-                                    ) : null}
+                                    {userSearchOpen && userSearchQuery.trim() && userSearchMenuBox && typeof document !== 'undefined'
+                                        ? ReactDOM.createPortal(
+                                            <div
+                                                className="fixed z-[500] overflow-y-auto rounded-xl border border-border shadow-2xl custom-scrollbar"
+                                                style={{
+                                                    top: userSearchMenuBox.top,
+                                                    left: userSearchMenuBox.left,
+                                                    width: userSearchMenuBox.width,
+                                                    maxHeight: userSearchMenuBox.maxHeight,
+                                                    backgroundColor: 'rgb(var(--color-card))',
+                                                }}
+                                            >
+                                                {userSearchMatches.length ? userSearchMatches.map((match) => (
+                                                    <button
+                                                        key={match.username}
+                                                        type="button"
+                                                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-white/10"
+                                                        style={{ backgroundColor: 'rgb(var(--color-card))' }}
+                                                        onMouseDown={(event) => event.preventDefault()}
+                                                        onClick={() => openUserAnalytics(match)}
+                                                    >
+                                                        <img
+                                                            src={resolveUserAvatar(match.thumb, 40, 40)}
+                                                            alt=""
+                                                            className="h-8 w-8 rounded-full object-cover bg-black/40"
+                                                            onError={(e) => { (e.target as HTMLImageElement).src = logoUrl(); }}
+                                                        />
+                                                        <span className="min-w-0 flex-1">
+                                                            <span className="block truncate text-sm font-semibold text-text">{match.username}</span>
+                                                            {match.email ? (
+                                                                <span className="block truncate text-[11px] text-muted">{match.email}</span>
+                                                            ) : null}
+                                                        </span>
+                                                        <BarChart3 className="h-4 w-4 shrink-0 text-plex" />
+                                                    </button>
+                                                )) : (
+                                                    <p className="px-3 py-3 text-sm text-muted" style={{ backgroundColor: 'rgb(var(--color-card))' }}>
+                                                        No users match “{userSearchQuery.trim()}”.
+                                                    </p>
+                                                )}
+                                            </div>,
+                                            document.body,
+                                        )
+                                        : null}
                                 </div>
                             )}
                         />

@@ -41,7 +41,7 @@ export const UnlockCelebration: React.FC<Props> = ({ badges, onClose }) => {
 
     return (
         <ModalPortal open={true}>
-            <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 pointer-events-none">
+            <div className="fixed inset-0 z-[340] flex items-center justify-center p-4 pointer-events-none">
                 <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] pointer-events-auto" onClick={() => { setVisible(false); onClose(); }} />
                 <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
                     {pieces.map((p) => (
