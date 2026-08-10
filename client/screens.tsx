@@ -11717,6 +11717,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         <InAppNotificationsBell
                             onNavigate={(route, options) => onNavigate(route as any, options)}
                             className="shrink-0"
+                            placement="up"
                             buttonClassName="relative w-10 h-10 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted hover:text-text hover:border-plex/40 hover:bg-white/10 transition-all"
                         />
                     </div>

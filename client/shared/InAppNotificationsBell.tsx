@@ -29,12 +29,15 @@ type Props = {
     onNavigate?: (route: string, options?: { path?: string }) => void;
     className?: string;
     buttonClassName?: string;
+    /** Panel opens above the bell (desktop sidebar) or below (mobile top bar). */
+    placement?: 'up' | 'down';
 };
 
 export const InAppNotificationsBell: React.FC<Props> = ({
     onNavigate,
     className = '',
     buttonClassName = '',
+    placement = 'down',
 }) => {
     const [open, setOpen] = useState(false);
     const [items, setItems] = useState<InAppNotification[]>([]);
@@ -132,7 +135,11 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                 )}
             </button>
             {open && (
-                <div className="absolute right-0 top-full mt-2 w-[min(20rem,calc(100vw-2rem))] max-h-[24rem] overflow-hidden rounded-xl border border-border bg-card shadow-2xl z-[90]">
+                <div
+                    className={`absolute right-0 w-[min(20rem,calc(100vw-2rem))] max-h-[24rem] overflow-hidden rounded-xl border border-border bg-card shadow-2xl z-[90] ${
+                        placement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'
+                    }`}
+                >
                     <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/80">
                         <p className="text-xs font-bold uppercase tracking-wider text-muted">Notifications</p>
                         {unread > 0 && (
