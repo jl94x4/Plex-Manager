@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Bell, Loader2, RefreshCw, Send } from 'lucide-react';
 import { apiFetch } from '../shared/api';
+import { notifyInAppNotificationsChanged } from '../shared/inAppNotificationsRefresh';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingFieldLabel, SettingHint } from './SettingHint';
 
@@ -176,6 +177,9 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
             ].filter(Boolean);
             if (ok) {
                 addToast(`Test sent (${bits.join(', ') || 'ok'}). Check the bell.`, 'success');
+                if (result?.results?.inApp) {
+                    notifyInAppNotificationsChanged();
+                }
             } else {
                 const errors = Array.isArray(result?.results?.errors) ? result.results.errors.join('; ') : 'No channel succeeded';
                 addToast(errors, 'error');

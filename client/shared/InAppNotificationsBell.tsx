@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
 import { apiFetch } from './api';
+import { IN_APP_NOTIFICATIONS_CHANGED_EVENT } from './inAppNotificationsRefresh';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
 
@@ -74,8 +75,29 @@ export const InAppNotificationsBell: React.FC<Props> = ({
 
     useEffect(() => {
         refresh();
-        const id = window.setInterval(refresh, 60_000);
-        return () => window.clearInterval(id);
+
+        const onChanged = () => { refresh(); };
+        const onFocus = () => { refresh(); };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') refresh();
+        };
+
+        window.addEventListener(IN_APP_NOTIFICATIONS_CHANGED_EVENT, onChanged);
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVisibility);
+
+        // Faster than once-a-minute so a just-sent test / available request shows the badge
+        // without requiring a tap. Keep it gentle for shared portal sessions.
+        const id = window.setInterval(() => {
+            if (document.visibilityState === 'visible') refresh();
+        }, 15_000);
+
+        return () => {
+            window.clearInterval(id);
+            window.removeEventListener(IN_APP_NOTIFICATIONS_CHANGED_EVENT, onChanged);
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
     }, [refresh]);
 
     const updatePanelBox = useCallback(() => {
@@ -250,7 +272,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             >
                 <Bell className="w-4 h-4" />
                 {unread > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none">
+                    <span className="absolute top-0 right-0 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none translate-x-1/4 -translate-y-1/4 pointer-events-none">
                         {unread > 9 ? '9+' : unread}
                     </span>
                 )}

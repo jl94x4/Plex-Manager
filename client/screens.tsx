@@ -11611,8 +11611,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         <>
 
             {/* Mobile Top Nav — height grows with safe-area so content clears the iOS status bar in PWA */}
-            <div className="md:hidden fixed top-0 left-0 right-0 z-50 nav-shell border-b shadow-lg pt-[env(safe-area-inset-top,0px)]">
-                <div className="h-16 flex items-center justify-between page-x">
+            <div className="md:hidden fixed top-0 left-0 right-0 z-50 nav-shell border-b shadow-lg pt-[env(safe-area-inset-top,0px)] overflow-visible">
+                <div className="h-16 flex items-center justify-between page-x overflow-visible">
                 <div className="flex items-center gap-3 min-w-0">
                     <img
                         src={serverIcon}
@@ -11624,10 +11624,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     />
                     <span className="font-bold text-text uppercase tracking-widest text-sm truncate">{serverName}</span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 overflow-visible">
                     <InAppNotificationsBell
                         onNavigate={(route, options) => onNavigate(route as any, options)}
-                        buttonClassName="relative w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted hover:border-plex/50 hover:text-text transition-all"
+                        className="overflow-visible"
+                        buttonClassName="relative w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted hover:border-plex/50 hover:text-text transition-all overflow-visible"
                     />
                     <DiscoverLocaleSelect showLabel={false} className="w-[6.75rem]" />
                     <div className="relative" ref={mobileThemeRef}>
