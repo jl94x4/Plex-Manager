@@ -1522,7 +1522,8 @@ export const SettingsDashboard: React.FC = () => {
                 await apiFetch('/api/status/config', { method: 'POST', body: JSON.stringify(statusDraft) });
                 setStatusConfig(statusDraft);
             } catch (e: any) {
-                addToast('Failed to save status monitor configuration', 'error');
+                addToast(e?.message || 'Failed to save status monitor configuration', 'error');
+                return;
             }
         }
 

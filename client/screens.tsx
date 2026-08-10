@@ -8582,6 +8582,18 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
     const selectedStats = periodStats(selectedHealth, period);
     const selectedBars = barsForPeriod(selectedHealth, period);
     const selectedLatencySeries = latencySeriesForPeriod(selectedHealth, period);
+    const knownGroupIds = new Set((groups || []).map((group: any) => String(group?.id ?? '')));
+    const ungroupedServices = (services || []).filter((service: any) => {
+        const groupId = service?.groupId;
+        if (groupId == null || groupId === '') return true;
+        return !knownGroupIds.has(String(groupId));
+    });
+    const overviewGroups = [
+        ...(Array.isArray(groups) ? groups : []),
+        ...(ungroupedServices.length
+            ? [{ id: '__ungrouped__', name: 'Ungrouped', order: 9999 }]
+            : []),
+    ];
 
     const barClassForTone = (tone: string) => {
         if (tone === 'online') return 'bg-status-active hover:shadow-[0_0_8px_rgba(35,134,54,0.6)]';
@@ -8760,8 +8772,10 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                             </DashboardPanel>
                         )}
 
-                        {groups.map((group: any) => {
-                            const groupServices = services.filter((s: any) => s.groupId === group.id);
+                        {overviewGroups.map((group: any) => {
+                            const groupServices = group.id === '__ungrouped__'
+                                ? ungroupedServices
+                                : services.filter((s: any) => s.groupId === group.id);
                             if (groupServices.length === 0) return null;
                             return (
                                 <DashboardPanel

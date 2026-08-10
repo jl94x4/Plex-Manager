@@ -1246,28 +1246,44 @@ const syncIntegrationServicesInStatusConfig = (config = {}) => {
             description: `${downloadClientLabel(client.type)} download client`,
             visibleToUsers: false,
         }));
-    const managedServices = [...arrServices, ...downloadServices];
-    const existingById = new Map((statusConfig.services || []).map((service) => [service.id, service]));
-    const managedIds = new Set(managedServices.map((service) => service.id));
-    const unmanaged = (statusConfig.services || []).filter((service) => {
+    const managedTemplates = [...arrServices, ...downloadServices];
+    const suppressed = new Set(
+        (Array.isArray(statusConfig.suppressedManagedIds) ? statusConfig.suppressedManagedIds : []).map(String),
+    );
+    const existingServices = Array.isArray(statusConfig.services) ? statusConfig.services : [];
+    const existingById = new Map(existingServices.map((service) => [String(service.id), service]));
+
+    // Keep custom / manually added monitors (not arr-* / download-* managed rows).
+    const unmanaged = existingServices.filter((service) => {
         const id = String(service.id || '');
-        return !managedIds.has(id) && !id.startsWith('arr-') && !id.startsWith('download-');
+        return !id.startsWith('arr-') && !id.startsWith('download-');
     });
-    const mergedManaged = managedServices.map((service) => {
-        const existing = existingById.get(service.id);
-        // Preserve admin toggles (visibleToUsers / isCritical) from existing config.
-        return existing ? {
-            ...existing,
-            name: service.name,
-            url: service.url,
-            type: service.type,
-            clientType: service.clientType,
-            clientId: service.clientId,
-            groupId: service.groupId,
-            description: service.description,
-        } : service;
-    });
+
+    const mergedManaged = [];
+    for (const template of managedTemplates) {
+        const id = String(template.id);
+        // Honor admin deletions — do not resurrect suppressed managed monitors.
+        if (suppressed.has(id)) continue;
+
+        const existing = existingById.get(id);
+        if (existing) {
+            mergedManaged.push({
+                ...existing,
+                // Only refresh connection metadata from Integrations; keep name/group/visibility.
+                url: template.url,
+                type: template.type,
+                ...(template.clientType != null ? { clientType: template.clientType } : {}),
+                ...(template.clientId != null ? { clientId: template.clientId } : {}),
+                // Managed rows without an explicit flag default to admin-only.
+                visibleToUsers: existing.visibleToUsers === undefined ? false : existing.visibleToUsers !== false,
+            });
+        } else {
+            mergedManaged.push(template);
+        }
+    }
+
     statusConfig.services = [...unmanaged, ...mergedManaged];
+    statusConfig.suppressedManagedIds = [...suppressed];
 };
 
 /** Public/member Status page: omit admin-only services. Missing flag stays visible for back-compat. */
@@ -11498,7 +11514,9 @@ app.get('/api/status', publicReadRateLimit, async (req, res) => {
     if (token) {
         try {
             sessionUser = jwt.verify(token, JWT_SECRET);
-            viewerIsAdmin = await resolveCurrentAdmin(getSessionActor(sessionUser), config);
+            const isRealAdmin = await resolveCurrentAdmin(getSessionActor(sessionUser), config);
+            // Impersonation must see the member/public view — not the full admin service list.
+            viewerIsAdmin = effectiveViewerIsAdmin(sessionUser, isRealAdmin);
         } catch (e) {
             sessionUser = null;
             viewerIsAdmin = false;
@@ -11583,6 +11601,14 @@ app.post('/api/status/config', requireAuth, requireAdmin, async (req, res) => {
         if (!Array.isArray(services) || !Array.isArray(groups)) {
             return res.status(400).json({ error: 'Invalid config structure: services and groups must be arrays.' });
         }
+        const previousServices = Array.isArray(statusConfig.services) ? statusConfig.services : [];
+        const previousManagedIds = previousServices
+            .map((service) => String(service?.id || ''))
+            .filter((id) => id.startsWith('arr-') || id.startsWith('download-'));
+        const previousSuppressed = new Set(
+            (Array.isArray(statusConfig.suppressedManagedIds) ? statusConfig.suppressedManagedIds : []).map(String),
+        );
+
         const sanitizedServices = [];
         for (const service of services) {
             if (!service || typeof service !== 'object') continue;
@@ -11600,6 +11626,10 @@ app.post('/api/status/config', requireAuth, requireAdmin, async (req, res) => {
                     return res.status(400).json({ error: `Invalid service URL for "${service.name || service.id || 'unknown'}": ${e.message}` });
                 }
             }
+            const rawGroupId = service.groupId;
+            const groupId = (rawGroupId == null || rawGroupId === '')
+                ? null
+                : String(rawGroupId);
             sanitizedServices.push({
                 id: String(service.id || randomUUID()),
                 name: String(service.name || 'Service'),
@@ -11608,14 +11638,33 @@ app.post('/api/status/config', requireAuth, requireAdmin, async (req, res) => {
                 type: String(service.type || 'web'),
                 clientType: service.clientType ? String(service.clientType) : undefined,
                 clientId: service.clientId ? String(service.clientId) : undefined,
-                groupId: String(service.groupId || 'core'),
+                groupId,
                 description: String(service.description || ''),
                 isCritical: service.isCritical !== false,
                 // Default visible when unset so older configs keep showing on the public page.
                 visibleToUsers: service.visibleToUsers !== false,
             });
         }
-        statusConfig = { services: sanitizedServices, groups, announcement: announcement || null };
+
+        // Track managed monitors the admin removed so /api/config sync does not resurrect them.
+        const nextManagedIds = new Set(
+            sanitizedServices
+                .map((service) => String(service.id || ''))
+                .filter((id) => id.startsWith('arr-') || id.startsWith('download-')),
+        );
+        for (const id of previousManagedIds) {
+            if (!nextManagedIds.has(id)) previousSuppressed.add(id);
+        }
+        for (const id of nextManagedIds) {
+            previousSuppressed.delete(id);
+        }
+
+        statusConfig = {
+            services: sanitizedServices,
+            groups,
+            announcement: announcement || null,
+            suppressedManagedIds: [...previousSuppressed],
+        };
         await saveFile(STATUS_CONFIG_PATH, statusConfig);
         res.json({ success: true, message: 'Status configuration updated successfully.' });
     } catch (error) {
