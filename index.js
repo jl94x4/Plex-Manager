@@ -1220,6 +1220,7 @@ import {
     listInAppNotificationsForUser,
     countUnreadInAppNotifications,
     markInAppNotificationsRead,
+    clearInAppNotificationsForUser,
     setInAppNotificationCreatedHook,
     createInAppNotification,
     getInAppNotificationsAdminSummary,
@@ -3619,6 +3620,26 @@ app.post('/api/notifications/read', requireAuth, requireMember, async (req, res)
     } catch (e) {
         log(`Error marking notifications read: ${e.message}`);
         res.status(500).json({ error: 'Failed to update notifications' });
+    }
+});
+
+app.post('/api/notifications/clear', requireAuth, requireMember, async (req, res) => {
+    if (blockIfImpersonating(req, res)) return;
+    try {
+        const { localUser } = await ensurePortalUserForNotifications(req.user);
+        if (!localUser?.id) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const clearAll = !!req.body?.all;
+        const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).filter(Boolean) : null;
+        if (!clearAll && !(ids && ids.length)) {
+            return res.status(400).json({ error: 'Specify all or ids' });
+        }
+        const result = await clearInAppNotificationsForUser(localUser.id, clearAll ? null : ids);
+        res.json({ success: true, ...result });
+    } catch (e) {
+        log(`Error clearing notifications: ${e.message}`);
+        res.status(500).json({ error: 'Failed to clear notifications' });
     }
 });
 

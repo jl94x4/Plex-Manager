@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
 import { apiFetch } from './api';
-import { IN_APP_NOTIFICATIONS_CHANGED_EVENT } from './inAppNotificationsRefresh';
+import { IN_APP_NOTIFICATIONS_CHANGED_EVENT, notifyInAppNotificationsChanged } from './inAppNotificationsRefresh';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
 
@@ -56,6 +56,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
     const [items, setItems] = useState<InAppNotification[]>([]);
     const [unread, setUnread] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [clearing, setClearing] = useState(false);
     const [panelBox, setPanelBox] = useState<PanelBox | null>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
@@ -164,8 +165,27 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             });
             setItems((prev) => prev.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() })));
             setUnread(0);
+            notifyInAppNotificationsChanged();
         } catch {
             // ignore
+        }
+    };
+
+    const clearAll = async () => {
+        if (clearing || !items.length) return;
+        try {
+            setClearing(true);
+            await apiFetch('/api/notifications/clear', {
+                method: 'POST',
+                body: JSON.stringify({ all: true }),
+            });
+            setItems([]);
+            setUnread(0);
+            notifyInAppNotificationsChanged();
+        } catch {
+            // ignore
+        } finally {
+            setClearing(false);
         }
     };
 
@@ -201,26 +221,39 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         ? createPortal(
             <div
                 ref={panelRef}
-                className="fixed overflow-hidden rounded-xl border border-border bg-card shadow-2xl z-[400]"
+                className="fixed overflow-hidden rounded-xl border border-border shadow-2xl z-[400]"
                 style={{
                     left: panelBox.left,
                     width: panelBox.width,
                     maxHeight: panelBox.maxHeight,
                     top: panelBox.top,
                     bottom: panelBox.bottom,
+                    backgroundColor: 'rgb(var(--color-card))',
                 }}
             >
                 <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/80">
                     <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('notifications.title')}</p>
-                    {unread > 0 && (
-                        <button
-                            type="button"
-                            onClick={markAllRead}
-                            className="text-[11px] font-semibold text-plex hover:underline"
-                        >
-                            {t('notifications.markAllRead')}
-                        </button>
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                        {unread > 0 && (
+                            <button
+                                type="button"
+                                onClick={markAllRead}
+                                className="text-[11px] font-semibold text-plex hover:underline"
+                            >
+                                {t('notifications.markAllRead')}
+                            </button>
+                        )}
+                        {items.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={clearAll}
+                                disabled={clearing}
+                                className="text-[11px] font-semibold text-muted hover:text-text hover:underline disabled:opacity-50"
+                            >
+                                {t('notifications.clearAll')}
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="overflow-y-auto max-h-[inherit] custom-scrollbar" style={{ maxHeight: `calc(${panelBox.maxHeight}px - 2.5rem)` }}>
                     {loading && !items.length ? (

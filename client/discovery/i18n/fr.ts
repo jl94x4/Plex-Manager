@@ -214,6 +214,7 @@ export const fr: DeepPartial<EnCatalog> = {
     notifications: {
         title: 'Notifications',
         markAllRead: 'Tout marquer comme lu',
+        clearAll: 'Tout effacer',
         empty: 'Aucune notification pour le moment',
     },
     home: {

@@ -212,6 +212,7 @@ export const en = {
     notifications: {
         title: 'Notifications',
         markAllRead: 'Mark all read',
+        clearAll: 'Clear all',
         empty: 'No notifications yet',
     },
     home: {
