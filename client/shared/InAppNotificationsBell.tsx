@@ -272,7 +272,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             >
                 <Bell className="w-4 h-4" />
                 {unread > 0 && (
-                    <span className="absolute top-0 right-0 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none translate-x-1/4 -translate-y-1/4 pointer-events-none">
+                    <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none pointer-events-none">
                         {unread > 9 ? '9+' : unread}
                     </span>
                 )}

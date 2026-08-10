@@ -11759,12 +11759,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 {sidebarIdentityPosition !== 'top' && renderServerIdentity('bottom')}
 
-                <div className="mt-2 pt-2 border-t border-white/10 shrink-0 w-full min-w-0 overflow-hidden">
-                    <div className="grid grid-cols-[minmax(0,1fr)_2.5rem] gap-1.5 items-stretch w-full min-w-0">
+                <div className="mt-2 pt-2 border-t border-white/10 shrink-0 w-full min-w-0">
+                    <div className="grid grid-cols-[minmax(0,1fr)_2.75rem] gap-1.5 items-stretch w-full min-w-0">
                         <button
                             type="button"
                             onClick={() => setProfileOpen(true)}
-                            className="min-w-0 flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-all py-1 px-1.5 text-left"
+                            className="min-w-0 flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-all py-1 px-1.5 text-left overflow-hidden"
                         >
                             <img
                                 src={profileIcon}
@@ -11782,9 +11782,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         </button>
                         <InAppNotificationsBell
                             onNavigate={(route, options) => onNavigate(route as any, options)}
-                            className="min-w-0 w-full self-stretch"
+                            className="min-w-0 w-full self-stretch overflow-visible"
                             placement="up"
-                            buttonClassName="relative w-full h-full flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted hover:text-text hover:border-plex/40 hover:bg-white/10 transition-all"
+                            buttonClassName="relative w-full h-full flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted hover:text-text hover:border-plex/40 hover:bg-white/10 transition-all overflow-visible"
                         />
                     </div>
                     <div className="mt-1 flex flex-col items-center gap-0.5">
