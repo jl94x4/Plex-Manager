@@ -1,5 +1,6 @@
 import { askConfirm } from '../../shared/confirm';
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { usePoll } from '../../shared/usePoll';
 import {
@@ -207,12 +208,12 @@ const JobsPage: React.FC = () => {
                     <p className="text-muted mb-8">
                         Collections created with the "Auto-Sync" option in the Creator tab will appear here. These jobs automatically refresh your collections every 6 hours.
                     </p>
-                    <a
-                        href="/creator"
+                    <Link
+                        to="/creator"
                         className="inline-flex items-center gap-2 bg-plex hover:bg-plex/80 text-text px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105"
                     >
                         Go to Creator <ChevronRight className="w-5 h-5" />
-                    </a>
+                    </Link>
                 </div>
             ) : filteredJobs.length === 0 ? (
                 <div className="text-center py-20 bg-card/30 border border-dashed border-border rounded-3xl">

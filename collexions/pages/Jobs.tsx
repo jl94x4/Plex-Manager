@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import {
     Play,
@@ -174,12 +175,12 @@ const JobsPage: React.FC = () => {
                     <p className="text-slate-400 mb-8">
                         Collections created with the "Auto-Sync" option in the Creator tab will appear here. These jobs automatically refresh your collections every 6 hours.
                     </p>
-                    <a
-                        href="/creator"
+                    <Link
+                        to="/creator"
                         className="inline-flex items-center gap-2 bg-plex-orange hover:bg-plex-orange/80 text-white px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105"
                     >
                         Go to Creator <ChevronRight className="w-5 h-5" />
-                    </a>
+                    </Link>
                 </div>
             ) : filteredJobs.length === 0 ? (
                 <div className="text-center py-20 bg-slate-900/20 border border-dashed border-slate-800 rounded-3xl">
