@@ -4,7 +4,7 @@ import express from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import fetch, { Blob, FormData } from 'node-fetch';
-import { randomUUID, randomBytes, createHash, createCipheriv, createDecipheriv } from 'crypto';
+import { randomUUID, randomBytes, createHash, createCipheriv, createDecipheriv, timingSafeEqual } from 'crypto';
 import nodemailer from 'nodemailer';
 import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
@@ -816,6 +816,63 @@ const setSessionCookie = (req, res, token) => {
         ...sessionCookieBase(req),
         maxAge: 7 * 24 * 60 * 60 * 1000,
     });
+};
+
+/** Bind Plex PIN login to the browser that started it (login CSRF / session substitution). */
+const PLEX_OAUTH_COOKIE = 'plex_oauth_state';
+const plexOauthStates = new Map(); // pinId -> { nonce, expiresAt }
+const PLEX_OAUTH_TTL_MS = 15 * 60 * 1000;
+
+const prunePlexOauthStates = () => {
+    const now = Date.now();
+    plexOauthStates.forEach((entry, pinId) => {
+        if (!entry?.expiresAt || entry.expiresAt <= now) plexOauthStates.delete(pinId);
+    });
+};
+
+const safeEqualString = (a, b) => {
+    const left = Buffer.from(String(a || ''), 'utf8');
+    const right = Buffer.from(String(b || ''), 'utf8');
+    if (left.length !== right.length || left.length === 0) return false;
+    return timingSafeEqual(left, right);
+};
+
+const issuePlexOauthState = (req, res, pinId) => {
+    prunePlexOauthStates();
+    const id = String(pinId || '').trim();
+    if (!id) return null;
+    const nonce = randomBytes(24).toString('base64url');
+    plexOauthStates.set(id, { nonce, expiresAt: Date.now() + PLEX_OAUTH_TTL_MS });
+    res.cookie(PLEX_OAUTH_COOKIE, `${id}.${nonce}`, {
+        ...sessionCookieBase(req),
+        maxAge: PLEX_OAUTH_TTL_MS,
+    });
+    return nonce;
+};
+
+const consumePlexOauthState = (req, res, pinId) => {
+    prunePlexOauthStates();
+    const id = String(pinId || '').trim();
+    const expected = id ? plexOauthStates.get(id) : null;
+    if (id) plexOauthStates.delete(id);
+    const raw = String(req.cookies?.[PLEX_OAUTH_COOKIE] || '').trim();
+    res.clearCookie(PLEX_OAUTH_COOKIE, sessionCookieBase(req));
+    if (!expected || !id || expected.expiresAt <= Date.now()) return false;
+    const sep = raw.indexOf('.');
+    if (sep <= 0) return false;
+    const cookiePin = raw.slice(0, sep);
+    const cookieNonce = raw.slice(sep + 1);
+    return safeEqualString(cookiePin, id) && safeEqualString(cookieNonce, expected.nonce);
+};
+
+const rejectPlexOauthState = (req, res, { redirectOnSuccess = false } = {}) => {
+    const message = 'Login session expired or invalid. Please start Plex sign-in again.';
+    log('Plex OAuth state mismatch — rejecting PIN callback (possible login CSRF)');
+    clearSessionCookie(req, res);
+    if (redirectOnSuccess) {
+        return res.redirect(withBasePath('/?loginError=' + encodeURIComponent(message)));
+    }
+    return res.status(403).json({ error: message });
 };
 
 app.use(express.json({ limit: '1mb' })); // Poster Sets Warm + other admin payloads; was 50kb (413 on large Warm)
@@ -3111,6 +3168,7 @@ app.post('/api/auth/plex/login', authRateLimit, async (req, res) => {
         });
         if (!response.ok) throw new Error('Failed to generate Plex PIN');
         const data = await response.json();
+        if (data?.id) issuePlexOauthState(req, res, data.id);
         res.json({ ...data, clientIdentifier: CLIENT_ID });
     } catch (err) {
         log('Error in plex login: ' + err.message);
@@ -3471,6 +3529,9 @@ app.get('/api/auth/session', publicReadRateLimit, async (req, res) => {
 app.post('/api/auth/plex/callback', authCallbackRateLimit, async (req, res) => {
     const { pinId, ref } = req.body;
     if (!pinId) return res.status(400).json({ error: 'pinId is required' });
+    if (!consumePlexOauthState(req, res, pinId)) {
+        return rejectPlexOauthState(req, res, { redirectOnSuccess: false });
+    }
 
     try {
         await handlePlexPinLogin(req, res, pinId, ref);
@@ -3483,6 +3544,9 @@ app.post('/api/auth/plex/callback', authCallbackRateLimit, async (req, res) => {
 app.get('/api/auth/plex/callback', authCallbackRateLimit, async (req, res) => {
     const { pinId, ref } = req.query;
     if (!pinId) return res.redirect(withBasePath('/?loginError=' + encodeURIComponent('Missing pin ID')));
+    if (!consumePlexOauthState(req, res, pinId)) {
+        return rejectPlexOauthState(req, res, { redirectOnSuccess: true });
+    }
 
     try {
         await handlePlexPinLogin(req, res, String(pinId), ref, { redirectOnSuccess: true });
@@ -3511,6 +3575,9 @@ app.post('/api/setup/plex/callback', setupRateLimit, authRateLimit, async (req, 
     if (!(await assertInitialSetupAccess(req, res))) return;
     const { pinId } = req.body;
     if (!pinId) return res.status(400).json({ error: 'pinId is required' });
+    if (!consumePlexOauthState(req, res, pinId)) {
+        return rejectPlexOauthState(req, res, { redirectOnSuccess: false });
+    }
 
     try {
         const pinData = await fetchPlexPinAuthToken(pinId);
@@ -10669,6 +10736,9 @@ app.get('/api/invites/:code/info', publicReadRateLimit, async (req, res) => {
 app.post('/api/invites/:code/claim', authRateLimit, async (req, res) => {
     const { pinId } = req.body;
     if (!pinId) return res.status(400).json({ error: 'PIN ID is required' });
+    if (!consumePlexOauthState(req, res, pinId)) {
+        return rejectPlexOauthState(req, res, { redirectOnSuccess: false });
+    }
 
     let invites = await loadFile(INVITES_PATH, []);
     const inviteIndex = invites.findIndex(i => i.code === req.params.code);
