@@ -1981,6 +1981,66 @@ const findLocalUserForSession = (users, sessionUser) => {
     }) || null;
 };
 
+/**
+ * Admins (Plex server owners) often never appear in users.json because sync only
+ * imports shared friends — not the owner. Create a stable portal user row so
+ * in-app / push notifications have a real userId to attach to.
+ */
+const ensurePortalUserForNotifications = async (sessionUser, { config: configArg = null } = {}) => {
+    const users = await loadFile(USERS_PATH, []);
+    let localUser = findLocalUserForSession(users, sessionUser);
+    if (localUser?.id) return { users, localUser, created: false };
+
+    const config = configArg || await loadFile(CONFIG_PATH, {});
+    const actor = getSessionActor(sessionUser);
+    const isAdmin = await resolveCurrentAdmin(actor, config);
+    if (!isAdmin) return { users, localUser: null, created: false };
+
+    const mediaServerType = String(config?.mediaServerType || 'plex').toLowerCase();
+    let plexId = sessionUser.plexId ? String(sessionUser.plexId) : null;
+    if (!plexId && mediaServerType === 'plex') {
+        plexId = (await getAdminId(config)) || null;
+    }
+    const jellyfinId = sessionUser.jellyfinId ? String(sessionUser.jellyfinId) : null;
+    const stableId = String(plexId || jellyfinId || sessionUser.id || '').trim();
+    if (!stableId) return { users, localUser: null, created: false };
+
+    localUser = users.find((user) => (
+        String(user?.id) === stableId
+        || (plexId && String(user?.plexId) === plexId)
+        || (jellyfinId && String(user?.jellyfinId) === jellyfinId)
+        || (sessionUser.username && String(user?.username || '').toLowerCase() === String(sessionUser.username).toLowerCase())
+    )) || null;
+    if (localUser?.id) {
+        let changed = false;
+        if (plexId && !localUser.plexId) { localUser.plexId = plexId; changed = true; }
+        if (jellyfinId && !localUser.jellyfinId) { localUser.jellyfinId = jellyfinId; changed = true; }
+        if (changed) await saveFile(USERS_PATH, users);
+        return { users, localUser, created: false };
+    }
+
+    const created = {
+        id: stableId,
+        ...(plexId ? { plexId } : {}),
+        ...(jellyfinId ? { jellyfinId } : {}),
+        username: sessionUser.username || 'Admin',
+        email: sessionUser.email || '',
+        thumb: sessionUser.thumb || null,
+        joiningDate: new Date().toISOString(),
+        expiryDate: null,
+        plexAccessStatus: 'active',
+        isTrial: false,
+        notifyRequestAvailableEmail: true,
+        notifyRequestAvailableInApp: true,
+        notifyRequestAvailableWebPush: true,
+        notifyWebPush: true,
+    };
+    users.push(created);
+    await saveFile(USERS_PATH, users);
+    log(`[Notifications] Ensured admin portal user for ${created.username} (${stableId})`);
+    return { users, localUser: created, created: true };
+};
+
 /** Record portal last-login using the same identity matching as membership checks. */
 const touchUserLastLogin = (users, sessionUser, at = new Date().toISOString(), extras = {}) => {
     const existingUser = findLocalUserForSession(users, sessionUser);
@@ -3531,8 +3591,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
 
 app.get('/api/notifications', requireAuth, requireMember, async (req, res) => {
     try {
-        const users = await loadFile(USERS_PATH, []);
-        const localUser = findLocalUserForSession(users, req.user);
+        const { localUser } = await ensurePortalUserForNotifications(req.user);
         if (!localUser?.id) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -3549,8 +3608,7 @@ app.get('/api/notifications', requireAuth, requireMember, async (req, res) => {
 app.post('/api/notifications/read', requireAuth, requireMember, async (req, res) => {
     if (blockIfImpersonating(req, res)) return;
     try {
-        const users = await loadFile(USERS_PATH, []);
-        const localUser = findLocalUserForSession(users, req.user);
+        const { localUser } = await ensurePortalUserForNotifications(req.user);
         if (!localUser?.id) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -3585,8 +3643,7 @@ app.post('/api/notifications/push/subscribe', requireAuth, requireMember, async 
         if (!isWebPushGloballyEnabled(config)) {
             return res.status(400).json({ error: 'Web Push is disabled' });
         }
-        const users = await loadFile(USERS_PATH, []);
-        const localUser = findLocalUserForSession(users, req.user);
+        const { localUser } = await ensurePortalUserForNotifications(req.user, { config });
         if (!localUser?.id) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -3604,8 +3661,7 @@ app.post('/api/notifications/push/subscribe', requireAuth, requireMember, async 
 app.post('/api/notifications/push/unsubscribe', requireAuth, requireMember, async (req, res) => {
     if (blockIfImpersonating(req, res)) return;
     try {
-        const users = await loadFile(USERS_PATH, []);
-        const localUser = findLocalUserForSession(users, req.user);
+        const { localUser } = await ensurePortalUserForNotifications(req.user);
         if (!localUser?.id) {
             return res.status(404).json({ error: 'User not found' });
         }
@@ -3742,10 +3798,12 @@ app.post('/api/admin/notifications/test', requireAdmin, async (req, res) => {
     if (blockIfImpersonating(req, res)) return;
     try {
         const config = await loadFile(CONFIG_PATH, {});
-        const users = await loadFile(USERS_PATH, []);
-        const localUser = findLocalUserForSession(users, req.user);
+        const { localUser } = await ensurePortalUserForNotifications(req.user, { config });
         if (!localUser?.id) {
-            return res.status(404).json({ error: 'Admin user not found in local users store' });
+            return res.status(404).json({
+                error: 'Admin user not found in local users store',
+                hint: 'Your admin Plex/Jellyfin account is missing from users.json. Sync users or re-login, then try again.',
+            });
         }
         const channels = Array.isArray(req.body?.channels) && req.body.channels.length
             ? req.body.channels.map(String)
