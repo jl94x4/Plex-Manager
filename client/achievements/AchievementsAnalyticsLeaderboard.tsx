@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { apiFetch } from '../shared/api';
 import { logoUrl } from '../shared/basePath';
-import { tAchievements } from './i18n';
+import { tAchievements, useAchievementsI18n } from './i18n';
 
 type LeaderboardEntry = {
     rank: number;
@@ -40,6 +40,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
     isAdmin,
     onUserClick,
 }) => {
+    const { locale, tAchievements } = useAchievementsI18n();
     const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [enabled, setEnabled] = useState(true);
@@ -116,7 +117,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                 sub: topLevel ? tAchievements('common.badgeCount', { count: topLevel.earnedCount }) : '',
             },
         ];
-    }, [byXp, byBadges, byLevel]);
+    }, [byXp, byBadges, byLevel, locale]);
 
     const xpChart = useMemo(
         () => byXp.slice(0, 10).map((u) => ({ name: shortName(u.username), full: u.username, value: u.xp })),

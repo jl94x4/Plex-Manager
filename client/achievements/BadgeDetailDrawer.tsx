@@ -3,7 +3,7 @@ import { Pin, PinOff, X, Lock, Calendar, Trophy, Flag } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { ModalPortal } from '../shared/ModalPortal';
-import { tAchievements } from './i18n';
+import { tAchievements, useAchievementsI18n } from './i18n';
 
 const rarityClass = (rarity: string) => {
     // Border + text only — never set translucent bg on the panel itself.
@@ -56,6 +56,7 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
     onTogglePin,
     pinBusy,
 }) => {
+    const { tAchievements } = useAchievementsI18n();
     const [detail, setDetail] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);

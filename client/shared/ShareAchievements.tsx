@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { X, Copy, Download, Share2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { getPublicOrigin } from './basePath';
-import { tAchievements } from '../achievements/i18n';
+import { tAchievements, useAchievementsI18n } from '../achievements/i18n';
 
 const EXPORT_WIDTH_PX = 1080;
 
@@ -17,21 +17,21 @@ const waitForExportImages = (root: HTMLElement) => Promise.all(
     }),
 );
 
-export const buildAchievementsShareText = (me: any, serverName: string, rank?: number | null) => {
+export const buildAchievementsShareText = (me: any, serverName: string, rank?: number | null, translate = tAchievements) => {
     const recent = Array.isArray(me?.recentEarned) ? me.recentEarned.slice(0, 5) : [];
     const origin = typeof window !== 'undefined' ? window.location.origin : getPublicOrigin();
     const lines = [
-        `🏆 ${tAchievements('share.textTitle', { serverName })}`,
+        `🏆 ${translate('share.textTitle', { serverName })}`,
         me?.username ? `👤 ${me.username}` : '',
         '',
-        `⭐ ${tAchievements('share.textLevelXp', { level: me?.level || 1, xp: (Number(me?.xp) || 0).toLocaleString() })}`,
-        rank ? `🏅 ${tAchievements('share.textRank', { rank })}` : '',
-        `🎖️ ${tAchievements('dossier.badgeCount', { earned: me?.earnedCount || 0, total: me?.totalBadges || 0 })}`,
+        `⭐ ${translate('share.textLevelXp', { level: me?.level || 1, xp: (Number(me?.xp) || 0).toLocaleString() })}`,
+        rank ? `🏅 ${translate('share.textRank', { rank })}` : '',
+        `🎖️ ${translate('dossier.badgeCount', { earned: me?.earnedCount || 0, total: me?.totalBadges || 0 })}`,
         recent.length
-            ? `✨ ${tAchievements('share.textRecent', { names: recent.map((b: any) => b?.name).filter(Boolean).join(', ') })}`
+            ? `✨ ${translate('share.textRecent', { names: recent.map((b: any) => b?.name).filter(Boolean).join(', ') })}`
             : '',
         '',
-        tAchievements('share.textSharedFrom', { origin }),
+        translate('share.textSharedFrom', { origin }),
     ].filter(Boolean);
     return lines.join('\n');
 };
@@ -51,6 +51,7 @@ export const ShareAchievementsModal: React.FC<Props> = ({
     onClose,
     onToast,
 }) => {
+    const { tAchievements } = useAchievementsI18n();
     const exportRef = useRef<HTMLDivElement>(null);
     const [busy, setBusy] = useState<'copy' | 'download' | 'share' | null>(null);
     const lp = me?.levelProgress || {};
@@ -88,7 +89,7 @@ export const ShareAchievementsModal: React.FC<Props> = ({
     const handleCopyText = async () => {
         setBusy('copy');
         try {
-            await navigator.clipboard.writeText(buildAchievementsShareText(me, serverName, rank));
+            await navigator.clipboard.writeText(buildAchievementsShareText(me, serverName, rank, tAchievements));
             onToast?.(tAchievements('share.copied'), 'success');
         } catch {
             onToast?.(tAchievements('share.copyFailed'), 'error');
@@ -121,7 +122,7 @@ export const ShareAchievementsModal: React.FC<Props> = ({
 
     const handleShare = async () => {
         setBusy('share');
-        const text = buildAchievementsShareText(me, serverName, rank);
+        const text = buildAchievementsShareText(me, serverName, rank, tAchievements);
         try {
             if (!navigator.share) {
                 await navigator.clipboard.writeText(text);

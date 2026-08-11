@@ -6,7 +6,7 @@ import {
 import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { ModalPortal } from '../shared/ModalPortal';
-import { tAchievements } from './i18n';
+import { tAchievements, useAchievementsI18n } from './i18n';
 
 const PANEL_FALLBACK = '#12141a';
 const PANEL_BG = 'rgb(var(--color-card))';
@@ -33,8 +33,8 @@ const resolveAvatar = (thumb: string | null | undefined, size = 160) => {
     return portalUrl(`/api/plex/image?path=${encodeURIComponent(thumb)}&width=${size}&height=${size}`);
 };
 
-const formatXpLabel = (key: string) => {
-    const mapped = tAchievements(`xp.source.${key}`);
+const formatXpLabel = (key: string, translate = tAchievements) => {
+    const mapped = translate(`xp.source.${key}`);
     return mapped.startsWith('xp.source.') ? key : mapped;
 };
 
@@ -47,6 +47,7 @@ type Props = {
 };
 
 export const LeaderboardDossierModal: React.FC<Props> = ({ query, onClose, onOpenBadge }) => {
+    const { tAchievements } = useAchievementsI18n();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -358,7 +359,7 @@ export const LeaderboardDossierModal: React.FC<Props> = ({ query, onClose, onOpe
                                                         {tAchievements('dossier.signature')}
                                                     </p>
                                                     <p className="text-sm font-bold text-text mt-1">
-                                                        {formatXpLabel(String(data.signature.label || data.signature.key))}
+                                                        {formatXpLabel(String(data.signature.label || data.signature.key), tAchievements)}
                                                     </p>
                                                     <p className="text-xs font-mono text-plex mt-0.5">
                                                         {Number(data.signature.value || 0).toLocaleString()}

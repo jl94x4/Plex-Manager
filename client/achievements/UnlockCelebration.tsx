@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
 import { ModalPortal } from '../shared/ModalPortal';
-import { tAchievements } from './i18n';
+import { tAchievements, useAchievementsI18n } from './i18n';
 
 type Props = {
     badges: Array<{ id?: string; name?: string; icon?: string }>;
@@ -12,6 +12,7 @@ const CONFETTI_COLORS = ['#e5a00d', '#38bdf8', '#a78bfa', '#34d399', '#f472b6', 
 
 /** Full-screen unlock moment with lightweight CSS confetti. Respect mute at call site. */
 export const UnlockCelebration: React.FC<Props> = ({ badges, onClose }) => {
+    const { tAchievements } = useAchievementsI18n();
     const [visible, setVisible] = useState(true);
     const pieces = useMemo(
         () => Array.from({ length: 36 }, (_, i) => ({
