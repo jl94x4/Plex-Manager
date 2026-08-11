@@ -70,6 +70,7 @@ import {
 import { loadPosterSetsAudit } from './lib/poster-sets/audit.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 import { createTtlLruCache } from './lib/memory-cache.js';
+import { asArray, extractPlexItemBytes } from './lib/plex-stats-bytes.js';
 
 const resolveAppVersion = () => {
     const pkgVersion = resolvePackageVersion();
@@ -6618,6 +6619,9 @@ const buildPlexStatsCache = async () => {
             '10 GB+': { movies: 0, shows: 0 }
         };
 
+        // Plex JSON often returns a single Media/Part as an object, not a 1-item array
+        // (especially music tracks). Iterating the object stringifies keys and skips size.
+
         for (const dir of directories) {
             try {
                 // ── Item count (single zero-size request) ──
@@ -6648,6 +6652,7 @@ const buildPlexStatsCache = async () => {
                 }
 
                 // ── Bytes (paginated) ──
+                // movie=1, episode=4, track=10
                 const typeParam = dir.type === 'movie' ? '?type=1' : dir.type === 'show' ? '?type=4' : dir.type === 'artist' ? '?type=10' : '';
                 if (!typeParam) continue;
 
@@ -6667,7 +6672,8 @@ const buildPlexStatsCache = async () => {
 
                     for (const item of items) {
                         let is4k = false;
-                        for (const media of item.Media || []) {
+                        for (const media of asArray(item.Media)) {
+                            if (!media || typeof media !== 'object') continue;
                             if (media.videoResolution === '4k') is4k = true;
 
                             if (dir.type === 'movie' || dir.type === 'show') {
@@ -6685,29 +6691,31 @@ const buildPlexStatsCache = async () => {
                                 else codecs['Other']++;
                             }
 
-                            for (const part of media.Part || []) {
-                                if (part.size) {
-                                    const partSize = parseInt(part.size);
-                                    bytes += partSize;
+                            for (const part of asArray(media.Part)) {
+                                if (!part || typeof part !== 'object') continue;
+                                const partSize = Number(part.size ?? part.fileSize ?? 0);
+                                if (!Number.isFinite(partSize) || partSize <= 0) continue;
 
-                                    if (dir.type === 'movie') {
-                                        const sizeMB = partSize / (1024 * 1024);
-                                        if (sizeMB < 500) fileSizes['0 - 500 MB'].movies++;
-                                        else if (sizeMB < 1500) fileSizes['500 MB - 1.5 GB'].movies++;
-                                        else if (sizeMB < 5000) fileSizes['1.5 GB - 5 GB'].movies++;
-                                        else if (sizeMB < 10000) fileSizes['5 GB - 10 GB'].movies++;
-                                        else fileSizes['10 GB+'].movies++;
-                                    } else if (dir.type === 'show') {
-                                        const sizeMB = partSize / (1024 * 1024);
-                                        if (sizeMB < 500) fileSizes['0 - 500 MB'].shows++;
-                                        else if (sizeMB < 1500) fileSizes['500 MB - 1.5 GB'].shows++;
-                                        else if (sizeMB < 5000) fileSizes['1.5 GB - 5 GB'].shows++;
-                                        else if (sizeMB < 10000) fileSizes['5 GB - 10 GB'].shows++;
-                                        else fileSizes['10 GB+'].shows++;
-                                    }
+                                if (dir.type === 'movie') {
+                                    const sizeMB = partSize / (1024 * 1024);
+                                    if (sizeMB < 500) fileSizes['0 - 500 MB'].movies++;
+                                    else if (sizeMB < 1500) fileSizes['500 MB - 1.5 GB'].movies++;
+                                    else if (sizeMB < 5000) fileSizes['1.5 GB - 5 GB'].movies++;
+                                    else if (sizeMB < 10000) fileSizes['5 GB - 10 GB'].movies++;
+                                    else fileSizes['10 GB+'].movies++;
+                                } else if (dir.type === 'show') {
+                                    const sizeMB = partSize / (1024 * 1024);
+                                    if (sizeMB < 500) fileSizes['0 - 500 MB'].shows++;
+                                    else if (sizeMB < 1500) fileSizes['500 MB - 1.5 GB'].shows++;
+                                    else if (sizeMB < 5000) fileSizes['1.5 GB - 5 GB'].shows++;
+                                    else if (sizeMB < 10000) fileSizes['5 GB - 10 GB'].shows++;
+                                    else fileSizes['10 GB+'].shows++;
                                 }
                             }
                         }
+
+                        bytes += extractPlexItemBytes(item);
+
                         if (is4k) {
                             if (dir.type === 'movie') total4kMovies++;
                             else if (dir.type === 'show') fourKShows.add(item.grandparentRatingKey || item.parentRatingKey || item.title);
@@ -6754,7 +6762,7 @@ const buildPlexStatsCache = async () => {
         };
         cachedPlexStats = stats;
         await fs.writeFile(PLEX_STATS_CACHE_PATH, JSON.stringify(stats, null, 2));
-        log(`[PlexStats] Cache built and saved — movies: ${totalMoviesCount}, shows: ${totalShowsCount}, music: ${totalMusicCount}, episodes: ${totalEpisodesCount}, artists: ${totalArtistsCount}, albums: ${totalAlbumsCount}, tracks: ${totalTracksCount}`);
+        log(`[PlexStats] Cache built and saved — movies: ${totalMoviesCount}, shows: ${totalShowsCount}, music: ${totalMusicCount} (${totalMusicBytes} bytes), episodes: ${totalEpisodesCount}, artists: ${totalArtistsCount}, albums: ${totalAlbumsCount}, tracks: ${totalTracksCount}`);
         markTaskEnd(systemJobs.plexStats, null);
     } catch (e) {
         log(`[PlexStats] Build failed: ${e.message}`);
