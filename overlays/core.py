@@ -311,6 +311,18 @@ def _iter_shows(plex: PlexServer, config: dict):
             yield section, show
 
 
+def _as_datetime(value) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        # plexapi sometimes returns datetime.date
+        return datetime.combine(value, datetime.min.time())
+    except Exception:
+        return None
+
+
 def _search_recent_premiere_episodes(section, cutoff: datetime):
     """
     Fast path: only E01 episodes aired on/after cutoff.
@@ -320,34 +332,59 @@ def _search_recent_premiere_episodes(section, cutoff: datetime):
     plex = getattr(section, "_server", None)
     section_id = str(getattr(section, "key", "") or "").rstrip("/").split("/")[-1]
 
-    # Preferred: plexapi fetchItems against the section endpoint (stable filter params).
-    if plex is not None and section_id:
-        try:
-            items = plex.fetchItems(
-                f"/library/sections/{section_id}/all",
-                params={
-                    "type": 4,
-                    "episode.index": 1,
-                    "originallyAvailableAt>=": cutoff_str,
-                },
-            )
-            return list(items or [])
-        except Exception:
-            pass
+    def _client_filter(items: list) -> list:
+        out = []
+        for ep in items or []:
+            idx = getattr(ep, "index", None)
+            if idx is not None and idx not in (1, "1"):
+                continue
+            aired = _as_datetime(getattr(ep, "originallyAvailableAt", None))
+            if aired is None or aired < cutoff:
+                continue
+            out.append(ep)
+        return out
 
-    attempts = [
-        {"libtype": "episode", "filters": {"episode.index": 1, "originallyAvailableAt>>=": cutoff_str}},
-        {"libtype": "episode", "filters": {"index": 1, "originallyAvailableAt>>=": cutoff_str}},
-    ]
-    last_error = None
-    for kwargs in attempts:
+    candidates: list = []
+
+    # 1) plexapi filter syntax uses >>= for >=
+    try:
+        candidates = list(section.search(
+            libtype="episode",
+            filters={
+                "episode.index": 1,
+                "originallyAvailableAt>>=": cutoff_str,
+            },
+        ))
+    except Exception:
+        candidates = []
+
+    # Server ignored the date filter if we still got thousands of historic E01s.
+    if len(candidates) > 1000:
+        filtered = _client_filter(candidates)
+        if len(filtered) <= 500:
+            return filtered
+        candidates = []
+
+    # 2) Raw query string — keeps `>=` intact (params dict keys can get mangled).
+    if not candidates and plex is not None and section_id:
         try:
-            return list(section.search(**kwargs))
-        except Exception as exc:
-            last_error = exc
-    if last_error:
-        raise last_error
-    return []
+            key = (
+                f"/library/sections/{section_id}/all"
+                f"?type=4&index=1&originallyAvailableAt>={cutoff_str}"
+            )
+            candidates = list(plex.fetchItems(key) or [])
+        except Exception:
+            candidates = []
+        if len(candidates) > 1000:
+            filtered = _client_filter(candidates)
+            if len(filtered) <= 500:
+                return filtered
+            # Filter clearly broken — force slow path instead of 8k show() lookups.
+            raise RuntimeError(
+                f"Plex returned {len(candidates)} E01 rows without honouring the air-date filter"
+            )
+
+    return _client_filter(candidates)
 
 
 def discover_eligible_shows(
@@ -364,6 +401,7 @@ def discover_eligible_shows(
     should_have: set[str] = set()
     meta_by_key: dict[str, dict] = {}
     show_by_key: dict[str, Any] = {}
+    window_days = max(1, (datetime.now() - cutoff).days)
 
     for section in _iter_tv_sections(plex, config):
         _progress(progress, f"Scanning {section.title} for recent season premieres…")
@@ -372,12 +410,17 @@ def discover_eligible_shows(
         try:
             episodes = _search_recent_premiere_episodes(section, cutoff)
             used_fast = True
-            _progress(progress, f"{section.title}: {len(episodes)} recent E01 episode(s)")
+            _progress(
+                progress,
+                f"{section.title}: {len(episodes)} E01 premiere(s) in the last {window_days} day(s)",
+            )
         except Exception as exc:
             _progress(progress, f"{section.title}: fast search failed ({exc}); falling back to full scan")
 
         if used_fast:
-            for ep in episodes:
+            for idx, ep in enumerate(episodes, start=1):
+                if idx == 1 or idx % 10 == 0 or idx == len(episodes):
+                    _progress(progress, f"{section.title}: checking premiere {idx}/{len(episodes)}…")
                 try:
                     show = ep.show()
                     season = ep.season()
@@ -386,12 +429,11 @@ def discover_eligible_shows(
                 key = str(getattr(show, "ratingKey", "") or "")
                 if not key or key in should_have:
                     continue
+                aired = _as_datetime(getattr(ep, "originallyAvailableAt", None))
                 if skip_kometa and _has_kometa_overlay_label(show):
                     meta_by_key[key] = {
                         "seasonIndex": getattr(season, "index", None),
-                        "airedAt": getattr(ep, "originallyAvailableAt", None).isoformat()
-                        if getattr(ep, "originallyAvailableAt", None)
-                        else None,
+                        "airedAt": aired.isoformat() if aired else None,
                         "reason": "kometa_overlay_label",
                     }
                     show_by_key[key] = show
@@ -405,7 +447,6 @@ def discover_eligible_shows(
                 # Only the show's current latest season qualifies as "new season".
                 if str(latest.ratingKey) != str(season.ratingKey):
                     continue
-                aired = getattr(ep, "originallyAvailableAt", None)
                 if aired is None or aired < cutoff:
                     continue
                 should_have.add(key)
@@ -418,7 +459,7 @@ def discover_eligible_shows(
                 }
             continue
 
-        # Slow fallback (small libraries / older plexapi).
+        # Slow fallback (broken date filters / older plexapi).
         count = 0
         for show in section.all():
             count += 1
