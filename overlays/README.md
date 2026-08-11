@@ -1,14 +1,21 @@
 # Overlays (New Season + New Episode)
 
-Phase 1–2 of SMP Overlays — New Season show/season banners plus Netflix-style **New Episode** episode thumbs.
+Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on **season posters + episode thumbs**, presets/uploads, preview gallery, and binge grouping.
 
 ## Layout
 
 - `cli.py` / `core.py` — Python worker (Pillow + plexapi)
-- `assets/presets/new-season.png` — New Season banner
-- `assets/presets/new-episode.png` — New Episode banner (default 6-day window)
-- Runtime data: `config/overlays/` (`config.json`, `overlaid_log.json`, `episode_overlaid_log.json`, `preview/`, `preview/samples/`, `backups/`)
-- Settings **Visual sample** (`POST /api/overlays/sample`) composites banners onto a random show poster + episode thumb for QA (does not change live art)
+- `assets/presets/new-season.png`, `new-season-compact.png`
+- `assets/presets/new-episode.png`, `new-episode-compact.png`
+- Runtime data: `config/overlays/` (`config.json`, logs, `preview/`, `preview/samples/`, `presets/custom/`, `backups/`)
+- Settings **Visual sample** composites banners onto chosen/random Plex art (no live mutations)
+
+## Stamp rules (Phase 3)
+
+- **Show poster:** New Season only
+- **Season poster:** New Episode when the show has eligible new episodes (same window + binge skip)
+- **Episode thumbs:** New Episode (default 6-day window)
+- `skipNewEpisodeOnBinge` (default on): if 3+ episodes of the same season share an air date, skip episode + season New Episode stamps
 
 ## Setup
 
@@ -25,6 +32,5 @@ pip install -r overlays/requirements.txt
 ## Notes
 
 - Skips items with a Kometa `Overlay` label by default (`skipIfKometaOverlayLabel`)
-- New Episode stamps **episode thumbnails only** for episodes aired within `newEpisodeDays` (default 6)
-- `skipNewEpisodeOnBinge` (default on): if 3+ episodes of the same season share an air date, skip episode badges and rely on New Season
+- Custom PNG uploads go to `config/overlays/presets/custom/` (`season-*` / `episode-*`)
 - Prefer off-hours if Poster Sets / Kometa also rewrite posters on the same libraries

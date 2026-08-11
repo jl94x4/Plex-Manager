@@ -27,11 +27,19 @@ export type OverlaysConfig = {
     skipNewEpisodeOnBinge?: boolean;
     librarySectionIds?: string[];
     overlayPresetId?: string;
+    episodeOverlayPresetId?: string;
     scheduleHours?: number;
     skipIfKometaOverlayLabel?: boolean;
     plexSource?: string;
     lastRunAt?: string | null;
     lastRunSummary?: Record<string, unknown> | null;
+};
+
+export type OverlayPreset = {
+    id: string;
+    file?: string;
+    source?: 'bundled' | 'custom';
+    kind?: 'season' | 'episode';
 };
 
 export const overlaysApi = {
@@ -44,7 +52,27 @@ export const overlaysApi = {
     }) as Promise<{ ok: boolean; config: OverlaysConfig }>,
     shows: () => apiFetch(`${ROOT}/shows`),
     episodes: () => apiFetch(`${ROOT}/episodes`),
-    presets: () => apiFetch(`${ROOT}/presets`),
+    presets: () => apiFetch(`${ROOT}/presets`) as Promise<{ presets: OverlayPreset[] }>,
+    uploadPreset: async (kind: 'season' | 'episode', file: File) => {
+        const buf = await file.arrayBuffer();
+        const response = await fetch(
+            `${ROOT}/presets/upload?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name || 'banner')}`,
+            {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': file.type || 'application/octet-stream',
+                    'X-Overlay-Kind': kind,
+                    'X-Overlay-Name': file.name || 'banner',
+                },
+                body: buf,
+            },
+        );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data?.error || `Upload failed (${response.status})`);
+        return data;
+    },
+    deleteCustomPreset: (id: string) => apiFetch(`${ROOT}/presets/custom/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     sections: () => apiFetch(`${ROOT}/sections`),
     scan: () => apiFetch(`${ROOT}/scan`, json({})),
     reconcile: () => apiFetch(`${ROOT}/reconcile`, json({})),
@@ -54,8 +82,18 @@ export const overlaysApi = {
     importLog: (log: Record<string, unknown>, mode: 'merge' | 'replace' = 'merge') => (
         apiFetch(`${ROOT}/import-log`, json({ mode, log }))
     ),
-    resetOne: (ratingKey: string, kind?: 'show' | 'episode') => apiFetch(`${ROOT}/reset-one`, json({ ratingKey, kind })),
+    resetOne: (ratingKey: string, kind?: 'show' | 'episode' | 'seasonEpisode') => (
+        apiFetch(`${ROOT}/reset-one`, json({ ratingKey, kind }))
+    ),
     resetAll: () => apiFetch(`${ROOT}/reset-all`, json({})),
+    resetBingeGroup: (ratingKeys: string[]) => apiFetch(`${ROOT}/reset-binge-group`, json({ ratingKeys })),
+    previewGallery: () => apiFetch(`${ROOT}/preview-gallery`) as Promise<{ items: Array<{
+        name: string;
+        kind: string;
+        rel: string;
+        mtime: number;
+        url: string;
+    }> }>,
     sampleMeta: () => apiFetch(`${ROOT}/sample/meta`) as Promise<{
         ok: boolean;
         exists: boolean;
@@ -64,14 +102,20 @@ export const overlaysApi = {
         showTitleForEp?: string | null;
         generatedAt?: string | null;
         presetId?: string | null;
+        showRatingKey?: string | null;
     }>,
-    sampleGenerate: () => apiFetch(`${ROOT}/sample`, json({})) as Promise<{
-        ok: boolean;
-        show?: { title?: string; source?: string };
-        episode?: { title?: string; showTitle?: string; source?: string };
-        generatedAt?: string;
-        presetId?: string;
-        meta?: Record<string, unknown>;
+    sampleGenerate: (opts?: { showRatingKey?: string; episodeRatingKey?: string }) => (
+        apiFetch(`${ROOT}/sample`, json(opts || {})) as Promise<{
+            ok: boolean;
+            show?: { title?: string; source?: string; ratingKey?: string };
+            episode?: { title?: string; showTitle?: string; source?: string };
+            generatedAt?: string;
+            presetId?: string;
+            meta?: Record<string, unknown>;
+        }>
+    ),
+    sampleCandidates: (q = '') => apiFetch(`${ROOT}/sample-candidates?q=${encodeURIComponent(q)}`) as Promise<{
+        shows: Array<{ ratingKey: string; title: string; library?: string }>;
     }>,
     sampleImageUrl: (kind: 'show' | 'episode', bust?: string | number) => (
         `${ROOT}/sample/${kind}?t=${encodeURIComponent(String(bust || Date.now()))}`

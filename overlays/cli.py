@@ -17,6 +17,7 @@ from core import (
     reset_one,
     run_overlays,
     scan_library,
+    search_sample_candidates,
 )
 
 
@@ -44,6 +45,7 @@ def main() -> int:
             "reset-all",
             "sections",
             "sample",
+            "sample-candidates",
         ],
     )
     parser.add_argument("--payload", default="", help="JSON payload string (otherwise read stdin)")
@@ -68,7 +70,22 @@ def main() -> int:
             return 0
 
         if args.command == "sample":
-            write_event("result", **generate_overlay_samples(config, progress=progress))
+            show_key = str(request.get("showRatingKey") or request.get("show_rating_key") or "").strip() or None
+            ep_key = str(request.get("episodeRatingKey") or request.get("episode_rating_key") or "").strip() or None
+            write_event(
+                "result",
+                **generate_overlay_samples(
+                    config,
+                    progress=progress,
+                    show_rating_key=show_key,
+                    episode_rating_key=ep_key,
+                ),
+            )
+            return 0
+
+        if args.command == "sample-candidates":
+            query = str(request.get("query") or request.get("q") or "")
+            write_event("result", **search_sample_candidates(config, query=query, progress=progress))
             return 0
 
         if args.command == "scan":

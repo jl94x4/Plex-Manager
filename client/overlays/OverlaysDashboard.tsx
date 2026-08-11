@@ -30,7 +30,7 @@ import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { overlaysApi, type OverlaysConfig } from './api';
 
-type TabId = 'overview' | 'shows' | 'settings' | 'import' | 'activity';
+type TabId = 'overview' | 'shows' | 'gallery' | 'settings' | 'import' | 'activity';
 type ActionId = 'refresh' | 'stop' | 'preview' | 'resetAll' | 'run' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample';
 
 type SampleMeta = {
@@ -40,6 +40,7 @@ type SampleMeta = {
     showTitleForEp?: string | null;
     generatedAt?: string | null;
     presetId?: string | null;
+    showRatingKey?: string | null;
 };
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
@@ -56,6 +57,7 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     skipNewEpisodeOnBinge: true,
     librarySectionIds: [],
     overlayPresetId: 'new-season',
+    episodeOverlayPresetId: 'new-episode',
     scheduleHours: 24,
     skipIfKometaOverlayLabel: true,
 };
@@ -76,6 +78,11 @@ export const OverlaysDashboard: React.FC = () => {
     const [sampleMeta, setSampleMeta] = useState<SampleMeta | null>(null);
     const [sampleBust, setSampleBust] = useState(() => Date.now());
     const [sampleError, setSampleError] = useState<string | null>(null);
+    const [sampleShowKey, setSampleShowKey] = useState('');
+    const [sampleQuery, setSampleQuery] = useState('');
+    const [sampleCandidates, setSampleCandidates] = useState<Array<{ ratingKey: string; title: string }>>([]);
+    const [gallery, setGallery] = useState<Array<{ name: string; kind: string; url: string; mtime: number }>>([]);
+    const [collapsedBinges, setCollapsedBinges] = useState<Record<string, boolean>>({});
     const sampleLoadedRef = React.useRef(false);
     const wasRunningRef = React.useRef(false);
 
@@ -175,18 +182,56 @@ export const OverlaysDashboard: React.FC = () => {
     const tabs = useMemo(() => ([
         { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
         { id: 'shows' as const, label: t('overlays.tabs.shows', { count: showCount, episodes: episodeCount }), icon: List },
+        { id: 'gallery' as const, label: t('overlays.tabs.gallery'), icon: Layers },
         { id: 'settings' as const, label: t('overlays.tabs.settings'), icon: Settings2 },
         { id: 'import' as const, label: t('overlays.tabs.import'), icon: Upload },
         { id: 'activity' as const, label: t('overlays.tabs.activity'), icon: Activity },
     ]), [showCount, episodeCount, t]);
 
-    const presetOptions = useMemo(
-        () => (status?.presets || [{ id: 'new-season' }]).map((preset: { id: string }) => ({
-            value: preset.id,
-            label: preset.id,
-        })),
+    const seasonPresetOptions = useMemo(
+        () => (status?.presets || [])
+            .filter((preset: { kind?: string }) => (preset.kind || 'season') === 'season')
+            .map((preset: { id: string; source?: string }) => ({
+                value: preset.id,
+                label: preset.source === 'custom' ? `${preset.id} (custom)` : preset.id,
+            })),
         [status?.presets],
     );
+
+    const episodePresetOptions = useMemo(
+        () => (status?.presets || [])
+            .filter((preset: { kind?: string }) => preset.kind === 'episode')
+            .map((preset: { id: string; source?: string }) => ({
+                value: preset.id,
+                label: preset.source === 'custom' ? `${preset.id} (custom)` : preset.id,
+            })),
+        [status?.presets],
+    );
+
+    const bingeGroups = useMemo(() => {
+        const map = new Map<string, any[]>();
+        for (const row of episodes) {
+            if (!row.bingeGroupId) continue;
+            if (!map.has(row.bingeGroupId)) map.set(row.bingeGroupId, []);
+            map.get(row.bingeGroupId)!.push(row);
+        }
+        return map;
+    }, [episodes]);
+
+    const episodeRowsGrouped = useMemo(() => {
+        const rendered = new Set<string>();
+        const out: Array<{ type: 'group' | 'row'; groupId?: string; rows?: any[]; row?: any }> = [];
+        for (const row of episodes) {
+            if (row.bingeGroupId) {
+                if (rendered.has(row.bingeGroupId)) continue;
+                rendered.add(row.bingeGroupId);
+                out.push({ type: 'group', groupId: row.bingeGroupId, rows: bingeGroups.get(row.bingeGroupId) || [] });
+            } else {
+                out.push({ type: 'row', row });
+            }
+        }
+        return out;
+    }, [episodes, bingeGroups]);
 
     const importModeOptions = useMemo(() => ([
         { value: 'merge', label: t('overlays.import.modeMerge') },
@@ -227,15 +272,19 @@ export const OverlaysDashboard: React.FC = () => {
     };
 
     const saveSettings = () => runAction('saveSettings', async () => {
-        const prevPreset = status?.config?.overlayPresetId || 'new-season';
+        const prevSeason = status?.config?.overlayPresetId || 'new-season';
+        const prevEpisode = status?.config?.episodeOverlayPresetId || 'new-episode';
         await overlaysApi.saveConfig(configDraft);
-        if ((configDraft.overlayPresetId || 'new-season') !== prevPreset) {
+        if (
+            (configDraft.overlayPresetId || 'new-season') !== prevSeason
+            || (configDraft.episodeOverlayPresetId || 'new-episode') !== prevEpisode
+        ) {
             await regenerateSamples({ quiet: true });
         }
     });
 
     const applySampleResult = (payload: {
-        show?: { title?: string };
+        show?: { title?: string; ratingKey?: string };
         episode?: { title?: string; showTitle?: string };
         generatedAt?: string;
         presetId?: string;
@@ -249,16 +298,23 @@ export const OverlaysDashboard: React.FC = () => {
             showTitleForEp: payload.episode?.showTitle || (meta.showTitleForEp as string) || null,
             generatedAt: payload.generatedAt || (meta.generatedAt as string) || null,
             presetId: payload.presetId || (meta.presetId as string) || null,
+            showRatingKey: payload.show?.ratingKey || (meta.showRatingKey as string) || null,
         });
         setSampleBust(Date.now());
         setSampleError(null);
     };
 
-    const regenerateSamples = async ({ quiet = false }: { quiet?: boolean } = {}) => {
+    const regenerateSamples = async ({
+        quiet = false,
+        showRatingKey,
+    }: { quiet?: boolean; showRatingKey?: string } = {}) => {
         setBusy('sample');
         setSampleError(null);
         try {
-            const result = await overlaysApi.sampleGenerate();
+            const key = showRatingKey !== undefined ? showRatingKey : sampleShowKey;
+            const result = await overlaysApi.sampleGenerate(
+                key ? { showRatingKey: key } : undefined,
+            );
             applySampleResult(result);
             if (!quiet) toast(t('overlays.actionComplete', { action: actionLabel('sample') }));
         } catch (error) {
@@ -269,6 +325,27 @@ export const OverlaysDashboard: React.FC = () => {
             setBusy(null);
         }
     };
+
+    const loadGallery = useCallback(async () => {
+        const res = await overlaysApi.previewGallery();
+        setGallery(res.items || []);
+    }, []);
+
+    useEffect(() => {
+        if (tab !== 'gallery') return;
+        void loadGallery().catch(() => setGallery([]));
+    }, [tab, loadGallery]);
+
+    useEffect(() => {
+        if (tab !== 'settings') return;
+        const q = sampleQuery.trim();
+        const timer = window.setTimeout(() => {
+            void overlaysApi.sampleCandidates(q).then((res) => {
+                setSampleCandidates(res.shows || []);
+            }).catch(() => setSampleCandidates([]));
+        }, 250);
+        return () => window.clearTimeout(timer);
+    }, [tab, sampleQuery]);
 
     useEffect(() => {
         if (tab !== 'settings' || sampleLoadedRef.current) return;
@@ -286,7 +363,9 @@ export const OverlaysDashboard: React.FC = () => {
                         showTitleForEp: meta.showTitleForEp,
                         generatedAt: meta.generatedAt,
                         presetId: meta.presetId,
+                        showRatingKey: meta.showRatingKey,
                     });
+                    if (meta.showRatingKey) setSampleShowKey(String(meta.showRatingKey));
                     setSampleBust(Date.now());
                     return;
                 }
@@ -298,7 +377,6 @@ export const OverlaysDashboard: React.FC = () => {
         return () => {
             cancelled = true;
         };
-        // Only on first Settings visit — regenerateSamples is stable enough via refs/state setters
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab]);
 
@@ -574,6 +652,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 <thead className="text-xs uppercase text-muted">
                                     <tr>
                                         <th className="px-2 py-2">{t('overlays.table.title')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.library')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.key')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.season')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.mode')}</th>
@@ -585,6 +664,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     {shows.map((row) => (
                                         <tr key={row.ratingKey} className="border-t border-white/10">
                                             <td className="px-2 py-2 font-medium">{row.title}</td>
+                                            <td className="px-2 py-2 text-muted">{row.library || '—'}</td>
                                             <td className="px-2 py-2 tabular-nums text-muted">{row.ratingKey}</td>
                                             <td className="px-2 py-2">{row.seasonIndex ?? '—'}</td>
                                             <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
@@ -621,6 +701,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 <thead className="text-xs uppercase text-muted">
                                     <tr>
                                         <th className="px-2 py-2">{t('overlays.table.show')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.library')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.title')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.episode')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.aired')}</th>
@@ -629,37 +710,146 @@ export const OverlaysDashboard: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {episodes.map((row) => (
-                                        <tr key={row.ratingKey} className="border-t border-white/10">
-                                            <td className="px-2 py-2 font-medium">{row.showTitle || '—'}</td>
-                                            <td className="px-2 py-2">{row.title}</td>
-                                            <td className="px-2 py-2 tabular-nums text-muted">
-                                                {row.seasonIndex != null || row.episodeIndex != null
-                                                    ? `S${row.seasonIndex ?? '?'}E${row.episodeIndex ?? '?'}`
-                                                    : '—'}
-                                            </td>
-                                            <td className="px-2 py-2 text-muted">
-                                                {row.airedAt ? new Date(row.airedAt).toLocaleString() : '—'}
-                                            </td>
-                                            <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
-                                            <td className="px-2 py-2 text-right">
-                                                <button
-                                                    type="button"
-                                                    className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
-                                                    disabled={busy !== null}
-                                                    onClick={() => void runAction('reset', () => overlaysApi.resetOne(row.ratingKey, 'episode'))}
-                                                >
-                                                    {t('overlays.actions.reset')}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {episodeRowsGrouped.map((entry) => {
+                                        if (entry.type === 'group' && entry.groupId && entry.rows) {
+                                            const rows = entry.rows;
+                                            const first = rows[0];
+                                            const collapsed = collapsedBinges[entry.groupId] !== false;
+                                            return (
+                                                <React.Fragment key={entry.groupId}>
+                                                    <tr className="border-t border-white/10 bg-white/5">
+                                                        <td className="px-2 py-2 font-semibold" colSpan={5}>
+                                                            <button
+                                                                type="button"
+                                                                className="text-left hover:underline"
+                                                                onClick={() => setCollapsedBinges((prev) => ({
+                                                                    ...prev,
+                                                                    [entry.groupId!]: !collapsed,
+                                                                }))}
+                                                            >
+                                                                {collapsed ? '▸' : '▾'}{' '}
+                                                                {t('overlays.episodes.bingeGroup', {
+                                                                    show: first?.showTitle || '—',
+                                                                    season: first?.seasonIndex ?? '?',
+                                                                    count: rows.length,
+                                                                })}
+                                                            </button>
+                                                        </td>
+                                                        <td className="px-2 py-2 text-muted">{t('overlays.episodes.bingeTag')}</td>
+                                                        <td className="px-2 py-2 text-right">
+                                                            <button
+                                                                type="button"
+                                                                className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                                disabled={busy !== null}
+                                                                onClick={() => void runAction(
+                                                                    'reset',
+                                                                    () => overlaysApi.resetBingeGroup(rows.map((r) => r.ratingKey)),
+                                                                )}
+                                                            >
+                                                                {t('overlays.actions.resetGroup')}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                    {!collapsed && rows.map((row) => (
+                                                        <tr key={row.ratingKey} className="border-t border-white/5">
+                                                            <td className="px-2 py-2 pl-6 text-muted">{row.showTitle || '—'}</td>
+                                                            <td className="px-2 py-2 text-muted">{row.library || '—'}</td>
+                                                            <td className="px-2 py-2">{row.title}</td>
+                                                            <td className="px-2 py-2 tabular-nums text-muted">
+                                                                {row.seasonIndex != null || row.episodeIndex != null
+                                                                    ? `S${row.seasonIndex ?? '?'}E${row.episodeIndex ?? '?'}`
+                                                                    : '—'}
+                                                            </td>
+                                                            <td className="px-2 py-2 text-muted">
+                                                                {row.airedAt ? new Date(row.airedAt).toLocaleString() : '—'}
+                                                            </td>
+                                                            <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
+                                                            <td className="px-2 py-2 text-right">
+                                                                <button
+                                                                    type="button"
+                                                                    className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                                    disabled={busy !== null}
+                                                                    onClick={() => void runAction('reset', () => overlaysApi.resetOne(row.ratingKey, 'episode'))}
+                                                                >
+                                                                    {t('overlays.actions.reset')}
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </React.Fragment>
+                                            );
+                                        }
+                                        const row = entry.row;
+                                        if (!row) return null;
+                                        return (
+                                            <tr key={row.ratingKey} className="border-t border-white/10">
+                                                <td className="px-2 py-2 font-medium">{row.showTitle || '—'}</td>
+                                                <td className="px-2 py-2 text-muted">{row.library || '—'}</td>
+                                                <td className="px-2 py-2">{row.title}</td>
+                                                <td className="px-2 py-2 tabular-nums text-muted">
+                                                    {row.seasonIndex != null || row.episodeIndex != null
+                                                        ? `S${row.seasonIndex ?? '?'}E${row.episodeIndex ?? '?'}`
+                                                        : '—'}
+                                                </td>
+                                                <td className="px-2 py-2 text-muted">
+                                                    {row.airedAt ? new Date(row.airedAt).toLocaleString() : '—'}
+                                                </td>
+                                                <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
+                                                <td className="px-2 py-2 text-right">
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                        disabled={busy !== null}
+                                                        onClick={() => void runAction('reset', () => overlaysApi.resetOne(row.ratingKey, 'episode'))}
+                                                    >
+                                                        {t('overlays.actions.reset')}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
                     )}
                 </DashboardPanel>
                 </div>
+            )}
+
+            {tab === 'gallery' && (
+                <DashboardPanel title={t('overlays.gallery.title')} subtitle={t('overlays.gallery.subtitle')}>
+                    <div className="mb-3 flex flex-wrap gap-2">
+                        <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void loadGallery()}>
+                            <RefreshCw className="h-4 w-4" /> {t('overlays.actions.refresh')}
+                        </button>
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={busy !== null || jobRunning || !workerReady}
+                            onClick={() => startBackgroundJob('preview', () => overlaysApi.preview())}
+                        >
+                            {t('overlays.actions.preview')}
+                        </button>
+                    </div>
+                    {gallery.length === 0 ? (
+                        <p className="text-sm text-muted">{t('overlays.gallery.empty')}</p>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                            {gallery.map((item) => (
+                                <figure key={item.url} className="space-y-1">
+                                    <img
+                                        src={`${item.url}&t=${item.mtime}`}
+                                        alt={item.name}
+                                        className="aspect-[2/3] w-full rounded-md border border-border object-cover bg-background/60"
+                                    />
+                                    <figcaption className="truncate text-[11px] text-muted" title={item.name}>
+                                        {item.kind}: {item.name}
+                                    </figcaption>
+                                </figure>
+                            ))}
+                        </div>
+                    )}
+                </DashboardPanel>
             )}
 
             {tab === 'settings' && (
@@ -743,14 +933,63 @@ export const OverlaysDashboard: React.FC = () => {
                         </label>
                     </div>
 
-                    <div className="border-b border-border/40 py-4">
-                        <span className={fieldLabelClass}>{t('overlays.settings.overlayPreset')}</span>
-                        <CustomSelect
-                            className="mt-1.5 max-w-md"
-                            value={configDraft.overlayPresetId || 'new-season'}
-                            onChange={(value) => setConfigDraft((prev) => ({ ...prev, overlayPresetId: value }))}
-                            options={presetOptions}
-                        />
+                    <div className="border-b border-border/40 py-4 space-y-4">
+                        <div>
+                            <span className={fieldLabelClass}>{t('overlays.settings.overlayPreset')}</span>
+                            <CustomSelect
+                                className="mt-1.5 max-w-md"
+                                value={configDraft.overlayPresetId || 'new-season'}
+                                onChange={(value) => setConfigDraft((prev) => ({ ...prev, overlayPresetId: value }))}
+                                options={seasonPresetOptions.length ? seasonPresetOptions : [{ value: 'new-season', label: 'new-season' }]}
+                            />
+                            <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-plex">
+                                <input
+                                    type="file"
+                                    accept="image/png"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        e.target.value = '';
+                                        if (!file) return;
+                                        void runAction('saveSettings', async () => {
+                                            const up = await overlaysApi.uploadPreset('season', file);
+                                            const id = up?.preset?.id;
+                                            if (id) setConfigDraft((prev) => ({ ...prev, overlayPresetId: id }));
+                                            await refresh();
+                                        });
+                                    }}
+                                />
+                                {t('overlays.settings.uploadSeasonPreset')}
+                            </label>
+                        </div>
+                        <div>
+                            <span className={fieldLabelClass}>{t('overlays.settings.episodeOverlayPreset')}</span>
+                            <CustomSelect
+                                className="mt-1.5 max-w-md"
+                                value={configDraft.episodeOverlayPresetId || 'new-episode'}
+                                onChange={(value) => setConfigDraft((prev) => ({ ...prev, episodeOverlayPresetId: value }))}
+                                options={episodePresetOptions.length ? episodePresetOptions : [{ value: 'new-episode', label: 'new-episode' }]}
+                            />
+                            <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-plex">
+                                <input
+                                    type="file"
+                                    accept="image/png"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        e.target.value = '';
+                                        if (!file) return;
+                                        void runAction('saveSettings', async () => {
+                                            const up = await overlaysApi.uploadPreset('episode', file);
+                                            const id = up?.preset?.id;
+                                            if (id) setConfigDraft((prev) => ({ ...prev, episodeOverlayPresetId: id }));
+                                            await refresh();
+                                        });
+                                    }}
+                                />
+                                {t('overlays.settings.uploadEpisodePreset')}
+                            </label>
+                        </div>
                     </div>
 
                     <div className="border-b border-border/40 py-4">
@@ -761,15 +1000,51 @@ export const OverlaysDashboard: React.FC = () => {
                                     {t('overlays.settings.visualSampleHint')}
                                 </p>
                             </div>
-                            <button
-                                type="button"
-                                className={buttonClass}
-                                disabled={busy !== null || jobRunning}
-                                onClick={() => void regenerateSamples()}
-                            >
-                                {busy === 'sample' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                                {t('overlays.actions.refreshSample')}
-                            </button>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null || jobRunning}
+                                    onClick={() => {
+                                        setSampleShowKey('');
+                                        void regenerateSamples({ showRatingKey: '' });
+                                    }}
+                                >
+                                    {t('overlays.actions.randomSample')}
+                                </button>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null || jobRunning}
+                                    onClick={() => void regenerateSamples()}
+                                >
+                                    {busy === 'sample' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                    {t('overlays.actions.refreshSample')}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="mb-3 grid gap-3 md:grid-cols-2">
+                            <label className="block">
+                                <span className={fieldLabelClass}>{t('overlays.settings.sampleSearch')}</span>
+                                <input
+                                    className={fieldInputClass}
+                                    value={sampleQuery}
+                                    onChange={(e) => setSampleQuery(e.target.value)}
+                                    placeholder={t('overlays.settings.sampleSearchPlaceholder')}
+                                />
+                            </label>
+                            <label className="block">
+                                <span className={fieldLabelClass}>{t('overlays.settings.sampleShow')}</span>
+                                <CustomSelect
+                                    className="mt-1.5"
+                                    value={sampleShowKey || ''}
+                                    onChange={(value) => setSampleShowKey(value)}
+                                    options={[
+                                        { value: '', label: t('overlays.settings.sampleRandom') },
+                                        ...sampleCandidates.map((s) => ({ value: s.ratingKey, label: s.title })),
+                                    ]}
+                                />
+                            </label>
                         </div>
                         {sampleError ? (
                             <p className="mb-3 text-xs text-red-400">{sampleError}</p>
