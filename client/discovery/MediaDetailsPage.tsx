@@ -432,6 +432,35 @@ export const MediaDetailsPage: React.FC<{
         [details, mediaType],
     );
 
+    useEffect(() => {
+        if (mediaType !== 'tv' || !seasonRows.length) return;
+        const readSeasonQuery = () => {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const season = Number(params.get('season'));
+                if (!Number.isFinite(season) || season < 0) return;
+                const row = seasonRows.find((s) => s.seasonNumber === season);
+                if (!row) return;
+                setEpisodesSeason({
+                    seasonNumber: row.seasonNumber,
+                    name: row.name,
+                    episodeCount: row.episodeCount,
+                    statusLabel: row.statusLabel,
+                    posterPath: row.posterPath,
+                });
+            } catch {
+                // ignore bad query
+            }
+        };
+        readSeasonQuery();
+        window.addEventListener('portal-discovery-navigate', readSeasonQuery);
+        window.addEventListener('popstate', readSeasonQuery);
+        return () => {
+            window.removeEventListener('portal-discovery-navigate', readSeasonQuery);
+            window.removeEventListener('popstate', readSeasonQuery);
+        };
+    }, [mediaType, mediaId, seasonRows]);
+
     const availability = useMemo(
         () => (details ? resolveMediaAvailabilityState(details) : null),
         [details],

@@ -1219,6 +1219,7 @@ import { fetchDiscoveryHeroBackdrops } from './lib/discovery-hero.js';
 import {
     fetchBecauseYouWatchedRecommendations,
     pickBecauseYouWatchedSeed,
+    extractTmdbIdFromPlexItem,
 } from './lib/discovery-because-you-watched.js';
 import { caaReleaseGroupCoverUrl, fetchMusicBrainzArtist, searchMusicBrainzArtists } from './lib/musicbrainz-client.js';
 import {
@@ -1322,6 +1323,14 @@ import {
 } from './lib/notifications/requestAvailable.js';
 import { notifyRequestNotReleasedYet } from './lib/notifications/requestNotReleased.js';
 import { normalizeReleaseDatePreference, isFutureReleaseDate } from './lib/notifications/releaseDates.js';
+import {
+    isDiscoverNowPlayingEnabled,
+    userAllowsDiscoverNowPlaying,
+    mapPlexSessionToNowPlaying,
+    mapJellyfinSessionToNowPlaying,
+    sessionBelongsToPlexUser,
+    sessionBelongsToJellyfinUser,
+} from './lib/streams/nowPlaying.js';
 const PLEX_API = 'https://plex.tv/api';
 
 // --- Status App Global State ---
@@ -3656,6 +3665,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyNewEpisodeInApp,
             notifyNewEpisodeWebPush,
             notifyWebPush,
+            showDiscoverNowPlaying,
         } = req.body || {};
         const users = await loadFile(USERS_PATH, []);
         const localUser = findLocalUserForSession(users, req.user);
@@ -3690,6 +3700,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyNewEpisodeInApp,
             notifyNewEpisodeWebPush,
             notifyWebPush,
+            showDiscoverNowPlaying,
         };
         for (const [key, value] of Object.entries(boolPrefs)) {
             if (value !== undefined) users[userIndex][key] = !!value;
@@ -4588,6 +4599,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 allowTemporaryAccess: !!config.allowTemporaryAccess,
                 showPosterQualityBadges: config.showPosterQualityBadges !== false,
                 showDashboardWatchingBadge: !!config.showDashboardWatchingBadge,
+                discoverNowPlayingEnabled: config.discoverNowPlayingEnabled !== false,
                 dashboardWatchingBadgePollSeconds: Math.min(15, Math.max(1, parseInt(config.dashboardWatchingBadgePollSeconds, 10) || 15)),
                 showPublicStatusMonitor: isPublicStatusVisible(config),
                 showPublicLibraryStats: arePublicLibraryStatsVisible(config),
@@ -4750,6 +4762,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 allowTemporaryAccess: false,
                 showPosterQualityBadges: true,
                 showDashboardWatchingBadge: false,
+                discoverNowPlayingEnabled: true,
                 dashboardWatchingBadgePollSeconds: 15,
                 showPublicStatusMonitor: true,
                 showPublicLibraryStats: true,
@@ -4834,7 +4847,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         requestDiscoverRegion, requestDiscoverLanguage, requestHideAvailableMedia, discoverySource, requestEngine,
         requestQuotaLimit, requestQuotaDays, requestQuotaLimit4k, autoApproveMovies, autoApproveTv,
         portalAllowRequestMovies, portalAllowRequestTv, portalAllowRequest4kMovies, portalAllowRequest4kTv,
-        portalAllowAdvancedRequests, portalShowRecentlyAdded, portalShowWatchlist,
+        portalAllowAdvancedRequests, portalShowRecentlyAdded, portalShowWatchlist, discoverNowPlayingEnabled,
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
@@ -5145,6 +5158,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             seriesMetadataProvider,
             animeMetadataProvider,
         }, existingConfig),
+        discoverNowPlayingEnabled: discoverNowPlayingEnabled !== undefined
+            ? !!discoverNowPlayingEnabled
+            : existingConfig.discoverNowPlayingEnabled !== false,
         tvdbApiKey: resolveSecret(tvdbApiKey, existingConfig.tvdbApiKey),
         primaryColor: primaryColor || '#F7C600',
         customLogoUrl: normalizeBrandingAssetForMediaServer(customLogoUrl, normalizedMediaServerType),
@@ -8678,6 +8694,8 @@ app.get('/api/discovery/me', requireAuth, requireMember, async (req, res) => {
                 discovery: {
                     showRecentlyAdded: defaults.showRecentlyAdded,
                     showWatchlist: defaults.showWatchlist,
+                    nowPlayingEnabled: isDiscoverNowPlayingEnabled(config),
+                    showNowPlaying: userAllowsDiscoverNowPlaying(portalUser),
                 },
             });
         }
@@ -13519,6 +13537,142 @@ app.get('/api/streams/watching-count', requireAuth, requireMember, async (req, r
     } catch (e) {
         log(`Watching count error: ${e.message}`);
         res.json({ count: 0, available: false, error: e.message });
+    }
+});
+
+app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!isDiscoverNowPlayingEnabled(config)) {
+            return res.json({ available: false, enabled: false, session: null });
+        }
+
+        const users = await loadFile(USERS_PATH, []);
+        const localUser = findLocalUserForSession(users, req.user);
+        if (!userAllowsDiscoverNowPlaying(localUser || req.user)) {
+            return res.json({ available: true, enabled: true, optedOut: true, session: null });
+        }
+
+        if (isEmbyLikeMediaServer(config)) {
+            if (!isJellyfinConfigured(config)) {
+                return res.json({ available: false, enabled: true, session: null });
+            }
+            const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
+            const sessions = await withCache('jellyfin_now_playing_sessions', 5000, async () => (
+                fetchWithTimeout(`${baseUrl}/Sessions`, { headers: jellyfinHeaders(config.jellyfinApiKey) }, 15000)
+                    .then((r) => (r.ok ? r.json() : []))
+                    .catch(() => [])
+            ));
+            const mine = (Array.isArray(sessions) ? sessions : []).find((session) => (
+                session?.NowPlayingItem
+                && sessionBelongsToJellyfinUser(session, {
+                    jellyfinId: req.user?.jellyfinId || localUser?.jellyfinId,
+                    username: req.user?.username || localUser?.username,
+                })
+            ));
+            if (!mine) return res.json({ available: true, enabled: true, session: null });
+
+            let mapped = mapJellyfinSessionToNowPlaying(mine);
+            if (mapped && !mapped.tmdbId && mapped.jellyfinSeriesId) {
+                try {
+                    const series = await fetchWithTimeout(
+                        `${baseUrl}/Items/${encodeURIComponent(mapped.jellyfinSeriesId)}`,
+                        { headers: jellyfinHeaders(config.jellyfinApiKey) },
+                        8000,
+                    ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+                    const seriesTmdb = Number(series?.ProviderIds?.Tmdb || series?.ProviderIds?.tmdb || 0);
+                    if (Number.isFinite(seriesTmdb) && seriesTmdb > 0) mapped.tmdbId = seriesTmdb;
+                } catch {
+                    // keep strip even without TMDB
+                }
+            }
+            if (mapped && !mapped.tmdbId && mine.NowPlayingItem) {
+                const epTmdb = Number(mine.NowPlayingItem?.ProviderIds?.Tmdb || 0);
+                // For movies the item TMDB is correct; for episodes it can be episode-scoped — only use for movies.
+                if (mapped.mediaType === 'movie' && Number.isFinite(epTmdb) && epTmdb > 0) {
+                    mapped.tmdbId = epTmdb;
+                }
+            }
+
+            return res.json({
+                available: true,
+                enabled: true,
+                session: mapped
+                    ? {
+                        mediaType: mapped.mediaType,
+                        tmdbId: mapped.tmdbId,
+                        title: mapped.title,
+                        episodeTitle: mapped.episodeTitle,
+                        season: mapped.season,
+                        episode: mapped.episode,
+                        progress: mapped.progress,
+                        state: mapped.state,
+                    }
+                    : null,
+            });
+        }
+
+        if (!config.plexToken || !config.serverIdentifier) {
+            return res.json({ available: false, enabled: true, session: null });
+        }
+        const uri = await getPlexConnectionUri(config);
+        if (!uri) return res.json({ available: false, enabled: true, session: null });
+
+        const accountId = await resolveLocalPlexAccountId(config, uri, req.user).catch(() => null);
+        const sessionsData = await withCache('plex_now_playing_sessions', 5000, async () => (
+            fetch(`${uri}/status/sessions?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) })
+                .then((r) => r.json())
+                .catch(() => null)
+        ));
+        const list = Array.isArray(sessionsData?.MediaContainer?.Metadata)
+            ? sessionsData.MediaContainer.Metadata
+            : [];
+        const mineMeta = list.find((metadata) => sessionBelongsToPlexUser(metadata, {
+            accountId,
+            username: req.user?.username || localUser?.username,
+            email: req.user?.email || localUser?.email,
+        }));
+        if (!mineMeta) return res.json({ available: true, enabled: true, session: null });
+
+        let mapped = mapPlexSessionToNowPlaying(mineMeta);
+        if (mapped && !mapped.tmdbId) {
+            const enrichKey = mapped.mediaType === 'tv'
+                ? (mineMeta.grandparentRatingKey || mineMeta.ratingKey)
+                : mineMeta.ratingKey;
+            if (enrichKey) {
+                try {
+                    const meta = await fetch(
+                        `${uri}/library/metadata/${encodeURIComponent(enrichKey)}?includeGuids=1&X-Plex-Token=${config.plexToken}`,
+                        { headers: plexClientHeaders(config.plexToken) },
+                    ).then((r) => r.json()).catch(() => null);
+                    const item = meta?.MediaContainer?.Metadata?.[0];
+                    const tmdbId = extractTmdbIdFromPlexItem(item || {});
+                    if (tmdbId) mapped.tmdbId = tmdbId;
+                } catch {
+                    // keep strip without deep link
+                }
+            }
+        }
+
+        return res.json({
+            available: true,
+            enabled: true,
+            session: mapped
+                ? {
+                    mediaType: mapped.mediaType,
+                    tmdbId: mapped.tmdbId,
+                    title: mapped.title,
+                    episodeTitle: mapped.episodeTitle,
+                    season: mapped.season,
+                    episode: mapped.episode,
+                    progress: mapped.progress,
+                    state: mapped.state,
+                }
+                : null,
+        });
+    } catch (e) {
+        log(`Now playing error: ${e.message}`);
+        res.json({ available: false, enabled: true, session: null, error: e.message });
     }
 });
 

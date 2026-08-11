@@ -214,6 +214,8 @@ const DiscoveryDashboardInner: React.FC<{
         formatItem,
         navigate,
         searchInputRef,
+        nowPlayingEnabled: discoveryMe?.discovery?.nowPlayingEnabled !== false
+            && discoveryMe?.discovery?.showNowPlaying !== false,
         onSelect: (formatted: any) => {
             if (formatted.type === 'person') {
                 navigate(`/discovery/person/${formatted.id}`);

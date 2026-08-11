@@ -45,6 +45,12 @@ export type DiscoveryMeProfile = {
         movies4k?: boolean;
         tv4k?: boolean;
     };
+    discovery?: {
+        showRecentlyAdded?: boolean;
+        showWatchlist?: boolean;
+        nowPlayingEnabled?: boolean;
+        showNowPlaying?: boolean;
+    };
 };
 
 const DEFAULT_PROFILE: DiscoveryMeProfile = {
@@ -101,6 +107,9 @@ export const useDiscoveryMe = (enabled = true) => {
 
     useEffect(() => {
         refresh();
+        const onRefresh = () => refresh();
+        window.addEventListener('portal-discover-me-refresh', onRefresh);
+        return () => window.removeEventListener('portal-discover-me-refresh', onRefresh);
     }, [refresh]);
 
     return { profile, loading, error, refresh };
