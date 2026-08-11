@@ -17314,6 +17314,7 @@ const listPortalRequestCalendarItems = async (config, { type, inTargetMonthRange
     }
 };
 
+const buildMediaStackMonthRange = (monthOffset = 0) => {
     const targetDate = new Date();
     targetDate.setMonth(targetDate.getMonth() + monthOffset);
     const firstDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
