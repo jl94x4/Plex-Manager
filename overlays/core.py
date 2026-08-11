@@ -1423,9 +1423,15 @@ def run_new_episode_overlays(
         try:
             if _is_season_episode_log_key(key):
                 show_key = key.split(":", 1)[-1]
+                title = entry.get("title") or show_key
                 if preview_mode:
-                    _progress(progress, f"[Preview] Would remove season New Episode: {entry.get('title') or show_key}")
-                    season_removed += 1
+                    if bool(entry.get("preview_only")):
+                        del log[key]
+                        season_removed += 1
+                        _progress(progress, f"[Preview] Dropped tracked season New Episode: {title}")
+                    else:
+                        _progress(progress, f"[Preview] Would remove season New Episode: {title}")
+                        season_removed += 1
                     continue
                 try:
                     show = plex.fetchItem(f"/library/metadata/{show_key}")
@@ -1438,12 +1444,22 @@ def run_new_episode_overlays(
                 if remove_season_new_episode_overlay(show, False, progress, paths=paths):
                     del log[key]
                     season_removed += 1
+                else:
+                    _progress(progress, f"Season-NE remove may have failed for {title}; dropping log entry anyway")
+                    del log[key]
+                    _clear_season_episode_backup(paths, show_key)
+                    season_removed += 1
                 continue
 
+            title = entry.get("title") or key
             if preview_mode:
-                title = entry.get("title") or key
-                _progress(progress, f"[Preview] Would remove episode overlay: {title}")
-                removed += 1
+                if bool(entry.get("preview_only")):
+                    del log[key]
+                    removed += 1
+                    _progress(progress, f"[Preview] Dropped tracked episode (no longer eligible): {title}")
+                else:
+                    _progress(progress, f"[Preview] Would remove live episode overlay: {title}")
+                    removed += 1
                 continue
             episode = episode_by_key.get(key)
             if episode is None:
@@ -1456,6 +1472,11 @@ def run_new_episode_overlays(
                     continue
             if remove_episode_overlay(episode, False, progress, paths=paths):
                 del log[key]
+                removed += 1
+            else:
+                _progress(progress, f"Episode remove may have failed for {title}; dropping log entry anyway")
+                del log[key]
+                _clear_episode_backup(paths, key)
                 removed += 1
         except Exception as exc:
             errors.append(f"remove {key}: {exc}")
@@ -1560,11 +1581,18 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
         if key in should_have:
             continue
         try:
+            entry = log.get(key) or {}
+            title = entry.get("title") or key
             if preview_mode:
-                # Preview must not wipe live log entries — only report what would drop.
-                title = (log.get(key) or {}).get("title") or key
-                _progress(progress, f"[Preview] Would remove overlay: {title}")
-                removed += 1
+                # Preview adds to the track list — also prune preview-only rows that
+                # are no longer eligible so the UI doesn't only grow.
+                if bool(entry.get("preview_only")):
+                    del log[key]
+                    removed += 1
+                    _progress(progress, f"[Preview] Dropped tracked show (no longer eligible): {title}")
+                else:
+                    _progress(progress, f"[Preview] Would remove live overlay: {title}")
+                    removed += 1
                 continue
             show = show_by_key.get(key)
             if show is None:
@@ -1577,6 +1605,14 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
                     continue
             if remove_show_overlay(show, False, progress, paths=paths):
                 del log[key]
+                removed += 1
+            else:
+                # Still drop tracking if Plex reset failed — otherwise ineligible
+                # titles stick forever and Preview/Run only ever add.
+                _progress(progress, f"Remove may have failed for {title}; dropping log entry anyway")
+                del log[key]
+                if paths is not None:
+                    _clear_backup_dir(paths, key)
                 removed += 1
         except Exception as exc:
             errors.append(f"remove {key}: {exc}")
