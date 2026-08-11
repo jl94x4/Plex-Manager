@@ -1659,12 +1659,15 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                     type: 'tv',
                     service: activeInstanceData.name || 'Sonarr',
                     title: ep.series?.title || 'Unknown Series',
-                    subtitle: `S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')} - ${ep.title}`,
+                    subtitle: ep.portalRequest
+                        ? 'Requested — not aired yet'
+                        : `S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')} - ${ep.title}`,
                     date: new Date(ep.airDateUtc || ep.airDate),
                     hasFile: ep.hasFile,
                     monitored: ep.monitored,
                     imageUrl: poster ? (poster.remoteUrl || poster.url) : null,
-                    network: ep.series?.network || ''
+                    network: ep.series?.network || '',
+                    portalRequest: !!ep.portalRequest,
                 });
             });
         } else {
@@ -1677,12 +1680,12 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                     type: 'movie',
                     service: activeInstanceData.name || 'Radarr',
                     title: movie.title,
-                    subtitle: movie.studio || 'Movie Release',
+                    subtitle: movie.portalRequest ? 'Requested — not released yet' : (movie.studio || 'Movie Release'),
                     date: new Date(releaseDateStr),
                     hasFile: movie.hasFile,
                     monitored: movie.monitored,
                     imageUrl: poster ? (poster.remoteUrl || poster.url) : null,
-                    network: movie.studio || ''
+                    portalRequest: !!movie.portalRequest,
                 });
             });
         }

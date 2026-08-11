@@ -8,6 +8,7 @@ const EVENT_LABELS: Record<string, string> = {
     season: 'Season available',
     episode: 'New episode',
     admin_pending: 'Admin — new pending request',
+    not_released: 'Not released yet',
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -80,7 +81,7 @@ export const NotificationTemplatesPanel: React.FC<Props> = ({
     };
 
     const variableHint = useMemo(
-        () => '{title} {user} {media_type} {status} {portal_url} {year} {season} {server_name} {decline_reason}',
+        () => '{title} {user} {media_type} {status} {portal_url} {year} {season} {server_name} {decline_reason} {release_date} {release_type}',
         [],
     );
 

@@ -92,14 +92,13 @@ export const resolveNotificationDestination = (item: NotificationLike): Notifica
         return { kind: 'home', labelKey: 'notifications.openHome' };
     }
 
-    if (type === 'request_declined') {
-        return { kind: 'discovery', path: '/discovery/requests', labelKey: 'notifications.openMyRequests' };
+    if (type === 'request_not_released') {
+        return { kind: 'discovery', path: href || '/discovery/requests', labelKey: 'notifications.openInDiscover' };
     }
 
-    if (REQUEST_TYPES.has(type)) {
+    if (type === 'request_declined' || REQUEST_TYPES.has(type)) {
         return { kind: 'discovery', path: '/discovery/requests', labelKey: 'notifications.openMyRequests' };
     }
-
     return { kind: 'discovery', path: '/discovery/requests', labelKey: 'notifications.openMyRequests' };
 };
 

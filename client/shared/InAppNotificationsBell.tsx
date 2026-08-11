@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { createPortal } from 'react-dom';
 import {
     Bell,
+    Calendar,
     CheckCheck,
     ChevronRight,
     CircleCheck,
@@ -62,6 +63,8 @@ const typeVisual = (type?: string) => {
             return { Icon: Clapperboard, tone: 'text-violet-300 bg-violet-500/15 border-violet-500/30' };
         case 'admin_pending':
             return { Icon: ClipboardList, tone: 'text-amber-300 bg-amber-500/15 border-amber-500/30' };
+        case 'request_not_released':
+            return { Icon: Calendar, tone: 'text-sky-300 bg-sky-500/15 border-sky-500/30' };
         case 'admin_test':
             return { Icon: Bell, tone: 'text-plex bg-plex/15 border-plex/30' };
         default:

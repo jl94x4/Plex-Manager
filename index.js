@@ -1320,6 +1320,8 @@ import {
     isRequestAvailableNotifyEnabled,
     shouldSendRequestAvailableEmail,
 } from './lib/notifications/requestAvailable.js';
+import { notifyRequestNotReleasedYet } from './lib/notifications/requestNotReleased.js';
+import { normalizeReleaseDatePreference, isFutureReleaseDate } from './lib/notifications/releaseDates.js';
 const PLEX_API = 'https://plex.tv/api';
 
 // --- Status App Global State ---
@@ -4625,6 +4627,11 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 requestAvailableNotifyWebPush: config.requestAvailableNotifyWebPush !== false,
                 requestAvailableNotifyDiscord: !!config.requestAvailableNotifyDiscord,
                 requestAvailableDiscordWebhookUrl: config.requestAvailableDiscordWebhookUrl ? SECRET_MASK : '',
+                requestNotReleasedNotifyEnabled: config.requestNotReleasedNotifyEnabled !== false,
+                requestNotReleasedNotifyEmail: config.requestNotReleasedNotifyEmail !== false,
+                requestNotReleasedNotifyInApp: config.requestNotReleasedNotifyInApp !== false,
+                requestNotReleasedNotifyWebPush: config.requestNotReleasedNotifyWebPush !== false,
+                notifyReleaseDatePreference: normalizeReleaseDatePreference(config.notifyReleaseDatePreference),
                 notificationTemplates: normalizeNotificationTemplates(config.notificationTemplates),
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
@@ -4775,6 +4782,11 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 requestAvailableNotifyWebPush: true,
                 requestAvailableNotifyDiscord: false,
                 requestAvailableDiscordWebhookUrl: '',
+                requestNotReleasedNotifyEnabled: true,
+                requestNotReleasedNotifyEmail: true,
+                requestNotReleasedNotifyInApp: true,
+                requestNotReleasedNotifyWebPush: true,
+                notifyReleaseDatePreference: 'digital',
                 notificationTemplates: {},
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
@@ -4828,7 +4840,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -5293,6 +5305,23 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             if (!incoming || incoming === SECRET_MASK) return existingConfig.requestAvailableDiscordWebhookUrl || '';
             return incoming;
         })(),
+        requestNotReleasedNotifyEnabled: requestNotReleasedNotifyEnabled !== undefined
+            ? !!requestNotReleasedNotifyEnabled
+            : (existingConfig.requestNotReleasedNotifyEnabled !== false),
+        requestNotReleasedNotifyEmail: requestNotReleasedNotifyEmail !== undefined
+            ? !!requestNotReleasedNotifyEmail
+            : (existingConfig.requestNotReleasedNotifyEmail !== false),
+        requestNotReleasedNotifyInApp: requestNotReleasedNotifyInApp !== undefined
+            ? !!requestNotReleasedNotifyInApp
+            : (existingConfig.requestNotReleasedNotifyInApp !== false),
+        requestNotReleasedNotifyWebPush: requestNotReleasedNotifyWebPush !== undefined
+            ? !!requestNotReleasedNotifyWebPush
+            : (existingConfig.requestNotReleasedNotifyWebPush !== false),
+        notifyReleaseDatePreference: normalizeReleaseDatePreference(
+            notifyReleaseDatePreference !== undefined
+                ? notifyReleaseDatePreference
+                : existingConfig.notifyReleaseDatePreference,
+        ),
         webPushEnabled: webPushEnabled !== undefined
             ? !!webPushEnabled
             : (existingConfig.webPushEnabled !== false),
@@ -8120,6 +8149,47 @@ const notifyAdminNewRequest = async (config, record) => {
     }
 };
 
+const maybeNotifyRequestNotReleased = async (config, record) => {
+    if (!record?.id || record.mediaType === 'music') return;
+    if (!record?.meta?.releaseDateIsFuture && !isFutureReleaseDate(record?.meta?.releaseDate)) return;
+    try {
+        const result = await notifyRequestNotReleasedYet({
+            config,
+            record,
+            releaseMeta: record?.meta?.releaseDate
+                ? {
+                    selectedDate: record.meta.releaseDate,
+                    selectedType: record.meta.releaseDateType || 'tmdb',
+                    selectedLabel: record.meta.releaseDateLabel || 'Release date',
+                    formatted: record.meta.releaseDateFormatted || record.meta.releaseDate,
+                    isFuture: true,
+                }
+                : null,
+            loadUsers: async () => loadFile(USERS_PATH, []),
+            sendEmail,
+            hasEmailBeenSent,
+            logEmailSent,
+            resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
+            log,
+        });
+        if (result?.notified) {
+            try {
+                const portalRequests = getPortalRequestService(config);
+                await portalRequests.store.update(record.id, {
+                    meta: {
+                        ...(record.meta || {}),
+                        notReleasedNotifiedAt: new Date().toISOString(),
+                    },
+                });
+            } catch (error) {
+                log(`[RequestNotReleased] stamp failed for ${record.id}: ${error?.message || error}`);
+            }
+        }
+    } catch (error) {
+        log(`[RequestNotReleased] notify failed: ${error?.message || error}`);
+    }
+};
+
 const getPortalWatchlistService = (config) => createPortalWatchlistService({
     dataDir: WATCHLIST_DIR,
     config,
@@ -9787,10 +9857,12 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
                 try {
                     const approved = await portalRequests.approveAdminRequest(created.id, null, req.user);
                     // Auto-approve: skip "approved" member notify; still skip admin pending (already approved).
+                    await maybeNotifyRequestNotReleased(config, created);
                     return res.status(201).json(approved);
                 } catch (approveError) {
                     log(`Portal auto-approve failed for request ${created.id}: ${approveError.message}`);
                     await notifyAdminNewRequest(config, created);
+                    await maybeNotifyRequestNotReleased(config, created);
                     return res.status(201).json({
                         ...created,
                         autoApproveError: approveError.message,
@@ -9799,6 +9871,7 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
             }
 
             await notifyAdminNewRequest(config, created);
+            await maybeNotifyRequestNotReleased(config, created);
             return res.status(201).json(created);
         }
 
@@ -17014,7 +17087,65 @@ async function runMonitorCycle() {
     saveHealthData();
 }
 
-const buildMediaStackMonthRange = (monthOffset = 0) => {
+const listPortalRequestCalendarItems = async (config, { type, inTargetMonthRange }) => {
+    if (getRequestEngine(config) !== 'portal') return [];
+    if (type !== 'radarr' && type !== 'sonarr') return [];
+    try {
+        const portalRequests = getPortalRequestService(config);
+        const records = await portalRequests.store.list({});
+        const wantTv = type === 'sonarr';
+        const items = [];
+        for (const record of Array.isArray(records) ? records : []) {
+            const mediaType = record?.mediaType === 'tv' ? 'tv' : (record?.mediaType === 'music' ? 'music' : 'movie');
+            if (wantTv && mediaType !== 'tv') continue;
+            if (!wantTv && mediaType !== 'movie') continue;
+            const status = Number(record?.status);
+            if (status === 3 || status === 4) continue; // declined / failed
+            if (Number(record?.meta?.mediaStatus) === 5) continue; // already available
+            const releaseDate = String(record?.meta?.releaseDate || '').slice(0, 10);
+            if (!releaseDate || !inTargetMonthRange(releaseDate)) continue;
+            const releaseType = String(record?.meta?.releaseDateType || '');
+            const iso = `${releaseDate}T12:00:00.000Z`;
+            if (wantTv) {
+                items.push({
+                    id: `portal-request-${record.id}`,
+                    title: 'Requested — not aired yet',
+                    airDateUtc: iso,
+                    airDate: releaseDate,
+                    monitored: true,
+                    hasFile: false,
+                    seasonNumber: 0,
+                    episodeNumber: 0,
+                    portalRequest: true,
+                    portalRequestId: record.id,
+                    series: {
+                        title: record.title || 'Requested series',
+                        network: 'Portal request',
+                        images: [],
+                    },
+                });
+            } else {
+                items.push({
+                    id: `portal-request-${record.id}`,
+                    title: record.title || 'Requested movie',
+                    digitalRelease: releaseType === 'digital' || !releaseType ? iso : null,
+                    physicalRelease: releaseType === 'physical' ? iso : null,
+                    inCinemas: releaseType === 'theatrical' || releaseType === 'first_air' ? iso : null,
+                    added: iso,
+                    hasFile: false,
+                    monitored: true,
+                    portalRequest: true,
+                    portalRequestId: record.id,
+                });
+            }
+        }
+        return items;
+    } catch (error) {
+        log(`[MediaStack] portal calendar merge failed: ${error?.message || error}`);
+        return [];
+    }
+};
+
     const targetDate = new Date();
     targetDate.setMonth(targetDate.getMonth() + monthOffset);
     const firstDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), 1);
@@ -17040,7 +17171,7 @@ const buildMediaStackMonthRange = (monthOffset = 0) => {
     return { start, end, inTargetMonthRange };
 };
 
-const buildMediaStackInstanceSummary = async (instance, monthOffset = 0) => {
+const buildMediaStackInstanceSummary = async (instance, monthOffset = 0, config = null) => {
     if (!['sonarr', 'radarr'].includes(instance?.type)) {
         return {
             id: instance?.id || '',
@@ -17141,6 +17272,13 @@ const buildMediaStackInstanceSummary = async (instance, monthOffset = 0) => {
                     })
                     .filter((movie) => inTargetMonthRange(movie._releaseDate));
             }
+        }
+    }
+
+    if (config) {
+        const portalCalendar = await listPortalRequestCalendarItems(config, { type, inTargetMonthRange });
+        if (portalCalendar.length) {
+            calendar = [...calendar, ...portalCalendar];
         }
     }
 
@@ -17269,7 +17407,7 @@ app.get('/api/media-stack/summary', requireAuth, requireMember, async (req, res)
                 if (!selected || !['sonarr', 'radarr'].includes(selected.type)) {
                     return { error: 'ARR instance not found.' };
                 }
-                const summary = await buildMediaStackInstanceSummary(selected, monthOffset);
+                const summary = await buildMediaStackInstanceSummary(selected, monthOffset, config);
                 return {
                     sonarr: summary.type === 'sonarr' ? summary : { configured: false, calendar: [] },
                     radarr: summary.type === 'radarr' ? summary : { configured: false, calendar: [] },
@@ -17280,7 +17418,7 @@ app.get('/api/media-stack/summary', requireAuth, requireMember, async (req, res)
             }
 
             const [instanceSummaries, toolSummaries] = await Promise.all([
-                Promise.all(enabledInstances.map((instance) => buildMediaStackInstanceSummary(instance, monthOffset))),
+                Promise.all(enabledInstances.map((instance) => buildMediaStackInstanceSummary(instance, monthOffset, config))),
                 Promise.all(toolInstances.map(buildMediaStackToolSummary)),
             ]);
             const defaultSonarr = instanceSummaries.find((entry) => entry.type === 'sonarr' && entry.isDefault)

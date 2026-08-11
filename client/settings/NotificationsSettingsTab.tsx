@@ -1,10 +1,120 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Bell, Loader2, RefreshCw, Send } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { notifyInAppNotificationsChanged } from '../shared/inAppNotificationsRefresh';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingFieldLabel, SettingHint } from './SettingHint';
 import { NotificationTemplatesPanel } from './NotificationTemplatesPanel';
+
+const formatWhen = (iso?: string | null) => {
+    if (!iso) return 'Never';
+    try {
+        return new Date(iso).toLocaleString();
+    } catch {
+        return iso;
+    }
+};
+
+const formatDayKey = (iso?: string | null) => {
+    if (!iso) return 'Unknown';
+    try {
+        return new Intl.DateTimeFormat(undefined, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        }).format(new Date(iso));
+    } catch {
+        return String(iso).slice(0, 10);
+    }
+};
+
+const RecentNotificationsHistory: React.FC<{ items: any[] }> = ({ items }) => {
+    const types = useMemo(() => {
+        const counts: Record<string, number> = {};
+        for (const item of items) {
+            const key = String(item?.type || 'unknown');
+            counts[key] = (counts[key] || 0) + 1;
+        }
+        return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    }, [items]);
+    const [filter, setFilter] = useState('all');
+    const filtered = useMemo(
+        () => (filter === 'all' ? items : items.filter((item) => String(item?.type || 'unknown') === filter)),
+        [items, filter],
+    );
+    const groups = useMemo(() => {
+        const map = new Map<string, any[]>();
+        for (const item of filtered) {
+            const key = formatDayKey(item?.createdAt);
+            const list = map.get(key) || [];
+            list.push(item);
+            map.set(key, list);
+        }
+        return [...map.entries()];
+    }, [filtered]);
+
+    return (
+        <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+                <button
+                    type="button"
+                    onClick={() => setFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                        filter === 'all' ? 'border-plex text-plex bg-plex/10' : 'border-border text-muted hover:text-text'
+                    }`}
+                >
+                    All ({items.length})
+                </button>
+                {types.map(([type, count]) => (
+                    <button
+                        key={type}
+                        type="button"
+                        onClick={() => setFilter(type)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                            filter === type ? 'border-plex text-plex bg-plex/10' : 'border-border text-muted hover:text-text'
+                        }`}
+                    >
+                        {type} ({count})
+                    </button>
+                ))}
+            </div>
+            <div className="rounded-xl border border-border overflow-hidden divide-y divide-border/60">
+                {groups.map(([day, rows]) => (
+                    <div key={day}>
+                        <div className="px-3 py-1.5 bg-white/[0.03] text-[10px] uppercase tracking-wider font-bold text-muted">
+                            {day}
+                        </div>
+                        {rows.map((item) => (
+                            <div key={item.id} className="px-3 py-2.5 bg-background/30 flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-sm font-semibold text-text truncate">{item.title}</p>
+                                        {!item.readAt && (
+                                            <span className="text-[10px] font-bold uppercase tracking-wide text-plex bg-plex/10 border border-plex/30 px-1.5 py-0.5 rounded">
+                                                unread
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-muted mt-0.5">
+                                        {item.username || item.userId || 'Unknown user'}
+                                        {item.type ? ` · ${item.type}` : ''}
+                                        {item.href ? ` · ${item.href}` : ''}
+                                    </p>
+                                    {item.body ? <p className="text-xs text-muted/80 mt-1 line-clamp-2">{item.body}</p> : null}
+                                </div>
+                                <p className="text-[10px] text-muted shrink-0 whitespace-nowrap">{formatWhen(item.createdAt)}</p>
+                            </div>
+                        ))}
+                    </div>
+                ))}
+                {!filtered.length && (
+                    <div className="px-4 py-8 text-center text-sm text-muted">No notifications for this filter.</div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 type StatusPayload = {
     requestAvailable?: {
@@ -75,6 +185,16 @@ type Props = {
     setRequestAvailableNotifyDiscord: (v: boolean) => void;
     requestAvailableDiscordWebhookUrl: string;
     setRequestAvailableDiscordWebhookUrl: (v: string) => void;
+    requestNotReleasedNotifyEnabled: boolean;
+    setRequestNotReleasedNotifyEnabled: (v: boolean) => void;
+    requestNotReleasedNotifyEmail: boolean;
+    setRequestNotReleasedNotifyEmail: (v: boolean) => void;
+    requestNotReleasedNotifyInApp: boolean;
+    setRequestNotReleasedNotifyInApp: (v: boolean) => void;
+    requestNotReleasedNotifyWebPush: boolean;
+    setRequestNotReleasedNotifyWebPush: (v: boolean) => void;
+    notifyReleaseDatePreference: string;
+    setNotifyReleaseDatePreference: (v: string) => void;
     webPushEnabled: boolean;
     setWebPushEnabled: (v: boolean) => void;
     notificationTemplates: Record<string, Record<string, string>>;
@@ -118,15 +238,6 @@ const Pill: React.FC<{ ok: boolean; label: string; detail?: string }> = ({ ok, l
     </div>
 );
 
-const formatWhen = (iso?: string | null) => {
-    if (!iso) return 'Never';
-    try {
-        return new Date(iso).toLocaleString();
-    } catch {
-        return iso;
-    }
-};
-
 export const NotificationsSettingsTab: React.FC<Props> = ({
     requestAvailableNotifyEnabled,
     setRequestAvailableNotifyEnabled,
@@ -140,6 +251,16 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     setRequestAvailableNotifyDiscord,
     requestAvailableDiscordWebhookUrl,
     setRequestAvailableDiscordWebhookUrl,
+    requestNotReleasedNotifyEnabled,
+    setRequestNotReleasedNotifyEnabled,
+    requestNotReleasedNotifyEmail,
+    setRequestNotReleasedNotifyEmail,
+    requestNotReleasedNotifyInApp,
+    setRequestNotReleasedNotifyInApp,
+    requestNotReleasedNotifyWebPush,
+    setRequestNotReleasedNotifyWebPush,
+    notifyReleaseDatePreference,
+    setNotifyReleaseDatePreference,
     webPushEnabled,
     setWebPushEnabled,
     notificationTemplates,
@@ -417,6 +538,55 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                 />
             </div>
 
+            <div id={getSettingsSectionElementId('notifications-not-released')} className="scroll-mt-24 space-y-3">
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Not released yet</h4>
+                <p className="text-xs text-muted max-w-2xl">
+                    When someone requests a movie/show that isn’t out yet, tell them the expected date (defaults to digital release).
+                    Those titles also appear on the Media Stack calendar when their date falls in the viewed month.
+                </p>
+                <SettingsToggleRow
+                    title="Enable not-released alerts"
+                    description="Notify the requester on create when the preferred release date is still in the future."
+                    checked={requestNotReleasedNotifyEnabled}
+                    onChange={setRequestNotReleasedNotifyEnabled}
+                    border={false}
+                />
+                <div className={requestNotReleasedNotifyEnabled ? 'space-y-3' : 'space-y-3 opacity-50 pointer-events-none'}>
+                    <div>
+                        <SettingFieldLabel htmlFor="notifyReleaseDatePreference">Preferred release date</SettingFieldLabel>
+                        <select
+                            id="notifyReleaseDatePreference"
+                            className="w-full max-w-md rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            value={notifyReleaseDatePreference || 'digital'}
+                            onChange={(e) => setNotifyReleaseDatePreference(e.target.value)}
+                        >
+                            <option value="digital">Digital (preferred)</option>
+                            <option value="theatrical">Theatrical / cinema</option>
+                            <option value="physical">Physical</option>
+                            <option value="tmdb">TMDB primary release date</option>
+                        </select>
+                    </div>
+                    <SettingsToggleRow
+                        title="Email"
+                        checked={requestNotReleasedNotifyEmail}
+                        onChange={setRequestNotReleasedNotifyEmail}
+                        border={false}
+                    />
+                    <SettingsToggleRow
+                        title="In-app bell"
+                        checked={requestNotReleasedNotifyInApp}
+                        onChange={setRequestNotReleasedNotifyInApp}
+                        border={false}
+                    />
+                    <SettingsToggleRow
+                        title="Browser push"
+                        checked={requestNotReleasedNotifyWebPush}
+                        onChange={setRequestNotReleasedNotifyWebPush}
+                        border={false}
+                    />
+                </div>
+            </div>
+
             <div id={getSettingsSectionElementId('notifications-ntfy')} className="scroll-mt-24 space-y-3">
                 <h4 className="text-sm font-bold text-text uppercase tracking-wider">ntfy</h4>
                 <p className="text-xs text-muted max-w-2xl">
@@ -589,31 +759,16 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
             </div>
 
             <div id={getSettingsSectionElementId('notifications-recent')} className="scroll-mt-24 space-y-3">
-                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Recent in-app notifications</h4>
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Notification history</h4>
                 <p className="text-xs text-muted">
-                    Latest items written to the shared store. If this stays empty while requests become available, the Seerr/portal user mapping or notify job is the problem — not the bell UI.
+                    Shared in-app store across members. Filter by type to diagnose mapping / notify issues.
                 </p>
                 {!recent.length ? (
                     <div className="rounded-xl border border-border bg-background/40 px-4 py-8 text-center text-sm text-muted">
                         No in-app notifications stored yet.
                     </div>
                 ) : (
-                    <div className="rounded-xl border border-border overflow-hidden divide-y divide-border/60">
-                        {recent.map((item) => (
-                            <div key={item.id} className="px-3 py-2.5 bg-background/30 flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    <p className="text-sm font-semibold text-text truncate">{item.title}</p>
-                                    <p className="text-xs text-muted mt-0.5">
-                                        {item.username || item.userId || 'Unknown user'}
-                                        {item.type ? ` · ${item.type}` : ''}
-                                        {item.readAt ? ' · read' : ' · unread'}
-                                    </p>
-                                    {item.body ? <p className="text-xs text-muted/80 mt-1 line-clamp-2">{item.body}</p> : null}
-                                </div>
-                                <p className="text-[10px] text-muted shrink-0 whitespace-nowrap">{formatWhen(item.createdAt)}</p>
-                            </div>
-                        ))}
-                    </div>
+                    <RecentNotificationsHistory items={recent} />
                 )}
             </div>
 

@@ -503,6 +503,11 @@ export const SettingsDashboard: React.FC = () => {
     const [requestAvailableNotifyWebPush, setRequestAvailableNotifyWebPush] = useState(true);
     const [requestAvailableNotifyDiscord, setRequestAvailableNotifyDiscord] = useState(false);
     const [requestAvailableDiscordWebhookUrl, setRequestAvailableDiscordWebhookUrl] = useState('');
+    const [requestNotReleasedNotifyEnabled, setRequestNotReleasedNotifyEnabled] = useState(true);
+    const [requestNotReleasedNotifyEmail, setRequestNotReleasedNotifyEmail] = useState(true);
+    const [requestNotReleasedNotifyInApp, setRequestNotReleasedNotifyInApp] = useState(true);
+    const [requestNotReleasedNotifyWebPush, setRequestNotReleasedNotifyWebPush] = useState(true);
+    const [notifyReleaseDatePreference, setNotifyReleaseDatePreference] = useState('digital');
     const [webPushEnabled, setWebPushEnabled] = useState(true);
     const [notificationTemplates, setNotificationTemplates] = useState<Record<string, Record<string, string>>>({});
     const [notificationTemplateDefaults, setNotificationTemplateDefaults] = useState<Record<string, Record<string, string>>>({});
@@ -1258,6 +1263,11 @@ export const SettingsDashboard: React.FC = () => {
             setRequestAvailableNotifyWebPush(initialSettings.requestAvailableNotifyWebPush !== false);
             setRequestAvailableNotifyDiscord(!!initialSettings.requestAvailableNotifyDiscord);
             setRequestAvailableDiscordWebhookUrl(initialSettings.requestAvailableDiscordWebhookUrl || '');
+            setRequestNotReleasedNotifyEnabled(initialSettings.requestNotReleasedNotifyEnabled !== false);
+            setRequestNotReleasedNotifyEmail(initialSettings.requestNotReleasedNotifyEmail !== false);
+            setRequestNotReleasedNotifyInApp(initialSettings.requestNotReleasedNotifyInApp !== false);
+            setRequestNotReleasedNotifyWebPush(initialSettings.requestNotReleasedNotifyWebPush !== false);
+            setNotifyReleaseDatePreference(initialSettings.notifyReleaseDatePreference || 'digital');
             setWebPushEnabled(initialSettings.webPushEnabled !== false);
             setNotificationTemplates(
                 initialSettings.notificationTemplates && typeof initialSettings.notificationTemplates === 'object'
@@ -1732,6 +1742,11 @@ export const SettingsDashboard: React.FC = () => {
             requestAvailableNotifyWebPush,
             requestAvailableNotifyDiscord,
             requestAvailableDiscordWebhookUrl,
+            requestNotReleasedNotifyEnabled,
+            requestNotReleasedNotifyEmail,
+            requestNotReleasedNotifyInApp,
+            requestNotReleasedNotifyWebPush,
+            notifyReleaseDatePreference,
             webPushEnabled,
             notificationTemplates,
             ntfyEnabled,
@@ -2285,6 +2300,16 @@ export const SettingsDashboard: React.FC = () => {
                             setRequestAvailableNotifyDiscord={setRequestAvailableNotifyDiscord}
                             requestAvailableDiscordWebhookUrl={requestAvailableDiscordWebhookUrl}
                             setRequestAvailableDiscordWebhookUrl={setRequestAvailableDiscordWebhookUrl}
+                            requestNotReleasedNotifyEnabled={requestNotReleasedNotifyEnabled}
+                            setRequestNotReleasedNotifyEnabled={setRequestNotReleasedNotifyEnabled}
+                            requestNotReleasedNotifyEmail={requestNotReleasedNotifyEmail}
+                            setRequestNotReleasedNotifyEmail={setRequestNotReleasedNotifyEmail}
+                            requestNotReleasedNotifyInApp={requestNotReleasedNotifyInApp}
+                            setRequestNotReleasedNotifyInApp={setRequestNotReleasedNotifyInApp}
+                            requestNotReleasedNotifyWebPush={requestNotReleasedNotifyWebPush}
+                            setRequestNotReleasedNotifyWebPush={setRequestNotReleasedNotifyWebPush}
+                            notifyReleaseDatePreference={notifyReleaseDatePreference}
+                            setNotifyReleaseDatePreference={setNotifyReleaseDatePreference}
                             webPushEnabled={webPushEnabled}
                             setWebPushEnabled={setWebPushEnabled}
                             notificationTemplates={notificationTemplates}
