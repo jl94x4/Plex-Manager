@@ -6,6 +6,7 @@ import {
     Loader2,
     Play,
     RefreshCw,
+    RotateCcw,
     Save,
     Square,
     Upload,
@@ -140,6 +141,21 @@ export const OverlaysDashboard: React.FC = () => {
                     </button>
                     <button
                         type="button"
+                        className={`${buttonClass} border-amber-500/40 text-amber-100`}
+                        disabled={busy !== null || status?.running || !(status?.logCount > 0)}
+                        onClick={() => {
+                            const count = status?.logCount || 0;
+                            const ok = window.confirm(
+                                `Reset all ${count} logged New Season overlay(s)?\n\nThis restores Plex posters for every show in the overlay log and clears the log. This cannot be undone from SMP.`,
+                            );
+                            if (!ok) return;
+                            void runAction('Reset all', () => overlaysApi.resetAll());
+                        }}
+                    >
+                        <RotateCcw className="h-4 w-4" /> Reset all
+                    </button>
+                    <button
+                        type="button"
                         className={primaryButtonClass}
                         disabled={busy !== null || status?.running}
                         onClick={() => void runAction('Run', () => overlaysApi.run({ preview: false }))}
@@ -203,7 +219,50 @@ export const OverlaysDashboard: React.FC = () => {
                             Window {configDraft.newSeasonDays || 21} days · preset {configDraft.overlayPresetId || 'new-season'}
                         </p>
                     </div>
-                    <div className={`${cardClass} md:col-span-3`}>
+                    <div className={`${cardClass} md:col-span-3 space-y-3`}>
+                        <div className="flex flex-wrap items-end gap-3">
+                            <label className="min-w-[140px]">
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">New season window (days)</span>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={365}
+                                    className="mt-1.5 w-full rounded-md border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                                    value={configDraft.newSeasonDays ?? 21}
+                                    onChange={(e) => setConfigDraft((prev) => ({
+                                        ...prev,
+                                        newSeasonDays: Math.max(1, Math.min(365, Number(e.target.value) || 21)),
+                                    }))}
+                                />
+                            </label>
+                            <label className="min-w-[140px]">
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Schedule (hours, 0=off)</span>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    max={168}
+                                    className="mt-1.5 w-full rounded-md border border-white/15 bg-black/40 px-3 py-2 text-sm"
+                                    value={configDraft.scheduleHours ?? 24}
+                                    onChange={(e) => setConfigDraft((prev) => ({
+                                        ...prev,
+                                        scheduleHours: Math.max(0, Math.min(168, Number(e.target.value) || 0)),
+                                    }))}
+                                />
+                            </label>
+                            <button
+                                type="button"
+                                className={primaryButtonClass}
+                                disabled={busy !== null}
+                                onClick={() => void runAction('Save settings', async () => {
+                                    await overlaysApi.saveConfig(configDraft);
+                                })}
+                            >
+                                <Save className="h-4 w-4" /> Save
+                            </button>
+                        </div>
+                        <p className="text-xs text-muted">
+                            Days controls how long a season counts as “new” (default 21, same as the standalone tool). Change it anytime — Save, then Scan / Run.
+                        </p>
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
@@ -230,7 +289,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 Reconcile dry-run
                             </button>
                         </div>
-                        <p className="mt-3 text-xs text-muted">
+                        <p className="text-xs text-muted">
                             Preview writes to <code>config/overlays/preview/</code>. Live mode uploads show + latest-season posters to Plex and updates <code>overlaid_log.json</code>.
                         </p>
                     </div>
@@ -238,7 +297,26 @@ export const OverlaysDashboard: React.FC = () => {
             )}
 
             {tab === 'shows' && (
-                <div className={cardClass}>
+                <div className={`${cardClass} space-y-3`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm text-muted">
+                            Shows currently tracked in <code>overlaid_log.json</code>.
+                        </p>
+                        <button
+                            type="button"
+                            className={`${buttonClass} border-amber-500/40 text-amber-100`}
+                            disabled={busy !== null || status?.running || shows.length === 0}
+                            onClick={() => {
+                                const ok = window.confirm(
+                                    `Reset all ${shows.length} logged New Season overlay(s) and clear the log?`,
+                                );
+                                if (!ok) return;
+                                void runAction('Reset all', () => overlaysApi.resetAll());
+                            }}
+                        >
+                            <RotateCcw className="h-4 w-4" /> Reset all overlays
+                        </button>
+                    </div>
                     {shows.length === 0 ? (
                         <p className="text-sm text-muted">No overlays logged yet. Run a preview/live pass or import an existing log.</p>
                     ) : (
@@ -319,9 +397,12 @@ export const OverlaysDashboard: React.FC = () => {
                             value={configDraft.newSeasonDays ?? 21}
                             onChange={(e) => setConfigDraft((prev) => ({
                                 ...prev,
-                                newSeasonDays: Number(e.target.value) || 21,
+                                newSeasonDays: Math.max(1, Math.min(365, Number(e.target.value) || 21)),
                             }))}
                         />
+                        <span className="mt-1 block text-[11px] text-muted">
+                            How long after S01 airs a season stays eligible (1–365). Same idea as changing <code>timedelta(days=…)</code> in the upstream script.
+                        </span>
                     </label>
                     <label className="block">
                         <span className="text-xs font-semibold uppercase text-muted">Schedule hours (0 = off)</span>

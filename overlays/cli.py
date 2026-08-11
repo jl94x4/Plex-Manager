@@ -12,6 +12,7 @@ from core import (
     list_status,
     list_tv_sections,
     reconcile,
+    reset_all,
     reset_one,
     run_overlays,
     scan_library,
@@ -31,7 +32,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Overlays New Season CLI")
     parser.add_argument(
         "command",
-        choices=["status", "scan", "run", "preview", "cleanup", "reconcile", "reset-one", "sections"],
+        choices=["status", "scan", "run", "preview", "cleanup", "reconcile", "reset-one", "reset-all", "sections"],
     )
     parser.add_argument("--payload", default="", help="JSON payload string (otherwise read stdin)")
     args = parser.parse_args()
@@ -64,6 +65,10 @@ def main() -> int:
         if args.command == "reset-one":
             key = str(request.get("ratingKey") or request.get("rating_key") or "").strip()
             write_event("result", **reset_one(config, key, progress=progress))
+            return 0
+
+        if args.command == "reset-all":
+            write_event("result", **reset_all(config, progress=progress))
             return 0
 
         if args.command in {"run", "preview", "cleanup"}:

@@ -463,12 +463,48 @@ def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None)
     if not key:
         raise ValueError("ratingKey is required")
     show = plex.fetchItem(f"/library/metadata/{key}")
-    preview_mode = _as_bool(config.get("previewMode"), False)
-    remove_show_overlay(show, preview_mode, progress)
+    # Explicit resets always clear live Plex art (not preview-only).
+    remove_show_overlay(show, False, progress)
     if key in log:
         del log[key]
         _save_log(paths["log"], log)
     return {"ok": True, "ratingKey": key, "title": getattr(show, "title", key)}
+
+
+def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
+    """Reset every show currently in overlaid_log.json and clear the log."""
+    paths = _resolve_paths(config)
+    plex = _connect(config)
+    log = _load_log(paths["log"])
+    keys = list(log.keys())
+    removed = 0
+    failed: list[str] = []
+    _progress(progress, f"Resetting {len(keys)} logged overlay(s)…")
+
+    for key in keys:
+        entry = log.get(key) or {}
+        title = entry.get("title") or key
+        try:
+            show = plex.fetchItem(f"/library/metadata/{key}")
+            remove_show_overlay(show, False, progress)
+            removed += 1
+        except Exception as exc:
+            failed.append(f"{title}: {exc}")
+            _progress(progress, f"Failed to reset {title}: {exc}")
+        if key in log:
+            del log[key]
+
+    _save_log(paths["log"], log)
+    summary = {
+        "ok": True,
+        "requested": len(keys),
+        "removed": removed,
+        "failed": failed,
+        "remaining": len(log),
+        "finishedAt": datetime.now().isoformat(),
+    }
+    _progress(progress, f"Reset complete — cleared {removed}/{len(keys)}")
+    return summary
 
 
 def list_tv_sections(config: dict) -> dict:

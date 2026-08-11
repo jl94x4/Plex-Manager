@@ -51,4 +51,5 @@ export const overlaysApi = {
         apiFetch(`${ROOT}/import-log`, json({ mode, log }))
     ),
     resetOne: (ratingKey: string) => apiFetch(`${ROOT}/reset-one`, json({ ratingKey })),
+    resetAll: () => apiFetch(`${ROOT}/reset-all`, json({})),
 };
