@@ -178,6 +178,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
     scanner: Activity,
     'media-automation': Cpu,
     'poster-sets': ImageIcon,
+    overlays: Layers,
     achievements: Trophy,
     system: Settings,
     contact: Phone,
@@ -344,7 +345,7 @@ export const SettingsDashboard: React.FC = () => {
         if (mediaServerType === 'plex') return SETTINGS_TAB_GROUPS;
         return SETTINGS_TAB_GROUPS.map((group) => ({
             ...group,
-            tabs: group.tabs.filter((tab) => tab.id !== 'collexions'),
+            tabs: group.tabs.filter((tab) => tab.id !== 'collexions' && tab.id !== 'overlays'),
         })).filter((group) => group.tabs.length > 0);
     }, [mediaServerType]);
     const settingsTabsFlat = settingsTabGroups.flatMap((group) => group.tabs);
@@ -492,6 +493,7 @@ export const SettingsDashboard: React.FC = () => {
     const [mediaAutomationEnabled, setMediaAutomationEnabled] = useState(false);
     const [mediaAutomationHomeWidgetEnabled, setMediaAutomationHomeWidgetEnabled] = useState(false);
     const [posterSetsEnabled, setPosterSetsEnabled] = useState(false);
+    const [overlaysEnabled, setOverlaysEnabled] = useState(false);
     const [achievementsEnabled, setAchievementsEnabled] = useState(false);
     const [achievementsLeaderboardEnabled, setAchievementsLeaderboardEnabled] = useState(true);
     const [achievementsHomeWidgetEnabled, setAchievementsHomeWidgetEnabled] = useState(true);
@@ -1221,6 +1223,9 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.posterSetsEnabled !== undefined) {
                 setPosterSetsEnabled(!!initialSettings.posterSetsEnabled);
             }
+            if (initialSettings.overlaysEnabled !== undefined) {
+                setOverlaysEnabled(!!initialSettings.overlaysEnabled);
+            }
             if (initialSettings.achievementsEnabled !== undefined) {
                 setAchievementsEnabled(!!initialSettings.achievementsEnabled);
             }
@@ -1733,6 +1738,7 @@ export const SettingsDashboard: React.FC = () => {
             mediaAutomationEnabled,
             mediaAutomationHomeWidgetEnabled,
             posterSetsEnabled,
+            overlaysEnabled,
             achievementsEnabled,
             achievementsLeaderboardEnabled,
             achievementsHomeWidgetEnabled,
@@ -3432,6 +3438,7 @@ export const SettingsDashboard: React.FC = () => {
                                 scanner: scannerEnabled,
                                 mediaAutomation: mediaAutomationEnabled,
                                 posterSets: posterSetsEnabled,
+                                overlays: overlaysEnabled,
                                 achievements: achievementsEnabled,
                                 maintenance: maintenanceExperimentalEnabled,
                             }}
@@ -4256,6 +4263,34 @@ export const SettingsDashboard: React.FC = () => {
                                         Open Poster Sets
                                     </button>
                                 )}
+                            </section>
+                        </div>
+                    )}
+                    {activeTab === 'overlays' && (
+                        <div className="mb-8 animate-fade-in space-y-6">
+                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Overlays</h3>
+                            <section id={getSettingsSectionElementId('overlays')} className="space-y-3 scroll-mt-24">
+                                <SettingsToggleRow
+                                    title="Enable Overlays"
+                                    hint={<SettingHint>Admin nav for New Season poster banners (and future Kometa-style overlays). Uses Plex credentials from Media Player. Import an existing overlaid_log.json from the standalone tool inside the Overlays page.</SettingHint>}
+                                    checked={overlaysEnabled}
+                                    onChange={setOverlaysEnabled}
+                                />
+                                <p className={`text-xs mt-2 font-semibold ${overlaysEnabled ? 'text-green-300' : 'text-yellow-300'}`}>
+                                    Current status: {overlaysEnabled ? 'ON' : 'OFF'}
+                                </p>
+                                {overlaysEnabled && (
+                                    <button
+                                        type="button"
+                                        className="mt-3 px-4 py-2 rounded-md font-bold transition-all bg-plex text-background hover:bg-plex-hover"
+                                        onClick={() => window.location.assign(portalUrl('/overlays'))}
+                                    >
+                                        Open Overlays
+                                    </button>
+                                )}
+                                <p className="text-xs text-muted mt-3">
+                                    Prefer off-hours runs if you also use Kometa or Poster Sets bulk poster uploads on the same libraries.
+                                </p>
                             </section>
                         </div>
                     )}

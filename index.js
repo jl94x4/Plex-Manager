@@ -60,6 +60,8 @@ import {
     spawnCommand,
 } from './lib/media-automation/index.js';
 import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook, startTpdbCacheDailyRefresh } from './lib/poster-sets/index.js';
+import { createOverlaysRouter } from './lib/overlays/index.js';
+import { startOverlaysScheduler, runOverlaysScheduledJob } from './lib/overlays/scheduler.js';
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource } from './lib/achievements/index.js';
@@ -4248,6 +4250,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         mediaAutomation: !!config.mediaAutomationEnabled,
         mediaAutomationHomeWidget: !!config.mediaAutomationEnabled && !!config.mediaAutomationHomeWidgetEnabled,
         posterSets: !!config.posterSetsEnabled,
+        overlays: !!config.overlaysEnabled,
         achievements: !!config.achievementsEnabled,
         achievementsLeaderboard: !!config.achievementsEnabled && config.achievementsLeaderboardEnabled !== false,
         // Portal engine unlocks Discover; Seerr URL still works when using Seerr as engine.
@@ -4667,6 +4670,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 mediaAutomationHomeWidgetEnabled: !!config.mediaAutomationHomeWidgetEnabled,
                 mediaAutomation: mediaAutomationConfigForApi(config),
                 posterSetsEnabled: !!config.posterSetsEnabled,
+                overlaysEnabled: !!config.overlaysEnabled,
                 achievementsEnabled: !!config.achievementsEnabled,
                 achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
                 achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
@@ -4827,6 +4831,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 mediaAutomationHomeWidgetEnabled: false,
                 mediaAutomation: mediaAutomationConfigForApi({}),
                 posterSetsEnabled: false,
+                overlaysEnabled: false,
                 achievementsEnabled: false,
                 achievementsLeaderboardEnabled: true,
                 achievementsHomeWidgetEnabled: true,
@@ -4899,7 +4904,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -5316,6 +5321,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         posterSetsEnabled: posterSetsEnabled !== undefined
             ? !!posterSetsEnabled
             : !!existingConfig.posterSetsEnabled,
+        overlaysEnabled: overlaysEnabled !== undefined
+            ? !!overlaysEnabled
+            : !!existingConfig.overlaysEnabled,
         achievementsEnabled: achievementsEnabled !== undefined
             ? !!achievementsEnabled
             : !!existingConfig.achievementsEnabled,
@@ -11414,6 +11422,34 @@ app.post('/api/tasks/run/:taskId', requireAdmin, async (req, res) => {
                         await runDiscoveryAvailabilityCacheRebuild('manual', { alreadyStarted: true });
                         break;
                     case 'seerrHistoryImport': await runSeerrHistoryImport('manual'); break;
+                    case 'overlaysNewSeason': {
+                        const cfg = await loadFile(CONFIG_PATH, {});
+                        if (!cfg.overlaysEnabled) {
+                            throw new Error('Overlays is disabled. Enable it in Settings → Features first.');
+                        }
+                        await runOverlaysScheduledJob({
+                            loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+                            resolvePlex: async () => {
+                                const config = await loadFile(CONFIG_PATH, {});
+                                if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex') {
+                                    throw new Error('Overlays currently supports Plex Media Player settings only.');
+                                }
+                                const base_url = resolveConfiguredPlexServerUrl(config);
+                                const token = normalizePlexToken(config.plexToken);
+                                if (!base_url || !token || token === SECRET_MASK) {
+                                    throw new Error('Configure Plex server URL and token under Settings → Media Player first.');
+                                }
+                                return {
+                                    base_url: base_url.endsWith('/') ? base_url.slice(0, -1) : base_url,
+                                    token,
+                                };
+                            },
+                            markTaskStart,
+                            markTaskEnd,
+                            systemJob: systemJobs.overlaysNewSeason,
+                        });
+                        break;
+                    }
                     default:
                         markTaskEnd(task, new Error('Invalid system task'));
                 }
@@ -16564,6 +16600,16 @@ const systemJobs = {
         id: 'seerrHistoryImport',
         name: 'Import Seerr History',
         description: 'Copies Seerr/Overseerr request, issue, and blocklist history into portal JSON stores (idempotent).',
+        lastRun: null,
+        nextRun: null,
+        running: false,
+        lastDurationMs: null,
+        lastError: null,
+    },
+    overlaysNewSeason: {
+        id: 'overlaysNewSeason',
+        name: 'Overlays: New Season',
+        description: 'Scans TV libraries and applies / removes New Season poster banners (Overlays feature).',
         lastRun: null,
         nextRun: null,
         running: false,
@@ -22937,6 +22983,34 @@ const requirePosterSets = async (req, res, next) => {
     }
 };
 
+const resolveOverlaysPlex = async () => {
+    const config = await loadFile(CONFIG_PATH, {});
+    if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex') {
+        throw Object.assign(new Error('Overlays currently supports Plex Media Player settings only.'), { status: 400 });
+    }
+    const base_url = resolveConfiguredPlexServerUrl(config);
+    const token = normalizePlexToken(config.plexToken);
+    if (!base_url || !token || token === SECRET_MASK) {
+        throw Object.assign(new Error('Configure Plex server URL and token under Settings → Media Player first.'), { status: 400 });
+    }
+    return {
+        base_url: base_url.endsWith('/') ? base_url.slice(0, -1) : base_url,
+        token,
+    };
+};
+
+const requireOverlays = async (req, res, next) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!config.overlaysEnabled) {
+            return res.status(403).json({ error: 'Overlays is disabled. Enable it in Settings first.' });
+        }
+        return next();
+    } catch {
+        return res.status(500).json({ error: 'Failed to check Overlays feature flag.' });
+    }
+};
+
 app.use('/api/poster-sets', createPosterSetsRouter({
     Router: express.Router,
     requireAdmin,
@@ -22977,6 +23051,17 @@ app.use('/api/poster-sets', createPosterSetsRouter({
             librarySource: selectedIds.length ? 'default-libraries' : 'all-sections',
         };
     },
+}));
+
+app.use('/api/overlays', createOverlaysRouter({
+    Router: express.Router,
+    requireAdmin,
+    requireOverlays,
+    loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+    resolvePlex: resolveOverlaysPlex,
+    markTaskStart,
+    markTaskEnd,
+    systemJob: systemJobs.overlaysNewSeason,
 }));
 
 const findMediaAutomationLibraryForPath = async (candidate) => {
@@ -25915,6 +26000,22 @@ app.listen(PORT, BIND_HOST, async () => {
         log('[poster-sets] TPDB cache refresh scheduler started');
     } catch (error) {
         log(`[poster-sets] Watcher startup failed: ${error.message}`);
+    }
+    try {
+        startOverlaysScheduler({
+            loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+            resolvePlex: resolveOverlaysPlex,
+            isFeatureEnabled: async () => {
+                const cfg = await loadFile(CONFIG_PATH, {});
+                return !!cfg.overlaysEnabled;
+            },
+            markTaskStart,
+            markTaskEnd,
+            systemJob: systemJobs.overlaysNewSeason,
+        });
+        log('[overlays] New Season scheduler started');
+    } catch (error) {
+        log(`[overlays] Scheduler startup failed: ${error.message}`);
     }
     // Never block portal boot on Media Automation (watcher/scans can hang on big mounts).
     void mediaAutomationService.start()

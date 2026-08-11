@@ -11523,7 +11523,7 @@ export const MaintenanceDashboard: React.FC = () => {
 interface NavigationProps {
     currentRoute: string;
     onNavigate: (
-        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about',
+        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'requests' | 'discovery' | 'about',
         options?: { hash?: string; reviewId?: number; path?: string },
     ) => void;
     onLogout: () => void;
@@ -11759,6 +11759,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'scanner': { label: 'Scanner', icon: Radar, route: 'scanner', adminOnly: true },
         'media-automation': { label: 'Media Automation', icon: Cpu, route: 'media-automation', adminOnly: true },
         'poster-sets': { label: 'Poster Sets', icon: ImageIcon, route: 'poster-sets', adminOnly: true },
+        'overlays': { label: 'Overlays', icon: Layers, route: 'overlays', adminOnly: true },
         'requests': { label: 'Requests', icon: ClipboardList, route: 'requests', adminOnly: true },
         'request': { label: 'Discover & Request', icon: Sparkles, route: 'discovery', adminOnly: false },
         'about': { label: 'About', icon: Info, route: 'about', adminOnly: false },

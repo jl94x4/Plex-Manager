@@ -5,6 +5,7 @@ export type NavFeatureFlags = {
     scanner?: boolean;
     mediaAutomation?: boolean;
     posterSets?: boolean;
+    overlays?: boolean;
     achievements?: boolean;
     /** Achievements XP/badge leaderboard (requires achievements). Default true when achievements on. */
     achievementsLeaderboard?: boolean;
@@ -27,6 +28,7 @@ export const DEFAULT_NAV_ORDER = [
     'scanner',
     'media-automation',
     'poster-sets',
+    'overlays',
     'mediastack',
     'requests',
     'status',
@@ -55,6 +57,7 @@ export const NAV_ITEM_LABELS: Record<string, string> = {
     scanner: 'Scanner',
     'media-automation': 'Media Automation',
     'poster-sets': 'Poster Sets',
+    overlays: 'Overlays',
     mediastack: 'Calendar',
     requests: 'Requests',
     status: 'Status',
@@ -72,6 +75,7 @@ const ADMIN_ONLY_NAV_KEYS = new Set([
     'scanner',
     'media-automation',
     'poster-sets',
+    'overlays',
     'requests',
     'maintenance',
     'settings',
@@ -105,6 +109,7 @@ const LEGACY_DEFAULT_NAV_ORDERS = [
     ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
     // Achievements landed early in the first opt-in default and crowded the mobile bar.
     ['home', 'discover', 'request', 'analytics', 'achievements', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
+    ['home', 'discover', 'request', 'analytics', 'achievements', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
 ];
 
 const sameOrder = (a: string[], b: string[]) => (
@@ -296,6 +301,7 @@ export const filterNavOrder = (
     const scannerEnabled = !!features.scanner;
     const mediaAutomationEnabled = !!features.mediaAutomation;
     const posterSetsEnabled = !!features.posterSets;
+    const overlaysEnabled = !!features.overlays;
     const achievementsEnabled = !!features.achievements;
     const requestsQueueEnabled = !!features.requestsQueue;
     const requestEnabled = features.request !== false || requestsQueueEnabled;
@@ -309,7 +315,7 @@ export const filterNavOrder = (
     return (Array.isArray(order) ? order : []).filter((key) => {
         if (key === 'logout' || key === 'logs') return false;
         if (hidden.has(key) && !alwaysVisible.has(key)) return false;
-        if ((key === 'users' || key === 'settings' || key === 'maintenance' || key === 'upgrader' || key === 'collexions' || key === 'scanner' || key === 'media-automation' || key === 'poster-sets' || key === 'requests') && !options.isAdmin) return false;
+        if ((key === 'users' || key === 'settings' || key === 'maintenance' || key === 'upgrader' || key === 'collexions' || key === 'scanner' || key === 'media-automation' || key === 'poster-sets' || key === 'overlays' || key === 'requests') && !options.isAdmin) return false;
         if (key === 'downloads' && !options.isAdmin && features.downloads === false) return false;
         if (key === 'maintenance' && !maintenanceEnabled) return false;
         if (key === 'upgrader' && !upgraderEnabled) return false;
@@ -317,6 +323,7 @@ export const filterNavOrder = (
         if (key === 'scanner' && !scannerEnabled) return false;
         if (key === 'media-automation' && !mediaAutomationEnabled) return false;
         if (key === 'poster-sets' && !posterSetsEnabled) return false;
+        if (key === 'overlays' && !overlaysEnabled) return false;
         if (key === 'achievements' && !achievementsEnabled) return false;
         if (key === 'request' && !requestEnabled) return false;
         if (key === 'requests' && !requestsQueueEnabled) return false;

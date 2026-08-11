@@ -17,6 +17,7 @@ type NavFeatureStatus = {
     scanner?: boolean;
     mediaAutomation?: boolean;
     posterSets?: boolean;
+    overlays?: boolean;
     achievements?: boolean;
     maintenance?: boolean;
 };
@@ -42,6 +43,7 @@ const FEATURE_OFF_HINT: Record<string, string> = {
     scanner: 'Feature off — enable under Settings → Scanner',
     'media-automation': 'Feature off — enable under Settings → Media Automation',
     'poster-sets': 'Feature off — enable under Settings → Poster Sets',
+    overlays: 'Feature off — enable under Settings → Overlays',
     achievements: 'Feature off — enable under Settings → Achievements',
     maintenance: 'Feature off — enable under Settings → Cleanup',
 };
@@ -237,6 +239,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                         if (key === 'scanner' && featureStatus?.scanner === false) return FEATURE_OFF_HINT.scanner;
                         if (key === 'media-automation' && featureStatus?.mediaAutomation === false) return FEATURE_OFF_HINT['media-automation'];
                         if (key === 'poster-sets' && featureStatus?.posterSets === false) return FEATURE_OFF_HINT['poster-sets'];
+                        if (key === 'overlays' && featureStatus?.overlays === false) return FEATURE_OFF_HINT.overlays;
                         if (key === 'achievements' && featureStatus?.achievements === false) return FEATURE_OFF_HINT.achievements;
                         if (key === 'maintenance' && featureStatus?.maintenance === false) return FEATURE_OFF_HINT.maintenance;
                         return null;

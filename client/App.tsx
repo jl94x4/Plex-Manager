@@ -28,6 +28,7 @@ const CollexionsDashboard = lazy(() => import('./collexions/CollexionsDashboard'
 const ScannerDashboard = lazy(() => import('./scanner/ScannerDashboard').then(m => ({ default: m.ScannerDashboard })));
 const MediaAutomationDashboard = lazy(() => import('./media-automation/MediaAutomationDashboard').then(m => ({ default: m.MediaAutomationDashboard })));
 const PosterSetsDashboard = lazy(() => import('./poster-sets/PosterSetsDashboard').then(m => ({ default: m.PosterSetsDashboard })));
+const OverlaysDashboard = lazy(() => import('./overlays/OverlaysDashboard').then(m => ({ default: m.OverlaysDashboard })));
 const AchievementsDashboard = lazy(() => import('./achievements/AchievementsDashboard').then(m => ({ default: m.AchievementsDashboard })));
 import {
     updateFavicon,
@@ -131,7 +132,7 @@ export const MainApp: React.FC = () => {
         closeConfirm();
     };
 
-    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading'>('loading');
+    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading'>('loading');
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
@@ -308,7 +309,7 @@ export const MainApp: React.FC = () => {
         setShowWhatsNew(false);
     }, [publicConfig?.appVersion]);
 
-    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
+    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
         if (route === 'logs') {
             setCurrentRoute('settings');
             window.history.pushState({}, '', portalUrl('/settings#logs'));
@@ -333,6 +334,7 @@ export const MainApp: React.FC = () => {
             if (route === 'scanner') path = '/scanner';
             if (route === 'media-automation') path = '/media-automation';
             if (route === 'poster-sets') path = '/poster-sets';
+            if (route === 'overlays') path = '/overlays';
             if (route === 'requests') {
                 path = options?.reviewId ? `/requests?review=${options.reviewId}` : '/requests';
             }
@@ -418,6 +420,11 @@ export const MainApp: React.FC = () => {
             }
             else if (path.startsWith('/poster-sets') && data.session.isAdmin && data.navFeatures?.posterSets) setCurrentRoute('poster-sets');
             else if (path.startsWith('/poster-sets')) {
+                window.history.replaceState({}, '', portalUrl('/portal'));
+                setCurrentRoute('user');
+            }
+            else if (path.startsWith('/overlays') && data.session.isAdmin && data.navFeatures?.overlays) setCurrentRoute('overlays');
+            else if (path.startsWith('/overlays')) {
                 window.history.replaceState({}, '', portalUrl('/portal'));
                 setCurrentRoute('user');
             }
@@ -550,6 +557,13 @@ export const MainApp: React.FC = () => {
             return (
                 <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
                     <PosterSetsDashboard />
+                </Suspense>
+            );
+        }
+        if (currentRoute === 'overlays' && isAdmin && sessionInfo?.navFeatures?.overlays) {
+            return (
+                <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
+                    <OverlaysDashboard />
                 </Suspense>
             );
         }
