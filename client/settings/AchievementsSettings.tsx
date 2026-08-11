@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 import { apiFetch } from '../shared/api';
+import { useDiscoverI18n } from '../discovery/i18n';
 
 export type AchievementsXpWeights = Record<string, number>;
 
@@ -73,6 +74,7 @@ export const AchievementsSettings: React.FC<Props> = ({
     achievementsSeasons,
     setAchievementsSeasons,
 }) => {
+    const { t } = useDiscoverI18n();
     const [weightLabels, setWeightLabels] = useState<Record<string, string>>({});
     const [defaultWeights, setDefaultWeights] = useState<AchievementsXpWeights>({});
     const [categories, setCategories] = useState<Array<{ id: string; label: string }>>([]);
@@ -236,24 +238,23 @@ export const AchievementsSettings: React.FC<Props> = ({
     return (
         <section id="settings-section-achievements" className="space-y-1 scroll-mt-24">
             <div className="mb-2">
-                <h3 className="text-lg font-bold text-text">Achievements & XP</h3>
+                <h3 className="text-lg font-bold text-text">{t('settings.achievements.title')}</h3>
                 <p className="text-sm text-muted mt-1">
-                    Optional gamification with levels, badges, profile rack, and leaderboard. Off by default.
+                    {t('settings.achievements.description')}
                 </p>
             </div>
             <SettingsToggleRow
-                title="Enable Achievements"
-                description="Adds Achievements to navigation and tracks XP / badges from watch history."
+                title={t('settings.achievements.enableTitle')}
+                description={t('settings.achievements.enableDescription')}
                 checked={achievementsEnabled}
                 onChange={setAchievementsEnabled}
             />
             <div className={achievementsEnabled ? '' : 'opacity-50 pointer-events-none'}>
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 py-4 border-b border-border/60">
                     <div className="min-w-0 sm:pr-6">
-                        <p className="text-sm font-semibold text-text">Watch history source</p>
+                        <p className="text-sm font-semibold text-text">{t('settings.achievements.watchHistorySource')}</p>
                         <SettingHint>
-                            Used for achievements XP/badges and Home personal wrap-up counts.
-                            Plex uses session history on this server; Tautulli usually retains fuller play history when configured.
+                            {t('settings.achievements.watchHistorySourceHint')}
                         </SettingHint>
                     </div>
                     <div className="w-full sm:w-56 shrink-0">
@@ -261,7 +262,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                             value={watchHistorySource}
                             onChange={(v) => setWatchHistorySource(v === 'tautulli' ? 'tautulli' : 'plex')}
                             options={[
-                                { label: 'Plex (session history)', value: 'plex' },
+                                { label: t('settings.achievements.plexSessionHistory'), value: 'plex' },
                                 { label: 'Tautulli', value: 'tautulli' },
                             ]}
                             compact
@@ -269,35 +270,35 @@ export const AchievementsSettings: React.FC<Props> = ({
                         />
                         {watchHistorySource === 'tautulli' && !tautulliConfigured && (
                             <p className="text-[11px] text-amber-300/90 mt-1.5">
-                                Tautulli isn’t configured yet — add URL + API key under Integrations, or the portal will keep using Plex.
+                                {t('settings.achievements.tautulliNotConfigured')}
                             </p>
                         )}
                     </div>
                 </div>
                 <SettingsToggleRow
-                    title="Show leaderboard"
-                    description="Rank members by XP. Users can hide themselves from the board."
+                    title={t('settings.achievements.showLeaderboard')}
+                    description={t('settings.achievements.showLeaderboardDescription')}
                     checked={achievementsLeaderboardEnabled}
                     onChange={setAchievementsLeaderboardEnabled}
                 />
                 <SettingsToggleRow
-                    title="Home dashboard widget"
-                    description="Show level, XP bar, and recent badges on Home."
+                    title={t('settings.achievements.homeWidget')}
+                    description={t('settings.achievements.homeWidgetDescription')}
                     checked={achievementsHomeWidgetEnabled}
                     onChange={setAchievementsHomeWidgetEnabled}
                 />
                 <SettingsToggleRow
-                    title="Show badges on profile"
-                    description="Display earned badges in the sidebar profile panel."
+                    title={t('settings.achievements.showBadgesOnProfile')}
+                    description={t('settings.achievements.showBadgesOnProfileDescription')}
                     checked={achievementsShowOnProfile}
                     onChange={setAchievementsShowOnProfile}
                 />
 
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 py-4 border-b border-border/60">
                     <div className="min-w-0 sm:pr-6">
-                        <p className="text-sm font-semibold text-text">Minimum % complete</p>
+                        <p className="text-sm font-semibold text-text">{t('settings.achievements.minPercentComplete')}</p>
                         <SettingHint>
-                            Skip short scrubs. 0 disables the gate. Needs percentage-complete data (Tautulli is most reliable).
+                            {t('settings.achievements.minPercentCompleteHint')}
                         </SettingHint>
                     </div>
                     <div className="w-full sm:w-36 shrink-0">
@@ -321,9 +322,9 @@ export const AchievementsSettings: React.FC<Props> = ({
                 <div className="py-4 border-b border-border/60 space-y-3">
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div className="min-w-0">
-                            <p className="text-sm font-semibold text-text">Season manager</p>
+                            <p className="text-sm font-semibold text-text">{t('settings.achievements.seasonManager')}</p>
                             <SettingHint>
-                                Define seasonal windows that gate listed badges and optionally spotlight them on the Achievements page. Dates use MM-DD (or YYYY-MM-DD).
+                                {t('settings.achievements.seasonManagerHint')}
                             </SettingHint>
                         </div>
                         <button
@@ -334,11 +335,11 @@ export const AchievementsSettings: React.FC<Props> = ({
                                 setSeasonBadgeQuery('');
                             }}
                         >
-                            Add season
+                            {t('settings.achievements.addSeason')}
                         </button>
                     </div>
                     {achievementsSeasons.length === 0 && !seasonDraft && (
-                        <p className="text-xs text-muted">No seasons configured yet.</p>
+                        <p className="text-xs text-muted">{t('settings.achievements.noSeasons')}</p>
                     )}
                     <div className="space-y-2">
                         {achievementsSeasons.map((season) => (
@@ -347,8 +348,8 @@ export const AchievementsSettings: React.FC<Props> = ({
                                     <p className="text-sm font-semibold text-text truncate">{season.name}</p>
                                     <p className="text-[11px] text-muted font-mono mt-0.5">
                                         {(season.activeFrom || '…')} → {(season.activeUntil || '…')}
-                                        {' · '}{season.badgeIds.length} badge{season.badgeIds.length === 1 ? '' : 's'}
-                                        {season.spotlight === false ? ' · no spotlight' : ''}
+                                        {' · '}{t('settings.achievements.seasonBadgeCount', { count: season.badgeIds.length })}
+                                        {season.spotlight === false ? ` · ${t('settings.achievements.noSpotlight')}` : ''}
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
@@ -360,14 +361,14 @@ export const AchievementsSettings: React.FC<Props> = ({
                                             setSeasonBadgeQuery('');
                                         }}
                                     >
-                                        Edit
+                                        {t('settings.achievements.edit')}
                                     </button>
                                     <button
                                         type="button"
                                         className="text-xs font-semibold text-muted hover:text-red-300"
                                         onClick={() => setAchievementsSeasons(achievementsSeasons.filter((s) => s.id !== season.id))}
                                     >
-                                        Remove
+                                        {t('common.remove')}
                                     </button>
                                 </div>
                             </div>
@@ -377,7 +378,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                         <div className="rounded-xl border border-plex/30 bg-plex/5 p-3 space-y-3">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <label className="space-y-1">
-                                    <span className="text-[11px] text-muted font-semibold">Name</span>
+                                    <span className="text-[11px] text-muted font-semibold">{t('settings.achievements.name')}</span>
                                     <input
                                         className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex"
                                         value={seasonDraft.name}
@@ -391,10 +392,10 @@ export const AchievementsSettings: React.FC<Props> = ({
                                         checked={seasonDraft.spotlight !== false}
                                         onChange={(e) => setSeasonDraft({ ...seasonDraft, spotlight: e.target.checked })}
                                     />
-                                    <span className="text-xs text-text">Show spotlight strip</span>
+                                    <span className="text-xs text-text">{t('settings.achievements.showSpotlightStrip')}</span>
                                 </label>
                                 <label className="space-y-1">
-                                    <span className="text-[11px] text-muted font-semibold">Active from</span>
+                                    <span className="text-[11px] text-muted font-semibold">{t('settings.achievements.activeFrom')}</span>
                                     <input
                                         className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex font-mono"
                                         value={seasonDraft.activeFrom}
@@ -403,7 +404,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                     />
                                 </label>
                                 <label className="space-y-1">
-                                    <span className="text-[11px] text-muted font-semibold">Active until</span>
+                                    <span className="text-[11px] text-muted font-semibold">{t('settings.achievements.activeUntil')}</span>
                                     <input
                                         className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex font-mono"
                                         value={seasonDraft.activeUntil}
@@ -414,13 +415,13 @@ export const AchievementsSettings: React.FC<Props> = ({
                             </div>
                             <div className="space-y-2">
                                 <p className="text-[11px] text-muted font-semibold">
-                                    Badges in season ({seasonDraft.badgeIds.length})
+                                    {t('settings.achievements.badgesInSeason', { count: seasonDraft.badgeIds.length })}
                                 </p>
                                 <input
                                     type="search"
                                     value={seasonBadgeQuery}
                                     onChange={(e) => setSeasonBadgeQuery(e.target.value)}
-                                    placeholder="Search badges to include…"
+                                    placeholder={t('settings.achievements.searchBadgesToInclude')}
                                     className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex"
                                 />
                                 <div className="max-h-40 overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40">
@@ -439,7 +440,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                         );
                                     })}
                                     {!seasonBadgeMatches.length && (
-                                        <p className="p-2 text-[11px] text-muted">No matching badges.</p>
+                                        <p className="p-2 text-[11px] text-muted">{t('settings.achievements.noMatchingBadges')}</p>
                                     )}
                                 </div>
                             </div>
@@ -449,7 +450,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                     className="text-xs font-semibold text-muted hover:text-text"
                                     onClick={() => { setSeasonDraft(null); setSeasonBadgeQuery(''); }}
                                 >
-                                    Cancel
+                                    {t('common.cancel')}
                                 </button>
                                 <button
                                     type="button"
@@ -457,7 +458,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                     disabled={!seasonDraft.name.trim()}
                                     onClick={saveSeasonDraft}
                                 >
-                                    Save season
+                                    {t('settings.achievements.saveSeason')}
                                 </button>
                             </div>
                         </div>
@@ -467,10 +468,9 @@ export const AchievementsSettings: React.FC<Props> = ({
                 <div className="py-4 border-b border-border/60 space-y-3">
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div className="min-w-0">
-                            <p className="text-sm font-semibold text-text">Leaderboard backfill</p>
+                            <p className="text-sm font-semibold text-text">{t('settings.achievements.backfillTitle')}</p>
                             <SettingHint>
-                                Rebuild XP snapshots and force-repair badge unlock times from watch history
-                                (fixes “Who unlocked first” first-run stamps). Use after history source or weight changes.
+                                {t('settings.achievements.backfillHint')}
                             </SettingHint>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -480,7 +480,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                 disabled={backfillBusy}
                                 onClick={() => { void refreshBackfill(); }}
                             >
-                                Refresh status
+                                {t('settings.achievements.refreshStatus')}
                             </button>
                             <button
                                 type="button"
@@ -488,24 +488,26 @@ export const AchievementsSettings: React.FC<Props> = ({
                                 disabled={backfillBusy || !!backfillStatus?.inFlight}
                                 onClick={() => { void runBackfill(true); }}
                             >
-                                {backfillBusy || backfillStatus?.inFlight ? 'Running…' : 'Force run'}
+                                {backfillBusy || backfillStatus?.inFlight
+                                    ? t('settings.achievements.running')
+                                    : t('settings.achievements.forceRun')}
                             </button>
                         </div>
                     </div>
                     <div className="rounded-lg border border-border/50 bg-background/40 px-3 py-2 text-xs text-muted space-y-1">
                         <p>
-                            Status:{' '}
+                            {t('settings.achievements.statusLabel')}{' '}
                             <span className="text-text font-semibold">
                                 {backfillStatus?.inFlight
-                                    ? 'In progress'
-                                    : (backfillStatus?.lastResult?.ok ? 'Ready' : (backfillStatus?.lastResult?.reason || 'Idle'))}
+                                    ? t('settings.achievements.inProgress')
+                                    : (backfillStatus?.lastResult?.ok ? t('settings.achievements.ready') : (backfillStatus?.lastResult?.reason || t('settings.achievements.idle')))}
                             </span>
                         </p>
                         {backfillStatus?.lastCompletedAt && (
-                            <p>Last completed: {new Date(backfillStatus.lastCompletedAt).toLocaleString()}</p>
+                            <p>{t('settings.achievements.lastCompleted', { date: new Date(backfillStatus.lastCompletedAt).toLocaleString() })}</p>
                         )}
                         {backfillStatus?.lastResult?.processed != null && (
-                            <p>Last run processed {Number(backfillStatus.lastResult.processed) || 0} member(s).</p>
+                            <p>{t('settings.achievements.lastRunProcessed', { count: Number(backfillStatus.lastResult.processed) || 0 })}</p>
                         )}
                     </div>
                 </div>
@@ -513,9 +515,9 @@ export const AchievementsSettings: React.FC<Props> = ({
                 <div className="py-4 border-b border-border/60 space-y-3">
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div className="min-w-0">
-                            <p className="text-sm font-semibold text-text">Badge insights</p>
+                            <p className="text-sm font-semibold text-text">{t('settings.achievements.badgeInsights')}</p>
                             <SettingHint>
-                                Spot never-unlocked and rare badges so you can tune thresholds or disable dead weight.
+                                {t('settings.achievements.badgeInsightsHint')}
                             </SettingHint>
                         </div>
                         <button
@@ -524,15 +526,17 @@ export const AchievementsSettings: React.FC<Props> = ({
                             disabled={insightsBusy}
                             onClick={() => { void loadInsights(); }}
                         >
-                            {insightsBusy ? 'Loading…' : (insights ? 'Refresh insights' : 'Load insights')}
+                            {insightsBusy
+                                ? t('settings.achievements.loading')
+                                : (insights ? t('settings.achievements.refreshInsights') : t('settings.achievements.loadInsights'))}
                         </button>
                     </div>
                     {insights && (
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 text-xs">
                             {[
-                                { title: 'Never unlocked', rows: insights.neverUnlocked || [] },
-                                { title: 'Rarest', rows: insights.rarest || [] },
-                                { title: 'Most common', rows: insights.mostCommon || [] },
+                                { title: t('settings.achievements.neverUnlocked'), rows: insights.neverUnlocked || [] },
+                                { title: t('settings.achievements.rarest'), rows: insights.rarest || [] },
+                                { title: t('settings.achievements.mostCommon'), rows: insights.mostCommon || [] },
                             ].map((col) => (
                                 <div key={col.title} className="rounded-lg border border-border/50 bg-background/40 overflow-hidden">
                                     <p className="px-3 py-2 font-semibold text-text border-b border-border/40">{col.title}</p>
@@ -545,7 +549,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                             </div>
                                         ))}
                                         {!col.rows?.length && (
-                                            <p className="px-3 py-2 text-muted">No data yet.</p>
+                                            <p className="px-3 py-2 text-muted">{t('settings.achievements.noData')}</p>
                                         )}
                                     </div>
                                 </div>
@@ -557,9 +561,9 @@ export const AchievementsSettings: React.FC<Props> = ({
                 <div className="py-4 border-b border-border/60 space-y-3">
                     <div className="flex items-start justify-between gap-3 flex-wrap">
                         <div className="min-w-0">
-                            <p className="text-sm font-semibold text-text">XP weights</p>
+                            <p className="text-sm font-semibold text-text">{t('settings.achievements.xpWeights')}</p>
                             <SettingHint>
-                                Points awarded per stat. Total plays defaults to 0 because it double-counts movie/episode/track plays.
+                                {t('settings.achievements.xpWeightsHint')}
                             </SettingHint>
                         </div>
                         {Object.keys(defaultWeights).length > 0 && (
@@ -568,7 +572,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                 className="text-xs font-semibold text-plex hover:underline shrink-0"
                                 onClick={() => setAchievementsXpWeights({ ...defaultWeights })}
                             >
-                                Reset to defaults
+                                {t('settings.achievements.resetToDefaults')}
                             </button>
                         )}
                     </div>
@@ -594,10 +598,10 @@ export const AchievementsSettings: React.FC<Props> = ({
 
                 <div className="py-4 space-y-3">
                     <div>
-                        <p className="text-sm font-semibold text-text">Disable badges</p>
+                        <p className="text-sm font-semibold text-text">{t('settings.achievements.disableBadges')}</p>
                         <SettingHint>
-                            Hidden badges stay locked for everyone and won’t appear in progress or the hall of fame.
-                            {disabledSet.size > 0 ? ` ${disabledSet.size} disabled.` : ''}
+                            {t('settings.achievements.disableBadgesHint')}
+                            {disabledSet.size > 0 ? ` ${t('settings.achievements.disabledCount', { count: disabledSet.size })}` : ''}
                         </SettingHint>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2">
@@ -605,7 +609,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                             type="search"
                             value={badgeQuery}
                             onChange={(e) => setBadgeQuery(e.target.value)}
-                            placeholder="Search badges…"
+                            placeholder={t('settings.achievements.searchBadges')}
                             className="flex-1 p-2.5 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex"
                         />
                         <div className="w-full sm:w-44 shrink-0">
@@ -613,7 +617,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                 value={badgeCategory}
                                 onChange={setBadgeCategory}
                                 options={[
-                                    { label: 'All categories', value: 'all' },
+                                    { label: t('settings.achievements.allCategories'), value: 'all' },
                                     ...categories.map((c) => ({ label: c.label, value: c.id })),
                                 ]}
                                 compact
@@ -623,10 +627,10 @@ export const AchievementsSettings: React.FC<Props> = ({
                     </div>
                     <div className="max-h-64 overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40">
                         {catalogLoading && (
-                            <p className="p-3 text-xs text-muted">Loading badge catalog…</p>
+                            <p className="p-3 text-xs text-muted">{t('settings.achievements.loadingBadgeCatalog')}</p>
                         )}
                         {!catalogLoading && filteredBadges.length === 0 && (
-                            <p className="p-3 text-xs text-muted">No badges match.</p>
+                            <p className="p-3 text-xs text-muted">{t('settings.achievements.noBadgesMatch')}</p>
                         )}
                         {filteredBadges.slice(0, 200).map((badge) => {
                             const disabled = disabledSet.has(badge.id);
@@ -647,14 +651,14 @@ export const AchievementsSettings: React.FC<Props> = ({
                                         <span className="block text-[10px] text-muted truncate">{badge.id}</span>
                                     </span>
                                     {disabled && (
-                                        <span className="text-[10px] uppercase tracking-wide text-amber-300/90 shrink-0">Off</span>
+                                        <span className="text-[10px] uppercase tracking-wide text-amber-300/90 shrink-0">{t('settings.achievements.off')}</span>
                                     )}
                                 </label>
                             );
                         })}
                         {filteredBadges.length > 200 && (
                             <p className="p-2 text-[11px] text-muted text-center">
-                                Showing 200 of {filteredBadges.length} — refine search to see more.
+                                {t('settings.achievements.showingBadgeLimit', { shown: 200, total: filteredBadges.length })}
                             </p>
                         )}
                     </div>
@@ -664,7 +668,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                             className="text-xs font-semibold text-muted hover:text-text"
                             onClick={() => setAchievementsDisabledBadgeIds([])}
                         >
-                            Clear all disabled badges
+                            {t('settings.achievements.clearDisabledBadges')}
                         </button>
                     )}
                 </div>
