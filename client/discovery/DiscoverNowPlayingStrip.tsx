@@ -6,11 +6,17 @@ import { useDiscoverI18n } from './i18n';
 type Props = {
     session: NowPlayingSession;
     onNavigate?: (path: string) => void;
+    /** Extra classes on the outer absolute wrapper. */
+    className?: string;
 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-export const DiscoverNowPlayingStrip: React.FC<Props> = ({ session, onNavigate }) => {
+/**
+ * Trakt-style thin green Now Playing bar.
+ * The full strip width is the item runtime; the brighter fill is watch progress.
+ */
+export const DiscoverNowPlayingStrip: React.FC<Props> = ({ session, onNavigate, className = '' }) => {
     const { t } = useDiscoverI18n();
     const hasTmdb = Number.isFinite(Number(session.tmdbId)) && Number(session.tmdbId) > 0;
     const basePath = hasTmdb
@@ -46,54 +52,66 @@ export const DiscoverNowPlayingStrip: React.FC<Props> = ({ session, onNavigate }
     };
 
     const linkClass = basePath && onNavigate
-        ? 'font-semibold text-white hover:underline underline-offset-2 decoration-white/70'
+        ? 'font-semibold text-white hover:underline underline-offset-2 decoration-white/80'
         : 'font-semibold text-white';
 
     return (
-        <div className="absolute bottom-0 inset-x-0 z-20 rounded-b-2xl overflow-hidden">
-            <div className="relative bg-emerald-600/95 text-white">
+        <div
+            className={`absolute bottom-0 inset-x-0 z-20 rounded-b-2xl overflow-hidden ${className}`.trim()}
+            role="status"
+            aria-live="polite"
+            aria-label={`${paused ? t('nowPlaying.paused') : t('nowPlaying.watching')}: ${session.title}${hasSeason ? `, ${t('nowPlaying.season', { number: season })}` : ''}${hasEpisode ? `, ${t('nowPlaying.episode', { number: episode })}` : ''}, ${Math.round(progress)}%`}
+        >
+            <div className="relative h-full min-h-[2rem] sm:min-h-[2.25rem] bg-emerald-950/90 text-white">
+                {/* Full-strip progress: width = % through the item */}
                 <div
-                    className="absolute left-0 top-0 bottom-0 bg-emerald-400/50 transition-[width] duration-500"
+                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 to-emerald-400 transition-[width] duration-500 ease-out"
                     style={{ width: `${progress}%` }}
                     aria-hidden
                 />
-                <div className="relative flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs min-h-[2rem]">
-                    <span className="inline-flex items-center gap-1 shrink-0 font-bold uppercase tracking-wider text-emerald-50/95">
+                <div
+                    className="absolute inset-y-0 right-0 bg-emerald-950/50"
+                    style={{ left: `${progress}%` }}
+                    aria-hidden
+                />
+                <div className="relative flex items-center justify-center gap-x-1.5 gap-y-0.5 flex-wrap px-3 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-xs text-center min-h-[2rem] sm:min-h-[2.25rem]">
+                    <span className="inline-flex items-center gap-1 shrink-0 font-bold uppercase tracking-wider text-white drop-shadow-sm">
                         {paused ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3 fill-current" />}
                         {paused ? t('nowPlaying.paused') : t('nowPlaying.watching')}
                     </span>
-                    <span className="text-emerald-100/70 shrink-0">·</span>
-                    <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                        <button type="button" className={`${linkClass} truncate max-w-full text-left`} onClick={goShow}>
-                            {session.title}
-                        </button>
-                        {hasSeason && (
-                            <>
-                                <span className="text-emerald-100/70">·</span>
-                                <button type="button" className={linkClass} onClick={goSeason}>
-                                    {t('nowPlaying.season', { number: season })}
-                                </button>
-                            </>
-                        )}
-                        {hasEpisode && (
-                            <>
-                                <span className="text-emerald-100/70">·</span>
-                                <button type="button" className={linkClass} onClick={goEpisode}>
-                                    {t('nowPlaying.episode', { number: episode })}
-                                    {session.episodeTitle ? (
-                                        <span className="font-normal text-emerald-50/90">
-                                            {` — ${session.episodeTitle}`}
-                                        </span>
-                                    ) : null}
-                                </button>
-                            </>
-                        )}
-                    </div>
+                    <span className="text-white/70 shrink-0">·</span>
+                    <button type="button" className={`${linkClass} truncate max-w-[min(100%,18rem)] drop-shadow-sm`} onClick={goShow}>
+                        {session.title}
+                    </button>
+                    {hasSeason && (
+                        <>
+                            <span className="text-white/70">·</span>
+                            <button type="button" className={`${linkClass} drop-shadow-sm`} onClick={goSeason}>
+                                {t('nowPlaying.season', { number: season })}
+                            </button>
+                        </>
+                    )}
+                    {hasEpisode && (
+                        <>
+                            <span className="text-white/70">·</span>
+                            <button type="button" className={`${linkClass} drop-shadow-sm`} onClick={goEpisode}>
+                                {t('nowPlaying.episode', { number: episode })}
+                                {session.episodeTitle ? (
+                                    <span className="font-normal text-white/90">
+                                        {` — ${session.episodeTitle}`}
+                                    </span>
+                                ) : null}
+                            </button>
+                        </>
+                    )}
                     {hasSeason && hasEpisode && (
-                        <span className="hidden sm:inline shrink-0 font-mono text-emerald-50/90 tabular-nums">
-                            {`S${pad(season)}E${pad(episode)}`}
+                        <span className="hidden sm:inline shrink-0 font-mono text-white/90 tabular-nums drop-shadow-sm">
+                            {`· S${pad(season)}E${pad(episode)}`}
                         </span>
                     )}
+                    <span className="hidden md:inline shrink-0 font-mono text-white/80 tabular-nums drop-shadow-sm">
+                        {`· ${Math.round(progress)}%`}
+                    </span>
                 </div>
             </div>
         </div>

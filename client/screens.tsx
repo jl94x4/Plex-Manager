@@ -38,6 +38,8 @@ import { DiscoverGridSizeSelect } from './discovery/DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './discovery/useDiscoverGridSize';
 import { DiscoverLocaleSelect } from './discovery/i18n/DiscoverLocaleSelect';
 import { useDiscoverI18n } from './discovery/i18n';
+import { DiscoverNowPlayingStrip } from './discovery/DiscoverNowPlayingStrip';
+import { useNowPlaying } from './shared/useNowPlaying';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
 import { isFirefoxMobileClient, isIosMobileClient, isStandaloneDisplayMode, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
@@ -7324,7 +7326,39 @@ const PortalWidgetEditorModal: React.FC<{
     );
 };
 
-export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onLogout: () => void; refreshSession: () => void; onViewAdmin: () => void; onViewStatus: () => void; onViewDashboard: () => void; onViewSettings?: () => void; onViewLogs?: () => void; onViewCollexions?: () => void; onViewScanner?: () => void; onViewMediaAutomation?: () => void; onViewRequests?: (reviewId?: number) => void; onPendingRequestsChange?: () => void }> = ({ sessionInfo, publicConfig, onLogout, refreshSession, onViewAdmin, onViewStatus, onViewDashboard, onViewSettings, onViewLogs, onViewCollexions, onViewScanner, onViewMediaAutomation, onViewRequests, onPendingRequestsChange }) => {
+export const UserDashboard: React.FC<{
+    sessionInfo: any;
+    publicConfig?: any;
+    onLogout: () => void;
+    refreshSession: () => void;
+    onViewAdmin: () => void;
+    onViewStatus: () => void;
+    onViewDashboard: () => void;
+    onViewSettings?: () => void;
+    onViewLogs?: () => void;
+    onViewCollexions?: () => void;
+    onViewScanner?: () => void;
+    onViewMediaAutomation?: () => void;
+    onViewRequests?: (reviewId?: number) => void;
+    onPendingRequestsChange?: () => void;
+    onNavigate?: (route: any, options?: { path?: string; hash?: string; reviewId?: number }) => void;
+}> = ({
+    sessionInfo,
+    publicConfig,
+    onLogout,
+    refreshSession,
+    onViewAdmin,
+    onViewStatus,
+    onViewDashboard,
+    onViewSettings,
+    onViewLogs,
+    onViewCollexions,
+    onViewScanner,
+    onViewMediaAutomation,
+    onViewRequests,
+    onPendingRequestsChange,
+    onNavigate,
+}) => {
     const { t } = useDiscoverI18n();
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -7363,6 +7397,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     const [wrapUpAchievementsSeed, setWrapUpAchievementsSeed] = useState(() => Date.now());
 
     const user = sessionInfo.account;
+    const { session: nowPlaying } = useNowPlaying(user?.showDiscoverNowPlaying !== false);
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
@@ -8357,7 +8392,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                     </div>
                 )}
 
-                <div className="relative pt-14 pb-7 px-4 md:pt-32 md:pb-12 md:px-12 flex flex-col items-center md:items-start text-center md:text-left z-10">
+                <div className={`relative pt-14 px-4 md:pt-32 md:px-12 flex flex-col items-center md:items-start text-center md:text-left z-10 ${nowPlaying ? 'pb-12 md:pb-16' : 'pb-7 md:pb-12'}`}>
                     <div className="flex flex-col md:flex-row items-center md:items-center gap-4 md:gap-6">
                         {/* Avatar */}
                         {(() => {
@@ -8428,6 +8463,13 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
                         </div>
                     </div>
                 </div>
+
+                {nowPlaying ? (
+                    <DiscoverNowPlayingStrip
+                        session={nowPlaying}
+                        onNavigate={(path) => onNavigate?.('discovery', { path })}
+                    />
+                ) : null}
             </div>
 
             {selectedMetric && analytics && (

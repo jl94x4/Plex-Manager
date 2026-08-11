@@ -3105,7 +3105,7 @@ export const SettingsDashboard: React.FC = () => {
                                         />
                                         <SettingsToggleRow title="Show recently added on Discover home" checked={portalShowRecentlyAdded} onChange={setPortalShowRecentlyAdded} border={false} />
                                         <SettingsToggleRow title="Show Plex watchlist on Discover home" checked={portalShowWatchlist} onChange={setPortalShowWatchlist} border={false} />
-                                        <SettingsToggleRow title="Show Now Playing strip on Discover hero" checked={discoverNowPlayingEnabled} onChange={setDiscoverNowPlayingEnabled} border={false} />
+                                        <SettingsToggleRow title="Show Now Playing strip on Home & Discover heroes" checked={discoverNowPlayingEnabled} onChange={setDiscoverNowPlayingEnabled} border={false} />
                                     </div>
 
                                     <div id={getSettingsSectionElementId('auto-approve')} className="scroll-mt-24 space-y-3">
