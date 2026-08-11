@@ -1,12 +1,14 @@
-# Overlays (New Season)
+# Overlays (New Season + New Episode)
 
-Phase 1 of SMP Overlays — ports [plex-new-season-overlay](https://github.com/ButtaJones/plex-new-season-overlay) into the portal.
+Phase 1–2 of SMP Overlays — New Season show/season banners plus Netflix-style **New Episode** episode thumbs.
 
 ## Layout
 
 - `cli.py` / `core.py` — Python worker (Pillow + plexapi)
-- `assets/presets/new-season.png` — default banner
-- Runtime data: `config/overlays/` (`config.json`, `overlaid_log.json`, `preview/`, `backups/<ratingKey>/`)
+- `assets/presets/new-season.png` — New Season banner
+- `assets/presets/new-episode.png` — New Episode banner (default 6-day window)
+- Runtime data: `config/overlays/` (`config.json`, `overlaid_log.json`, `episode_overlaid_log.json`, `preview/`, `preview/samples/`, `backups/`)
+- Settings **Visual sample** (`POST /api/overlays/sample`) composites banners onto a random show poster + episode thumb for QA (does not change live art)
 
 ## Setup
 
@@ -23,4 +25,5 @@ pip install -r overlays/requirements.txt
 ## Notes
 
 - Skips items with a Kometa `Overlay` label by default (`skipIfKometaOverlayLabel`)
+- New Episode stamps **episode thumbnails only** for episodes aired within `newEpisodeDays` (default 6)
 - Prefer off-hours if Poster Sets / Kometa also rewrite posters on the same libraries

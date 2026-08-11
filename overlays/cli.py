@@ -9,6 +9,7 @@ import sys
 import traceback
 
 from core import (
+    generate_overlay_samples,
     list_status,
     list_tv_sections,
     reconcile,
@@ -32,7 +33,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Overlays New Season CLI")
     parser.add_argument(
         "command",
-        choices=["status", "scan", "run", "preview", "cleanup", "reconcile", "reset-one", "reset-all", "sections"],
+        choices=[
+            "status",
+            "scan",
+            "run",
+            "preview",
+            "cleanup",
+            "reconcile",
+            "reset-one",
+            "reset-all",
+            "sections",
+            "sample",
+        ],
     )
     parser.add_argument("--payload", default="", help="JSON payload string (otherwise read stdin)")
     args = parser.parse_args()
@@ -55,6 +67,10 @@ def main() -> int:
             write_event("result", **list_tv_sections(config))
             return 0
 
+        if args.command == "sample":
+            write_event("result", **generate_overlay_samples(config, progress=progress))
+            return 0
+
         if args.command == "scan":
             write_event("result", **scan_library(config, progress=progress))
             return 0
@@ -65,7 +81,8 @@ def main() -> int:
 
         if args.command == "reset-one":
             key = str(request.get("ratingKey") or request.get("rating_key") or "").strip()
-            write_event("result", **reset_one(config, key, progress=progress))
+            kind = str(request.get("kind") or "").strip() or None
+            write_event("result", **reset_one(config, key, progress=progress, kind=kind))
             return 0
 
         if args.command == "reset-all":

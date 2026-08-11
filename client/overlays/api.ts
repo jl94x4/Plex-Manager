@@ -22,6 +22,8 @@ export type OverlaysConfig = {
     enabled?: boolean;
     previewMode?: boolean;
     newSeasonDays?: number;
+    newEpisodeEnabled?: boolean;
+    newEpisodeDays?: number;
     librarySectionIds?: string[];
     overlayPresetId?: string;
     scheduleHours?: number;
@@ -40,6 +42,7 @@ export const overlaysApi = {
         body: JSON.stringify(config),
     }) as Promise<{ ok: boolean; config: OverlaysConfig }>,
     shows: () => apiFetch(`${ROOT}/shows`),
+    episodes: () => apiFetch(`${ROOT}/episodes`),
     presets: () => apiFetch(`${ROOT}/presets`),
     sections: () => apiFetch(`${ROOT}/sections`),
     scan: () => apiFetch(`${ROOT}/scan`, json({})),
@@ -50,6 +53,26 @@ export const overlaysApi = {
     importLog: (log: Record<string, unknown>, mode: 'merge' | 'replace' = 'merge') => (
         apiFetch(`${ROOT}/import-log`, json({ mode, log }))
     ),
-    resetOne: (ratingKey: string) => apiFetch(`${ROOT}/reset-one`, json({ ratingKey })),
+    resetOne: (ratingKey: string, kind?: 'show' | 'episode') => apiFetch(`${ROOT}/reset-one`, json({ ratingKey, kind })),
     resetAll: () => apiFetch(`${ROOT}/reset-all`, json({})),
+    sampleMeta: () => apiFetch(`${ROOT}/sample/meta`) as Promise<{
+        ok: boolean;
+        exists: boolean;
+        showTitle?: string | null;
+        episodeTitle?: string | null;
+        showTitleForEp?: string | null;
+        generatedAt?: string | null;
+        presetId?: string | null;
+    }>,
+    sampleGenerate: () => apiFetch(`${ROOT}/sample`, json({})) as Promise<{
+        ok: boolean;
+        show?: { title?: string; source?: string };
+        episode?: { title?: string; showTitle?: string; source?: string };
+        generatedAt?: string;
+        presetId?: string;
+        meta?: Record<string, unknown>;
+    }>,
+    sampleImageUrl: (kind: 'show' | 'episode', bust?: string | number) => (
+        `${ROOT}/sample/${kind}?t=${encodeURIComponent(String(bust || Date.now()))}`
+    ),
 };
