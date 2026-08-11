@@ -19,18 +19,19 @@ const waitForExportImages = (root: HTMLElement) => Promise.all(
 
 export const buildAchievementsShareText = (me: any, serverName: string, rank?: number | null) => {
     const recent = Array.isArray(me?.recentEarned) ? me.recentEarned.slice(0, 5) : [];
+    const origin = typeof window !== 'undefined' ? window.location.origin : getPublicOrigin();
     const lines = [
-        `🏆 ${serverName} — Achievements`,
+        `🏆 ${tAchievements('share.textTitle', { serverName })}`,
         me?.username ? `👤 ${me.username}` : '',
         '',
-        `⭐ Level ${me?.level || 1} · ${(Number(me?.xp) || 0).toLocaleString()} XP`,
-        rank ? `🏅 Rank #${rank}` : '',
-        `🎖️ ${me?.earnedCount || 0} / ${me?.totalBadges || 0} badges`,
+        `⭐ ${tAchievements('share.textLevelXp', { level: me?.level || 1, xp: (Number(me?.xp) || 0).toLocaleString() })}`,
+        rank ? `🏅 ${tAchievements('share.textRank', { rank })}` : '',
+        `🎖️ ${tAchievements('dossier.badgeCount', { earned: me?.earnedCount || 0, total: me?.totalBadges || 0 })}`,
         recent.length
-            ? `✨ Recent: ${recent.map((b: any) => b?.name).filter(Boolean).join(', ')}`
+            ? `✨ ${tAchievements('share.textRecent', { names: recent.map((b: any) => b?.name).filter(Boolean).join(', ') })}`
             : '',
         '',
-        `Shared from ${typeof window !== 'undefined' ? window.location.origin : getPublicOrigin()}`,
+        tAchievements('share.textSharedFrom', { origin }),
     ].filter(Boolean);
     return lines.join('\n');
 };
@@ -131,12 +132,12 @@ export const ShareAchievementsModal: React.FC<Props> = ({
             if (blob) {
                 const file = new File([blob], 'achievements.png', { type: 'image/png' });
                 if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-                    await navigator.share({ title: `${serverName} — Achievements`, files: [file] });
+                    await navigator.share({ title: tAchievements('share.textTitle', { serverName }), files: [file] });
                     onToast?.(tAchievements('share.shared'), 'success');
                     return;
                 }
             }
-            await navigator.share({ title: `${serverName} — Achievements`, text });
+            await navigator.share({ title: tAchievements('share.textTitle', { serverName }), text });
             onToast?.(tAchievements('share.shared'), 'success');
         } catch (e) {
             if ((e as Error)?.name === 'AbortError') return;
@@ -154,7 +155,7 @@ export const ShareAchievementsModal: React.FC<Props> = ({
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 md:p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
             <div className="glass-card shadow-2xl w-[calc(100vw-1.5rem)] max-w-[720px] p-5 md:p-6 relative max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <button type="button" onClick={onClose} className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-muted hover:text-text transition-colors z-10">
+                <button type="button" onClick={onClose} aria-label={tAchievements('common.close')} className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-muted hover:text-text transition-colors z-10">
                     <X className="w-5 h-5" />
                 </button>
                 <h3 className="text-xl font-bold text-text mb-1 pr-10">{tAchievements('share.title')}</h3>
@@ -169,7 +170,7 @@ export const ShareAchievementsModal: React.FC<Props> = ({
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <p className="text-[10px] uppercase tracking-[0.28em] text-plex font-bold">{serverName}</p>
-                                <h4 className="text-2xl font-black text-white mt-1">Level {me?.level || 1}</h4>
+                                <h4 className="text-2xl font-black text-white mt-1">{tAchievements('page.level', { level: me?.level || 1 })}</h4>
                                 <p className="text-sm text-white/60 font-mono mt-1">
                                     {(Number(me?.xp) || 0).toLocaleString()} XP
                                     {rank ? ` · #${rank}` : ''}
@@ -177,7 +178,7 @@ export const ShareAchievementsModal: React.FC<Props> = ({
                             </div>
                             <div className="text-right">
                                 <p className="text-3xl font-black text-plex font-mono">{me?.earnedCount || 0}</p>
-                                <p className="text-[11px] text-white/50 uppercase tracking-widest">badges</p>
+                                <p className="text-[11px] text-white/50 uppercase tracking-widest">{tAchievements('share.badgesLabel')}</p>
                             </div>
                         </div>
                         <div className="h-2.5 rounded-full bg-white/10 overflow-hidden">

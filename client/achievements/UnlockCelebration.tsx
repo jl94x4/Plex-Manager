@@ -74,7 +74,7 @@ export const UnlockCelebration: React.FC<Props> = ({ badges, onClose }) => {
                         type="button"
                         onClick={() => { setVisible(false); onClose(); }}
                         className="absolute top-3 right-3 p-2 rounded-xl text-muted hover:text-text hover:bg-white/5"
-                        aria-label="Close"
+                        aria-label={tAchievements('common.close')}
                     >
                         <X className="w-4 h-4" />
                     </button>

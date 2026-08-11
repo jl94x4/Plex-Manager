@@ -104,7 +104,7 @@ export const LeaderboardDossierModal: React.FC<Props> = ({ query, onClose, onOpe
     return (
         <ModalPortal open={open}>
             <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-6 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
-                <button type="button" className="absolute inset-0 bg-black/80 backdrop-blur-[3px]" aria-label="Close" onClick={onClose} />
+                <button type="button" className="absolute inset-0 bg-black/80 backdrop-blur-[3px]" aria-label={tAchievements('common.close')} onClick={onClose} />
                 <div
                     className="relative isolate w-full sm:max-w-5xl max-h-[min(94vh,100%)] sm:max-h-[90vh] flex flex-col rounded-t-3xl sm:rounded-3xl border border-white/10 shadow-[0_28px_100px_rgba(0,0,0,0.65)] overflow-hidden animate-[achUnlockPop_0.4s_ease-out]"
                     style={{ backgroundColor: PANEL_FALLBACK }}
@@ -148,7 +148,7 @@ export const LeaderboardDossierModal: React.FC<Props> = ({ query, onClose, onOpe
                                         </p>
                                         <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
                                             <span className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-black/25 px-2 py-1 font-mono text-text">
-                                                Lv {data?.level ?? '—'}
+                                                {tAchievements('common.levelShort', { level: data?.level ?? '—' })}
                                             </span>
                                             <span className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-black/25 px-2 py-1 font-mono text-text">
                                                 {(Number(data?.xp) || 0).toLocaleString()} XP
@@ -168,7 +168,7 @@ export const LeaderboardDossierModal: React.FC<Props> = ({ query, onClose, onOpe
                                     type="button"
                                     onClick={onClose}
                                     className="p-2.5 rounded-xl text-muted hover:text-text hover:bg-white/5 border border-transparent hover:border-white/10 shrink-0"
-                                    aria-label="Close"
+                                    aria-label={tAchievements('common.close')}
                                 >
                                     <X className="w-4 h-4" />
                                 </button>

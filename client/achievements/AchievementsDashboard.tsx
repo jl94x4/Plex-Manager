@@ -180,7 +180,7 @@ export const ProfileBadgeRack: React.FC<{
                     <Award className="w-3.5 h-3.5 text-plex" />
                     {tAchievements('profile.title')}
                     {level != null && (
-                        <span className="normal-case tracking-normal text-plex font-black">Lv {level}</span>
+                        <span className="normal-case tracking-normal text-plex font-black">{tAchievements('common.levelShort', { level })}</span>
                     )}
                 </div>
                 {onOpenAll && (
@@ -194,7 +194,9 @@ export const ProfileBadgeRack: React.FC<{
                 )}
             </div>
             {xp != null && (
-                <p className="text-[11px] text-muted font-mono">{Number(xp).toLocaleString()} XP · {earned?.length || 0} badges</p>
+                <p className="text-[11px] text-muted font-mono">
+                    {Number(xp).toLocaleString()} XP · {tAchievements('common.badgeCount', { count: earned?.length || 0 })}
+                </p>
             )}
             <div className="flex flex-wrap gap-1.5">
                 {shown.map((badge) => (
@@ -268,7 +270,7 @@ export const XpBreakdownModal: React.FC<{
     return (
         <ModalPortal open={open}>
             <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-5 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
-                <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" aria-label="Close" onClick={onClose} />
+                <button type="button" className="absolute inset-0 bg-black/75 backdrop-blur-[2px]" aria-label={tAchievements('common.close')} onClick={onClose} />
                 <div
                     className="relative isolate w-full sm:max-w-3xl max-h-[min(92vh,100%)] sm:max-h-[88vh] flex flex-col rounded-t-3xl sm:rounded-3xl border border-white/10 shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden"
                     style={{ backgroundColor: '#12141a' }}
@@ -299,6 +301,7 @@ export const XpBreakdownModal: React.FC<{
                         <button
                             type="button"
                             onClick={onClose}
+                            aria-label={tAchievements('common.close')}
                             className="p-2.5 rounded-xl text-muted hover:text-text hover:bg-white/5 border border-transparent hover:border-white/10 transition-colors shrink-0"
                         >
                             <X className="w-4 h-4" />
@@ -991,7 +994,7 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                                             #{rivals.above.rank} {rivals.above.username}
                                                         </p>
                                                         <p className="text-[11px] text-muted font-mono mt-0.5 tabular-nums">
-                                                            Lv {rivals.above.level} · {(Number(rivals.above.xp) || 0).toLocaleString()} XP
+                                                            {tAchievements('common.levelShort', { level: rivals.above.level })} · {(Number(rivals.above.xp) || 0).toLocaleString()} XP
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1045,7 +1048,7 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                                             #{rivals.below.rank} {rivals.below.username}
                                                         </p>
                                                         <p className="text-[11px] text-muted font-mono mt-0.5 tabular-nums">
-                                                            Lv {rivals.below.level} · {(Number(rivals.below.xp) || 0).toLocaleString()} XP
+                                                            {tAchievements('common.levelShort', { level: rivals.below.level })} · {(Number(rivals.below.xp) || 0).toLocaleString()} XP
                                                         </p>
                                                     </div>
                                                 </div>
@@ -1115,13 +1118,13 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                                     <DeltaIcon className={`w-3.5 h-3.5 shrink-0 ${deltaTone}`} aria-hidden />
                                                 </div>
                                                 <p className="text-sm font-bold truncate mt-0.5">
-                                                    {entry.username}{entry.isMe ? ' (you)' : ''}
+                                                    {entry.username}{entry.isMe ? ` ${tAchievements('dossier.you')}` : ''}
                                                 </p>
                                                 <p className="text-[10px] text-muted font-mono mt-1 leading-snug truncate">
-                                                    Lv {entry.level} · {Number(entry.xp).toLocaleString()} XP
+                                                    {tAchievements('common.levelShort', { level: entry.level })} · {Number(entry.xp).toLocaleString()} XP
                                                 </p>
                                                 <p className="text-[10px] text-muted font-mono truncate">
-                                                    {entry.earnedCount} badges
+                                                    {tAchievements('common.badgeCount', { count: entry.earnedCount })}
                                                 </p>
                                             </div>
                                         </div>
@@ -1294,7 +1297,10 @@ export const AchievementsHomeWidget: React.FC<{
                     <p className="text-[10px] uppercase tracking-[0.25em] text-plex font-bold">{tAchievements('home.eyebrow')}</p>
                     <p className="text-xl font-black text-text mt-1">{tAchievements('page.level', { level: summary.level || 1 })}</p>
                     <p className="text-xs text-muted font-mono mt-0.5">
-                        {(summary.xp || 0).toLocaleString()} XP · {summary.earnedCount || 0}/{summary.totalBadges || 0} badges
+                        {(summary.xp || 0).toLocaleString()} XP · {tAchievements('dossier.badgeCount', {
+                            earned: summary.earnedCount || 0,
+                            total: summary.totalBadges || 0,
+                        })}
                     </p>
                 </div>
                 <Trophy className="w-7 h-7 text-plex" />
