@@ -46,6 +46,7 @@ def main() -> int:
 
     config = request.get("config") if isinstance(request.get("config"), dict) else {}
     try:
+        progress(f"Worker received `{args.command}`")
         if args.command == "status":
             write_event("result", **list_status(config))
             return 0

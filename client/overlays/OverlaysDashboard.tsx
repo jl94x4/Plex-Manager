@@ -56,6 +56,7 @@ export const OverlaysDashboard: React.FC = () => {
     const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
     const [busy, setBusy] = useState<string | null>(null);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
+    const wasRunningRef = React.useRef(false);
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((prev) => pushToast(prev, message, type));
@@ -69,6 +70,7 @@ export const OverlaysDashboard: React.FC = () => {
         setStatus(nextStatus);
         if (nextStatus?.config) setConfigDraft({ ...DEFAULT_CONFIG, ...nextStatus.config });
         setShows(showsRes.shows || []);
+        return nextStatus;
     }, []);
 
     useEffect(() => {
@@ -79,9 +81,29 @@ export const OverlaysDashboard: React.FC = () => {
         if (!status?.running) return undefined;
         const timer = window.setInterval(() => {
             void refresh().catch(() => {});
-        }, 2000);
+        }, 1500);
         return () => window.clearInterval(timer);
     }, [status?.running, refresh]);
+
+    useEffect(() => {
+        const running = !!status?.running;
+        if (wasRunningRef.current && !running) {
+            if (status?.lastOutcome === 'cancelled') {
+                // Stop action already toasts
+            } else if (status?.lastError || status?.lastOutcome === 'error') {
+                toast(status.lastError || 'Overlays job failed', 'error');
+            } else if (status?.lastOutcome === 'ok') {
+                const s = status?.lastRunSummary;
+                toast(
+                    s
+                        ? `Finished — +${s.added ?? 0} / −${s.removed ?? 0}${s.previewMode ? ' (preview)' : ''}`
+                        : 'Overlays job finished',
+                );
+            }
+            void overlaysApi.shows().then((showsRes) => setShows(showsRes.shows || [])).catch(() => {});
+        }
+        wasRunningRef.current = running;
+    }, [status?.running, status?.lastError, status?.lastOutcome, status?.lastRunSummary, toast]);
 
     const loadSections = useCallback(async () => {
         try {
@@ -96,6 +118,7 @@ export const OverlaysDashboard: React.FC = () => {
     const activity = status?.activity || [];
     const workerReady = !!status?.workerReady;
     const showCount = shows.length || status?.logCount || 0;
+    const jobRunning = !!status?.running;
 
     const tabs = useMemo(() => ([
         { id: 'overview' as const, label: 'Overview', icon: Layers },
@@ -118,17 +141,22 @@ export const OverlaysDashboard: React.FC = () => {
         { value: 'replace', label: 'Replace' },
     ]), []);
 
-    const runAction = async (label: string, fn: () => Promise<unknown>) => {
+    const runAction = async (label: string, fn: () => Promise<unknown>, { startedToast = false } = {}) => {
         setBusy(label);
         try {
             await fn();
             await refresh();
-            toast(`${label} complete`);
+            toast(startedToast ? `${label} started` : `${label} complete`);
         } catch (error) {
             toast(error instanceof Error ? error.message : `${label} failed`, 'error');
         } finally {
             setBusy(null);
         }
+    };
+
+    const startBackgroundJob = (label: string, fn: () => Promise<unknown>) => {
+        setTab('activity');
+        void runAction(label, fn, { startedToast: true });
     };
 
     const saveSettings = () => runAction('Save settings', async () => {
@@ -152,7 +180,7 @@ export const OverlaysDashboard: React.FC = () => {
                 accent="plex"
                 eyebrow="Overlays"
                 title="New Season banners"
-                description="Phase 1: TV show season banners (parity with the standalone plex-new-season-overlay tool). Uses Media Player Plex credentials. Skip shows that already have a Kometa Overlay label by default."
+                description="TV show season banners (parity with the standalone plex-new-season-overlay tool). Uses Media Player Plex credentials. Skip shows that already have a Kometa Overlay label by default."
                 icon={<Layers className="h-3.5 w-3.5" />}
                 secondaryBlob
                 actions={(
@@ -168,7 +196,7 @@ export const OverlaysDashboard: React.FC = () => {
                         <button
                             type="button"
                             className={buttonClass}
-                            disabled={busy !== null || !status?.running}
+                            disabled={busy === 'Stop' || !jobRunning}
                             onClick={() => void runAction('Stop', () => overlaysApi.stop())}
                         >
                             <Square className="h-4 w-4" /> Stop
@@ -176,15 +204,15 @@ export const OverlaysDashboard: React.FC = () => {
                         <button
                             type="button"
                             className={buttonClass}
-                            disabled={busy !== null || status?.running}
-                            onClick={() => void runAction('Preview', () => overlaysApi.preview())}
+                            disabled={busy !== null || jobRunning || !workerReady}
+                            onClick={() => startBackgroundJob('Preview', () => overlaysApi.preview())}
                         >
                             Preview
                         </button>
                         <button
                             type="button"
                             className={`${buttonClass} border-amber-500/40 text-amber-100`}
-                            disabled={busy !== null || status?.running || !(status?.logCount > 0)}
+                            disabled={busy !== null || jobRunning || !(status?.logCount > 0)}
                             onClick={resetAll}
                         >
                             <RotateCcw className="h-4 w-4" /> Reset all
@@ -192,10 +220,10 @@ export const OverlaysDashboard: React.FC = () => {
                         <button
                             type="button"
                             className={primaryButtonClass}
-                            disabled={busy !== null || status?.running || !workerReady}
-                            onClick={() => void runAction('Run', () => overlaysApi.run({ preview: false }))}
+                            disabled={busy !== null || jobRunning || !workerReady}
+                            onClick={() => startBackgroundJob('Run', () => overlaysApi.run({ preview: false }))}
                         >
-                            {busy || status?.running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                            {busy === 'Run' || jobRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                             Run now
                         </button>
                     </>
