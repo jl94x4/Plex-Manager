@@ -106,33 +106,33 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         if (!button) return;
         const rect = button.getBoundingClientRect();
         const margin = 12;
-        // Large panel: ~42vw, clamped so it still fits phones and ultrawides.
-        const width = Math.min(
-            560,
-            Math.max(320, Math.floor(window.innerWidth * 0.42)),
-            window.innerWidth - margin * 2,
-        );
 
         if (placement === 'up') {
-            // Use nearly the full height above the sidebar bell.
-            const maxHeight = Math.max(280, rect.top - margin * 2);
-            // Grow rightward from the sidebar into the main content area.
-            let left = Math.max(margin, Math.min(rect.left - 8, window.innerWidth - margin - width));
-            left = Math.min(Math.max(left, margin), window.innerWidth - margin - width);
-            setPanelBox({
-                left,
-                width,
-                maxHeight,
-                bottom: window.innerHeight - rect.top + margin,
-            });
+            // Desktop sidebar: claim most of the viewport above the bell and grow into main content.
+            const top = margin;
+            const bottom = Math.max(margin, window.innerHeight - rect.top + 8);
+            const maxHeight = Math.max(320, window.innerHeight - top - bottom);
+            const width = Math.min(
+                Math.max(420, Math.floor(window.innerWidth * 0.72)),
+                window.innerWidth - margin * 2,
+            );
+            // Anchor near the bell, then shift left if needed so the wide panel stays on-screen.
+            let left = Math.max(margin, rect.left - 8);
+            left = Math.min(left, window.innerWidth - margin - width);
+            left = Math.max(margin, left);
+            setPanelBox({ left, width, maxHeight, top, bottom });
             return;
         }
 
-        const maxHeight = Math.max(
-            240,
-            Math.min(Math.floor(window.innerHeight * 0.72), window.innerHeight - rect.bottom - margin * 2),
+        // Mobile top bar: wide dropdown under the bell.
+        const width = Math.min(
+            Math.max(300, Math.floor(window.innerWidth * 0.92)),
+            window.innerWidth - margin * 2,
         );
-        // Prefer aligning the panel’s right edge with the bell, then clamp into the viewport.
+        const maxHeight = Math.max(
+            280,
+            Math.min(Math.floor(window.innerHeight * 0.78), window.innerHeight - rect.bottom - margin * 2),
+        );
         let left = rect.right - width;
         left = Math.min(Math.max(left, margin), window.innerWidth - margin - width);
         setPanelBox({
@@ -237,21 +237,21 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                 style={{
                     left: panelBox.left,
                     width: panelBox.width,
-                    height: panelBox.maxHeight,
-                    maxHeight: panelBox.maxHeight,
-                    top: panelBox.top,
-                    bottom: panelBox.bottom,
+                    // Prefer top+bottom stretch for desktop (placement=up); height for mobile dropdown.
+                    ...(panelBox.top != null && panelBox.bottom != null
+                        ? { top: panelBox.top, bottom: panelBox.bottom }
+                        : { top: panelBox.top, height: panelBox.maxHeight, maxHeight: panelBox.maxHeight }),
                     backgroundColor: 'rgb(var(--color-card))',
                 }}
             >
-                <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border/80 shrink-0">
-                    <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('notifications.title')}</p>
+                <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-border/80 shrink-0">
+                    <p className="text-sm font-bold uppercase tracking-wider text-muted">{t('notifications.title')}</p>
                     <div className="flex items-center gap-3 shrink-0">
                         {unread > 0 && (
                             <button
                                 type="button"
                                 onClick={markAllRead}
-                                className="text-[11px] font-semibold text-plex hover:underline"
+                                className="text-xs font-semibold text-plex hover:underline"
                             >
                                 {t('notifications.markAllRead')}
                             </button>
@@ -261,7 +261,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                 type="button"
                                 onClick={clearAll}
                                 disabled={clearing}
-                                className="text-[11px] font-semibold text-muted hover:text-text hover:underline disabled:opacity-50"
+                                className="text-xs font-semibold text-muted hover:text-text hover:underline disabled:opacity-50"
                             >
                                 {t('notifications.clearAll')}
                             </button>
@@ -270,12 +270,12 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                     {loading && !items.length ? (
-                        <div className="h-full min-h-[12rem] flex items-center justify-center px-4">
-                            <p className="text-sm text-muted text-center">{t('common.loadingMore')}</p>
+                        <div className="h-full flex items-center justify-center px-6">
+                            <p className="text-base text-muted text-center">{t('common.loadingMore')}</p>
                         </div>
                     ) : !items.length ? (
-                        <div className="h-full min-h-[12rem] flex items-center justify-center px-4">
-                            <p className="text-sm text-muted text-center">{t('notifications.empty')}</p>
+                        <div className="h-full flex items-center justify-center px-6">
+                            <p className="text-base text-muted text-center">{t('notifications.empty')}</p>
                         </div>
                     ) : (
                         items.map((item) => (
@@ -283,18 +283,18 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                 key={item.id}
                                 type="button"
                                 onClick={() => openItem(item)}
-                                className={`w-full text-left px-4 py-3 border-b border-border/40 hover:bg-white/5 transition-colors ${item.readAt ? 'opacity-70' : ''}`}
+                                className={`w-full text-left px-5 py-3.5 border-b border-border/40 hover:bg-white/5 transition-colors ${item.readAt ? 'opacity-70' : ''}`}
                             >
-                                <div className="flex items-start gap-2">
+                                <div className="flex items-start gap-2.5">
                                     {!item.readAt && (
-                                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-plex shrink-0" />
+                                        <span className="mt-1.5 w-2 h-2 rounded-full bg-plex shrink-0" />
                                     )}
-                                    <div className={`min-w-0 flex-1 ${item.readAt ? 'pl-3.5' : ''}`}>
+                                    <div className={`min-w-0 flex-1 ${item.readAt ? 'pl-4' : ''}`}>
                                         <p className="text-sm font-semibold text-text truncate">{item.title}</p>
                                         {item.body ? (
-                                            <p className="text-xs text-muted mt-0.5 line-clamp-2">{item.body}</p>
+                                            <p className="text-sm text-muted mt-0.5 line-clamp-2">{item.body}</p>
                                         ) : null}
-                                        <p className="text-[10px] text-muted/80 mt-1">{formatRelative(item.createdAt, t)}</p>
+                                        <p className="text-xs text-muted/80 mt-1.5">{formatRelative(item.createdAt, t)}</p>
                                     </div>
                                 </div>
                             </button>
