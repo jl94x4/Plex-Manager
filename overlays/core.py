@@ -223,7 +223,9 @@ def _apply_overlay(
     *,
     width_ratio: float = 0.85,
     max_height_ratio: float | None = None,
-    bottom_clip_ratio: float = 0.30,
+    # Only enough to shave the corner radius (~8–10% of banner height). Higher
+    # values (e.g. 0.30) cut into the white text.
+    bottom_clip_ratio: float = 0.10,
 ) -> Image.Image:
     """
     Composite banner onto art, Netflix-style: hang slightly off the bottom so
@@ -242,8 +244,8 @@ def _apply_overlay(
             new_height = max_h
     resized = overlay_img.resize((new_width, new_height), Image.LANCZOS)
 
-    # Crop the bottom of the badge so side corners become vertical at the frame edge.
-    clip = max(0, min(new_height - 1, int(new_height * max(0.0, min(0.6, bottom_clip_ratio)))))
+    # Crop only the corner radius — keep full glyph descenders visible.
+    clip = max(0, min(new_height - 1, int(new_height * max(0.0, min(0.2, bottom_clip_ratio)))))
     keep_h = max(1, new_height - clip)
     cropped = resized.crop((0, 0, new_width, keep_h))
     x = int((width - new_width) / 2)
@@ -259,7 +261,7 @@ def _apply_episode_overlay(base_img: Image.Image, overlay_img: Image.Image) -> I
         overlay_img,
         width_ratio=0.38,
         max_height_ratio=0.14,
-        bottom_clip_ratio=0.30,
+        bottom_clip_ratio=0.10,
     )
 
 
