@@ -149,27 +149,35 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         const margin = 12;
 
         if (placement === 'up') {
-            const top = margin;
-            const bottom = Math.max(margin, window.innerHeight - rect.top + 8);
-            const maxHeight = Math.max(320, window.innerHeight - top - bottom);
+            // Half the previous “almost full viewport” panel — tall enough to scan, not dominate.
+            const available = Math.max(260, rect.top - margin * 2);
+            const maxHeight = Math.max(240, Math.min(Math.floor(available * 0.5), Math.floor(window.innerHeight * 0.48)));
             const width = Math.min(
-                Math.max(420, Math.floor(window.innerWidth * 0.72)),
+                Math.max(300, Math.floor(window.innerWidth * 0.36)),
                 window.innerWidth - margin * 2,
+                480,
             );
             let left = Math.max(margin, rect.left - 8);
             left = Math.min(left, window.innerWidth - margin - width);
             left = Math.max(margin, left);
-            setPanelBox({ left, width, maxHeight, top, bottom });
+            setPanelBox({
+                left,
+                width,
+                maxHeight,
+                bottom: window.innerHeight - rect.top + 8,
+            });
             return;
         }
 
+        // Mobile top bar: medium dropdown under the bell.
         const width = Math.min(
-            Math.max(300, Math.floor(window.innerWidth * 0.92)),
+            Math.max(280, Math.floor(window.innerWidth * 0.72)),
             window.innerWidth - margin * 2,
+            420,
         );
         const maxHeight = Math.max(
-            280,
-            Math.min(Math.floor(window.innerHeight * 0.78), window.innerHeight - rect.bottom - margin * 2),
+            220,
+            Math.min(Math.floor(window.innerHeight * 0.45), window.innerHeight - rect.bottom - margin * 2),
         );
         let left = rect.right - width;
         left = Math.min(Math.max(left, margin), window.innerWidth - margin - width);
@@ -299,7 +307,9 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                     width: panelBox.width,
                     ...(panelBox.top != null && panelBox.bottom != null
                         ? { top: panelBox.top, bottom: panelBox.bottom }
-                        : { top: panelBox.top, height: panelBox.maxHeight, maxHeight: panelBox.maxHeight }),
+                        : panelBox.bottom != null
+                            ? { bottom: panelBox.bottom, height: panelBox.maxHeight, maxHeight: panelBox.maxHeight }
+                            : { top: panelBox.top, height: panelBox.maxHeight, maxHeight: panelBox.maxHeight }),
                 }}
             >
                 <div className="relative shrink-0 overflow-hidden border-b border-border/70">
