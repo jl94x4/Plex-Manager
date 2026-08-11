@@ -504,6 +504,10 @@ export const SettingsDashboard: React.FC = () => {
     const [requestAvailableNotifyDiscord, setRequestAvailableNotifyDiscord] = useState(false);
     const [requestAvailableDiscordWebhookUrl, setRequestAvailableDiscordWebhookUrl] = useState('');
     const [webPushEnabled, setWebPushEnabled] = useState(true);
+    const [notificationTemplates, setNotificationTemplates] = useState<Record<string, Record<string, string>>>({});
+    const [notificationTemplateDefaults, setNotificationTemplateDefaults] = useState<Record<string, Record<string, string>>>({});
+    const [notificationTemplateEvents, setNotificationTemplateEvents] = useState<string[]>([]);
+    const [notificationTemplateFields, setNotificationTemplateFields] = useState<Record<string, string[]>>({});
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
     const [tautulliConfigured, setTautulliConfigured] = useState(false);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
@@ -1241,6 +1245,26 @@ export const SettingsDashboard: React.FC = () => {
             setRequestAvailableNotifyDiscord(!!initialSettings.requestAvailableNotifyDiscord);
             setRequestAvailableDiscordWebhookUrl(initialSettings.requestAvailableDiscordWebhookUrl || '');
             setWebPushEnabled(initialSettings.webPushEnabled !== false);
+            setNotificationTemplates(
+                initialSettings.notificationTemplates && typeof initialSettings.notificationTemplates === 'object'
+                    ? initialSettings.notificationTemplates
+                    : {},
+            );
+            setNotificationTemplateDefaults(
+                initialSettings.notificationTemplateDefaults && typeof initialSettings.notificationTemplateDefaults === 'object'
+                    ? initialSettings.notificationTemplateDefaults
+                    : {},
+            );
+            setNotificationTemplateEvents(
+                Array.isArray(initialSettings.notificationTemplateEvents)
+                    ? initialSettings.notificationTemplateEvents.map(String)
+                    : [],
+            );
+            setNotificationTemplateFields(
+                initialSettings.notificationTemplateFields && typeof initialSettings.notificationTemplateFields === 'object'
+                    ? initialSettings.notificationTemplateFields
+                    : {},
+            );
             if (initialSettings.watchHistorySource !== undefined) {
                 setWatchHistorySource(initialSettings.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex');
             }
@@ -1667,6 +1691,7 @@ export const SettingsDashboard: React.FC = () => {
             requestAvailableNotifyDiscord,
             requestAvailableDiscordWebhookUrl,
             webPushEnabled,
+            notificationTemplates,
             watchHistorySource,
             mediaAutomation: {
                 ...mediaAutomation,
@@ -2210,6 +2235,11 @@ export const SettingsDashboard: React.FC = () => {
                             setRequestAvailableDiscordWebhookUrl={setRequestAvailableDiscordWebhookUrl}
                             webPushEnabled={webPushEnabled}
                             setWebPushEnabled={setWebPushEnabled}
+                            notificationTemplates={notificationTemplates}
+                            setNotificationTemplates={setNotificationTemplates}
+                            notificationTemplateDefaults={notificationTemplateDefaults}
+                            notificationTemplateEvents={notificationTemplateEvents}
+                            notificationTemplateFields={notificationTemplateFields}
                             onOpenGotify={() => setActiveTab('gotify')}
                             onOpenSmtp={() => setActiveTab('smtp')}
                             addToast={addToast}

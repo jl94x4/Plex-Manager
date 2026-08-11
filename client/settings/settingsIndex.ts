@@ -66,6 +66,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'notifications', tabId: 'notifications', label: 'Notifications', group: 'Comms', keywords: ['notifications', 'bell', 'web push', 'discord', 'request available', 'vapid', 'in-app', 'test'] },
     { id: 'notifications/status', tabId: 'notifications', sectionId: 'notifications-status', label: 'Notification Health', group: 'Comms', keywords: ['health', 'status', 'vapid', 'smtp', 'discord', 'job'] },
     { id: 'notifications/request-available', tabId: 'notifications', sectionId: 'notifications-request-available', label: 'Request Available Alerts', group: 'Comms', keywords: ['request available', 'email', 'in-app', 'push', 'discord'] },
+    { id: 'notifications/templates', tabId: 'notifications', sectionId: 'notifications-templates', label: 'Notification Templates', group: 'Comms', keywords: ['template', 'email subject', 'push title', 'discord', 'copy', 'message'] },
     { id: 'notifications/test', tabId: 'notifications', sectionId: 'notifications-test', label: 'Send Test Notification', group: 'Comms', keywords: ['test', 'send', 'bell'] },
     { id: 'notifications/recent', tabId: 'notifications', sectionId: 'notifications-recent', label: 'Recent Notifications', group: 'Comms', keywords: ['history', 'log', 'recent', 'bell'] },
     { id: 'gotify', tabId: 'gotify', label: 'Gotify Alerts', group: 'Comms', keywords: ['gotify', 'push', 'alerts', 'notifications', 'rules', 'self hosted'] },

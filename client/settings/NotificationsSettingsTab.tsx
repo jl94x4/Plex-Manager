@@ -4,6 +4,7 @@ import { apiFetch } from '../shared/api';
 import { notifyInAppNotificationsChanged } from '../shared/inAppNotificationsRefresh';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingFieldLabel, SettingHint } from './SettingHint';
+import { NotificationTemplatesPanel } from './NotificationTemplatesPanel';
 
 type StatusPayload = {
     requestAvailable?: {
@@ -74,6 +75,11 @@ type Props = {
     setRequestAvailableDiscordWebhookUrl: (v: string) => void;
     webPushEnabled: boolean;
     setWebPushEnabled: (v: boolean) => void;
+    notificationTemplates: Record<string, Record<string, string>>;
+    setNotificationTemplates: (v: Record<string, Record<string, string>>) => void;
+    notificationTemplateDefaults: Record<string, Record<string, string>>;
+    notificationTemplateEvents: string[];
+    notificationTemplateFields: Record<string, string[]>;
     onOpenGotify: () => void;
     onOpenSmtp: () => void;
     addToast: (message: string, type?: 'success' | 'error') => void;
@@ -114,6 +120,11 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     setRequestAvailableDiscordWebhookUrl,
     webPushEnabled,
     setWebPushEnabled,
+    notificationTemplates,
+    setNotificationTemplates,
+    notificationTemplateDefaults,
+    notificationTemplateEvents,
+    notificationTemplateFields,
     onOpenGotify,
     onOpenSmtp,
     addToast,
@@ -342,6 +353,15 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                     border={false}
                 />
             </div>
+
+            <NotificationTemplatesPanel
+                notificationTemplates={notificationTemplates}
+                setNotificationTemplates={setNotificationTemplates}
+                defaults={notificationTemplateDefaults}
+                events={notificationTemplateEvents}
+                eventFields={notificationTemplateFields}
+                getSettingsSectionElementId={getSettingsSectionElementId}
+            />
 
             <div id={getSettingsSectionElementId('notifications-test')} className="scroll-mt-24 space-y-3">
                 <h4 className="text-sm font-bold text-text uppercase tracking-wider">Send test to me</h4>
