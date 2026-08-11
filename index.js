@@ -2055,6 +2055,24 @@ const getAdminId = async (config) => {
     }
 };
 
+/**
+ * True when this portal user is the media-server owner / administrator.
+ * Owners are not Plex "shared users", so friend-list sync must never mark them revoked.
+ */
+const isServerOwnerUser = (user = {}, config = {}) => {
+    if (!user) return false;
+    if (user.isAdmin === true || user.jellyfinIsAdmin === true) return true;
+    const mediaServerType = String(config?.mediaServerType || 'plex').toLowerCase();
+    if (mediaServerType === 'jellyfin' || mediaServerType === 'emby') {
+        return false;
+    }
+    const adminId = String(config?.adminPlexId || '').trim();
+    if (!adminId) return false;
+    return [user.id, user.plexId]
+        .filter(Boolean)
+        .some((id) => String(id) === adminId);
+};
+
 const findLocalUserForSession = (users, sessionUser) => {
     if (!sessionUser || !Array.isArray(users)) return null;
     if (sessionUser.impersonatingUserId) {
@@ -2366,6 +2384,7 @@ const requireAdmin = async (req, res, next) => {
 
 const syncUsers = async (config) => {
     log('Starting user sync from Plex...');
+    config = await syncAdminPlexIdFromConfigToken(config, { persist: true });
     let res;
     try {
         res = await apiFetch(
@@ -2457,6 +2476,13 @@ const syncUsers = async (config) => {
 
     for (const localUser of localUsers) {
         if (!matchedLocalUserIds.has(localUser.id)) {
+            // Server owners are never in the shared-friends XML; keep them Active.
+            if (isServerOwnerUser(localUser, config)) {
+                localUser.plexAccessStatus = 'active';
+                localUser.isAdmin = true;
+                syncedUsers.push(localUser);
+                continue;
+            }
             if (localUser.plexAccessStatus !== 'pending') {
                 // If they are no longer on Plex (e.g., they expired and were removed, or manually removed from Plex), 
                 // keep them in the app but mark their access as revoked so they stay visible until manually deleted.
@@ -2533,7 +2559,9 @@ const syncJellyfinUsers = async (config) => {
                 email: existingUser.email || '',
                 thumb: jUser.thumb,
                 authProvider: 'jellyfin',
-                plexAccessStatus: accessStatus,
+                jellyfinIsAdmin: !!jUser.isAdmin,
+                isAdmin: !!jUser.isAdmin || !!existingUser.isAdmin,
+                plexAccessStatus: jUser.isAdmin ? 'active' : accessStatus,
             };
         }
 
@@ -2550,6 +2578,8 @@ const syncJellyfinUsers = async (config) => {
             joiningDate: new Date().toISOString(),
             expiryDate: jUser.isAdmin ? null : addDays(new Date(), 1).toISOString(),
             plexAccessStatus: accessStatus,
+            jellyfinIsAdmin: !!jUser.isAdmin,
+            isAdmin: !!jUser.isAdmin,
             isTrial: false,
         };
     }).filter(Boolean);
@@ -2561,6 +2591,12 @@ const syncJellyfinUsers = async (config) => {
             continue;
         }
         if (!matchedLocalUserIds.has(localUser.id)) {
+            if (isServerOwnerUser(localUser, config) || localUser.jellyfinIsAdmin || localUser.isAdmin) {
+                localUser.plexAccessStatus = 'active';
+                localUser.isAdmin = true;
+                syncedUsers.push(localUser);
+                continue;
+            }
             if (localUser.plexAccessStatus !== 'pending') {
                 localUser.plexAccessStatus = 'revoked';
             }
@@ -3025,6 +3061,7 @@ const checkAndRevoke = async (config) => {
     log('Running periodic check for expired users...');
     const users = await loadFile(USERS_PATH, []);
     const expiredUsers = users.filter(u => {
+        if (isServerOwnerUser(u, config)) return false;
         const days = getDaysUntilExpiry(u.expiryDate);
         return u.plexAccessStatus !== 'revoked' && days !== null && days < 0;
     });
@@ -11216,12 +11253,28 @@ app.post('/api/invites/:code/claim', authRateLimit, async (req, res) => {
 
 // User data endpoints
 app.get('/api/users', requireAdmin, async (req, res) => {
+    let config = await loadFile(CONFIG_PATH, {});
+    config = await syncAdminPlexIdFromConfigToken(config, { persist: true });
     const users = await loadFile(USERS_PATH, []);
-    const { users: withLastLogin, changed } = await backfillLastLoginFromAudit(users);
+    const { users: withLastLogin, changed: loginChanged } = await backfillLastLoginFromAudit(users);
+    let changed = loginChanged;
+    const healed = withLastLogin.map((user) => {
+        if (!isServerOwnerUser(user, config)) return user;
+        const next = { ...user, isAdmin: true };
+        if (next.plexAccessStatus === 'revoked' || next.plexAccessStatus === 'unknown' || !next.plexAccessStatus) {
+            next.plexAccessStatus = 'active';
+            changed = true;
+        }
+        return next;
+    });
     if (changed) {
-        await saveFile(USERS_PATH, withLastLogin);
+        await saveFile(USERS_PATH, healed);
     }
-    res.json(sanitizeUsersForApi(withLastLogin));
+    res.json(sanitizeUsersForApi(healed.map((user) => (
+        isServerOwnerUser(user, config)
+            ? { ...user, isAdmin: true, isServerOwner: true, plexAccessStatus: 'active' }
+            : user
+    ))));
 });
 
 app.get('/api/deleted-users', requireAdmin, async (req, res) => {
@@ -16373,7 +16426,7 @@ const checkAndCleanupInactive = async (config) => {
     } catch (e) { /* optional logo */ }
 
     for (const user of users) {
-        if (user.isAdmin || user.exemptFromCleanup) continue;
+        if (isServerOwnerUser(user, config) || user.isAdmin || user.exemptFromCleanup) continue;
         // Only consider users with active access; pending/revoked users aren't relevant.
         if (user.plexAccessStatus !== 'active') continue;
 

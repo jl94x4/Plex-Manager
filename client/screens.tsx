@@ -296,8 +296,18 @@ const UserCard: React.FC<{
                 <div className="flex justify-between items-center text-xs pb-1.5 border-b border-white/5 last:border-0 last:pb-0">
                     <span className="text-muted text-[10px] uppercase tracking-wider font-bold">{providerLabel}</span>
                     <span className="info-value plex-status flex items-center gap-1.5">
-                        <span className={`plex-status-dot ${user.plexAccessStatus || 'unknown'}`}></span>
-                        <span className="text-text font-medium text-xs">{(user.plexAccessStatus || 'unknown').charAt(0).toUpperCase() + (user.plexAccessStatus || 'unknown').slice(1)}</span>
+                        {(() => {
+                            const accessStatus = (user.isServerOwner || user.isAdmin)
+                                ? 'active'
+                                : (user.plexAccessStatus || 'unknown');
+                            const label = accessStatus.charAt(0).toUpperCase() + accessStatus.slice(1);
+                            return (
+                                <>
+                                    <span className={`plex-status-dot ${accessStatus}`}></span>
+                                    <span className="text-text font-medium text-xs">{label}</span>
+                                </>
+                            );
+                        })()}
                     </span>
                 </div>
                 <div className="flex justify-between items-center text-xs pb-1.5 border-b border-white/5 last:border-0 last:pb-0">
@@ -5246,7 +5256,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 if (statusFilter === 'all') return true;
 
                 const days = getDaysUntilExpiry(user.expiryDate);
-                const isRevoked = user.plexAccessStatus === 'revoked';
+                const isRevoked = user.plexAccessStatus === 'revoked' && !(user.isServerOwner || user.isAdmin);
                 const isTrial = user.isTrial === true;
 
                 if (statusFilter === 'trial') return isTrial;
@@ -5298,7 +5308,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
         let trial = 0;
         let revoked = 0;
         for (const user of users) {
-            if (user.plexAccessStatus === 'revoked') {
+            if (user.plexAccessStatus === 'revoked' && !(user.isServerOwner || user.isAdmin)) {
                 revoked += 1;
                 continue;
             }
