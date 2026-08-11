@@ -64,7 +64,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
     const refresh = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await apiFetch('/api/notifications?limit=25');
+            const data = await apiFetch('/api/notifications?limit=50');
             setItems(Array.isArray(data?.items) ? data.items : []);
             setUnread(Number(data?.unread) || 0);
         } catch {
@@ -105,14 +105,20 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         const button = buttonRef.current;
         if (!button) return;
         const rect = button.getBoundingClientRect();
-        const margin = 8;
-        const width = Math.min(320, Math.max(220, window.innerWidth - margin * 2));
-        // Prefer aligning the panel’s right edge with the bell, then clamp into the viewport.
-        let left = rect.right - width;
-        left = Math.min(Math.max(left, margin), window.innerWidth - margin - width);
+        const margin = 12;
+        // Large panel: ~42vw, clamped so it still fits phones and ultrawides.
+        const width = Math.min(
+            560,
+            Math.max(320, Math.floor(window.innerWidth * 0.42)),
+            window.innerWidth - margin * 2,
+        );
 
         if (placement === 'up') {
-            const maxHeight = Math.max(120, Math.min(384, rect.top - margin * 2));
+            // Use nearly the full height above the sidebar bell.
+            const maxHeight = Math.max(280, rect.top - margin * 2);
+            // Grow rightward from the sidebar into the main content area.
+            let left = Math.max(margin, Math.min(rect.left - 8, window.innerWidth - margin - width));
+            left = Math.min(Math.max(left, margin), window.innerWidth - margin - width);
             setPanelBox({
                 left,
                 width,
@@ -122,7 +128,13 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             return;
         }
 
-        const maxHeight = Math.max(120, Math.min(384, window.innerHeight - rect.bottom - margin * 2));
+        const maxHeight = Math.max(
+            240,
+            Math.min(Math.floor(window.innerHeight * 0.72), window.innerHeight - rect.bottom - margin * 2),
+        );
+        // Prefer aligning the panel’s right edge with the bell, then clamp into the viewport.
+        let left = rect.right - width;
+        left = Math.min(Math.max(left, margin), window.innerWidth - margin - width);
         setPanelBox({
             left,
             width,
@@ -221,19 +233,20 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         ? createPortal(
             <div
                 ref={panelRef}
-                className="fixed overflow-hidden rounded-xl border border-border shadow-2xl z-[400]"
+                className="fixed flex flex-col overflow-hidden rounded-xl border border-border shadow-2xl z-[400]"
                 style={{
                     left: panelBox.left,
                     width: panelBox.width,
+                    height: panelBox.maxHeight,
                     maxHeight: panelBox.maxHeight,
                     top: panelBox.top,
                     bottom: panelBox.bottom,
                     backgroundColor: 'rgb(var(--color-card))',
                 }}
             >
-                <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-border/80">
+                <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border/80 shrink-0">
                     <p className="text-xs font-bold uppercase tracking-wider text-muted">{t('notifications.title')}</p>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-3 shrink-0">
                         {unread > 0 && (
                             <button
                                 type="button"
@@ -255,18 +268,22 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                         )}
                     </div>
                 </div>
-                <div className="overflow-y-auto max-h-[inherit] custom-scrollbar" style={{ maxHeight: `calc(${panelBox.maxHeight}px - 2.5rem)` }}>
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                     {loading && !items.length ? (
-                        <p className="px-3 py-6 text-sm text-muted text-center">{t('common.loadingMore')}</p>
+                        <div className="h-full min-h-[12rem] flex items-center justify-center px-4">
+                            <p className="text-sm text-muted text-center">{t('common.loadingMore')}</p>
+                        </div>
                     ) : !items.length ? (
-                        <p className="px-3 py-6 text-sm text-muted text-center">{t('notifications.empty')}</p>
+                        <div className="h-full min-h-[12rem] flex items-center justify-center px-4">
+                            <p className="text-sm text-muted text-center">{t('notifications.empty')}</p>
+                        </div>
                     ) : (
                         items.map((item) => (
                             <button
                                 key={item.id}
                                 type="button"
                                 onClick={() => openItem(item)}
-                                className={`w-full text-left px-3 py-2.5 border-b border-border/40 hover:bg-white/5 transition-colors ${item.readAt ? 'opacity-70' : ''}`}
+                                className={`w-full text-left px-4 py-3 border-b border-border/40 hover:bg-white/5 transition-colors ${item.readAt ? 'opacity-70' : ''}`}
                             >
                                 <div className="flex items-start gap-2">
                                     {!item.readAt && (
