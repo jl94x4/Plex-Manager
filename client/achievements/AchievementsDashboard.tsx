@@ -10,7 +10,7 @@ import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { ShareAchievementsModal } from '../shared/ShareAchievements';
-import { tAchievements } from './i18n';
+import { tAchievements, useAchievementsI18n } from './i18n';
 import { groupBadgesIntoFamilies, type BadgeFamily } from './badgeFamilies';
 import { BadgeDetailDrawer } from './BadgeDetailDrawer';
 import { UnlockCelebration } from './UnlockCelebration';
@@ -33,8 +33,8 @@ const BREAKDOWN_META: Record<string, { icon: LucideIcon; statKey?: string; tipKe
     hoursWatched: { icon: Clock, tipKey: 'xp.tip.hoursWatched', statKey: 'hoursWatched' },
 };
 
-const formatLabel = (key: string) => tAchievements(`xp.source.${key}`) !== `xp.source.${key}`
-    ? tAchievements(`xp.source.${key}`)
+const formatLabel = (key: string, translate = tAchievements) => translate(`xp.source.${key}`) !== `xp.source.${key}`
+    ? translate(`xp.source.${key}`)
     : key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
 
 const resolveLeaderboardAvatar = (thumb: string | null | undefined, width = 64, height = 64) => {
@@ -57,6 +57,7 @@ export const BadgeTile: React.FC<{
     compact?: boolean;
     onClick?: () => void;
 }> = ({ badge, compact, onClick }) => {
+    const { tAchievements } = useAchievementsI18n();
     const earned = !!badge?.earned;
     return (
         <button
@@ -95,6 +96,7 @@ export const LadderFamilyCard: React.FC<{
     onToggle: () => void;
     onBadgeClick?: (badge: any) => void;
 }> = ({ family, expanded, onToggle, onBadgeClick }) => {
+    const { tAchievements } = useAchievementsI18n();
     const focus = family.focus;
     const next = family.next;
     const complete = family.earnedCount >= family.totalCount && family.totalCount > 0;
@@ -171,6 +173,7 @@ export const ProfileBadgeRack: React.FC<{
     onOpenAll?: () => void;
     max?: number;
 }> = ({ earned, level, xp, onOpenAll, max = 12 }) => {
+    const { tAchievements } = useAchievementsI18n();
     const shown = (earned || []).slice(0, max);
     if (!shown.length && level == null) return null;
     return (
@@ -237,6 +240,7 @@ export const XpBreakdownModal: React.FC<{
     totalBadges = 0,
     nextUnlocks = [],
 }) => {
+    const { tAchievements } = useAchievementsI18n();
     if (!open) return null;
 
     const level = Number(levelProgress?.level) || 1;
@@ -323,7 +327,7 @@ export const XpBreakdownModal: React.FC<{
                                     {topKey && (
                                         <p className="text-xs text-muted mt-2">
                                             {tAchievements('xp.topSource', {
-                                                source: formatLabel(topKey),
+                                                source: formatLabel(topKey, tAchievements),
                                                 pct: topShare,
                                             })}
                                         </p>
@@ -423,7 +427,7 @@ export const XpBreakdownModal: React.FC<{
                                                     <div className="flex items-start justify-between gap-3">
                                                         <div className="min-w-0">
                                                             <p className="text-sm font-bold text-text truncate">
-                                                                {formatLabel(key)}
+                                                                {formatLabel(key, tAchievements)}
                                                             </p>
                                                             <p className="text-[11px] text-muted mt-0.5 line-clamp-2">
                                                                 {tAchievements(meta.tipKey)}
@@ -470,7 +474,7 @@ export const XpBreakdownModal: React.FC<{
                                     <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                         {zeroRows.map(([key]) => (
                                             <div key={key} className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-black/15 px-3 py-2 text-xs">
-                                                <span className="text-muted truncate">{formatLabel(key)}</span>
+                                                <span className="text-muted truncate">{formatLabel(key, tAchievements)}</span>
                                                 <span className="font-mono text-muted/70">+0</span>
                                             </div>
                                         ))}
@@ -523,6 +527,7 @@ export const XpBreakdownModal: React.FC<{
 };
 
 export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ sessionInfo = null }) => {
+    const { tAchievements } = useAchievementsI18n();
     const [data, setData] = useState<any>(null);
     const [board, setBoard] = useState<any[]>([]);
     const [boardPage, setBoardPage] = useState(0);
@@ -1275,6 +1280,7 @@ export const AchievementsHomeWidget: React.FC<{
     summary: any;
     onOpen?: () => void;
 }> = ({ summary, onOpen }) => {
+    const { tAchievements } = useAchievementsI18n();
     if (!summary) return null;
     const lp = summary.levelProgress || {};
     const recent = (summary.recentEarned || summary.earned?.slice?.(0, 6) || []) as any[];

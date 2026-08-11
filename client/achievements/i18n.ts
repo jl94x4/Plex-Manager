@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+import { useDiscoverI18n } from '../discovery/i18n';
 import { readDiscoverUiLocale, type DiscoverLocale } from '../discovery/i18n/types';
 
 const catalogs: Record<DiscoverLocale, Record<string, string>> = {
@@ -509,4 +511,13 @@ export const tAchievements = (
         }
     }
     return text;
+};
+
+export const useAchievementsI18n = () => {
+    const { locale } = useDiscoverI18n();
+    const tAchievementsForLocale = useCallback((
+        key: string,
+        vars?: Record<string, string | number>,
+    ) => tAchievements(key, vars, locale), [locale]);
+    return { locale, tAchievements: tAchievementsForLocale };
 };
