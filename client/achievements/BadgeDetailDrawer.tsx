@@ -101,7 +101,7 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
     return (
         <ModalPortal open={true}>
             <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-5 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
-                <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" aria-label="Close" onClick={onClose} />
+                <button type="button" className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" aria-label={tAchievements('common.close')} onClick={onClose} />
                 <div
                     className={`relative isolate w-full sm:max-w-lg max-h-[min(92vh,100%)] flex flex-col rounded-t-3xl sm:rounded-3xl border overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.55)] ${rarityClass(badge.rarity || 'common')}`}
                     style={{ backgroundColor: PANEL_SOLID_FALLBACK }}
@@ -129,7 +129,7 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
                                 <p className="text-sm text-muted mt-1 leading-relaxed">{badge.description}</p>
                             </div>
                         </div>
-                        <button type="button" onClick={onClose} className="p-2 rounded-xl text-muted hover:text-text hover:bg-white/5 shrink-0">
+                        <button type="button" onClick={onClose} aria-label={tAchievements('common.close')} className="p-2 rounded-xl text-muted hover:text-text hover:bg-white/5 shrink-0">
                             <X className="w-4 h-4" />
                         </button>
                     </div>
@@ -224,7 +224,7 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
                                             </p>
                                             <p className="text-sm font-black text-text truncate mt-0.5">{first.username}</p>
                                             <p className="text-[11px] text-muted font-mono mt-0.5 truncate">
-                                                Lv {first.level}
+                                                {tAchievements('common.levelShort', { level: first.level })}
                                                 {first.earnedAt
                                                     ? ` · ${new Date(first.earnedAt).toLocaleString()}`
                                                     : ''}

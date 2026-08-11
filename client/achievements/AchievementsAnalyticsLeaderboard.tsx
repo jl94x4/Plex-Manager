@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { apiFetch } from '../shared/api';
 import { logoUrl } from '../shared/basePath';
+import { tAchievements } from './i18n';
 
 type LeaderboardEntry = {
     rank: number;
@@ -56,7 +57,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                 setEnabled(data?.enabled !== false);
                 setEntries(Array.isArray(data?.entries) ? data.entries : []);
             } catch (e: any) {
-                if (!cancelled) setError(e?.message || 'Failed to load achievements leaderboard');
+                if (!cancelled) setError(e?.message || tAchievements('analytics.error'));
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -89,30 +90,30 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
         return [
             {
                 key: 'xp',
-                label: 'Most XP',
+                label: tAchievements('analytics.mostXp'),
                 icon: Sparkles,
                 accent: 'text-plex border-plex/40 bg-plex/10',
                 user: topXp,
                 value: topXp ? `${topXp.xp.toLocaleString()} XP` : '—',
-                sub: topXp ? `Level ${topXp.level}` : '',
+                sub: topXp ? tAchievements('page.level', { level: topXp.level }) : '',
             },
             {
                 key: 'badges',
-                label: 'Top Badge Holder',
+                label: tAchievements('analytics.topBadgeHolder'),
                 icon: Award,
                 accent: 'text-fuchsia-300 border-fuchsia-400/40 bg-fuchsia-500/10',
                 user: topBadges,
-                value: topBadges ? `${topBadges.earnedCount} badges` : '—',
+                value: topBadges ? tAchievements('common.badgeCount', { count: topBadges.earnedCount }) : '—',
                 sub: topBadges ? `${topBadges.xp.toLocaleString()} XP` : '',
             },
             {
                 key: 'level',
-                label: 'Highest Level',
+                label: tAchievements('analytics.highestLevel'),
                 icon: Medal,
                 accent: 'text-sky-300 border-sky-400/40 bg-sky-500/10',
                 user: topLevel,
-                value: topLevel ? `Level ${topLevel.level}` : '—',
-                sub: topLevel ? `${topLevel.earnedCount} badges` : '',
+                value: topLevel ? tAchievements('page.level', { level: topLevel.level }) : '—',
+                sub: topLevel ? tAchievements('common.badgeCount', { count: topLevel.earnedCount }) : '',
             },
         ];
     }, [byXp, byBadges, byLevel]);
@@ -180,14 +181,16 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                     className={`rounded-full object-cover mb-2 border-2 ${isFirst ? 'w-20 h-20 border-yellow-500' : 'w-16 h-16 border-border'} bg-card`}
                 />
                 <span className="font-bold text-text group-hover:text-plex transition-colors truncate w-full text-center">
-                    {user.username}{user.isMe ? ' (you)' : ''}
+                    {user.username}{user.isMe ? ` ${tAchievements('dossier.you')}` : ''}
                 </span>
                 <span className="text-xs text-muted font-mono mt-1">{user.xp.toLocaleString()} XP</span>
-                <span className="text-[10px] text-muted/80 font-mono">Lv {user.level} · {user.earnedCount} badges</span>
+                <span className="text-[10px] text-muted/80 font-mono">
+                    {tAchievements('analytics.levelBadgeLine', { level: user.level, count: user.earnedCount })}
+                </span>
 
                 {delta && (
                     <div className="absolute -right-2 -top-2">
-                        {delta.type === 'new' && <span className="bg-plex text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">NEW</span>}
+                        {delta.type === 'new' && <span className="bg-plex text-black text-[9px] font-bold px-1.5 py-0.5 rounded-full">{tAchievements('analytics.newRank')}</span>}
                         {delta.type === 'up' && <span className="bg-green-500/20 text-green-400 text-[10px] font-bold px-1.5 py-0.5 rounded">↑{delta.val}</span>}
                         {delta.type === 'down' && <span className="bg-red-500/20 text-red-400 text-[10px] font-bold px-1.5 py-0.5 rounded">↓{delta.val}</span>}
                     </div>
@@ -220,9 +223,9 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
     const title = (
         <div className="flex flex-col gap-1">
             <h2 className="text-xl font-bold text-text uppercase tracking-wider flex items-center gap-2">
-                <Trophy className="text-plex w-5 h-5" /> Hall of Fame
+                <Trophy className="text-plex w-5 h-5" /> {tAchievements('analytics.hallOfFame')}
             </h2>
-            <p className="text-xs text-muted">Ranked by XP · levels · badges</p>
+            <p className="text-xs text-muted">{tAchievements('analytics.subtitle')}</p>
         </div>
     );
 
@@ -231,7 +234,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
             <div className="w-full flex flex-col gap-4">
                 {title}
                 <div className="glass-card p-10 flex items-center justify-center gap-3 text-muted text-sm">
-                    <Loader2 className="w-5 h-5 animate-spin text-plex" /> Syncing XP for all portal users…
+                    <Loader2 className="w-5 h-5 animate-spin text-plex" /> {tAchievements('analytics.syncingXp')}
                 </div>
             </div>
         );
@@ -252,8 +255,8 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                 {title}
                 <p className="text-sm text-muted">
                     {!enabled
-                        ? 'Leaderboard is turned off in Settings → Achievements.'
-                        : 'No XP rankings yet — watch history will populate as soon as the leaderboard syncs.'}
+                        ? tAchievements('analytics.leaderboardOff')
+                        : tAchievements('analytics.noRankingsYet')}
                 </p>
             </div>
         );
@@ -298,14 +301,14 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                 />
                                 <div className="flex-1 flex items-center gap-2 z-10 min-w-0">
                                     <span className="font-bold text-text truncate group-hover:text-plex transition-colors">
-                                        {user.username}{user.isMe ? ' (you)' : ''}
+                                        {user.username}{user.isMe ? ` ${tAchievements('dossier.you')}` : ''}
                                     </span>
-                                    {hasFire && <span className="text-sm" title="Hot streak">🔥</span>}
+                                    {hasFire && <span className="text-sm" title={tAchievements('analytics.hotStreak')}>🔥</span>}
                                 </div>
                                 <div className="flex items-center gap-3 z-10 flex-shrink-0">
                                     {delta && (
                                         <div className="w-8 sm:w-10 text-right">
-                                            {delta.type === 'new' && <span className="bg-plex/20 text-plex text-[9px] font-bold px-1.5 py-0.5 rounded">NEW</span>}
+                                            {delta.type === 'new' && <span className="bg-plex/20 text-plex text-[9px] font-bold px-1.5 py-0.5 rounded">{tAchievements('analytics.newRank')}</span>}
                                             {delta.type === 'up' && <span className="text-green-400 text-xs font-bold">↑{delta.val}</span>}
                                             {delta.type === 'down' && <span className="text-red-400 text-xs font-bold">↓{delta.val}</span>}
                                         </div>
@@ -313,14 +316,16 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                     <div className="min-w-[5.5rem] sm:min-w-[8rem] text-right font-mono text-xs sm:text-sm whitespace-nowrap">
                                         <span className="text-plex font-bold">{user.xp.toLocaleString()}</span>
                                         <span className="text-muted hidden sm:inline"> XP</span>
-                                        <span className="block text-[10px] text-muted">Lv {user.level} · {user.earnedCount} badges</span>
+                                        <span className="block text-[10px] text-muted">
+                                            {tAchievements('analytics.levelBadgeLine', { level: user.level, count: user.earnedCount })}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
                         );
                     })}
                     {!rest.length && byXp.length <= 3 && (
-                        <p className="text-sm text-muted px-1">Only a few ranked members so far — podium above has the top spots.</p>
+                        <p className="text-sm text-muted px-1">{tAchievements('analytics.podiumOnly')}</p>
                     )}
                 </div>
             </div>
@@ -362,7 +367,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="glass-card p-4 flex flex-col gap-3 min-h-[240px]">
                     <h3 className="text-sm font-bold text-muted uppercase tracking-wider flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-plex" /> XP leaders
+                        <Sparkles className="w-4 h-4 text-plex" /> {tAchievements('analytics.xpLeaders')}
                     </h3>
                     <div className="flex-1 min-h-[180px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -375,7 +380,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                     contentStyle={chartTooltipStyle}
                                     labelStyle={chartTooltipLabelStyle}
                                     itemStyle={chartTooltipItemStyle}
-                                    formatter={(value: any) => [`${Number(value).toLocaleString()} XP`, 'XP']}
+                                    formatter={(value: any) => [tAchievements('analytics.xpValue', { value: Number(value).toLocaleString() }), 'XP']}
                                     labelFormatter={(_, payload: any) => payload?.[0]?.payload?.full || ''}
                                 />
                                 <Bar dataKey="value" radius={[0, 6, 6, 0]}>
@@ -390,7 +395,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
 
                 <div className="glass-card p-4 flex flex-col gap-3 min-h-[240px]">
                     <h3 className="text-sm font-bold text-muted uppercase tracking-wider flex items-center gap-2">
-                        <Medal className="w-4 h-4 text-sky-400" /> Highest level
+                        <Medal className="w-4 h-4 text-sky-400" /> {tAchievements('analytics.highestLevel')}
                     </h3>
                     <div className="flex-1 min-h-[180px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -403,7 +408,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                     contentStyle={chartTooltipStyle}
                                     labelStyle={chartTooltipLabelStyle}
                                     itemStyle={chartTooltipItemStyle}
-                                    formatter={(value: any) => [`Level ${value}`, 'Level']}
+                                    formatter={(value: any) => [tAchievements('analytics.levelValue', { value }), tAchievements('analytics.levelLabel')]}
                                     labelFormatter={(_, payload: any) => payload?.[0]?.payload?.full || ''}
                                 />
                                 <Bar dataKey="value" radius={[0, 6, 6, 0]}>
@@ -418,7 +423,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
 
                 <div className="glass-card p-4 flex flex-col gap-3 min-h-[240px]">
                     <h3 className="text-sm font-bold text-muted uppercase tracking-wider flex items-center gap-2">
-                        <Award className="w-4 h-4 text-fuchsia-400" /> Badge count
+                        <Award className="w-4 h-4 text-fuchsia-400" /> {tAchievements('analytics.badgeCountChart')}
                     </h3>
                     <div className="flex-1 min-h-[180px]">
                         <ResponsiveContainer width="100%" height="100%">
@@ -431,7 +436,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                                     contentStyle={chartTooltipStyle}
                                     labelStyle={chartTooltipLabelStyle}
                                     itemStyle={chartTooltipItemStyle}
-                                    formatter={(value: any) => [`${value} badges`, 'Badges']}
+                                    formatter={(value: any) => [tAchievements('analytics.badgeValue', { value }), tAchievements('xp.stat.badges')]}
                                     labelFormatter={(_, payload: any) => payload?.[0]?.payload?.full || ''}
                                 />
                                 <Bar dataKey="value" radius={[0, 6, 6, 0]}>
