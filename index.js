@@ -8110,6 +8110,7 @@ const notifyAdminNewRequest = async (config, record) => {
         await notifyAdminPendingRequest({
             config,
             record,
+            loadUsers: async () => loadFile(USERS_PATH, []),
             sendGotifyAlert,
             alertRuleEnabled,
             log,

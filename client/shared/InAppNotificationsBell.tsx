@@ -1,8 +1,21 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell } from 'lucide-react';
+import {
+    Bell,
+    CheckCheck,
+    ChevronRight,
+    CircleCheck,
+    CircleX,
+    Clapperboard,
+    ClipboardList,
+    Inbox,
+    Sparkles,
+    Trash2,
+    Tv,
+} from 'lucide-react';
 import { apiFetch } from './api';
 import { IN_APP_NOTIFICATIONS_CHANGED_EVENT, notifyInAppNotificationsChanged } from './inAppNotificationsRefresh';
+import { resolveNotificationDestination } from './notificationDestination';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
 
@@ -14,6 +27,12 @@ export type InAppNotification = {
     href?: string;
     readAt?: string | null;
     createdAt?: string;
+    meta?: {
+        requestId?: string | number | null;
+        mediaType?: string | null;
+        tmdbId?: string | number | null;
+        [key: string]: unknown;
+    };
 };
 
 const formatRelative = (iso: string | undefined, t: DiscoverTranslate) => {
@@ -29,8 +48,29 @@ const formatRelative = (iso: string | undefined, t: DiscoverTranslate) => {
     return t('common.daysAgo', { count: days });
 };
 
+const typeVisual = (type?: string) => {
+    switch (String(type || '')) {
+        case 'request_available':
+            return { Icon: CircleCheck, tone: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' };
+        case 'request_approved':
+            return { Icon: Sparkles, tone: 'text-plex bg-plex/15 border-plex/30' };
+        case 'request_declined':
+            return { Icon: CircleX, tone: 'text-rose-400 bg-rose-500/15 border-rose-500/30' };
+        case 'request_season_available':
+            return { Icon: Tv, tone: 'text-sky-400 bg-sky-500/15 border-sky-500/30' };
+        case 'request_new_episode':
+            return { Icon: Clapperboard, tone: 'text-violet-300 bg-violet-500/15 border-violet-500/30' };
+        case 'admin_pending':
+            return { Icon: ClipboardList, tone: 'text-amber-300 bg-amber-500/15 border-amber-500/30' };
+        case 'admin_test':
+            return { Icon: Bell, tone: 'text-plex bg-plex/15 border-plex/30' };
+        default:
+            return { Icon: Inbox, tone: 'text-plex bg-plex/15 border-plex/30' };
+    }
+};
+
 type Props = {
-    onNavigate?: (route: string, options?: { path?: string }) => void;
+    onNavigate?: (route: string, options?: { path?: string; reviewId?: number }) => void;
     className?: string;
     buttonClassName?: string;
     /** Panel opens above the bell (desktop sidebar) or below (mobile top bar). */
@@ -87,8 +127,6 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         window.addEventListener('focus', onFocus);
         document.addEventListener('visibilitychange', onVisibility);
 
-        // Faster than once-a-minute so a just-sent test / available request shows the badge
-        // without requiring a tap. Keep it gentle for shared portal sessions.
         const id = window.setInterval(() => {
             if (document.visibilityState === 'visible') refresh();
         }, 15_000);
@@ -108,7 +146,6 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         const margin = 12;
 
         if (placement === 'up') {
-            // Desktop sidebar: claim most of the viewport above the bell and grow into main content.
             const top = margin;
             const bottom = Math.max(margin, window.innerHeight - rect.top + 8);
             const maxHeight = Math.max(320, window.innerHeight - top - bottom);
@@ -116,7 +153,6 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                 Math.max(420, Math.floor(window.innerWidth * 0.72)),
                 window.innerWidth - margin * 2,
             );
-            // Anchor near the bell, then shift left if needed so the wide panel stays on-screen.
             let left = Math.max(margin, rect.left - 8);
             left = Math.min(left, window.innerWidth - margin - width);
             left = Math.max(margin, left);
@@ -124,7 +160,6 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             return;
         }
 
-        // Mobile top bar: wide dropdown under the bell.
         const width = Math.min(
             Math.max(300, Math.floor(window.innerWidth * 0.92)),
             window.innerWidth - margin * 2,
@@ -165,8 +200,15 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
             setOpen(false);
         };
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setOpen(false);
+        };
         document.addEventListener('mousedown', onDoc);
-        return () => document.removeEventListener('mousedown', onDoc);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDoc);
+            document.removeEventListener('keydown', onKey);
+        };
     }, [open]);
 
     const markAllRead = async () => {
@@ -217,88 +259,152 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             }
         }
         setOpen(false);
-        const href = String(item.href || '').trim() || '/discovery/requests';
-        if (href.startsWith('/discovery')) {
-            onNavigate?.('discovery', { path: href });
+
+        const dest = resolveNotificationDestination(item);
+        if (dest.kind === 'discovery') {
+            onNavigate?.('discovery', { path: dest.path });
             return;
         }
-        if (href.startsWith('/')) {
-            window.location.assign(href);
+        if (dest.kind === 'requests') {
+            onNavigate?.('requests', dest.reviewId ? { reviewId: dest.reviewId } : undefined);
             return;
         }
-        onNavigate?.('discovery');
+        if (dest.kind === 'home') {
+            onNavigate?.('user');
+            return;
+        }
+        if (dest.kind === 'settings') {
+            onNavigate?.('settings');
+            return;
+        }
+        if (dest.kind === 'external' && dest.href.startsWith('/')) {
+            window.location.assign(dest.href);
+            return;
+        }
+        onNavigate?.('discovery', { path: '/discovery/requests' });
     };
 
     const panel = open && panelBox && typeof document !== 'undefined'
         ? createPortal(
             <div
                 ref={panelRef}
-                className="fixed flex flex-col overflow-hidden rounded-xl border border-border shadow-2xl z-[400]"
+                role="dialog"
+                aria-label={t('notifications.title')}
+                className="fixed flex flex-col overflow-hidden rounded-2xl border border-border/80 shadow-2xl z-[400] bg-card/90 backdrop-blur-xl"
                 style={{
                     left: panelBox.left,
                     width: panelBox.width,
-                    // Prefer top+bottom stretch for desktop (placement=up); height for mobile dropdown.
                     ...(panelBox.top != null && panelBox.bottom != null
                         ? { top: panelBox.top, bottom: panelBox.bottom }
                         : { top: panelBox.top, height: panelBox.maxHeight, maxHeight: panelBox.maxHeight }),
-                    backgroundColor: 'rgb(var(--color-card))',
                 }}
             >
-                <div className="flex items-center justify-between gap-2 px-5 py-3.5 border-b border-border/80 shrink-0">
-                    <p className="text-sm font-bold uppercase tracking-wider text-muted">{t('notifications.title')}</p>
-                    <div className="flex items-center gap-3 shrink-0">
-                        {unread > 0 && (
-                            <button
-                                type="button"
-                                onClick={markAllRead}
-                                className="text-xs font-semibold text-plex hover:underline"
-                            >
-                                {t('notifications.markAllRead')}
-                            </button>
-                        )}
-                        {items.length > 0 && (
-                            <button
-                                type="button"
-                                onClick={clearAll}
-                                disabled={clearing}
-                                className="text-xs font-semibold text-muted hover:text-text hover:underline disabled:opacity-50"
-                            >
-                                {t('notifications.clearAll')}
-                            </button>
-                        )}
+                <div className="relative shrink-0 overflow-hidden border-b border-border/70">
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-plex/20 via-plex/5 to-transparent" />
+                    <div className="relative flex items-start justify-between gap-3 px-5 py-4">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2.5">
+                                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-plex/35 bg-plex/15 text-plex shadow-[0_0_24px_rgba(0,0,0,0.15)]">
+                                    <Bell className="h-4 w-4" />
+                                </span>
+                                <div className="min-w-0">
+                                    <p className="text-sm font-bold tracking-wide text-text">{t('notifications.title')}</p>
+                                    <p className="text-xs text-muted mt-0.5">
+                                        {unread > 0
+                                            ? t('notifications.unreadCount', { count: unread })
+                                            : t('notifications.allCaughtUp')}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                            {unread > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={markAllRead}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-plex/30 bg-plex/10 px-2.5 py-1.5 text-[11px] font-semibold text-plex hover:bg-plex/20 transition-colors"
+                                >
+                                    <CheckCheck className="h-3.5 w-3.5" />
+                                    {t('notifications.markAllRead')}
+                                </button>
+                            )}
+                            {items.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={clearAll}
+                                    disabled={clearing}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-muted hover:text-text hover:border-border transition-colors disabled:opacity-50"
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    {t('notifications.clearAll')}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
+
                 <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                     {loading && !items.length ? (
-                        <div className="h-full flex items-center justify-center px-6">
-                            <p className="text-base text-muted text-center">{t('common.loadingMore')}</p>
+                        <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
+                            <span className="h-10 w-10 rounded-2xl border border-border bg-white/5 animate-pulse" />
+                            <p className="text-sm text-muted">{t('common.loadingMore')}</p>
                         </div>
                     ) : !items.length ? (
-                        <div className="h-full flex items-center justify-center px-6">
-                            <p className="text-base text-muted text-center">{t('notifications.empty')}</p>
+                        <div className="h-full flex flex-col items-center justify-center gap-3 px-8 text-center">
+                            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-plex/25 bg-plex/10 text-plex">
+                                <Inbox className="h-6 w-6" />
+                            </span>
+                            <div>
+                                <p className="text-base font-semibold text-text">{t('notifications.empty')}</p>
+                                <p className="text-sm text-muted mt-1 max-w-sm">{t('notifications.emptyHint')}</p>
+                            </div>
                         </div>
                     ) : (
-                        items.map((item) => (
-                            <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => openItem(item)}
-                                className={`w-full text-left px-5 py-3.5 border-b border-border/40 hover:bg-white/5 transition-colors ${item.readAt ? 'opacity-70' : ''}`}
-                            >
-                                <div className="flex items-start gap-2.5">
-                                    {!item.readAt && (
-                                        <span className="mt-1.5 w-2 h-2 rounded-full bg-plex shrink-0" />
-                                    )}
-                                    <div className={`min-w-0 flex-1 ${item.readAt ? 'pl-4' : ''}`}>
-                                        <p className="text-sm font-semibold text-text truncate">{item.title}</p>
-                                        {item.body ? (
-                                            <p className="text-sm text-muted mt-0.5 line-clamp-2">{item.body}</p>
-                                        ) : null}
-                                        <p className="text-xs text-muted/80 mt-1.5">{formatRelative(item.createdAt, t)}</p>
-                                    </div>
-                                </div>
-                            </button>
-                        ))
+                        <ul className="py-1">
+                            {items.map((item) => {
+                                const unreadItem = !item.readAt;
+                                const { Icon, tone } = typeVisual(item.type);
+                                const dest = resolveNotificationDestination(item);
+                                return (
+                                    <li key={item.id}>
+                                        <button
+                                            type="button"
+                                            onClick={() => openItem(item)}
+                                            className={`group relative w-full text-left px-4 sm:px-5 py-3.5 transition-colors border-b border-border/40 last:border-b-0 hover:bg-plex/5 focus-visible:outline-none focus-visible:bg-plex/10 ${
+                                                unreadItem ? 'bg-plex/[0.04]' : ''
+                                            }`}
+                                        >
+                                            {unreadItem && (
+                                                <span className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-plex" />
+                                            )}
+                                            <div className="flex items-start gap-3">
+                                                <span className={`mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${tone}`}>
+                                                    <Icon className="h-4 w-4" />
+                                                </span>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <p className={`text-sm leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
+                                                            {item.title}
+                                                        </p>
+                                                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted opacity-0 -translate-x-1 transition-all group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
+                                                    </div>
+                                                    {item.body ? (
+                                                        <p className="text-sm text-muted mt-1 line-clamp-2 leading-relaxed">{item.body}</p>
+                                                    ) : null}
+                                                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                                                        <span className="text-muted/80">{formatRelative(item.createdAt, t)}</span>
+                                                        <span className="text-border">·</span>
+                                                        <span className="font-semibold text-plex/90 group-hover:text-plex">
+                                                            {t(dest.labelKey)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
                     )}
                 </div>
             </div>,

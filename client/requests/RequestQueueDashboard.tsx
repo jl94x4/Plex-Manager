@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Ban, ClipboardList } from 'lucide-react';
 import {
     DashboardHero,
@@ -17,14 +17,36 @@ type Props = {
     openIssueCount?: number;
 };
 
+const readReviewIdFromUrl = (): number | null => {
+    if (typeof window === 'undefined') return null;
+    const raw = new URLSearchParams(window.location.search).get('review');
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
 export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIssueCount = 0 }) => {
     const [tab, setTab] = useState<QueueTab>('requests');
-    const [reviewRequestId, setReviewRequestId] = useState<number | null>(() => {
-        if (typeof window === 'undefined') return null;
-        const raw = new URLSearchParams(window.location.search).get('review');
-        const parsed = Number(raw);
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-    });
+    const [reviewRequestId, setReviewRequestId] = useState<number | null>(() => readReviewIdFromUrl());
+
+    useEffect(() => {
+        const syncFromUrl = (event?: Event) => {
+            const detailId = Number((event as CustomEvent)?.detail?.reviewId);
+            if (Number.isFinite(detailId) && detailId > 0) {
+                setReviewRequestId(detailId);
+                setTab('requests');
+                return;
+            }
+            const fromUrl = readReviewIdFromUrl();
+            setReviewRequestId(fromUrl);
+            if (fromUrl) setTab('requests');
+        };
+        window.addEventListener('popstate', syncFromUrl);
+        window.addEventListener('portal-requests-navigate', syncFromUrl as EventListener);
+        return () => {
+            window.removeEventListener('popstate', syncFromUrl);
+            window.removeEventListener('portal-requests-navigate', syncFromUrl as EventListener);
+        };
+    }, []);
 
     return (
         <DashboardPageShell>

@@ -147,7 +147,9 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
 
     useEffect(() => {
         if (!initialReviewId || loading) return;
-        const match = requests.find((item) => item.id === initialReviewId);
+        const match = requests.find((item) => (
+            item.id === initialReviewId || Number(item.id) === Number(initialReviewId)
+        ));
         if (match) {
             setReviewTarget(match);
             const url = new URL(window.location.href);

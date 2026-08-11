@@ -346,6 +346,11 @@ export const MainApp: React.FC = () => {
             if (route === 'discovery') {
                 window.dispatchEvent(new Event('portal-discovery-navigate'));
             }
+            if (route === 'requests') {
+                window.dispatchEvent(new CustomEvent('portal-requests-navigate', {
+                    detail: { reviewId: options?.reviewId ?? null },
+                }));
+            }
         }
     }, []);
 
