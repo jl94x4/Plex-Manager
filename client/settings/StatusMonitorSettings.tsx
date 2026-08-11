@@ -5,7 +5,9 @@ import { appConfirm } from '../shared/confirm';
 import { CustomSelect } from '../shared/ui';
 import type { User, AuditEntry, DeletedUser } from '../shared/types';
 import { formatDateTime, formatEventName, hexToRgb, getDaysUntilExpiry, addMonths, addYears, formatDate } from '../shared/format';
+import { useDiscoverI18n } from '../discovery/i18n';
 export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any) => void; appConfirm: (msg: string, cb: () => void) => void; fetchConfig: () => void; addToast: (msg: string, type?: 'success' | 'error') => void }> = ({ config, onChange, appConfirm, fetchConfig, addToast }) => {
+    const { t } = useDiscoverI18n();
     const [localConfig, setLocalConfig] = useState<any>({ groups: [], services: [] });
 
     useEffect(() => {
@@ -61,8 +63,8 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
     };
 
     const removeGroup = async (id: string) => {
-        const groupName = localConfig.groups.find((g: any) => g.id === id)?.name || 'this group';
-        appConfirm(`Remove group "${groupName}"? Services inside it won't be deleted but will lose their group.`, () => {
+        const groupName = localConfig.groups.find((g: any) => g.id === id)?.name || t('settings.statusMonitor.thisGroup');
+        appConfirm(t('settings.statusMonitor.removeGroupConfirm', { groupName }), () => {
             const newConfig = {
                 ...localConfig,
                 groups: localConfig.groups.filter((g: any) => g.id !== id),
@@ -74,7 +76,7 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
     };
 
     const removeService = async (id: string) => {
-        appConfirm(`Remove service ${id}?`, () => {
+        appConfirm(t('settings.statusMonitor.removeServiceConfirm', { id }), () => {
             const newConfig = {
                 ...localConfig,
                 services: localConfig.services.filter((s: any) => s.id !== id)
@@ -85,13 +87,13 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
     };
 
     const handleResetStats = () => {
-        appConfirm('Are you sure you want to reset all uptime statistics? This will delete all historical status data including hourly samples, latency history, and incidents.', async () => {
+        appConfirm(t('settings.statusMonitor.resetConfirm'), async () => {
             try {
                 const res = await apiFetch('/api/status/reset', { method: 'POST' });
                 if (res.error) throw new Error(res.error);
-                addToast('Status statistics reset successfully.', 'success');
+                addToast(t('settings.statusMonitor.resetSuccess'), 'success');
             } catch (e: any) {
-                addToast(e.message || 'Failed to reset statistics.', 'error');
+                addToast(e.message || t('settings.statusMonitor.resetFailed'), 'error');
             }
         });
     };
@@ -100,8 +102,8 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
         <div className="flex flex-col gap-8 w-full">
             <div>
                 <div className="flex justify-between items-center mb-4 border-b border-border pb-3">
-                    <h4 className="font-bold text-xl text-text">Service Groups</h4>
-                    <button onClick={addGroup} className="px-4 py-2 bg-white/10 hover:bg-white/20 text-text rounded-md text-sm font-bold transition-colors">Add Group</button>
+                    <h4 className="font-bold text-xl text-text">{t('settings.statusMonitor.serviceGroups')}</h4>
+                    <button onClick={addGroup} className="px-4 py-2 bg-white/10 hover:bg-white/20 text-text rounded-md text-sm font-bold transition-colors">{t('settings.statusMonitor.addGroup')}</button>
                 </div>
                 {localConfig.groups.map((group: any) => (
                     <div key={group.id} className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
@@ -110,54 +112,54 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
                             value={group.name}
                             onChange={(e) => updateGroup(group.id, 'name', e.target.value)}
                             className="flex-1 w-full p-3 rounded-lg bg-background border border-border focus:border-plex outline-none text-sm"
-                            placeholder="Group Name"
+                            placeholder={t('settings.statusMonitor.groupNamePlaceholder')}
                         />
-                        <button type="button" onClick={() => removeGroup(group.id)} className="px-4 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-md text-xs font-bold transition-colors flex-shrink-0 sm:w-[5.75rem]">Remove</button>
+                        <button type="button" onClick={() => removeGroup(group.id)} className="px-4 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-md text-xs font-bold transition-colors flex-shrink-0 sm:w-[5.75rem]">{t('common.remove')}</button>
                     </div>
                 ))}
-                {localConfig.groups.length === 0 && <p className="text-muted text-sm italic py-2">No groups defined. Create one to organize your services.</p>}
+                {localConfig.groups.length === 0 && <p className="text-muted text-sm italic py-2">{t('settings.statusMonitor.noGroups')}</p>}
             </div>
 
             <div>
                 <div className="flex justify-between items-center mb-4 border-b border-border pb-3">
-                    <h4 className="font-bold text-xl text-text">Monitored Services</h4>
-                    <button onClick={addService} className="px-4 py-2 bg-plex text-background hover:bg-plex-hover rounded-md text-sm font-bold transition-colors shadow-lg">Add Service</button>
+                    <h4 className="font-bold text-xl text-text">{t('settings.statusMonitor.monitoredServices')}</h4>
+                    <button onClick={addService} className="px-4 py-2 bg-plex text-background hover:bg-plex-hover rounded-md text-sm font-bold transition-colors shadow-lg">{t('settings.statusMonitor.addService')}</button>
                 </div>
                 <p className="text-xs text-muted mb-4">
-                    Use <span className="text-text font-semibold">Users: Visible / Hidden</span> to control whether a service appears on the member or public Status page. Admins always see every service. New *arr and download clients default to Hidden.
+                    {t('settings.statusMonitor.visibilityHintBefore')} <span className="text-text font-semibold">{t('settings.statusMonitor.usersVisibleHidden')}</span> {t('settings.statusMonitor.visibilityHintAfter')}
                 </p>
                 <div className="flex flex-col gap-6">
                     {localConfig.services.map((service: any) => (
                         <div key={service.id} className="flex flex-col gap-3 pb-6 border-b border-border/40 last:border-b-0 last:pb-0">
                             <div>
-                                <label className="block text-sm text-muted mb-1">Service Name</label>
+                                <label className="block text-sm text-muted mb-1">{t('settings.statusMonitor.serviceName')}</label>
                                 <input
                                     type="text"
                                     value={service.name}
                                     onChange={(e) => updateService(service.id, 'name', e.target.value)}
                                     className="w-full p-3 rounded-lg bg-background border border-border focus:border-plex outline-none text-sm font-bold"
-                                    placeholder="Service Name"
+                                    placeholder={t('settings.statusMonitor.serviceName')}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm text-muted mb-1">Service URL</label>
+                                <label className="block text-sm text-muted mb-1">{t('settings.statusMonitor.serviceUrl')}</label>
                                 <input
                                     type="text"
                                     value={service.url}
                                     onChange={(e) => updateService(service.id, 'url', e.target.value)}
                                     className="w-full p-3 rounded-lg bg-background border border-border focus:border-plex outline-none text-sm font-mono"
-                                    placeholder="Service URL (e.g. https://...)"
+                                    placeholder={t('settings.statusMonitor.serviceUrlPlaceholder')}
                                 />
                             </div>
                             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                                 <div className="flex items-center gap-2">
-                                    <span className="text-muted">Group:</span>
+                                    <span className="text-muted">{t('settings.statusMonitor.groupLabel')}</span>
                                     <div className="w-48">
                                         <CustomSelect
                                             value={service.groupId || ''}
                                             onChange={(val) => updateService(service.id, 'groupId', val || null)}
                                             options={[
-                                                { label: 'None', value: '' },
+                                                { label: t('settings.statusMonitor.none'), value: '' },
                                                 ...localConfig.groups.map((g: any) => ({ label: g.name, value: g.id }))
                                             ]}
                                         />
@@ -168,35 +170,35 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
                                         type="button"
                                         onClick={() => updateService(service.id, 'visibleToUsers', service.visibleToUsers === false)}
                                         className={`px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-2 ${service.visibleToUsers !== false ? 'bg-plex/20 text-plex hover:bg-plex/30' : 'bg-white/10 text-muted hover:bg-white/20'}`}
-                                        title={service.visibleToUsers !== false ? 'Shown on the member/public Status page' : 'Admin-only — hidden from members and the public Status page'}
+                                        title={service.visibleToUsers !== false ? t('settings.statusMonitor.visibleTooltip') : t('settings.statusMonitor.hiddenTooltip')}
                                     >
-                                        Users: {service.visibleToUsers !== false ? 'Visible' : 'Hidden'}
+                                        {t('settings.statusMonitor.usersLabel')} {service.visibleToUsers !== false ? t('settings.statusMonitor.visible') : t('settings.statusMonitor.hidden')}
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => updateService(service.id, 'isCritical', !service.isCritical)}
                                         className={`px-3 py-1.5 rounded text-xs font-bold transition-colors flex items-center gap-2 ${service.isCritical ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' : 'bg-white/10 text-muted hover:bg-white/20'}`}
                                     >
-                                        Critical: {service.isCritical ? 'Yes' : 'No'}
+                                        {t('settings.statusMonitor.criticalLabel')} {service.isCritical ? t('settings.statusMonitor.yes') : t('settings.statusMonitor.no')}
                                     </button>
-                                    <button type="button" onClick={() => removeService(service.id)} className="px-4 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-md text-xs font-bold transition-colors w-[5.75rem]">Remove</button>
+                                    <button type="button" onClick={() => removeService(service.id)} className="px-4 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-md text-xs font-bold transition-colors w-[5.75rem]">{t('common.remove')}</button>
                                 </div>
                             </div>
                         </div>
                     ))}
                 </div>
-                {localConfig.services.length === 0 && <p className="text-muted text-sm italic py-2">No services defined. Add some services to monitor.</p>}
+                {localConfig.services.length === 0 && <p className="text-muted text-sm italic py-2">{t('settings.statusMonitor.noServices')}</p>}
             </div>
 
             <div className="border-t border-border/40 pt-6 mt-2">
-                <h4 className="font-bold text-xl text-text mb-2">Reset Statistics</h4>
-                <p className="text-sm text-muted mb-4">Resetting the status statistics will clear all historical uptime, hourly samples, latency, and incident data for all monitored services. This action cannot be undone.</p>
+                <h4 className="font-bold text-xl text-text mb-2">{t('settings.statusMonitor.resetStatistics')}</h4>
+                <p className="text-sm text-muted mb-4">{t('settings.statusMonitor.resetDescription')}</p>
                 <button
                     type="button"
                     onClick={handleResetStats}
                     className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-bold transition-colors shadow-lg"
                 >
-                    Reset Uptime Data
+                    {t('settings.statusMonitor.resetUptimeData')}
                 </button>
             </div>
         </div>
