@@ -69,6 +69,7 @@ import {
 } from './lib/users/joiningDateFromHistory.js';
 import { loadPosterSetsAudit } from './lib/poster-sets/audit.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
+import { createTtlLruCache } from './lib/memory-cache.js';
 
 const resolveAppVersion = () => {
     const pkgVersion = resolvePackageVersion();
@@ -933,12 +934,21 @@ if (BASE_PATH) {
 }
 app.use(portalCsrfMiddleware);
 
-// --- In-Memory Cache for Plex Metadata ---
-const plexMetadataCache = new Map();
+// --- Bounded in-memory caches (TTL + LRU) ---
+const plexMetadataCache = createTtlLruCache({
+    name: 'plexMetadata',
+    maxEntries: 800,
+    defaultTtlMs: 15 * 60 * 1000,
+});
 
 // Personal Wrap-Up (`/api/plex/analytics/me`) — serve last payload instantly while refreshing.
 const PERSONAL_ANALYTICS_CACHE_MS = 10 * 60 * 1000;
-const personalAnalyticsCache = new Map(); // key -> { at, payload }
+// Soft freshness uses `at`; LRU entry cap prevents unbounded Wrap-Up payloads.
+const personalAnalyticsCache = createTtlLruCache({
+    name: 'personalAnalytics',
+    maxEntries: 64,
+    defaultTtlMs: Number.POSITIVE_INFINITY,
+});
 const personalAnalyticsRefreshJobs = new Map(); // key -> Promise
 const personalAnalyticsDaysKey = (raw) => {
     if (raw === 'all') return 'all';
@@ -1554,8 +1564,12 @@ const addDays = (date, days) => {
 
 const normalized = (value) => value ? value.toString().trim().toLowerCase() : '';
 
-// --- In-Memory Cache Utility ---
-const apiCache = new Map();
+// --- Bounded API cache (TTL + LRU) ---
+const apiCache = createTtlLruCache({
+    name: 'api',
+    maxEntries: 300,
+    defaultTtlMs: 60_000,
+});
 
 /**
  * Wraps an expensive async fetcher function with a TTL cache.
@@ -1564,18 +1578,12 @@ const apiCache = new Map();
  * @param {Function} fetcher Async function returning data to cache
  */
 const withCache = async (key, ttlMs, fetcher) => {
-    const now = Date.now();
-    if (apiCache.has(key)) {
-        const entry = apiCache.get(key);
-        if (now < entry.expiresAt) {
-            return entry.data;
-        }
-        apiCache.delete(key);
-    }
+    const hit = apiCache.get(key);
+    if (hit !== undefined) return hit;
 
     const data = await fetcher();
     if (data !== null && data !== undefined) {
-        apiCache.set(key, { data, expiresAt: now + ttlMs });
+        apiCache.set(key, data, ttlMs);
     }
     return data;
 };
@@ -7708,7 +7716,7 @@ const createDiscoveryLibraryAvailability = (config, extras = {}) => createLibrar
 
 let discoveryAvailabilityCacheMemo = null;
 let discoveryAvailabilityCacheMemoAt = 0;
-const DISCOVERY_AVAILABILITY_MEMO_TTL_MS = 5 * 60 * 1000;
+const DISCOVERY_AVAILABILITY_MEMO_TTL_MS = 90 * 1000;
 
 const loadDiscoveryAvailabilityCacheFile = async ({ force = false } = {}) => {
     if (
@@ -11389,7 +11397,13 @@ app.get('/api/admin/diagnostics', requireAdmin, async (req, res) => {
                 uptimeSeconds: Math.floor(process.uptime()),
                 nodeVersion: process.version,
                 memoryRssMB: Math.round(process.memoryUsage().rss / (1024 * 1024)),
-                configDataDir: CONFIG_DIR
+                memoryHeapUsedMB: Math.round(process.memoryUsage().heapUsed / (1024 * 1024)),
+                configDataDir: CONFIG_DIR,
+                memoryCaches: {
+                    api: apiCache.stats(),
+                    plexMetadata: plexMetadataCache.stats(),
+                    personalAnalytics: personalAnalyticsCache.stats(),
+                },
             },
             integrations: {
                 mediaServerType: config.mediaServerType || 'plex',
