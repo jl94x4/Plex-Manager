@@ -17,6 +17,12 @@ Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on *
 - **Episode thumbs:** New Episode (default 6-day window)
 - `skipNewEpisodeOnBinge` (default on): if 3+ episodes of the same season share an air date, skip episode + season New Episode stamps
 
+## Placement
+
+- Overlays → **Placement** tab: drag/resize the banner on sample art (show / season / episode targets)
+- Layout is stored in `config/overlays/config.json` under `placement` and honoured by Preview, Run, and visual samples
+- Changing placement does not auto-restamp live Plex art — run Preview or Run again
+
 ## Setup
 
 ```bash

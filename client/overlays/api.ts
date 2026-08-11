@@ -18,6 +18,53 @@ const json = (body: unknown) => ({
     body: JSON.stringify(body ?? {}),
 });
 
+export type OverlayPlacementKind = {
+    x: number;
+    y: number;
+    width: number;
+    anchorX?: 'left' | 'center' | 'right';
+    anchorY?: 'top' | 'center' | 'bottom';
+    bottomClip?: number;
+    maxHeight?: number;
+};
+
+export type OverlaysPlacement = {
+    show: OverlayPlacementKind;
+    season: OverlayPlacementKind;
+    episode: OverlayPlacementKind;
+};
+
+export type OverlayPlacement = OverlaysPlacement;
+
+export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
+    show: {
+        x: 0.5,
+        y: 1.0,
+        width: 0.92,
+        anchorX: 'center',
+        anchorY: 'bottom',
+        bottomClip: 0.10,
+    },
+    season: {
+        x: 0.5,
+        y: 1.0,
+        width: 0.70,
+        maxHeight: 0.14,
+        anchorX: 'center',
+        anchorY: 'bottom',
+        bottomClip: 0.10,
+    },
+    episode: {
+        x: 0.5,
+        y: 1.0,
+        width: 0.55,
+        maxHeight: 0.20,
+        anchorX: 'center',
+        anchorY: 'bottom',
+        bottomClip: 0.10,
+    },
+};
+
 export type OverlaysConfig = {
     enabled?: boolean;
     previewMode?: boolean;
@@ -28,6 +75,7 @@ export type OverlaysConfig = {
     librarySectionIds?: string[];
     overlayPresetId?: string;
     episodeOverlayPresetId?: string;
+    placement?: OverlaysPlacement;
     scheduleHours?: number;
     skipIfKometaOverlayLabel?: boolean;
     plexSource?: string;
@@ -117,7 +165,10 @@ export const overlaysApi = {
     sampleCandidates: (q = '') => apiFetch(`${ROOT}/sample-candidates?q=${encodeURIComponent(q)}`) as Promise<{
         shows: Array<{ ratingKey: string; title: string; library?: string }>;
     }>,
-    sampleImageUrl: (kind: 'show' | 'episode', bust?: string | number) => (
+    sampleImageUrl: (kind: 'show' | 'episode' | 'season' | 'show-base' | 'episode-base', bust?: string | number) => (
         `${ROOT}/sample/${kind}?t=${encodeURIComponent(String(bust || Date.now()))}`
+    ),
+    presetFileUrl: (id: string, kind: 'season' | 'episode' = 'season', bust?: string | number) => (
+        `${ROOT}/preset-file?id=${encodeURIComponent(id)}&kind=${kind}&t=${encodeURIComponent(String(bust || Date.now()))}`
     ),
 };

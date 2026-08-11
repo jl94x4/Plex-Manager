@@ -250,10 +250,15 @@ def _apply_overlay(
     # Only enough to shave the corner radius (~8–10% of banner height). Higher
     # values (e.g. 0.30) cut into the white text.
     bottom_clip_ratio: float = 0.10,
+    x: float = 0.5,
+    y: float = 1.0,
+    anchor_x: str = "center",
+    anchor_y: str = "bottom",
 ) -> Image.Image:
     """
-    Composite banner onto art, Netflix-style: hang slightly off the bottom so
-    rounded bottom corners are clipped into a straight flush edge.
+    Composite banner onto art. Default is Netflix-style bottom-center flush
+    (rounded bottom corners clipped). Position uses normalized x/y (0–1) with
+    anchors matching the Placement editor.
     """
     base_img = base_img.convert("RGBA")
     overlay_img = overlay_img.convert("RGBA")
@@ -272,32 +277,136 @@ def _apply_overlay(
     clip = max(0, min(new_height - 1, int(new_height * max(0.0, min(0.2, bottom_clip_ratio)))))
     keep_h = max(1, new_height - clip)
     cropped = resized.crop((0, 0, new_width, keep_h))
-    x = int((width - new_width) / 2)
-    y = height - keep_h
-    base_img.paste(cropped, (x, y), cropped)
+
+    ax = str(anchor_x or "center").strip().lower()
+    ay = str(anchor_y or "bottom").strip().lower()
+    nx = max(0.0, min(1.0, float(x)))
+    ny = max(0.0, min(1.0, float(y)))
+    anchor_px = width * nx
+    anchor_py = height * ny
+
+    if ax == "left":
+        px = int(anchor_px)
+    elif ax == "right":
+        px = int(anchor_px - new_width)
+    else:
+        px = int(anchor_px - new_width / 2)
+
+    if ay == "top":
+        py = int(anchor_py)
+    elif ay == "center":
+        py = int(anchor_py - keep_h / 2)
+    else:
+        py = int(anchor_py - keep_h)
+
+    base_img.paste(cropped, (px, py), cropped)
     return base_img
 
 
-def _apply_episode_overlay(base_img: Image.Image, overlay_img: Image.Image) -> Image.Image:
+DEFAULT_PLACEMENT: dict[str, dict[str, Any]] = {
+    "show": {
+        "x": 0.5,
+        "y": 1.0,
+        "width": 0.92,
+        "anchorX": "center",
+        "anchorY": "bottom",
+        "bottomClip": 0.10,
+    },
+    "season": {
+        "x": 0.5,
+        "y": 1.0,
+        "width": 0.70,
+        "maxHeight": 0.14,
+        "anchorX": "center",
+        "anchorY": "bottom",
+        "bottomClip": 0.10,
+    },
+    "episode": {
+        "x": 0.5,
+        "y": 1.0,
+        "width": 0.55,
+        "maxHeight": 0.20,
+        "anchorX": "center",
+        "anchorY": "bottom",
+        "bottomClip": 0.10,
+    },
+}
+
+
+def _placement_for(config: dict | None, kind: str) -> dict[str, Any]:
+    defaults = DEFAULT_PLACEMENT.get(kind) or DEFAULT_PLACEMENT["show"]
+    raw_root = (config or {}).get("placement") if isinstance(config, dict) else None
+    raw = (raw_root or {}).get(kind) if isinstance(raw_root, dict) else None
+    if not isinstance(raw, dict):
+        return dict(defaults)
+    out = dict(defaults)
+    for key in ("x", "y", "width", "bottomClip", "maxHeight"):
+        if key in raw and raw[key] is not None:
+            try:
+                out[key] = float(raw[key])
+            except (TypeError, ValueError):
+                pass
+    for src, dst in (("bottom_clip", "bottomClip"), ("max_height", "maxHeight"), ("anchor_x", "anchorX"), ("anchor_y", "anchorY")):
+        if src in raw and raw[src] is not None and dst not in raw:
+            if dst in ("anchorX", "anchorY"):
+                out[dst] = str(raw[src])
+            else:
+                try:
+                    out[dst] = float(raw[src])
+                except (TypeError, ValueError):
+                    pass
+    if raw.get("anchorX") is not None:
+        out["anchorX"] = str(raw["anchorX"])
+    if raw.get("anchorY") is not None:
+        out["anchorY"] = str(raw["anchorY"])
+    return out
+
+
+def _apply_with_placement(
+    base_img: Image.Image,
+    overlay_img: Image.Image,
+    placement: dict[str, Any],
+) -> Image.Image:
+    max_h = placement.get("maxHeight")
+    max_height_ratio = float(max_h) if max_h is not None else None
+    return _apply_overlay(
+        base_img,
+        overlay_img,
+        width_ratio=float(placement.get("width") or 0.92),
+        max_height_ratio=max_height_ratio,
+        bottom_clip_ratio=float(placement.get("bottomClip") or 0.10),
+        x=float(placement.get("x") if placement.get("x") is not None else 0.5),
+        y=float(placement.get("y") if placement.get("y") is not None else 1.0),
+        anchor_x=str(placement.get("anchorX") or "center"),
+        anchor_y=str(placement.get("anchorY") or "bottom"),
+    )
+
+
+def _apply_episode_overlay(
+    base_img: Image.Image,
+    overlay_img: Image.Image,
+    config: dict | None = None,
+) -> Image.Image:
     """Readable New Episode badge on landscape thumbs (sized for small Plex grids)."""
-    return _apply_overlay(
-        base_img,
-        overlay_img,
-        width_ratio=0.55,
-        max_height_ratio=0.20,
-        bottom_clip_ratio=0.10,
-    )
+    return _apply_with_placement(base_img, overlay_img, _placement_for(config, "episode"))
 
 
-def _apply_season_episode_overlay(base_img: Image.Image, overlay_img: Image.Image) -> Image.Image:
+def _apply_season_episode_overlay(
+    base_img: Image.Image,
+    overlay_img: Image.Image,
+    config: dict | None = None,
+) -> Image.Image:
     """New Episode banner on portrait season posters."""
-    return _apply_overlay(
-        base_img,
-        overlay_img,
-        width_ratio=0.70,
-        max_height_ratio=0.14,
-        bottom_clip_ratio=0.10,
-    )
+    return _apply_with_placement(base_img, overlay_img, _placement_for(config, "season"))
+
+
+def _apply_show_overlay(
+    base_img: Image.Image,
+    overlay_img: Image.Image,
+    config: dict | None = None,
+) -> Image.Image:
+    """New Season banner on show posters."""
+    return _apply_with_placement(base_img, overlay_img, _placement_for(config, "show"))
 
 
 def _download_poster(plex: PlexServer, thumb_path: str) -> Image.Image | None:
@@ -676,7 +785,7 @@ def process_show_overlay(
         if saved["show"]:
             _progress(progress, f"Backed up original show poster: {show.title}")
 
-    result = _apply_overlay(show_poster.copy(), overlay_img)
+    result = _apply_show_overlay(show_poster.copy(), overlay_img, config)
 
     safe_title = _sanitize_filename(show.title)
     now = datetime.now()
@@ -836,7 +945,7 @@ def process_season_new_episode_overlay(
             _progress(progress, f"Backed up season poster (New Episode): {show.title} S{latest.index}")
 
     overlay_img = Image.open(overlay_path)
-    result = _apply_season_episode_overlay(season_poster.copy(), overlay_img)
+    result = _apply_season_episode_overlay(season_poster.copy(), overlay_img, config)
     safe = _sanitize_filename(f"{show.title}_S{latest.index}_ne")
     now = datetime.now()
     preset = "new-episode"
@@ -1105,6 +1214,7 @@ def process_episode_overlay(
     paths: dict,
     preview_mode: bool,
     progress: ProgressFn | None = None,
+    config: dict | None = None,
 ) -> dict:
     overlay_path: Path = paths["episodeOverlay"]
     if not overlay_path.exists():
@@ -1130,7 +1240,7 @@ def process_episode_overlay(
         if saved:
             _progress(progress, f"Backed up episode thumb: {meta.get('showTitle') or ''} — {meta.get('title')}")
 
-    result = _apply_episode_overlay(thumb.copy(), overlay_img)
+    result = _apply_episode_overlay(thumb.copy(), overlay_img, config)
     safe = _sanitize_filename(f"{meta.get('showTitle') or 'show'}_{meta.get('title') or rating_key}")
     now = datetime.now()
     entry = {
@@ -1231,7 +1341,7 @@ def run_new_episode_overlays(
         existing = log.get(key)
         try:
             if preview_mode:
-                entry = process_episode_overlay(plex, episode, meta, paths, True, progress)
+                entry = process_episode_overlay(plex, episode, meta, paths, True, progress, config=config)
                 if existing is None:
                     log[key] = entry
                     added += 1
@@ -1248,7 +1358,7 @@ def run_new_episode_overlays(
                 skipped += 1
                 continue
 
-            entry = process_episode_overlay(plex, episode, meta, paths, False, progress)
+            entry = process_episode_overlay(plex, episode, meta, paths, False, progress, config=config)
             added += 1
             if isinstance(existing, dict):
                 log[key] = {**existing, **entry}
@@ -1969,14 +2079,21 @@ def generate_overlay_samples(
         episode_img = _placeholder_poster("episode")
         _progress(progress, "Using placeholder episode thumb")
 
-    show_out = _apply_overlay(show_img.copy(), show_banner)
-    episode_out = _apply_episode_overlay(episode_img.copy(), episode_banner)
+    show_out = _apply_show_overlay(show_img.copy(), show_banner, config)
+    episode_out = _apply_episode_overlay(episode_img.copy(), episode_banner, config)
+    season_out = _apply_season_episode_overlay(show_img.copy(), episode_banner, config)
 
     show_path = samples / "show.png"
     episode_path = samples / "episode.png"
+    season_path = samples / "season.png"
+    show_base_path = samples / "show-base.png"
+    episode_base_path = samples / "episode-base.png"
     meta_path = samples / "meta.json"
+    show_img.save(show_base_path)
+    episode_img.save(episode_base_path)
     show_out.save(show_path)
     episode_out.save(episode_path)
+    season_out.save(season_path)
 
     meta = {
         "showTitle": show_title,
@@ -1989,6 +2106,11 @@ def generate_overlay_samples(
         "episodeSource": episode_source,
         "showRatingKey": str(getattr(show, "ratingKey", "") or "") or None,
         "episodeRatingKey": str(getattr(episode, "ratingKey", "") or "") or None,
+        "placement": {
+            "show": _placement_for(config, "show"),
+            "season": _placement_for(config, "season"),
+            "episode": _placement_for(config, "episode"),
+        },
     }
     meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     _progress(progress, f"Samples ready — show: {show_title}; episode: {episode_show_title or ''} {episode_title}".strip())

@@ -7,6 +7,7 @@ import {
     Layers,
     List,
     Loader2,
+    Move,
     Play,
     RefreshCw,
     RotateCcw,
@@ -28,9 +29,10 @@ import { CustomSelect, SettingsToggleRow, StyledCheckbox } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
 import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { useDiscoverI18n } from '../discovery/i18n';
-import { overlaysApi, type OverlaysConfig } from './api';
+import { overlaysApi, DEFAULT_OVERLAY_PLACEMENT, type OverlaysConfig, type OverlaysPlacement } from './api';
+import { PlacementEditor } from './PlacementEditor';
 
-type TabId = 'overview' | 'shows' | 'gallery' | 'settings' | 'import' | 'activity';
+type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'settings' | 'import' | 'activity';
 type ActionId = 'refresh' | 'stop' | 'preview' | 'resetAll' | 'run' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample';
 
 type SampleMeta = {
@@ -58,6 +60,7 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     librarySectionIds: [],
     overlayPresetId: 'new-season',
     episodeOverlayPresetId: 'new-episode',
+    placement: DEFAULT_OVERLAY_PLACEMENT,
     scheduleHours: 24,
     skipIfKometaOverlayLabel: true,
 };
@@ -183,6 +186,7 @@ export const OverlaysDashboard: React.FC = () => {
         { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
         { id: 'shows' as const, label: t('overlays.tabs.shows', { count: showCount, episodes: episodeCount }), icon: List },
         { id: 'gallery' as const, label: t('overlays.tabs.gallery'), icon: Layers },
+        { id: 'placement' as const, label: t('overlays.tabs.placement'), icon: Move },
         { id: 'settings' as const, label: t('overlays.tabs.settings'), icon: Settings2 },
         { id: 'import' as const, label: t('overlays.tabs.import'), icon: Upload },
         { id: 'activity' as const, label: t('overlays.tabs.activity'), icon: Activity },
@@ -283,6 +287,40 @@ export const OverlaysDashboard: React.FC = () => {
         }
     });
 
+    const placementDraft: OverlaysPlacement = {
+        ...DEFAULT_OVERLAY_PLACEMENT,
+        ...(configDraft.placement || {}),
+        show: { ...DEFAULT_OVERLAY_PLACEMENT.show, ...(configDraft.placement?.show || {}) },
+        season: { ...DEFAULT_OVERLAY_PLACEMENT.season, ...(configDraft.placement?.season || {}) },
+        episode: { ...DEFAULT_OVERLAY_PLACEMENT.episode, ...(configDraft.placement?.episode || {}) },
+    };
+
+    const savePlacement = () => runAction('saveSettings', async () => {
+        const saved = await overlaysApi.saveConfig({ placement: placementDraft });
+        if (saved?.config) {
+            setConfigDraft((prev) => ({ ...prev, ...saved.config, placement: saved.config.placement || placementDraft }));
+        }
+        try {
+            await regenerateSamples({ quiet: true });
+        } catch {
+            /* sample refresh best-effort */
+        }
+    });
+
+    const resetPlacementKind = (kind: 'show' | 'season' | 'episode') => {
+        setConfigDraft((prev) => ({
+            ...prev,
+            placement: {
+                ...DEFAULT_OVERLAY_PLACEMENT,
+                ...(prev.placement || {}),
+                show: { ...DEFAULT_OVERLAY_PLACEMENT.show, ...(prev.placement?.show || {}) },
+                season: { ...DEFAULT_OVERLAY_PLACEMENT.season, ...(prev.placement?.season || {}) },
+                episode: { ...DEFAULT_OVERLAY_PLACEMENT.episode, ...(prev.placement?.episode || {}) },
+                [kind]: { ...DEFAULT_OVERLAY_PLACEMENT[kind] },
+            },
+        }));
+    };
+
     const applySampleResult = (payload: {
         show?: { title?: string; ratingKey?: string };
         episode?: { title?: string; showTitle?: string };
@@ -348,7 +386,8 @@ export const OverlaysDashboard: React.FC = () => {
     }, [tab, sampleQuery]);
 
     useEffect(() => {
-        if (tab !== 'settings' || sampleLoadedRef.current) return;
+        if (tab !== 'settings' && tab !== 'placement') return;
+        if (sampleLoadedRef.current) return;
         sampleLoadedRef.current = true;
         let cancelled = false;
         void (async () => {
@@ -371,12 +410,27 @@ export const OverlaysDashboard: React.FC = () => {
                 }
                 await regenerateSamples({ quiet: true });
             } catch {
-                if (!cancelled) setSampleMeta({ exists: false });
+                /* ignore — placement/settings can regenerate later */
             }
         })();
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tab]);
+
+    useEffect(() => {
+        if (tab !== 'placement') return;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const res = await fetch(`/api/overlays/sample/show-base?t=${Date.now()}`, { credentials: 'include' });
+                if (cancelled) return;
+                if (!res.ok) await regenerateSamples({ quiet: true });
+                else setSampleBust(Date.now());
+            } catch {
+                /* ignore */
+            }
+        })();
+        return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab]);
 
@@ -850,6 +904,19 @@ export const OverlaysDashboard: React.FC = () => {
                         </div>
                     )}
                 </DashboardPanel>
+            )}
+
+            {tab === 'placement' && (
+                <PlacementEditor
+                    placement={placementDraft}
+                    seasonPresetId={configDraft.overlayPresetId || 'new-season'}
+                    episodePresetId={configDraft.episodeOverlayPresetId || 'new-episode'}
+                    sampleBust={sampleBust}
+                    busy={busy !== null}
+                    onChange={(next) => setConfigDraft((prev) => ({ ...prev, placement: next }))}
+                    onSave={() => void savePlacement()}
+                    onResetKind={resetPlacementKind}
+                />
             )}
 
             {tab === 'settings' && (
