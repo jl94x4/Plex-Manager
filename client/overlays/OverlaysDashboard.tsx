@@ -25,6 +25,7 @@ import {
     dashboardSubnavLinkClass,
 } from '../shared/dashboard/DashboardChrome';
 import { CustomSelect, SettingsToggleRow, StyledCheckbox } from '../shared/ui';
+import { askConfirm } from '../shared/confirm';
 import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { overlaysApi, type OverlaysConfig } from './api';
 
@@ -156,20 +157,41 @@ export const OverlaysDashboard: React.FC = () => {
 
     const startBackgroundJob = (label: string, fn: () => Promise<unknown>) => {
         setTab('activity');
-        void runAction(label, fn, { startedToast: true });
+        setBusy(label);
+        void (async () => {
+            try {
+                await fn();
+                toast(`${label} started`);
+            } catch (error) {
+                toast(error instanceof Error ? error.message : `${label} failed`, 'error');
+            } finally {
+                setBusy(null);
+            }
+            void refresh().catch(() => {});
+        })();
     };
 
     const saveSettings = () => runAction('Save settings', async () => {
         await overlaysApi.saveConfig(configDraft);
     });
 
+    const canResetAll = showCount > 0 && !jobRunning && busy !== 'Reset all';
+
     const resetAll = () => {
-        const count = status?.logCount || shows.length || 0;
-        const ok = window.confirm(
-            `Reset all ${count} logged New Season overlay(s)?\n\nThis restores original posters from config/overlays/backups/ when available (falls back to Plex metadata), then clears the log.`,
-        );
-        if (!ok) return;
-        void runAction('Reset all', () => overlaysApi.resetAll());
+        void (async () => {
+            const count = showCount;
+            const ok = await askConfirm(
+                `Reset all ${count} logged New Season overlay(s)? This restores original posters from config/overlays/backups/ when available (falls back to Plex metadata), then clears the log.`,
+                {
+                    title: 'Reset all overlays?',
+                    confirmLabel: 'Reset all',
+                    cancelLabel: 'Cancel',
+                    danger: true,
+                },
+            );
+            if (!ok) return;
+            await runAction('Reset all', () => overlaysApi.resetAll());
+        })();
     };
 
     return (
@@ -212,7 +234,7 @@ export const OverlaysDashboard: React.FC = () => {
                         <button
                             type="button"
                             className={`${buttonClass} border-amber-500/40 text-amber-100`}
-                            disabled={busy !== null || jobRunning || !(status?.logCount > 0)}
+                            disabled={!canResetAll}
                             onClick={resetAll}
                         >
                             <RotateCcw className="h-4 w-4" /> Reset all
@@ -399,7 +421,7 @@ export const OverlaysDashboard: React.FC = () => {
                         <button
                             type="button"
                             className={`${buttonClass} border-amber-500/40 text-amber-100`}
-                            disabled={busy !== null || status?.running || shows.length === 0}
+                            disabled={!canResetAll}
                             onClick={resetAll}
                         >
                             <RotateCcw className="h-4 w-4" /> Reset all overlays
