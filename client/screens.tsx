@@ -7368,6 +7368,26 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     const [notifyRequestAvailableInApp, setNotifyRequestAvailableInApp] = useState(user?.notifyRequestAvailableInApp !== false);
     const [notifyRequestAvailableWebPush, setNotifyRequestAvailableWebPush] = useState(user?.notifyRequestAvailableWebPush !== false);
     const [notifyRequestAvailableDiscord, setNotifyRequestAvailableDiscord] = useState(user?.notifyRequestAvailableDiscord !== false);
+    const [notifyRequestApproved, setNotifyRequestApproved] = useState(
+        user?.notifyRequestApprovedEmail !== false
+        && user?.notifyRequestApprovedInApp !== false
+        && user?.notifyRequestApprovedWebPush !== false,
+    );
+    const [notifyRequestDeclined, setNotifyRequestDeclined] = useState(
+        user?.notifyRequestDeclinedEmail !== false
+        && user?.notifyRequestDeclinedInApp !== false
+        && user?.notifyRequestDeclinedWebPush !== false,
+    );
+    const [notifySeasonAvailable, setNotifySeasonAvailable] = useState(
+        user?.notifySeasonAvailableEmail !== false
+        && user?.notifySeasonAvailableInApp !== false
+        && user?.notifySeasonAvailableWebPush !== false,
+    );
+    const [notifyNewEpisode, setNotifyNewEpisode] = useState(
+        user?.notifyNewEpisodeEmail === true
+        || user?.notifyNewEpisodeInApp === true
+        || user?.notifyNewEpisodeWebPush === true,
+    );
     const [notifyWebPush, setNotifyWebPush] = useState(user?.notifyWebPush !== false);
     const [browserPushReady, setBrowserPushReady] = useState(false);
     const browserPushSupportedFlag = webPushSupported();
@@ -7377,6 +7397,26 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         setNotifyRequestAvailableInApp(user?.notifyRequestAvailableInApp !== false);
         setNotifyRequestAvailableWebPush(user?.notifyRequestAvailableWebPush !== false);
         setNotifyRequestAvailableDiscord(user?.notifyRequestAvailableDiscord !== false);
+        setNotifyRequestApproved(
+            user?.notifyRequestApprovedEmail !== false
+            && user?.notifyRequestApprovedInApp !== false
+            && user?.notifyRequestApprovedWebPush !== false,
+        );
+        setNotifyRequestDeclined(
+            user?.notifyRequestDeclinedEmail !== false
+            && user?.notifyRequestDeclinedInApp !== false
+            && user?.notifyRequestDeclinedWebPush !== false,
+        );
+        setNotifySeasonAvailable(
+            user?.notifySeasonAvailableEmail !== false
+            && user?.notifySeasonAvailableInApp !== false
+            && user?.notifySeasonAvailableWebPush !== false,
+        );
+        setNotifyNewEpisode(
+            user?.notifyNewEpisodeEmail === true
+            || user?.notifyNewEpisodeInApp === true
+            || user?.notifyNewEpisodeWebPush === true,
+        );
         setNotifyWebPush(user?.notifyWebPush !== false);
         setOptOutNewsletter(!!user?.optOutNewsletter);
     }, [
@@ -7384,6 +7424,18 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         user?.notifyRequestAvailableInApp,
         user?.notifyRequestAvailableWebPush,
         user?.notifyRequestAvailableDiscord,
+        user?.notifyRequestApprovedEmail,
+        user?.notifyRequestApprovedInApp,
+        user?.notifyRequestApprovedWebPush,
+        user?.notifyRequestDeclinedEmail,
+        user?.notifyRequestDeclinedInApp,
+        user?.notifyRequestDeclinedWebPush,
+        user?.notifySeasonAvailableEmail,
+        user?.notifySeasonAvailableInApp,
+        user?.notifySeasonAvailableWebPush,
+        user?.notifyNewEpisodeEmail,
+        user?.notifyNewEpisodeInApp,
+        user?.notifyNewEpisodeWebPush,
         user?.notifyWebPush,
         user?.optOutNewsletter,
     ]);
@@ -7573,6 +7625,53 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
             setIsLoading(false);
         }
     };
+
+    const toggleLifecycleEventPrefs = async (
+        enabled: boolean,
+        keys: string[],
+        setLocal: (v: boolean) => void,
+    ) => {
+        setIsLoading(true);
+        try {
+            const body: Record<string, boolean> = {};
+            for (const key of keys) body[key] = enabled;
+            await apiFetch('/api/users/preferences', {
+                method: 'POST',
+                body: JSON.stringify(body),
+            });
+            setLocal(enabled);
+            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
+            refreshSession();
+        } catch (e: any) {
+            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleToggleRequestApproved = () => toggleLifecycleEventPrefs(
+        !notifyRequestApproved,
+        ['notifyRequestApprovedEmail', 'notifyRequestApprovedInApp', 'notifyRequestApprovedWebPush'],
+        setNotifyRequestApproved,
+    );
+
+    const handleToggleRequestDeclined = () => toggleLifecycleEventPrefs(
+        !notifyRequestDeclined,
+        ['notifyRequestDeclinedEmail', 'notifyRequestDeclinedInApp', 'notifyRequestDeclinedWebPush'],
+        setNotifyRequestDeclined,
+    );
+
+    const handleToggleSeasonAvailable = () => toggleLifecycleEventPrefs(
+        !notifySeasonAvailable,
+        ['notifySeasonAvailableEmail', 'notifySeasonAvailableInApp', 'notifySeasonAvailableWebPush'],
+        setNotifySeasonAvailable,
+    );
+
+    const handleToggleNewEpisode = () => toggleLifecycleEventPrefs(
+        !notifyNewEpisode,
+        ['notifyNewEpisodeEmail', 'notifyNewEpisodeInApp', 'notifyNewEpisodeWebPush'],
+        setNotifyNewEpisode,
+    );
 
     const handleToggleWebPush = async () => {
         setIsLoading(true);
@@ -8103,6 +8202,10 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         notifyRequestAvailableInApp,
         notifyRequestAvailableWebPush,
         notifyRequestAvailableDiscord,
+        notifyRequestApproved,
+        notifyRequestDeclined,
+        notifySeasonAvailable,
+        notifyNewEpisode,
         notifyWebPush,
         browserPushReady,
         browserPushSupported: browserPushSupportedFlag,
@@ -8123,6 +8226,10 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
         handleToggleRequestAvailableInApp,
         handleToggleRequestAvailableWebPush,
         handleToggleRequestAvailableDiscord,
+        handleToggleRequestApproved,
+        handleToggleRequestDeclined,
+        handleToggleSeasonAvailable,
+        handleToggleNewEpisode,
         handleToggleWebPush,
         handleEnableBrowserPush,
         handleDisableBrowserPush,
@@ -8140,6 +8247,7 @@ export const UserDashboard: React.FC<{ sessionInfo: any; publicConfig?: any; onL
     }), [
         t, sessionInfo, publicConfig, user, isRevoked, isExpiringSoon, daysLeft, progressPct, optOutNewsletter,
         notifyRequestAvailableEmail, notifyRequestAvailableInApp, notifyRequestAvailableWebPush, notifyRequestAvailableDiscord,
+        notifyRequestApproved, notifyRequestDeclined, notifySeasonAvailable, notifyNewEpisode,
         notifyWebPush, browserPushReady, browserPushSupportedFlag,
         serverStats, serverDataLoading, analytics, analyticsLoading, analyticsDays, analyticsDaysOpen,
         showQualityBadges, dashboardData, bazarrWidgets, onViewAdmin, onViewSettings, onViewLogs, onViewCollexions, onViewScanner, onViewMediaAutomation, onViewRequests, onPendingRequestsChange,

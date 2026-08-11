@@ -152,6 +152,10 @@ export type UserDashboardWidgetDeps = {
     handleToggleRequestAvailableInApp?: () => void;
     handleToggleRequestAvailableWebPush?: () => void;
     handleToggleRequestAvailableDiscord?: () => void;
+    handleToggleRequestApproved?: () => void;
+    handleToggleRequestDeclined?: () => void;
+    handleToggleSeasonAvailable?: () => void;
+    handleToggleNewEpisode?: () => void;
     handleToggleWebPush?: () => void;
     handleEnableBrowserPush?: () => void;
     handleDisableBrowserPush?: () => void;
@@ -159,6 +163,10 @@ export type UserDashboardWidgetDeps = {
     notifyRequestAvailableInApp?: boolean;
     notifyRequestAvailableWebPush?: boolean;
     notifyRequestAvailableDiscord?: boolean;
+    notifyRequestApproved?: boolean;
+    notifyRequestDeclined?: boolean;
+    notifySeasonAvailable?: boolean;
+    notifyNewEpisode?: boolean;
     notifyWebPush?: boolean;
     browserPushReady?: boolean;
     browserPushSupported?: boolean;
@@ -325,6 +333,10 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
         handleToggleRequestAvailableInApp,
         handleToggleRequestAvailableWebPush,
         handleToggleRequestAvailableDiscord,
+        handleToggleRequestApproved,
+        handleToggleRequestDeclined,
+        handleToggleSeasonAvailable,
+        handleToggleNewEpisode,
         handleToggleWebPush,
         handleEnableBrowserPush,
         handleDisableBrowserPush,
@@ -332,6 +344,10 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
         notifyRequestAvailableInApp = true,
         notifyRequestAvailableWebPush = true,
         notifyRequestAvailableDiscord = true,
+        notifyRequestApproved = true,
+        notifyRequestDeclined = true,
+        notifySeasonAvailable = true,
+        notifyNewEpisode = false,
         notifyWebPush = true,
         browserPushReady = false,
         browserPushSupported = false,
@@ -543,6 +559,54 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                     <button onClick={handleToggleRequestAvailableDiscord} aria-label={t('homeDashboard.toggleRequestAvailableDiscordAria')}
                                         className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestAvailableDiscord ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestAvailableDiscord ? 'translate-x-8' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            )}
+                            {handleToggleRequestApproved && (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-text font-bold text-sm">{t('homeDashboard.requestApprovedAlerts')}</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.requestApprovedAlertsHint')}</p>
+                                    </div>
+                                    <button onClick={handleToggleRequestApproved} aria-label={t('homeDashboard.toggleRequestApprovedAria')}
+                                        className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestApproved ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestApproved ? 'translate-x-8' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            )}
+                            {handleToggleRequestDeclined && (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-text font-bold text-sm">{t('homeDashboard.requestDeclinedAlerts')}</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.requestDeclinedAlertsHint')}</p>
+                                    </div>
+                                    <button onClick={handleToggleRequestDeclined} aria-label={t('homeDashboard.toggleRequestDeclinedAria')}
+                                        className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyRequestDeclined ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyRequestDeclined ? 'translate-x-8' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            )}
+                            {handleToggleSeasonAvailable && (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-text font-bold text-sm">{t('homeDashboard.seasonAvailableAlerts')}</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.seasonAvailableAlertsHint')}</p>
+                                    </div>
+                                    <button onClick={handleToggleSeasonAvailable} aria-label={t('homeDashboard.toggleSeasonAvailableAria')}
+                                        className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifySeasonAvailable ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifySeasonAvailable ? 'translate-x-8' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            )}
+                            {handleToggleNewEpisode && (
+                                <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                        <p className="text-text font-bold text-sm">{t('homeDashboard.newEpisodeAlerts')}</p>
+                                        <p className="text-muted text-xs mt-1 leading-relaxed">{t('homeDashboard.newEpisodeAlertsHint')}</p>
+                                    </div>
+                                    <button onClick={handleToggleNewEpisode} aria-label={t('homeDashboard.toggleNewEpisodeAria')}
+                                        className={`relative inline-flex items-center w-14 h-7 rounded-full transition-all flex-shrink-0 border-2 ${notifyNewEpisode ? 'bg-plex border-plex' : 'bg-background border-border'}`}>
+                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-300 ${notifyNewEpisode ? 'translate-x-8' : 'translate-x-1'}`} />
                                     </button>
                                 </div>
                             )}

@@ -21,6 +21,22 @@ export interface User {
     notifyRequestAvailableWebPush?: boolean;
     /** Include this user's requests in Discord webhook posts (default on). */
     notifyRequestAvailableDiscord?: boolean;
+    /** Request approved (email / in-app / push; default on). */
+    notifyRequestApprovedEmail?: boolean;
+    notifyRequestApprovedInApp?: boolean;
+    notifyRequestApprovedWebPush?: boolean;
+    /** Request declined (default on). */
+    notifyRequestDeclinedEmail?: boolean;
+    notifyRequestDeclinedInApp?: boolean;
+    notifyRequestDeclinedWebPush?: boolean;
+    /** Season available for TV requests (default on). */
+    notifySeasonAvailableEmail?: boolean;
+    notifySeasonAvailableInApp?: boolean;
+    notifySeasonAvailableWebPush?: boolean;
+    /** New episode for ongoing series (default off). */
+    notifyNewEpisodeEmail?: boolean;
+    notifyNewEpisodeInApp?: boolean;
+    notifyNewEpisodeWebPush?: boolean;
     /** Master browser push preference for all in-app fan-out (default on). */
     notifyWebPush?: boolean;
     lastLogin?: string;

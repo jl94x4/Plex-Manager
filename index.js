@@ -1276,6 +1276,13 @@ import {
     clearPortalArrServiceOptionsCache,
 } from './lib/portal-request/index.js';
 import { notifyRequestBecameAvailable } from './lib/notifications/requestAvailable.js';
+import {
+    notifyRequestApproved,
+    notifyRequestDeclined,
+    notifySeasonAvailable,
+    notifyNewEpisode,
+    notifyAdminPendingRequest,
+} from './lib/notifications/requestLifecycle.js';
 import { syncSeerrRequestAvailableNotifications } from './lib/notifications/seerrAvailablePoll.js';
 import {
     listInAppNotificationsForUser,
@@ -1653,6 +1660,7 @@ const DEFAULT_ALERT_RULES = {
     newUserSynced: true,
     syncSuccess: false,
     syncFailure: true,
+    requestPending: true,
 };
 
 const normalizeAlertRules = (rules = {}) => ({
@@ -3620,6 +3628,18 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyRequestAvailableInApp,
             notifyRequestAvailableWebPush,
             notifyRequestAvailableDiscord,
+            notifyRequestApprovedEmail,
+            notifyRequestApprovedInApp,
+            notifyRequestApprovedWebPush,
+            notifyRequestDeclinedEmail,
+            notifyRequestDeclinedInApp,
+            notifyRequestDeclinedWebPush,
+            notifySeasonAvailableEmail,
+            notifySeasonAvailableInApp,
+            notifySeasonAvailableWebPush,
+            notifyNewEpisodeEmail,
+            notifyNewEpisodeInApp,
+            notifyNewEpisodeWebPush,
             notifyWebPush,
         } = req.body || {};
         const users = await loadFile(USERS_PATH, []);
@@ -3637,20 +3657,27 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
                 await appendAuditLog(optOutNewsletter ? 'newsletter_opt_out' : 'newsletter_opt_in', req.user, req.user);
             }
         }
-        if (notifyRequestAvailableEmail !== undefined) {
-            users[userIndex].notifyRequestAvailableEmail = !!notifyRequestAvailableEmail;
-        }
-        if (notifyRequestAvailableInApp !== undefined) {
-            users[userIndex].notifyRequestAvailableInApp = !!notifyRequestAvailableInApp;
-        }
-        if (notifyRequestAvailableWebPush !== undefined) {
-            users[userIndex].notifyRequestAvailableWebPush = !!notifyRequestAvailableWebPush;
-        }
-        if (notifyRequestAvailableDiscord !== undefined) {
-            users[userIndex].notifyRequestAvailableDiscord = !!notifyRequestAvailableDiscord;
-        }
-        if (notifyWebPush !== undefined) {
-            users[userIndex].notifyWebPush = !!notifyWebPush;
+        const boolPrefs = {
+            notifyRequestAvailableEmail,
+            notifyRequestAvailableInApp,
+            notifyRequestAvailableWebPush,
+            notifyRequestAvailableDiscord,
+            notifyRequestApprovedEmail,
+            notifyRequestApprovedInApp,
+            notifyRequestApprovedWebPush,
+            notifyRequestDeclinedEmail,
+            notifyRequestDeclinedInApp,
+            notifyRequestDeclinedWebPush,
+            notifySeasonAvailableEmail,
+            notifySeasonAvailableInApp,
+            notifySeasonAvailableWebPush,
+            notifyNewEpisodeEmail,
+            notifyNewEpisodeInApp,
+            notifyNewEpisodeWebPush,
+            notifyWebPush,
+        };
+        for (const [key, value] of Object.entries(boolPrefs)) {
+            if (value !== undefined) users[userIndex][key] = !!value;
         }
         await saveFile(USERS_PATH, users);
 
@@ -7883,7 +7910,70 @@ const getPortalRequestService = (config) => createPortalRequestService({
         resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
         log,
     }),
+    onSeasonAvailable: async ({ record, seasonNumber }) => notifySeasonAvailable({
+        config,
+        record,
+        seasonNumber,
+        loadUsers: () => loadFile(USERS_PATH, []),
+        sendEmail,
+        hasEmailBeenSent,
+        logEmailSent,
+        resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
+        log,
+    }),
+    onNewEpisode: async ({ record }) => notifyNewEpisode({
+        config,
+        record,
+        loadUsers: () => loadFile(USERS_PATH, []),
+        sendEmail,
+        hasEmailBeenSent,
+        logEmailSent,
+        resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
+        log,
+    }),
 });
+
+const buildRequestLifecycleNotifyDeps = (config, record) => ({
+    config,
+    record,
+    loadUsers: () => loadFile(USERS_PATH, []),
+    sendEmail,
+    hasEmailBeenSent,
+    logEmailSent,
+    resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
+    log,
+});
+
+const notifyPortalRequestDecision = async (config, record, { approved = false, declined = false, silent = false, declineReason = null } = {}) => {
+    if (silent || !record) return;
+    try {
+        if (approved) {
+            await notifyRequestApproved(buildRequestLifecycleNotifyDeps(config, record));
+        } else if (declined) {
+            await notifyRequestDeclined({
+                ...buildRequestLifecycleNotifyDeps(config, record),
+                declineReason,
+            });
+        }
+    } catch (error) {
+        log(`[RequestLifecycle] decision notify failed: ${error?.message || error}`);
+    }
+};
+
+const notifyAdminNewRequest = async (config, record) => {
+    if (!record) return;
+    try {
+        await notifyAdminPendingRequest({
+            config,
+            record,
+            sendGotifyAlert,
+            alertRuleEnabled,
+            log,
+        });
+    } catch (error) {
+        log(`[RequestLifecycle] admin pending notify failed: ${error?.message || error}`);
+    }
+};
 
 const getPortalWatchlistService = (config) => createPortalWatchlistService({
     dataDir: WATCHLIST_DIR,
@@ -9551,9 +9641,11 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
             if (shouldPortalAutoApprove(config, type === 'music' ? 'movie' : type, { is4k: type === 'music' ? false : !!is4k })) {
                 try {
                     const approved = await portalRequests.approveAdminRequest(created.id, null, req.user);
+                    // Auto-approve: skip "approved" member notify; still skip admin pending (already approved).
                     return res.status(201).json(approved);
                 } catch (approveError) {
                     log(`Portal auto-approve failed for request ${created.id}: ${approveError.message}`);
+                    await notifyAdminNewRequest(config, created);
                     return res.status(201).json({
                         ...created,
                         autoApproveError: approveError.message,
@@ -9561,6 +9653,7 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
                 }
             }
 
+            await notifyAdminNewRequest(config, created);
             return res.status(201).json(created);
         }
 
@@ -9648,6 +9741,20 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
             method: 'POST',
             body,
         });
+        const seerrStatus = Number(data?.status);
+        // Pending only — skip admin alert when Seerr auto-approves.
+        if (seerrStatus === 1 || (!Number.isFinite(seerrStatus) && !data?.media)) {
+            await notifyAdminNewRequest(config, {
+                id: data?.id || 'seerr',
+                title: data?.media?.title || data?.media?.name || req.body?.title || 'New request',
+                mediaType: type,
+                tmdbId,
+                meta: {
+                    requestedByName: req.user?.username || null,
+                    requestedByEmail: req.user?.email || null,
+                },
+            });
+        }
         res.status(201).json(data);
     } catch (e) {
         const mapped = mapSeerrClientError(e.message, e.status);
@@ -10618,6 +10725,7 @@ app.post('/api/requests/:id/approve', requireAdmin, async (req, res) => {
                 engine: 'portal',
                 arrInstanceId: result?.arrInstanceId || null,
             });
+            await notifyPortalRequestDecision(config, result, { approved: true });
             return res.json({ success: true, title, engine: 'portal' });
         }
         const result = overrides
@@ -10625,6 +10733,18 @@ app.post('/api/requests/:id/approve', requireAdmin, async (req, res) => {
             : await requestAppService.approveRequest(config, requestId);
         const title = result?.media?.title || result?.media?.name || req.body?.title || `Request #${requestId}`;
         await appendAuditLog('request_approved', req.user, null, { requestId, title, overrides: overrides || null });
+        await notifyPortalRequestDecision(config, {
+            id: requestId,
+            title,
+            userId: result?.requestedBy?.id || result?.requestedBy?.plexId || result?.userId || null,
+            mediaType: result?.type || result?.mediaType || null,
+            tmdbId: result?.media?.tmdbId || result?.tmdbId || null,
+            year: result?.media?.releaseDate || result?.media?.firstAirDate || null,
+            meta: {
+                requestedByName: result?.requestedBy?.displayName || result?.requestedBy?.username || null,
+                requestedByEmail: result?.requestedBy?.email || null,
+            },
+        }, { approved: true });
         res.json({ success: true, title });
     } catch (error) {
         res.status(error.status || 502).json({ error: error.message || 'Failed to approve request' });
@@ -10647,6 +10767,7 @@ app.post('/api/requests/:id/decline', requireAdmin, async (req, res) => {
                 reason: reason || null,
                 engine: 'portal',
             });
+            await notifyPortalRequestDecision(config, result, { declined: true, declineReason: reason });
 
             let blacklisted = false;
             if (req.body?.blacklist) {
@@ -10685,6 +10806,18 @@ app.post('/api/requests/:id/decline', requireAdmin, async (req, res) => {
         const result = await requestAppService.declineRequest(config, requestId, reason);
         const title = result?.media?.title || result?.media?.name || req.body?.title || `Request #${requestId}`;
         await appendAuditLog('request_declined', req.user, null, { requestId, title, reason: reason || null });
+        await notifyPortalRequestDecision(config, {
+            id: requestId,
+            title,
+            userId: result?.requestedBy?.id || result?.requestedBy?.plexId || result?.userId || null,
+            mediaType: result?.type || result?.mediaType || null,
+            tmdbId: result?.media?.tmdbId || result?.tmdbId || null,
+            meta: {
+                requestedByName: result?.requestedBy?.displayName || result?.requestedBy?.username || null,
+                requestedByEmail: result?.requestedBy?.email || null,
+                declineReason: reason || null,
+            },
+        }, { declined: true, declineReason: reason });
 
         if (req.body?.blacklist) {
             const tmdbId = Number(req.body?.tmdbId);

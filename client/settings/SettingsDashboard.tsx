@@ -114,6 +114,7 @@ const DEFAULT_ALERT_RULES = {
     expiryWarning: true,
     accessRevoked: true,
     newUserSynced: true,
+    requestPending: true,
     syncSuccess: false,
     syncFailure: true,
 };
@@ -2276,6 +2277,7 @@ export const SettingsDashboard: React.FC = () => {
                                         ['expiryWarning', 'Access Expiry Warnings', 'Alert when a user reaches the configured expiry-warning threshold.'],
                                         ['accessRevoked', 'Access Revoked', 'Alert when expired access is revoked automatically.'],
                                         ['newUserSynced', 'New Users During Sync', 'Alert when a Plex/Jellyfin sync discovers new users.'],
+                                        ['requestPending', 'New Media Requests', 'Alert when a member submits a request that needs approval.'],
                                         ['syncFailure', 'Sync Failures', 'Alert when a manual user sync fails.'],
                                         ['syncSuccess', 'Sync Success', 'Alert after every successful manual user sync.'],
                                     ].map(([key, title, description]) => (
