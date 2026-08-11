@@ -61,6 +61,8 @@ Much of the wider portal (Scanner, Settings, admin dashboards, etc.) is still En
 
 You do not need a translation platform. Edited `.ts` catalogs + a PR is enough. If you cannot open a PR, paste suggested strings (key → translation) in an issue or Discord and maintainers can land them.
 
+For the full localization workflow and current project coverage, see the [Localization Guide](translations.md) and [Localization Status](translation-status.md).
+
 ### Add a new language
 
 1. Copy `fr.ts` to e.g. `it.ts` and translate the strings (or start from a minimal subset — English fills gaps).
