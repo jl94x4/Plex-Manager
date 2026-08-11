@@ -445,6 +445,7 @@ export const en = {
         jobFailed: 'Overlays job failed',
         jobFinished: 'Overlays job finished',
         jobFinishedSummary: 'Finished — +{added} / −{removed}{preview}',
+        previewFinishedSummary: 'Preview done — eligible {eligible}, new {added}, refreshed {refreshed}',
         actionStarted: '{action} started',
         actionComplete: '{action} complete',
         actionFailed: '{action} failed',
@@ -547,7 +548,7 @@ export const en = {
             skipKometa: 'Skip if Kometa Overlay label present',
             windowHint: 'How long after S01 airs a season stays eligible (1–365).',
             overlayPreset: 'Overlay preset',
-            tvLibraries: 'TV libraries (empty = all)',
+            tvLibraries: 'TV libraries (all ticked = all)',
             loadSectionsHint: 'Load sections to pick specific TV libraries.',
         },
         import: {

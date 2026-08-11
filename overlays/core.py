@@ -287,20 +287,152 @@ def _section_filter(config: dict) -> set[str] | None:
     return {str(x).strip() for x in raw if str(x).strip()}
 
 
-def _iter_shows(plex: PlexServer, config: dict):
+def _section_ids(section) -> set[str]:
+    section_id = str(getattr(section, "key", "") or "").rstrip("/").split("/")[-1]
+    section_key = str(getattr(section, "key", "") or "")
+    titles = {str(section.title)}
+    return {section_id, section_key, *titles}
+
+
+def _iter_tv_sections(plex: PlexServer, config: dict):
     wanted = _section_filter(config)
     for section in plex.library.sections():
         if section.type != "show":
             continue
-        section_id = str(getattr(section, "key", "") or "").rstrip("/").split("/")[-1]
-        section_key = str(getattr(section, "key", "") or "")
-        if wanted is not None:
-            titles = {str(section.title)}
-            ids = {section_id, section_key}
-            if not (wanted & titles) and not (wanted & ids):
-                continue
+        ids = _section_ids(section)
+        if wanted is not None and not (wanted & ids):
+            continue
+        yield section
+
+
+def _iter_shows(plex: PlexServer, config: dict):
+    for section in _iter_tv_sections(plex, config):
         for show in section.all():
             yield section, show
+
+
+def _search_recent_premiere_episodes(section, cutoff: datetime):
+    """
+    Fast path: only E01 episodes aired on/after cutoff.
+    Avoids walking every show with seasons()/episodes() (that hangs large libraries / 502s).
+    """
+    cutoff_str = cutoff.strftime("%Y-%m-%d")
+    plex = getattr(section, "_server", None)
+    section_id = str(getattr(section, "key", "") or "").rstrip("/").split("/")[-1]
+
+    # Preferred: plexapi fetchItems against the section endpoint (stable filter params).
+    if plex is not None and section_id:
+        try:
+            items = plex.fetchItems(
+                f"/library/sections/{section_id}/all",
+                params={
+                    "type": 4,
+                    "episode.index": 1,
+                    "originallyAvailableAt>=": cutoff_str,
+                },
+            )
+            return list(items or [])
+        except Exception:
+            pass
+
+    attempts = [
+        {"libtype": "episode", "filters": {"episode.index": 1, "originallyAvailableAt>>=": cutoff_str}},
+        {"libtype": "episode", "filters": {"index": 1, "originallyAvailableAt>>=": cutoff_str}},
+    ]
+    last_error = None
+    for kwargs in attempts:
+        try:
+            return list(section.search(**kwargs))
+        except Exception as exc:
+            last_error = exc
+    if last_error:
+        raise last_error
+    return []
+
+
+def discover_eligible_shows(
+    plex: PlexServer,
+    config: dict,
+    cutoff: datetime,
+    skip_kometa: bool,
+    progress: ProgressFn | None = None,
+) -> tuple[set[str], dict[str, dict], dict[str, Any]]:
+    """
+    Return (should_have_keys, meta_by_key, show_by_key) for shows whose *latest*
+    season premiere (E01) falls inside the new-season window.
+    """
+    should_have: set[str] = set()
+    meta_by_key: dict[str, dict] = {}
+    show_by_key: dict[str, Any] = {}
+
+    for section in _iter_tv_sections(plex, config):
+        _progress(progress, f"Scanning {section.title} for recent season premieres…")
+        episodes = []
+        used_fast = False
+        try:
+            episodes = _search_recent_premiere_episodes(section, cutoff)
+            used_fast = True
+            _progress(progress, f"{section.title}: {len(episodes)} recent E01 episode(s)")
+        except Exception as exc:
+            _progress(progress, f"{section.title}: fast search failed ({exc}); falling back to full scan")
+
+        if used_fast:
+            for ep in episodes:
+                try:
+                    show = ep.show()
+                    season = ep.season()
+                except Exception:
+                    continue
+                key = str(getattr(show, "ratingKey", "") or "")
+                if not key or key in should_have:
+                    continue
+                if skip_kometa and _has_kometa_overlay_label(show):
+                    meta_by_key[key] = {
+                        "seasonIndex": getattr(season, "index", None),
+                        "airedAt": getattr(ep, "originallyAvailableAt", None).isoformat()
+                        if getattr(ep, "originallyAvailableAt", None)
+                        else None,
+                        "reason": "kometa_overlay_label",
+                    }
+                    show_by_key[key] = show
+                    continue
+                try:
+                    latest = _latest_season(show)
+                except Exception:
+                    continue
+                if latest is None:
+                    continue
+                # Only the show's current latest season qualifies as "new season".
+                if str(latest.ratingKey) != str(season.ratingKey):
+                    continue
+                aired = getattr(ep, "originallyAvailableAt", None)
+                if aired is None or aired < cutoff:
+                    continue
+                should_have.add(key)
+                show_by_key[key] = show
+                meta_by_key[key] = {
+                    "seasonIndex": latest.index,
+                    "airedAt": aired.isoformat(),
+                    "reason": None,
+                    "library": section.title,
+                }
+            continue
+
+        # Slow fallback (small libraries / older plexapi).
+        count = 0
+        for show in section.all():
+            count += 1
+            if count % 25 == 0:
+                _progress(progress, f"{section.title}: checked {count} shows…")
+            ok, meta = should_have_overlay(show, cutoff, skip_kometa)
+            key = str(show.ratingKey)
+            show_by_key[key] = show
+            meta_by_key[key] = {**meta, "library": section.title}
+            if ok:
+                should_have.add(key)
+
+    _progress(progress, f"Eligible shows: {len(should_have)}")
+    return should_have, meta_by_key, show_by_key
 
 
 def scan_library(config: dict, progress: ProgressFn | None = None) -> dict:
@@ -311,24 +443,25 @@ def scan_library(config: dict, progress: ProgressFn | None = None) -> dict:
     paths = _resolve_paths(config)
     log = _load_log(paths["log"])
 
+    should_have, meta_by_key, show_by_key = discover_eligible_shows(
+        plex, config, cutoff, skip_kometa, progress
+    )
+
     eligible = []
-    skipped = []
-    _progress(progress, "Scanning TV libraries…")
-    for section, show in _iter_shows(plex, config):
-        ok, meta = should_have_overlay(show, cutoff, skip_kometa)
-        row = {
-            "ratingKey": str(show.ratingKey),
-            "title": show.title,
-            "library": section.title,
-            "libraryKey": str(getattr(section, "key", "") or ""),
-            **meta,
-            "inLog": str(show.ratingKey) in log,
-            "previewOnly": bool((log.get(str(show.ratingKey)) or {}).get("preview_only")),
-        }
-        if ok:
-            eligible.append(row)
-        else:
-            skipped.append(row)
+    for key in sorted(should_have):
+        show = show_by_key.get(key)
+        meta = meta_by_key.get(key) or {}
+        eligible.append({
+            "ratingKey": key,
+            "title": getattr(show, "title", None) or key,
+            "library": meta.get("library") or "",
+            "libraryKey": "",
+            "seasonIndex": meta.get("seasonIndex"),
+            "airedAt": meta.get("airedAt"),
+            "reason": meta.get("reason"),
+            "inLog": key in log,
+            "previewOnly": bool((log.get(key) or {}).get("preview_only")),
+        })
 
     return {
         "ok": True,
@@ -338,7 +471,7 @@ def scan_library(config: dict, progress: ProgressFn | None = None) -> dict:
         "eligible": eligible,
         "logCount": len(log),
         "logKeys": list(log.keys()),
-        "toRemove": [k for k in log.keys() if k not in {e["ratingKey"] for e in eligible}],
+        "toRemove": [k for k in log.keys() if k not in should_have],
     }
 
 
@@ -456,40 +589,54 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
 
     plex = _connect(config)
     log = _load_log(paths["log"])
-    should_have: set[str] = set()
-    meta_by_key: dict[str, dict] = {}
-    show_by_key: dict[str, Any] = {}
 
     _progress(progress, "Scanning for eligible new seasons…")
-    for _section, show in _iter_shows(plex, config):
-        ok, meta = should_have_overlay(show, cutoff, skip_kometa)
-        key = str(show.ratingKey)
-        show_by_key[key] = show
-        meta_by_key[key] = meta
-        if ok:
-            should_have.add(key)
+    should_have, _meta_by_key, show_by_key = discover_eligible_shows(
+        plex, config, cutoff, skip_kometa, progress
+    )
 
     added = 0
     converted = 0
+    refreshed = 0
+    skipped = 0
     removed = 0
     errors: list[str] = []
+    preview_files: list[dict] = []
 
     for key in sorted(should_have):
         show = show_by_key[key]
         existing = log.get(key)
-        needs = existing is None or (existing.get("preview_only") and not preview_mode)
-        if not needs:
-            continue
         try:
-            entry = process_show_overlay(plex, show, config, paths, preview_mode, progress)
-            if existing and existing.get("preview_only") and not preview_mode:
+            if preview_mode:
+                # Always regenerate preview art — previously we skipped already-logged
+                # shows, which made Preview look broken when the log was non-empty.
+                entry = process_show_overlay(plex, show, config, paths, True, progress)
+                preview_files.append({
+                    "ratingKey": key,
+                    "title": show.title,
+                    "previewShow": entry.get("previewShow"),
+                    "previewSeason": entry.get("previewSeason"),
+                })
+                if existing is None:
+                    log[key] = entry
+                    added += 1
+                else:
+                    refreshed += 1
+                continue
+
+            needs = existing is None or bool(existing.get("preview_only"))
+            if not needs:
+                skipped += 1
+                _progress(progress, f"Already overlaid, skipping: {show.title}")
+                continue
+
+            entry = process_show_overlay(plex, show, config, paths, False, progress)
+            if existing and existing.get("preview_only"):
                 converted += 1
             else:
                 added += 1
-            # preserve unknown fields from previous entry
             if isinstance(existing, dict):
-                merged = {**existing, **entry}
-                log[key] = merged
+                log[key] = {**existing, **entry}
             else:
                 log[key] = entry
         except Exception as exc:
@@ -500,6 +647,12 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
         if key in should_have:
             continue
         try:
+            if preview_mode:
+                # Preview must not wipe live log entries — only report what would drop.
+                title = (log.get(key) or {}).get("title") or key
+                _progress(progress, f"[Preview] Would remove overlay: {title}")
+                removed += 1
+                continue
             show = show_by_key.get(key)
             if show is None:
                 try:
@@ -509,7 +662,7 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
                     del log[key]
                     removed += 1
                     continue
-            if remove_show_overlay(show, preview_mode, progress, paths=paths):
+            if remove_show_overlay(show, False, progress, paths=paths):
                 del log[key]
                 removed += 1
         except Exception as exc:
@@ -521,15 +674,26 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
         "previewMode": preview_mode,
         "added": added,
         "converted": converted,
+        "refreshed": refreshed,
+        "skipped": skipped,
         "removed": removed,
         "totalWithOverlays": len(log),
         "eligible": len(should_have),
         "errors": errors,
+        "previewFiles": preview_files,
+        "previewDir": str(paths["preview"]),
         "logPath": str(paths["log"]),
         "overlayPath": str(paths["overlay"]),
         "finishedAt": datetime.now().isoformat(),
     }
-    _progress(progress, f"Done — added {added}, removed {removed}, total {len(log)}")
+    if preview_mode:
+        _progress(
+            progress,
+            f"Done (preview) — eligible {len(should_have)}, new {added}, refreshed {refreshed}, "
+            f"would remove {removed}, files in {paths['preview']}",
+        )
+    else:
+        _progress(progress, f"Done — added {added}, removed {removed}, skipped {skipped}, total {len(log)}")
     return summary
 
 

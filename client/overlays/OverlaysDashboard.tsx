@@ -98,15 +98,25 @@ export const OverlaysDashboard: React.FC = () => {
                 toast(status.lastError || t('overlays.jobFailed'), 'error');
             } else if (status?.lastOutcome === 'ok') {
                 const s = status?.lastRunSummary;
-                toast(
-                    s
-                        ? t('overlays.jobFinishedSummary', {
-                            added: s.added ?? 0,
-                            removed: s.removed ?? 0,
-                            preview: s.previewMode ? t('overlays.overview.previewSuffix') : '',
-                        })
-                        : t('overlays.jobFinished'),
-                );
+                if (s?.command === 'scan' || s?.command === 'reconcile') {
+                    toast(t('overlays.eligibleToast', { count: s.eligible ?? 0 }));
+                } else if (s?.previewMode || s?.command === 'preview') {
+                    toast(t('overlays.previewFinishedSummary', {
+                        eligible: s?.eligible ?? 0,
+                        added: s?.added ?? 0,
+                        refreshed: s?.refreshed ?? 0,
+                    }));
+                } else {
+                    toast(
+                        s
+                            ? t('overlays.jobFinishedSummary', {
+                                added: s.added ?? 0,
+                                removed: s.removed ?? 0,
+                                preview: s.previewMode ? t('overlays.overview.previewSuffix') : '',
+                            })
+                            : t('overlays.jobFinished'),
+                    );
+                }
             }
             void overlaysApi.shows().then((showsRes) => setShows(showsRes.shows || [])).catch(() => {});
         }
@@ -121,6 +131,12 @@ export const OverlaysDashboard: React.FC = () => {
             toast(error instanceof Error ? error.message : t('overlays.sectionsLoadFailed'), 'error');
         }
     }, [toast, t]);
+
+    useEffect(() => {
+        if (tab !== 'settings') return;
+        if (sections.length > 0) return;
+        void loadSections();
+    }, [tab, sections.length, loadSections]);
 
     const summary = status?.lastRunSummary || configDraft.lastRunSummary || null;
     const activity = status?.activity || [];
@@ -399,22 +415,17 @@ export const OverlaysDashboard: React.FC = () => {
                             <button
                                 type="button"
                                 className={buttonClass}
-                                disabled={busy !== null || !workerReady}
-                                onClick={() => void runAction('scan', async () => {
-                                    const res = await overlaysApi.scan();
-                                    setReconcile(null);
-                                    toast(t('overlays.eligibleToast', { count: res.eligibleCount ?? 0 }));
-                                })}
+                                disabled={busy !== null || jobRunning || !workerReady}
+                                onClick={() => startBackgroundJob('scan', () => overlaysApi.scan())}
                             >
                                 {t('overlays.actions.scanLibrary')}
                             </button>
                             <button
                                 type="button"
                                 className={buttonClass}
-                                disabled={busy !== null || !workerReady}
-                                onClick={() => void runAction('reconcile', async () => {
-                                    const res = await overlaysApi.reconcile();
-                                    setReconcile(res);
+                                disabled={busy !== null || jobRunning || !workerReady}
+                                onClick={() => startBackgroundJob('reconcile', async () => {
+                                    await overlaysApi.reconcile();
                                     setTab('import');
                                 })}
                             >
@@ -562,7 +573,9 @@ export const OverlaysDashboard: React.FC = () => {
                             <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border bg-background/40 p-3">
                                 {sections.map((section) => {
                                     const id = section.id || section.key;
-                                    const checked = (configDraft.librarySectionIds || []).includes(id);
+                                    const selected = configDraft.librarySectionIds || [];
+                                    const allSelected = selected.length === 0;
+                                    const checked = allSelected || selected.includes(id);
                                     return (
                                         <StyledCheckbox
                                             key={id}
@@ -570,10 +583,28 @@ export const OverlaysDashboard: React.FC = () => {
                                             label={`${section.title} (${id})`}
                                             onChange={(next) => {
                                                 setConfigDraft((prev) => {
-                                                    const current = new Set(prev.librarySectionIds || []);
-                                                    if (next) current.add(id);
-                                                    else current.delete(id);
-                                                    return { ...prev, librarySectionIds: [...current] };
+                                                    const allIds = sections.map((s) => s.id || s.key);
+                                                    const currentSelected = prev.librarySectionIds || [];
+                                                    const currentlyAll = currentSelected.length === 0;
+                                                    let nextIds: string[];
+                                                    if (currentlyAll) {
+                                                        nextIds = next
+                                                            ? [...allIds]
+                                                            : allIds.filter((value) => value !== id);
+                                                    } else {
+                                                        const current = new Set(currentSelected);
+                                                        if (next) current.add(id);
+                                                        else current.delete(id);
+                                                        nextIds = [...current];
+                                                    }
+                                                    // Persist empty array when every section is selected (= all).
+                                                    if (
+                                                        nextIds.length === allIds.length
+                                                        && allIds.every((value) => nextIds.includes(value))
+                                                    ) {
+                                                        return { ...prev, librarySectionIds: [] };
+                                                    }
+                                                    return { ...prev, librarySectionIds: nextIds };
                                                 });
                                             }}
                                         />
@@ -627,10 +658,8 @@ export const OverlaysDashboard: React.FC = () => {
                         <button
                             type="button"
                             className={buttonClass}
-                            disabled={busy !== null || !workerReady}
-                            onClick={() => void runAction('reconcile', async () => {
-                                setReconcile(await overlaysApi.reconcile());
-                            })}
+                            disabled={busy !== null || jobRunning || !workerReady}
+                            onClick={() => startBackgroundJob('reconcile', () => overlaysApi.reconcile())}
                         >
                             {t('overlays.actions.reconcileDryRun')}
                         </button>
@@ -643,6 +672,18 @@ export const OverlaysDashboard: React.FC = () => {
                                     add: reconcile.wouldAddCount ?? 0,
                                     convert: reconcile.wouldConvertCount ?? 0,
                                     remove: reconcile.wouldRemoveCount ?? 0,
+                                })}
+                            </p>
+                        </div>
+                    )}
+                    {!reconcile && summary?.command === 'reconcile' && (
+                        <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
+                            <p className="font-semibold">{t('overlays.reconcile.title')}</p>
+                            <p className="mt-1 text-muted">
+                                {t('overlays.reconcile.summary', {
+                                    add: summary.wouldAddCount ?? 0,
+                                    convert: summary.wouldConvertCount ?? 0,
+                                    remove: summary.wouldRemoveCount ?? 0,
                                 })}
                             </p>
                         </div>

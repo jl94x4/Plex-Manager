@@ -447,6 +447,7 @@ export const fr: DeepPartial<EnCatalog> = {
         jobFailed: 'Échec de la tâche Overlays',
         jobFinished: 'Tâche Overlays terminée',
         jobFinishedSummary: 'Terminé — +{added} / −{removed}{preview}',
+        previewFinishedSummary: 'Aperçu terminé — éligibles {eligible}, nouveaux {added}, actualisés {refreshed}',
         actionStarted: 'Action « {action} » démarrée.',
         actionComplete: 'Action « {action} » terminée.',
         actionFailed: 'Échec de l’action « {action} ».',
@@ -549,7 +550,7 @@ export const fr: DeepPartial<EnCatalog> = {
             skipKometa: 'Ignorer si le label Kometa Overlay est présent',
             windowHint: 'Durée pendant laquelle une saison reste éligible après la diffusion de S01 (1–365).',
             overlayPreset: 'Préréglage d’overlay',
-            tvLibraries: 'Bibliothèques TV (vide = toutes)',
+            tvLibraries: 'Bibliothèques TV (toutes cochées = toutes)',
             loadSectionsHint: 'Chargez les sections pour choisir des bibliothèques TV spécifiques.',
         },
         import: {
