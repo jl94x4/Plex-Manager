@@ -21,6 +21,9 @@ const FIELD_LABELS: Record<string, string> = {
     discordEmbedDescription: 'Discord embed description',
     gotifyTitle: 'Gotify title',
     gotifyBody: 'Gotify body',
+    ntfyTitle: 'ntfy title',
+    ntfyBody: 'ntfy body',
+    webhookBody: 'Webhook JSON body (optional template)',
 };
 
 type Props = {

@@ -1289,6 +1289,13 @@ import {
     NOTIFY_EVENT_FIELDS,
     NOTIFY_EVENTS,
 } from './lib/notifications/templates/defaults.js';
+import { normalizeNtfyEvents, isNtfyConfigured, notifyNtfyEvent } from './lib/notifications/ntfy.js';
+import {
+    normalizeWebhookEvents,
+    isWebhookConfigured,
+    parseWebhookHeaders,
+    sendGenericWebhook,
+} from './lib/notifications/genericWebhook.js';
 import { syncSeerrRequestAvailableNotifications } from './lib/notifications/seerrAvailablePoll.js';
 import {
     listInAppNotificationsForUser,
@@ -3854,6 +3861,16 @@ app.get('/api/admin/notifications/status', requireAdmin, async (req, res) => {
                 enabled: !!config.gotifyEnabled,
                 configured: gotifyReady,
             },
+            ntfy: {
+                enabled: !!config.ntfyEnabled,
+                configured: isNtfyConfigured(config),
+                events: normalizeNtfyEvents(config.ntfyEvents),
+            },
+            webhook: {
+                enabled: !!config.webhookEnabled,
+                configured: isWebhookConfigured(config),
+                events: normalizeWebhookEvents(config.webhookEvents),
+            },
             inApp: {
                 total: inApp.total,
                 unread: inApp.unread,
@@ -4009,8 +4026,57 @@ app.post('/api/admin/notifications/test', requireAdmin, async (req, res) => {
             }
         }
 
+        if (channels.includes('ntfy')) {
+            try {
+                results.ntfy = !!(await notifyNtfyEvent({
+                    config: {
+                        ...config,
+                        ntfyEnabled: true,
+                        ntfyEvents: { ...normalizeNtfyEvents(config.ntfyEvents), available: true },
+                    },
+                    event: 'available',
+                    title,
+                    body,
+                    clickUrl: resolvePublicBaseUrlFromConfig(config) || href,
+                    log,
+                }));
+                if (!results.ntfy) {
+                    results.errors.push('ntfy: not configured or disabled');
+                }
+            } catch (error) {
+                results.errors.push(`ntfy: ${error?.message || error}`);
+            }
+        }
+
+        if (channels.includes('webhook')) {
+            try {
+                results.webhook = !!(await sendGenericWebhook({
+                    config: {
+                        ...config,
+                        webhookEnabled: true,
+                        webhookEvents: { ...normalizeWebhookEvents(config.webhookEvents), available: true },
+                    },
+                    event: 'available',
+                    vars: {
+                        title,
+                        user: localUser.username || 'Admin',
+                        media_type: 'movie',
+                        status: 'Test',
+                        portal_url: resolvePublicBaseUrlFromConfig(config) || href,
+                        server_name: config.serverName || 'Server Portal',
+                    },
+                    log,
+                }));
+                if (!results.webhook) {
+                    results.errors.push('webhook: not configured or disabled');
+                }
+            } catch (error) {
+                results.errors.push(`webhook: ${error?.message || error}`);
+            }
+        }
+
         res.json({
-            success: results.inApp || results.webPush || results.email || results.discord,
+            success: results.inApp || results.webPush || results.email || results.discord || results.ntfy || results.webhook,
             userId: localUser.id,
             username: localUser.username || null,
             results,
@@ -4563,6 +4629,16 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
                 notificationTemplateFields: NOTIFY_EVENT_FIELDS,
+                ntfyEnabled: !!config.ntfyEnabled,
+                ntfyServerUrl: config.ntfyServerUrl || '',
+                ntfyTopic: config.ntfyTopic || '',
+                ntfyToken: config.ntfyToken ? SECRET_MASK : '',
+                ntfyPriority: Math.max(1, Math.min(5, Number(config.ntfyPriority) || 3)),
+                ntfyEvents: normalizeNtfyEvents(config.ntfyEvents),
+                webhookEnabled: !!config.webhookEnabled,
+                webhookUrl: config.webhookUrl ? SECRET_MASK : '',
+                webhookHeadersJson: config.webhookHeadersJson || '',
+                webhookEvents: normalizeWebhookEvents(config.webhookEvents),
                 webPushEnabled: config.webPushEnabled !== false,
                 watchHistorySource: config.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex',
                 tautulliConfigured: !!(config.tautulliUrl && config.tautulliApiKey),
@@ -4703,6 +4779,16 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
                 notificationTemplateFields: NOTIFY_EVENT_FIELDS,
+                ntfyEnabled: false,
+                ntfyServerUrl: '',
+                ntfyTopic: '',
+                ntfyToken: '',
+                ntfyPriority: 3,
+                ntfyEvents: normalizeNtfyEvents({}),
+                webhookEnabled: false,
+                webhookUrl: '',
+                webhookHeadersJson: '',
+                webhookEvents: normalizeWebhookEvents({}),
                 webPushEnabled: true,
                 watchHistorySource: 'plex',
                 tautulliConfigured: false,
@@ -4742,7 +4828,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, notificationTemplates, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -5213,6 +5299,47 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         notificationTemplates: notificationTemplates !== undefined
             ? normalizeNotificationTemplates(notificationTemplates)
             : normalizeNotificationTemplates(existingConfig.notificationTemplates),
+        ntfyEnabled: ntfyEnabled !== undefined ? !!ntfyEnabled : !!existingConfig.ntfyEnabled,
+        ntfyServerUrl: ntfyServerUrl !== undefined
+            ? String(ntfyServerUrl || '').trim().replace(/\/+$/, '')
+            : (existingConfig.ntfyServerUrl || ''),
+        ntfyTopic: ntfyTopic !== undefined
+            ? String(ntfyTopic || '').trim().replace(/^\/+|\/+$/g, '')
+            : (existingConfig.ntfyTopic || ''),
+        ntfyToken: (() => {
+            if (ntfyToken === undefined) return existingConfig.ntfyToken || '';
+            const incoming = String(ntfyToken || '').trim();
+            if (!incoming || incoming === SECRET_MASK) return existingConfig.ntfyToken || '';
+            return incoming;
+        })(),
+        ntfyPriority: Math.max(1, Math.min(5, Number(
+            ntfyPriority !== undefined ? ntfyPriority : (existingConfig.ntfyPriority ?? 3),
+        ) || 3)),
+        ntfyEvents: normalizeNtfyEvents(
+            ntfyEvents !== undefined ? ntfyEvents : existingConfig.ntfyEvents,
+        ),
+        webhookEnabled: webhookEnabled !== undefined ? !!webhookEnabled : !!existingConfig.webhookEnabled,
+        webhookUrl: (() => {
+            if (webhookUrl === undefined) return existingConfig.webhookUrl || '';
+            const incoming = String(webhookUrl || '').trim();
+            if (!incoming || incoming === SECRET_MASK) return existingConfig.webhookUrl || '';
+            return incoming;
+        })(),
+        webhookHeadersJson: (() => {
+            const incoming = webhookHeadersJson !== undefined
+                ? String(webhookHeadersJson || '').trim()
+                : String(existingConfig.webhookHeadersJson || '').trim();
+            if (!incoming) return '';
+            try {
+                parseWebhookHeaders(incoming);
+                return incoming;
+            } catch {
+                return existingConfig.webhookHeadersJson || '';
+            }
+        })(),
+        webhookEvents: normalizeWebhookEvents(
+            webhookEvents !== undefined ? webhookEvents : existingConfig.webhookEvents,
+        ),
         watchHistorySource: (() => {
             const raw = watchHistorySource !== undefined
                 ? watchHistorySource

@@ -25,6 +25,8 @@ type StatusPayload = {
     email?: { smtpReady?: boolean; requestAvailableAllowed?: boolean };
     discord?: { enabled?: boolean; webhookConfigured?: boolean };
     gotify?: { enabled?: boolean; configured?: boolean };
+    ntfy?: { enabled?: boolean; configured?: boolean; events?: Record<string, boolean> };
+    webhook?: { enabled?: boolean; configured?: boolean; events?: Record<string, boolean> };
     inApp?: {
         total?: number;
         unread?: number;
@@ -80,6 +82,26 @@ type Props = {
     notificationTemplateDefaults: Record<string, Record<string, string>>;
     notificationTemplateEvents: string[];
     notificationTemplateFields: Record<string, string[]>;
+    ntfyEnabled: boolean;
+    setNtfyEnabled: (v: boolean) => void;
+    ntfyServerUrl: string;
+    setNtfyServerUrl: (v: string) => void;
+    ntfyTopic: string;
+    setNtfyTopic: (v: string) => void;
+    ntfyToken: string;
+    setNtfyToken: (v: string) => void;
+    ntfyPriority: number;
+    setNtfyPriority: (v: number) => void;
+    ntfyEvents: Record<string, boolean>;
+    setNtfyEvents: (v: Record<string, boolean>) => void;
+    webhookEnabled: boolean;
+    setWebhookEnabled: (v: boolean) => void;
+    webhookUrl: string;
+    setWebhookUrl: (v: string) => void;
+    webhookHeadersJson: string;
+    setWebhookHeadersJson: (v: string) => void;
+    webhookEvents: Record<string, boolean>;
+    setWebhookEvents: (v: Record<string, boolean>) => void;
     onOpenGotify: () => void;
     onOpenSmtp: () => void;
     addToast: (message: string, type?: 'success' | 'error') => void;
@@ -125,6 +147,26 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     notificationTemplateDefaults,
     notificationTemplateEvents,
     notificationTemplateFields,
+    ntfyEnabled,
+    setNtfyEnabled,
+    ntfyServerUrl,
+    setNtfyServerUrl,
+    ntfyTopic,
+    setNtfyTopic,
+    ntfyToken,
+    setNtfyToken,
+    ntfyPriority,
+    setNtfyPriority,
+    ntfyEvents,
+    setNtfyEvents,
+    webhookEnabled,
+    setWebhookEnabled,
+    webhookUrl,
+    setWebhookUrl,
+    webhookHeadersJson,
+    setWebhookHeadersJson,
+    webhookEvents,
+    setWebhookEvents,
     onOpenGotify,
     onOpenSmtp,
     addToast,
@@ -139,7 +181,18 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
         webPush: false,
         email: false,
         discord: false,
+        ntfy: false,
+        webhook: false,
     });
+
+    const eventLabels: Record<string, string> = {
+        available: 'Available',
+        approved: 'Approved',
+        declined: 'Declined',
+        season: 'Season',
+        episode: 'New episode',
+        admin_pending: 'Admin pending',
+    };
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -264,6 +317,16 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                             detail={status?.gotify?.configured ? 'Admin Gotify alerts ready.' : 'Optional — configure under Gotify Alerts.'}
                         />
                         <Pill
+                            ok={!!status?.ntfy?.configured}
+                            label="ntfy"
+                            detail={status?.ntfy?.configured ? 'ntfy topic ready.' : 'Optional — configure ntfy below.'}
+                        />
+                        <Pill
+                            ok={!!status?.webhook?.configured}
+                            label="Webhook"
+                            detail={status?.webhook?.configured ? 'Generic webhook ready.' : 'Optional — configure webhook below.'}
+                        />
+                        <Pill
                             ok={!notifyJob?.lastError}
                             label={engine === 'seerr' ? 'Seerr notify job' : 'Portal status sync'}
                             detail={`Last run: ${formatWhen(notifyJob?.lastRun)}.${notifyJob?.lastError ? ` Error: ${notifyJob.lastError}` : ''}`}
@@ -354,6 +417,132 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                 />
             </div>
 
+            <div id={getSettingsSectionElementId('notifications-ntfy')} className="scroll-mt-24 space-y-3">
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">ntfy</h4>
+                <p className="text-xs text-muted max-w-2xl">
+                    Push to an ntfy topic for request lifecycle + admin pending (self-hosted or ntfy.sh).
+                </p>
+                <SettingsToggleRow
+                    title="Enable ntfy"
+                    description="Send selected events to your ntfy topic."
+                    checked={ntfyEnabled}
+                    onChange={setNtfyEnabled}
+                    border={false}
+                />
+                <div className={ntfyEnabled ? 'space-y-3' : 'space-y-3 opacity-50 pointer-events-none'}>
+                    <div>
+                        <SettingFieldLabel htmlFor="ntfyServerUrl">Server URL</SettingFieldLabel>
+                        <input
+                            id="ntfyServerUrl"
+                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            placeholder="https://ntfy.sh"
+                            value={ntfyServerUrl}
+                            onChange={(e) => setNtfyServerUrl(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <SettingFieldLabel htmlFor="ntfyTopic">Topic</SettingFieldLabel>
+                        <input
+                            id="ntfyTopic"
+                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            placeholder="server-manager-portal"
+                            value={ntfyTopic}
+                            onChange={(e) => setNtfyTopic(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <SettingFieldLabel htmlFor="ntfyToken">Access token (optional)</SettingFieldLabel>
+                        <input
+                            id="ntfyToken"
+                            type="password"
+                            autoComplete="off"
+                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            value={ntfyToken}
+                            onChange={(e) => setNtfyToken(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <SettingFieldLabel htmlFor="ntfyPriority">Priority (1–5)</SettingFieldLabel>
+                        <input
+                            id="ntfyPriority"
+                            type="number"
+                            min={1}
+                            max={5}
+                            className="w-28 rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            value={ntfyPriority}
+                            onChange={(e) => setNtfyPriority(Math.max(1, Math.min(5, Number(e.target.value) || 3)))}
+                        />
+                    </div>
+                    <div className="flex flex-wrap gap-3 pt-1">
+                        {Object.keys(eventLabels).map((key) => (
+                            <label key={key} className="inline-flex items-center gap-2 text-sm text-text cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={ntfyEvents?.[key] !== false}
+                                    onChange={(e) => setNtfyEvents({ ...ntfyEvents, [key]: e.target.checked })}
+                                    className="rounded border-border"
+                                />
+                                {eventLabels[key]}
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div id={getSettingsSectionElementId('notifications-webhook')} className="scroll-mt-24 space-y-3">
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Generic webhook</h4>
+                <p className="text-xs text-muted max-w-2xl">
+                    POST JSON to any HTTPS endpoint. Optional body template under Notification templates (must be valid JSON).
+                </p>
+                <SettingsToggleRow
+                    title="Enable webhook"
+                    description="Send selected events as JSON POST requests."
+                    checked={webhookEnabled}
+                    onChange={setWebhookEnabled}
+                    border={false}
+                />
+                <div className={webhookEnabled ? 'space-y-3' : 'space-y-3 opacity-50 pointer-events-none'}>
+                    <div>
+                        <SettingFieldLabel htmlFor="webhookUrl">Webhook URL</SettingFieldLabel>
+                        <input
+                            id="webhookUrl"
+                            type="password"
+                            autoComplete="off"
+                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            placeholder="https://example.com/hooks/portal"
+                            value={webhookUrl}
+                            onChange={(e) => setWebhookUrl(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <SettingFieldLabel htmlFor="webhookHeadersJson">Extra headers (JSON object, optional)</SettingFieldLabel>
+                        <textarea
+                            id="webhookHeadersJson"
+                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm min-h-[72px]"
+                            placeholder={'{"Authorization":"Bearer …"}'}
+                            value={webhookHeadersJson}
+                            onChange={(e) => setWebhookHeadersJson(e.target.value)}
+                        />
+                    </div>
+                    <div className="flex flex-wrap gap-3 pt-1">
+                        {Object.keys(eventLabels).map((key) => (
+                            <label key={key} className="inline-flex items-center gap-2 text-sm text-text cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={!!webhookEvents?.[key]}
+                                    onChange={(e) => setWebhookEvents({ ...webhookEvents, [key]: e.target.checked })}
+                                    className="rounded border-border"
+                                />
+                                {eventLabels[key]}
+                            </label>
+                        ))}
+                    </div>
+                    <SettingHint>
+                        Defaults: Available on, other events off. Use templates → webhook JSON body to customize the payload.
+                    </SettingHint>
+                </div>
+            </div>
+
             <NotificationTemplatesPanel
                 notificationTemplates={notificationTemplates}
                 setNotificationTemplates={setNotificationTemplates}
@@ -374,6 +563,8 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         ['webPush', 'Web Push'],
                         ['email', 'Email'],
                         ['discord', 'Discord'],
+                        ['ntfy', 'ntfy'],
+                        ['webhook', 'Webhook'],
                     ] as const).map(([key, label]) => (
                         <label key={key} className="inline-flex items-center gap-2 text-sm text-text cursor-pointer">
                             <input

@@ -508,6 +508,20 @@ export const SettingsDashboard: React.FC = () => {
     const [notificationTemplateDefaults, setNotificationTemplateDefaults] = useState<Record<string, Record<string, string>>>({});
     const [notificationTemplateEvents, setNotificationTemplateEvents] = useState<string[]>([]);
     const [notificationTemplateFields, setNotificationTemplateFields] = useState<Record<string, string[]>>({});
+    const [ntfyEnabled, setNtfyEnabled] = useState(false);
+    const [ntfyServerUrl, setNtfyServerUrl] = useState('');
+    const [ntfyTopic, setNtfyTopic] = useState('');
+    const [ntfyToken, setNtfyToken] = useState('');
+    const [ntfyPriority, setNtfyPriority] = useState(3);
+    const [ntfyEvents, setNtfyEvents] = useState<Record<string, boolean>>({
+        available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
+    });
+    const [webhookEnabled, setWebhookEnabled] = useState(false);
+    const [webhookUrl, setWebhookUrl] = useState('');
+    const [webhookHeadersJson, setWebhookHeadersJson] = useState('');
+    const [webhookEvents, setWebhookEvents] = useState<Record<string, boolean>>({
+        available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
+    });
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
     const [tautulliConfigured, setTautulliConfigured] = useState(false);
     const [mediaAutomation, setMediaAutomation] = useState<MediaAutomationSettingsConfig>(DEFAULT_MEDIA_AUTOMATION_SETTINGS);
@@ -1265,6 +1279,34 @@ export const SettingsDashboard: React.FC = () => {
                     ? initialSettings.notificationTemplateFields
                     : {},
             );
+            setNtfyEnabled(!!initialSettings.ntfyEnabled);
+            setNtfyServerUrl(initialSettings.ntfyServerUrl || '');
+            setNtfyTopic(initialSettings.ntfyTopic || '');
+            setNtfyToken(initialSettings.ntfyToken || '');
+            setNtfyPriority(Math.max(1, Math.min(5, Number(initialSettings.ntfyPriority) || 3)));
+            setNtfyEvents(
+                initialSettings.ntfyEvents && typeof initialSettings.ntfyEvents === 'object'
+                    ? {
+                        available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
+                        ...initialSettings.ntfyEvents,
+                    }
+                    : {
+                        available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
+                    },
+            );
+            setWebhookEnabled(!!initialSettings.webhookEnabled);
+            setWebhookUrl(initialSettings.webhookUrl || '');
+            setWebhookHeadersJson(initialSettings.webhookHeadersJson || '');
+            setWebhookEvents(
+                initialSettings.webhookEvents && typeof initialSettings.webhookEvents === 'object'
+                    ? {
+                        available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
+                        ...initialSettings.webhookEvents,
+                    }
+                    : {
+                        available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
+                    },
+            );
             if (initialSettings.watchHistorySource !== undefined) {
                 setWatchHistorySource(initialSettings.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex');
             }
@@ -1692,6 +1734,16 @@ export const SettingsDashboard: React.FC = () => {
             requestAvailableDiscordWebhookUrl,
             webPushEnabled,
             notificationTemplates,
+            ntfyEnabled,
+            ntfyServerUrl,
+            ntfyTopic,
+            ntfyToken,
+            ntfyPriority,
+            ntfyEvents,
+            webhookEnabled,
+            webhookUrl,
+            webhookHeadersJson,
+            webhookEvents,
             watchHistorySource,
             mediaAutomation: {
                 ...mediaAutomation,
@@ -2240,6 +2292,26 @@ export const SettingsDashboard: React.FC = () => {
                             notificationTemplateDefaults={notificationTemplateDefaults}
                             notificationTemplateEvents={notificationTemplateEvents}
                             notificationTemplateFields={notificationTemplateFields}
+                            ntfyEnabled={ntfyEnabled}
+                            setNtfyEnabled={setNtfyEnabled}
+                            ntfyServerUrl={ntfyServerUrl}
+                            setNtfyServerUrl={setNtfyServerUrl}
+                            ntfyTopic={ntfyTopic}
+                            setNtfyTopic={setNtfyTopic}
+                            ntfyToken={ntfyToken}
+                            setNtfyToken={setNtfyToken}
+                            ntfyPriority={ntfyPriority}
+                            setNtfyPriority={setNtfyPriority}
+                            ntfyEvents={ntfyEvents}
+                            setNtfyEvents={setNtfyEvents}
+                            webhookEnabled={webhookEnabled}
+                            setWebhookEnabled={setWebhookEnabled}
+                            webhookUrl={webhookUrl}
+                            setWebhookUrl={setWebhookUrl}
+                            webhookHeadersJson={webhookHeadersJson}
+                            setWebhookHeadersJson={setWebhookHeadersJson}
+                            webhookEvents={webhookEvents}
+                            setWebhookEvents={setWebhookEvents}
                             onOpenGotify={() => setActiveTab('gotify')}
                             onOpenSmtp={() => setActiveTab('smtp')}
                             addToast={addToast}
