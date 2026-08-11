@@ -41,7 +41,9 @@ def _as_bool(value: Any, default: bool = False) -> bool:
 def _resolve_paths(config: dict) -> dict[str, Path]:
     root = Path(str(config.get("dataDir") or config.get("data_dir") or ".")).resolve()
     preview = root / "preview"
+    backups = root / "backups"
     preview.mkdir(parents=True, exist_ok=True)
+    backups.mkdir(parents=True, exist_ok=True)
     log_path = Path(str(config.get("logPath") or config.get("log_path") or (root / "overlaid_log.json")))
     assets_dir = Path(
         str(
@@ -55,10 +57,106 @@ def _resolve_paths(config: dict) -> dict[str, Path]:
     return {
         "root": root,
         "preview": preview,
+        "backups": backups,
         "log": log_path,
         "overlay": overlay_path,
         "assets": assets_dir,
     }
+
+
+def _backup_dir(paths: dict, rating_key: str) -> Path:
+    return paths["backups"] / str(rating_key)
+
+
+def _save_original_backups(
+    paths: dict,
+    rating_key: str,
+    show_img: Image.Image,
+    season_img: Image.Image | None,
+    meta: dict | None = None,
+) -> dict:
+    """
+    Persist pre-overlay posters once. Never overwrite an existing backup —
+    that would replace originals with already-overlaid art on a later run.
+    """
+    folder = _backup_dir(paths, rating_key)
+    show_path = folder / "show.png"
+    season_path = folder / "season.png"
+    meta_path = folder / "meta.json"
+    saved = {"show": False, "season": False, "dir": str(folder)}
+
+    folder.mkdir(parents=True, exist_ok=True)
+    if not show_path.exists():
+        show_img.convert("RGBA").save(show_path)
+        saved["show"] = True
+    if season_img is not None and not season_path.exists():
+        season_img.convert("RGBA").save(season_path)
+        saved["season"] = True
+    if meta and not meta_path.exists():
+        meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return saved
+
+
+def _clear_backup_dir(paths: dict, rating_key: str) -> None:
+    folder = _backup_dir(paths, rating_key)
+    if not folder.exists():
+        return
+    for child in folder.iterdir():
+        try:
+            child.unlink()
+        except Exception:
+            pass
+    try:
+        folder.rmdir()
+    except Exception:
+        pass
+
+
+def _restore_from_backup(show, paths: dict, rating_key: str, progress: ProgressFn | None = None) -> bool:
+    """Upload saved originals back to Plex. Returns True if any backup file was applied."""
+    folder = _backup_dir(paths, rating_key)
+    show_path = folder / "show.png"
+    season_path = folder / "season.png"
+    restored_any = False
+
+    if show_path.exists():
+        try:
+            show.uploadPoster(filepath=str(show_path))
+            restored_any = True
+            _progress(progress, f"Restored show poster from backup: {show.title}")
+        except Exception as exc:
+            _progress(progress, f"Backup show restore failed for {show.title}: {exc}")
+
+    latest = _latest_season(show)
+    # Prefer the season index recorded when we backed up (latest may have changed).
+    season_index = None
+    meta_path = folder / "meta.json"
+    if meta_path.exists():
+        try:
+            season_index = json.loads(meta_path.read_text(encoding="utf-8")).get("seasonIndex")
+        except Exception:
+            season_index = None
+    season_item = latest
+    if season_index is not None:
+        try:
+            for season in show.seasons():
+                if season.index == season_index:
+                    season_item = season
+                    break
+        except Exception:
+            pass
+
+    if season_path.exists() and season_item is not None:
+        try:
+            season_item.uploadPoster(filepath=str(season_path))
+            restored_any = True
+            _progress(progress, f"Restored season poster from backup: {show.title}")
+        except Exception as exc:
+            _progress(progress, f"Backup season restore failed for {show.title}: {exc}")
+
+    if restored_any:
+        _clear_backup_dir(paths, rating_key)
+    return restored_any
 
 
 def _load_log(log_path: Path) -> dict:
@@ -258,12 +356,31 @@ def process_show_overlay(plex: PlexServer, show, config: dict, paths: dict, prev
     if show_poster is None:
         raise RuntimeError(f"Failed to download show poster for {show.title}")
 
-    result = _apply_overlay(show_poster, overlay_img)
-    season_result = None
+    season_poster = None
     if getattr(latest, "thumb", None):
         season_poster = _download_poster(plex, latest.thumb)
-        if season_poster is not None:
-            season_result = _apply_overlay(season_poster, overlay_img)
+
+    # Capture originals before compositing (live runs only; never overwrite existing backups).
+    if not preview_mode:
+        saved = _save_original_backups(
+            paths,
+            str(show.ratingKey),
+            show_poster,
+            season_poster,
+            meta={
+                "title": show.title,
+                "seasonIndex": latest.index,
+                "ratingKey": str(show.ratingKey),
+                "savedAt": datetime.now().isoformat(),
+            },
+        )
+        if saved["show"] or saved["season"]:
+            _progress(progress, f"Backed up original poster(s): {show.title}")
+
+    result = _apply_overlay(show_poster.copy(), overlay_img)
+    season_result = None
+    if season_poster is not None:
+        season_result = _apply_overlay(season_poster.copy(), overlay_img)
 
     safe_title = _sanitize_filename(show.title)
     now = datetime.now()
@@ -273,6 +390,7 @@ def process_show_overlay(plex: PlexServer, show, config: dict, paths: dict, prev
         "preview_only": bool(preview_mode),
         "seasonIndex": latest.index,
         "presetId": str(config.get("overlayPresetId") or "new-season"),
+        "hasBackup": (_backup_dir(paths, str(show.ratingKey)) / "show.png").exists(),
     }
 
     if preview_mode:
@@ -306,13 +424,24 @@ def process_show_overlay(plex: PlexServer, show, config: dict, paths: dict, prev
     return entry
 
 
-def remove_show_overlay(show, preview_mode: bool, progress: ProgressFn | None = None) -> bool:
-    latest = _latest_season(show)
+def remove_show_overlay(show, preview_mode: bool, progress: ProgressFn | None = None, paths: dict | None = None) -> bool:
+    rating_key = str(getattr(show, "ratingKey", "") or "")
     if preview_mode:
         _progress(progress, f"[Preview] Would remove overlay: {show.title}")
         return True
     _progress(progress, f"Removing overlay: {show.title}")
+
+    restored = False
+    if paths is not None and rating_key:
+        restored = _restore_from_backup(show, paths, rating_key, progress)
+
+    if restored:
+        return True
+
+    # Fallback when no on-disk backup (e.g. migrated logs from the standalone tool).
+    _progress(progress, f"No backup for {show.title} — falling back to Plex poster list")
     ok = _reset_poster(show)
+    latest = _latest_season(show)
     if latest:
         _reset_poster(latest)
     return ok
@@ -380,7 +509,7 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
                     del log[key]
                     removed += 1
                     continue
-            if remove_show_overlay(show, preview_mode, progress):
+            if remove_show_overlay(show, preview_mode, progress, paths=paths):
                 del log[key]
                 removed += 1
         except Exception as exc:
@@ -450,6 +579,7 @@ def list_status(config: dict) -> dict:
         "overlayPath": str(paths["overlay"]),
         "logPath": str(paths["log"]),
         "previewDir": str(paths["preview"]),
+        "backupsDir": str(paths["backups"]),
         "logCount": len(log),
         "shows": shows,
     }
@@ -464,11 +594,18 @@ def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None)
         raise ValueError("ratingKey is required")
     show = plex.fetchItem(f"/library/metadata/{key}")
     # Explicit resets always clear live Plex art (not preview-only).
-    remove_show_overlay(show, False, progress)
+    had_backup = (_backup_dir(paths, key) / "show.png").exists()
+    remove_show_overlay(show, False, progress, paths=paths)
+    _clear_backup_dir(paths, key)
     if key in log:
         del log[key]
         _save_log(paths["log"], log)
-    return {"ok": True, "ratingKey": key, "title": getattr(show, "title", key)}
+    return {
+        "ok": True,
+        "ratingKey": key,
+        "title": getattr(show, "title", key),
+        "restoredFromBackup": had_backup,
+    }
 
 
 def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
@@ -478,19 +615,24 @@ def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
     log = _load_log(paths["log"])
     keys = list(log.keys())
     removed = 0
+    restored_from_backup = 0
     failed: list[str] = []
     _progress(progress, f"Resetting {len(keys)} logged overlay(s)…")
 
     for key in keys:
         entry = log.get(key) or {}
         title = entry.get("title") or key
+        had_backup = (_backup_dir(paths, key) / "show.png").exists()
         try:
             show = plex.fetchItem(f"/library/metadata/{key}")
-            remove_show_overlay(show, False, progress)
+            remove_show_overlay(show, False, progress, paths=paths)
+            if had_backup:
+                restored_from_backup += 1
             removed += 1
         except Exception as exc:
             failed.append(f"{title}: {exc}")
             _progress(progress, f"Failed to reset {title}: {exc}")
+        _clear_backup_dir(paths, key)
         if key in log:
             del log[key]
 
@@ -499,11 +641,16 @@ def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
         "ok": True,
         "requested": len(keys),
         "removed": removed,
+        "restoredFromBackup": restored_from_backup,
         "failed": failed,
         "remaining": len(log),
+        "backupsDir": str(paths["backups"]),
         "finishedAt": datetime.now().isoformat(),
     }
-    _progress(progress, f"Reset complete — cleared {removed}/{len(keys)}")
+    _progress(
+        progress,
+        f"Reset complete — cleared {removed}/{len(keys)} ({restored_from_backup} from file backups)",
+    )
     return summary
 
 

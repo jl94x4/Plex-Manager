@@ -6,7 +6,7 @@ Phase 1 of SMP Overlays — ports [plex-new-season-overlay](https://github.com/B
 
 - `cli.py` / `core.py` — Python worker (Pillow + plexapi)
 - `assets/presets/new-season.png` — default banner
-- Runtime data: `config/overlays/` (`config.json`, `overlaid_log.json`, `preview/`)
+- Runtime data: `config/overlays/` (`config.json`, `overlaid_log.json`, `preview/`, `backups/<ratingKey>/`)
 
 ## Setup
 

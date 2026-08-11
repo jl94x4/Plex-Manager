@@ -38,6 +38,8 @@ ENV FORCE_SECURE_COOKIES=false
 ENV COLLEXIONS_APP_DIR=/app/collexions
 ENV COLLEXIONS_EMBEDDED_PORT=15755
 ENV POSTER_SETS_APP_DIR=/app/poster-sets
+ENV OVERLAYS_APP_DIR=/app/overlays
+ENV OVERLAYS_PYTHON=/opt/poster-sets-venv/bin/python
 
 # ffmpeg supplies both ffmpeg and ffprobe. Mesa provides AMD VAAPI; Intel media /
 # QSV runtime libs are installed when Bookworm publishes them for the arch.
@@ -145,10 +147,18 @@ RUN python3 -m venv /opt/poster-sets-venv \
     && /opt/poster-sets-venv/bin/pip install --no-cache-dir -r /app/poster-sets/requirements.txt \
     && chown -R node:node /app/poster-sets /opt/poster-sets-venv
 
+# Overlays headless worker (New Season banners) — shares poster-sets venv for Python deps.
+COPY overlays/requirements.txt /app/overlays/requirements.txt
+COPY overlays/cli.py /app/overlays/cli.py
+COPY overlays/core.py /app/overlays/core.py
+COPY overlays/assets /app/overlays/assets
+RUN /opt/poster-sets-venv/bin/pip install --no-cache-dir -r /app/overlays/requirements.txt \
+    && chown -R node:node /app/overlays
+
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-RUN mkdir -p config/media-automation/work config/poster-sets backup \
+RUN mkdir -p config/media-automation/work config/poster-sets config/overlays backup \
     && chown -R node:node /app
 
 EXPOSE 2121
