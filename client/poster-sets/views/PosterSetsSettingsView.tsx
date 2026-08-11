@@ -364,9 +364,17 @@ export const PosterSetsSettingsView: React.FC = () => {
         media: 'all',
         source: 'full',
         skipCached: true,
-        followedPrefetchOnly: false,
+        // Mirror the persisted prioritize setting so this switch survives Save / remount.
+        followedPrefetchOnly: configDraft.tpdbPrioritizeFollowedCreators !== false,
     });
     const [activityFilter, setActivityFilter] = useState<'all' | 'cache' | 'prefetch' | 'error' | 'followed'>('all');
+
+    useEffect(() => {
+        setWarmScope((prev) => {
+            const next = configDraft.tpdbPrioritizeFollowedCreators !== false;
+            return prev.followedPrefetchOnly === next ? prev : { ...prev, followedPrefetchOnly: next };
+        });
+    }, [configDraft.tpdbPrioritizeFollowedCreators]);
 
     useEffect(() => {
         if (tab !== 'settings') return undefined;
@@ -830,9 +838,37 @@ export const PosterSetsSettingsView: React.FC = () => {
                                             />
                                             <SettingsToggleRow
                                                 title="Prefetch followed creators first"
-                                                description="When Prefetch is on, hydrate sets from Creators you follow before everyone else for this build — others still queue after."
+                                                description="When Prefetch is on, hydrate sets from Creators you follow before everyone else — others still queue after. Saves immediately."
                                                 checked={warmScope.followedPrefetchOnly}
-                                                onChange={(next) => setWarmScope((prev) => ({ ...prev, followedPrefetchOnly: next }))}
+                                                onChange={(next) => {
+                                                    setWarmScope((prev) => ({ ...prev, followedPrefetchOnly: next }));
+                                                    setConfigDraft((prev) => ({
+                                                        ...prev,
+                                                        tpdbPrioritizeFollowedCreators: next,
+                                                    }));
+                                                    void posterSetsApi.saveConfig({ tpdbPrioritizeFollowedCreators: next })
+                                                        .then((response) => {
+                                                            if (response?.config) {
+                                                                setConfigDraft((prev) => ({
+                                                                    ...prev,
+                                                                    ...response.config,
+                                                                    token: response.config.hasToken ? '********' : (prev.token || ''),
+                                                                    tpdb_password: response.config.hasTpdbPassword
+                                                                        ? '********'
+                                                                        : (prev.tpdb_password || ''),
+                                                                    tpdbPrioritizeFollowedCreators: next,
+                                                                }));
+                                                            }
+                                                        })
+                                                        .catch((error) => {
+                                                            toast(
+                                                                error instanceof Error
+                                                                    ? error.message
+                                                                    : 'Failed to save followed-creators preference',
+                                                                'error',
+                                                            );
+                                                        });
+                                                }}
                                                 border={false}
                                                 className="!py-2.5"
                                             />
