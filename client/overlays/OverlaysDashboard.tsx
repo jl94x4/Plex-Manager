@@ -27,9 +27,11 @@ import {
 import { CustomSelect, SettingsToggleRow, StyledCheckbox } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
 import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
+import { useDiscoverI18n } from '../discovery/i18n';
 import { overlaysApi, type OverlaysConfig } from './api';
 
 type TabId = 'overview' | 'shows' | 'settings' | 'import' | 'activity';
+type ActionId = 'refresh' | 'stop' | 'preview' | 'resetAll' | 'run' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog';
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover disabled:opacity-50';
@@ -47,6 +49,7 @@ const DEFAULT_CONFIG: OverlaysConfig = {
 };
 
 export const OverlaysDashboard: React.FC = () => {
+    const { t } = useDiscoverI18n();
     const [tab, setTab] = useState<TabId>('overview');
     const [status, setStatus] = useState<any>(null);
     const [configDraft, setConfigDraft] = useState<OverlaysConfig>(DEFAULT_CONFIG);
@@ -55,7 +58,7 @@ export const OverlaysDashboard: React.FC = () => {
     const [reconcile, setReconcile] = useState<any>(null);
     const [importText, setImportText] = useState('');
     const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
-    const [busy, setBusy] = useState<string | null>(null);
+    const [busy, setBusy] = useState<ActionId | null>(null);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const wasRunningRef = React.useRef(false);
 
@@ -75,8 +78,8 @@ export const OverlaysDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        void refresh().catch((error) => toast(error.message || 'Failed to load Overlays', 'error'));
-    }, [refresh, toast]);
+        void refresh().catch((error) => toast(error.message || t('overlays.loadFailed'), 'error'));
+    }, [refresh, toast, t]);
 
     useEffect(() => {
         if (!status?.running) return undefined;
@@ -92,28 +95,32 @@ export const OverlaysDashboard: React.FC = () => {
             if (status?.lastOutcome === 'cancelled') {
                 // Stop action already toasts
             } else if (status?.lastError || status?.lastOutcome === 'error') {
-                toast(status.lastError || 'Overlays job failed', 'error');
+                toast(status.lastError || t('overlays.jobFailed'), 'error');
             } else if (status?.lastOutcome === 'ok') {
                 const s = status?.lastRunSummary;
                 toast(
                     s
-                        ? `Finished — +${s.added ?? 0} / −${s.removed ?? 0}${s.previewMode ? ' (preview)' : ''}`
-                        : 'Overlays job finished',
+                        ? t('overlays.jobFinishedSummary', {
+                            added: s.added ?? 0,
+                            removed: s.removed ?? 0,
+                            preview: s.previewMode ? t('overlays.overview.previewSuffix') : '',
+                        })
+                        : t('overlays.jobFinished'),
                 );
             }
             void overlaysApi.shows().then((showsRes) => setShows(showsRes.shows || [])).catch(() => {});
         }
         wasRunningRef.current = running;
-    }, [status?.running, status?.lastError, status?.lastOutcome, status?.lastRunSummary, toast]);
+    }, [status?.running, status?.lastError, status?.lastOutcome, status?.lastRunSummary, toast, t]);
 
     const loadSections = useCallback(async () => {
         try {
             const res = await overlaysApi.sections();
             setSections(res.sections || []);
         } catch (error) {
-            toast(error instanceof Error ? error.message : 'Failed to list TV sections', 'error');
+            toast(error instanceof Error ? error.message : t('overlays.sectionsLoadFailed'), 'error');
         }
-    }, [toast]);
+    }, [toast, t]);
 
     const summary = status?.lastRunSummary || configDraft.lastRunSummary || null;
     const activity = status?.activity || [];
@@ -122,12 +129,12 @@ export const OverlaysDashboard: React.FC = () => {
     const jobRunning = !!status?.running;
 
     const tabs = useMemo(() => ([
-        { id: 'overview' as const, label: 'Overview', icon: Layers },
-        { id: 'shows' as const, label: `Shows (${showCount})`, icon: List },
-        { id: 'settings' as const, label: 'Settings', icon: Settings2 },
-        { id: 'import' as const, label: 'Import', icon: Upload },
-        { id: 'activity' as const, label: 'Activity', icon: Activity },
-    ]), [showCount]);
+        { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
+        { id: 'shows' as const, label: t('overlays.tabs.shows', { count: showCount }), icon: List },
+        { id: 'settings' as const, label: t('overlays.tabs.settings'), icon: Settings2 },
+        { id: 'import' as const, label: t('overlays.tabs.import'), icon: Upload },
+        { id: 'activity' as const, label: t('overlays.tabs.activity'), icon: Activity },
+    ]), [showCount, t]);
 
     const presetOptions = useMemo(
         () => (status?.presets || [{ id: 'new-season' }]).map((preset: { id: string }) => ({
@@ -138,32 +145,36 @@ export const OverlaysDashboard: React.FC = () => {
     );
 
     const importModeOptions = useMemo(() => ([
-        { value: 'merge', label: 'Merge' },
-        { value: 'replace', label: 'Replace' },
-    ]), []);
+        { value: 'merge', label: t('overlays.import.modeMerge') },
+        { value: 'replace', label: t('overlays.import.modeReplace') },
+    ]), [t]);
 
-    const runAction = async (label: string, fn: () => Promise<unknown>, { startedToast = false } = {}) => {
-        setBusy(label);
+    const actionLabel = (id: ActionId) => t(`overlays.actionLabels.${id}`);
+
+    const runAction = async (id: ActionId, fn: () => Promise<unknown>, { startedToast = false } = {}) => {
+        setBusy(id);
+        const label = actionLabel(id);
         try {
             await fn();
             await refresh();
-            toast(startedToast ? `${label} started` : `${label} complete`);
+            toast(startedToast ? t('overlays.actionStarted', { action: label }) : t('overlays.actionComplete', { action: label }));
         } catch (error) {
-            toast(error instanceof Error ? error.message : `${label} failed`, 'error');
+            toast(error instanceof Error ? error.message : t('overlays.actionFailed', { action: label }), 'error');
         } finally {
             setBusy(null);
         }
     };
 
-    const startBackgroundJob = (label: string, fn: () => Promise<unknown>) => {
+    const startBackgroundJob = (id: ActionId, fn: () => Promise<unknown>) => {
         setTab('activity');
-        setBusy(label);
+        setBusy(id);
+        const label = actionLabel(id);
         void (async () => {
             try {
                 await fn();
-                toast(`${label} started`);
+                toast(t('overlays.actionStarted', { action: label }));
             } catch (error) {
-                toast(error instanceof Error ? error.message : `${label} failed`, 'error');
+                toast(error instanceof Error ? error.message : t('overlays.actionFailed', { action: label }), 'error');
             } finally {
                 setBusy(null);
             }
@@ -171,26 +182,26 @@ export const OverlaysDashboard: React.FC = () => {
         })();
     };
 
-    const saveSettings = () => runAction('Save settings', async () => {
+    const saveSettings = () => runAction('saveSettings', async () => {
         await overlaysApi.saveConfig(configDraft);
     });
 
-    const canResetAll = showCount > 0 && !jobRunning && busy !== 'Reset all';
+    const canResetAll = showCount > 0 && !jobRunning && busy !== 'resetAll';
 
     const resetAll = () => {
         void (async () => {
             const count = showCount;
             const ok = await askConfirm(
-                `Reset all ${count} logged New Season overlay(s)? This restores original posters from config/overlays/backups/ when available (falls back to Plex metadata), then clears the log.`,
+                t('overlays.resetAllConfirm', { count }),
                 {
-                    title: 'Reset all overlays?',
-                    confirmLabel: 'Reset all',
-                    cancelLabel: 'Cancel',
+                    title: t('overlays.resetAllTitle'),
+                    confirmLabel: t('overlays.actions.resetAll'),
+                    cancelLabel: t('common.cancel'),
                     danger: true,
                 },
             );
             if (!ok) return;
-            await runAction('Reset all', () => overlaysApi.resetAll());
+            await runAction('resetAll', () => overlaysApi.resetAll());
         })();
     };
 
@@ -200,9 +211,9 @@ export const OverlaysDashboard: React.FC = () => {
 
             <DashboardHero
                 accent="plex"
-                eyebrow="Overlays"
-                title="New Season banners"
-                description="TV show season banners (parity with the standalone plex-new-season-overlay tool). Uses Media Player Plex credentials. Skip shows that already have a Kometa Overlay label by default."
+                eyebrow={t('overlays.eyebrow')}
+                title={t('overlays.title')}
+                description={t('overlays.description')}
                 icon={<Layers className="h-3.5 w-3.5" />}
                 secondaryBlob
                 actions={(
@@ -211,25 +222,25 @@ export const OverlaysDashboard: React.FC = () => {
                             type="button"
                             className={buttonClass}
                             disabled={busy !== null}
-                            onClick={() => void runAction('Refresh', refresh)}
+                            onClick={() => void runAction('refresh', refresh)}
                         >
-                            <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> Refresh
+                            <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> {t('overlays.actions.refresh')}
                         </button>
                         <button
                             type="button"
                             className={buttonClass}
-                            disabled={busy === 'Stop' || !jobRunning}
-                            onClick={() => void runAction('Stop', () => overlaysApi.stop())}
+                            disabled={busy === 'stop' || !jobRunning}
+                            onClick={() => void runAction('stop', () => overlaysApi.stop())}
                         >
-                            <Square className="h-4 w-4" /> Stop
+                            <Square className="h-4 w-4" /> {t('overlays.actions.stop')}
                         </button>
                         <button
                             type="button"
                             className={buttonClass}
                             disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('Preview', () => overlaysApi.preview())}
+                            onClick={() => startBackgroundJob('preview', () => overlaysApi.preview())}
                         >
-                            Preview
+                            {t('overlays.actions.preview')}
                         </button>
                         <button
                             type="button"
@@ -237,16 +248,16 @@ export const OverlaysDashboard: React.FC = () => {
                             disabled={!canResetAll}
                             onClick={resetAll}
                         >
-                            <RotateCcw className="h-4 w-4" /> Reset all
+                            <RotateCcw className="h-4 w-4" /> {t('overlays.actions.resetAll')}
                         </button>
                         <button
                             type="button"
                             className={primaryButtonClass}
                             disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('Run', () => overlaysApi.run({ preview: false }))}
+                            onClick={() => startBackgroundJob('run', () => overlaysApi.run({ preview: false }))}
                         >
-                            {busy === 'Run' || jobRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                            Run now
+                            {busy === 'run' || jobRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                            {t('overlays.actions.runNow')}
                         </button>
                     </>
                 )}
@@ -259,26 +270,26 @@ export const OverlaysDashboard: React.FC = () => {
                             {workerReady
                                 ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
                                 : <XCircle className="h-3.5 w-3.5 text-rose-300" />}
-                            <span>Worker</span>
+                            <span>{t('overlays.status.worker')}</span>
                         </div>
                         <p className={`truncate text-sm font-semibold sm:text-[15px] ${workerReady ? 'text-text' : 'text-amber-100'}`}>
-                            {workerReady ? 'Ready' : 'Missing'}
+                            {workerReady ? t('overlays.status.ready') : t('overlays.status.missing')}
                         </p>
                     </div>
                     <div className="flex min-w-0 flex-col items-center gap-1 px-2 py-2.5 text-center sm:items-start sm:px-3 sm:py-3 sm:text-left">
                         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
                             <Layers className="h-3.5 w-3.5 text-sky-300" />
-                            <span>Logged</span>
+                            <span>{t('overlays.status.logged')}</span>
                         </div>
                         <p className="truncate text-sm font-semibold tabular-nums sm:text-[15px]">{status?.logCount ?? 0}</p>
                     </div>
                     <div className="flex min-w-0 flex-col items-center gap-1 px-2 py-2.5 text-center sm:items-start sm:px-3 sm:py-3 sm:text-left">
                         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
                             <Clock3 className="h-3.5 w-3.5 text-plex" />
-                            <span>Schedule</span>
+                            <span>{t('overlays.status.schedule')}</span>
                         </div>
                         <p className="truncate text-sm font-semibold sm:text-[15px]">
-                            {configDraft.scheduleHours ? `Every ${configDraft.scheduleHours}h` : 'Disabled'}
+                            {configDraft.scheduleHours ? t('overlays.status.everyHours', { hours: configDraft.scheduleHours }) : t('overlays.status.disabled')}
                         </p>
                     </div>
                 </div>
@@ -288,10 +299,10 @@ export const OverlaysDashboard: React.FC = () => {
                 <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-100">
                     <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
                     <div>
-                        <p className="font-semibold">Overlays Python worker missing</p>
+                        <p className="font-semibold">{t('overlays.workerMissingTitle')}</p>
                         <p className="text-sm text-amber-100/80">
-                            Expected <code>overlays/cli.py</code> in the container or repo root. On Docker, rebuild the image so the overlays worker is bundled; locally run{' '}
-                            <code>pip install -r overlays/requirements.txt</code> (or reuse the Poster Sets venv).
+                            {t('overlays.workerMissingBeforeCli')} <code>overlays/cli.py</code> {t('overlays.workerMissingAfterCli')}{' '}
+                            <code>pip install -r overlays/requirements.txt</code> {t('overlays.workerMissingAfterCommand')}
                         </p>
                     </div>
                 </div>
@@ -315,33 +326,37 @@ export const OverlaysDashboard: React.FC = () => {
                 <div className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-3">
                         <DashboardStatCard
-                            label="Logged overlays"
+                            label={t('overlays.overview.loggedOverlays')}
                             value={status?.logCount ?? 0}
                             icon={<Layers className="h-4 w-4 text-sky-300" />}
                             glow="sky"
                         />
                         <DashboardStatCard
-                            label="Last run"
-                            value={status?.lastRunAt ? new Date(status.lastRunAt).toLocaleString() : 'Never'}
-                            hint={summary ? `+${String(summary.added ?? 0)} / −${String(summary.removed ?? 0)}${summary.previewMode ? ' (preview)' : ''}` : undefined}
+                            label={t('overlays.overview.lastRun')}
+                            value={status?.lastRunAt ? new Date(status.lastRunAt).toLocaleString() : t('overlays.overview.never')}
+                            hint={summary ? t('overlays.overview.lastRunHint', {
+                                added: String(summary.added ?? 0),
+                                removed: String(summary.removed ?? 0),
+                                preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
+                            }) : undefined}
                             icon={<Clock3 className="h-4 w-4 text-plex" />}
                             glow="plex"
                             valueClassName="text-lg md:text-xl"
                         />
                         <DashboardStatCard
-                            label="New season window"
-                            value={`${configDraft.newSeasonDays || 21} days`}
-                            hint={`Preset: ${configDraft.overlayPresetId || 'new-season'}`}
+                            label={t('overlays.overview.newSeasonWindow')}
+                            value={t('overlays.overview.daysValue', { count: configDraft.newSeasonDays || 21 })}
+                            hint={t('overlays.overview.presetHint', { preset: configDraft.overlayPresetId || 'new-season' })}
                             icon={<Settings2 className="h-4 w-4 text-amber-300" />}
                             glow="amber"
                             valueClassName="text-lg md:text-xl"
                         />
                     </div>
 
-                    <DashboardPanel title="Quick configuration" subtitle="Adjust window and schedule, then scan or run.">
+                    <DashboardPanel title={t('overlays.quick.title')} subtitle={t('overlays.quick.subtitle')}>
                         <div className="flex flex-wrap items-end gap-3">
                             <label className="min-w-[160px] flex-1">
-                                <span className={fieldLabelClass}>New season window (days)</span>
+                                <span className={fieldLabelClass}>{t('overlays.fields.newSeasonWindowDays')}</span>
                                 <input
                                     type="number"
                                     min={1}
@@ -355,7 +370,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 />
                             </label>
                             <label className="min-w-[160px] flex-1">
-                                <span className={fieldLabelClass}>Schedule (hours, 0=off)</span>
+                                <span className={fieldLabelClass}>{t('overlays.fields.scheduleHoursShort')}</span>
                                 <input
                                     type="number"
                                     min={0}
@@ -374,40 +389,40 @@ export const OverlaysDashboard: React.FC = () => {
                                 disabled={busy !== null}
                                 onClick={() => void saveSettings()}
                             >
-                                <Save className="h-4 w-4" /> Save
+                                <Save className="h-4 w-4" /> {t('overlays.actions.save')}
                             </button>
                         </div>
                         <p className="mt-3 text-xs text-muted">
-                            Days controls how long a season counts as “new” (default 21, same as the standalone tool). Change it anytime — Save, then Scan / Run.
+                            {t('overlays.quick.daysHint')}
                         </p>
                         <div className="mt-4 flex flex-wrap gap-2">
                             <button
                                 type="button"
                                 className={buttonClass}
                                 disabled={busy !== null || !workerReady}
-                                onClick={() => void runAction('Scan', async () => {
+                                onClick={() => void runAction('scan', async () => {
                                     const res = await overlaysApi.scan();
                                     setReconcile(null);
-                                    toast(`Eligible: ${res.eligibleCount ?? 0}`);
+                                    toast(t('overlays.eligibleToast', { count: res.eligibleCount ?? 0 }));
                                 })}
                             >
-                                Scan library
+                                {t('overlays.actions.scanLibrary')}
                             </button>
                             <button
                                 type="button"
                                 className={buttonClass}
                                 disabled={busy !== null || !workerReady}
-                                onClick={() => void runAction('Reconcile', async () => {
+                                onClick={() => void runAction('reconcile', async () => {
                                     const res = await overlaysApi.reconcile();
                                     setReconcile(res);
                                     setTab('import');
                                 })}
                             >
-                                Reconcile dry-run
+                                {t('overlays.actions.reconcileDryRun')}
                             </button>
                         </div>
                         <p className="mt-3 text-xs text-muted">
-                            Preview writes to <code>config/overlays/preview/</code>. Live mode uploads show + latest-season posters to Plex and updates <code>overlaid_log.json</code>.
+                            {t('overlays.quick.previewHintBeforePreviewPath')} <code>config/overlays/preview/</code>. {t('overlays.quick.previewHintBetweenPaths')} <code>overlaid_log.json</code>.
                         </p>
                     </DashboardPanel>
                 </div>
@@ -415,8 +430,8 @@ export const OverlaysDashboard: React.FC = () => {
 
             {tab === 'shows' && (
                 <DashboardPanel
-                    title="Tracked shows"
-                    subtitle="Shows currently tracked in overlaid_log.json."
+                    title={t('overlays.shows.title')}
+                    subtitle={t('overlays.shows.subtitle')}
                     controls={(
                         <button
                             type="button"
@@ -424,22 +439,22 @@ export const OverlaysDashboard: React.FC = () => {
                             disabled={!canResetAll}
                             onClick={resetAll}
                         >
-                            <RotateCcw className="h-4 w-4" /> Reset all overlays
+                            <RotateCcw className="h-4 w-4" /> {t('overlays.actions.resetAllOverlays')}
                         </button>
                     )}
                 >
                     {shows.length === 0 ? (
-                        <p className="text-sm text-muted">No overlays logged yet. Run a preview/live pass or import an existing log.</p>
+                        <p className="text-sm text-muted">{t('overlays.shows.empty')}</p>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="min-w-full text-left text-sm">
                                 <thead className="text-xs uppercase text-muted">
                                     <tr>
-                                        <th className="px-2 py-2">Title</th>
-                                        <th className="px-2 py-2">Key</th>
-                                        <th className="px-2 py-2">Season</th>
-                                        <th className="px-2 py-2">Mode</th>
-                                        <th className="px-2 py-2">When</th>
+                                        <th className="px-2 py-2">{t('overlays.table.title')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.key')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.season')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.mode')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.when')}</th>
                                         <th className="px-2 py-2" />
                                     </tr>
                                 </thead>
@@ -449,7 +464,7 @@ export const OverlaysDashboard: React.FC = () => {
                                             <td className="px-2 py-2 font-medium">{row.title}</td>
                                             <td className="px-2 py-2 tabular-nums text-muted">{row.ratingKey}</td>
                                             <td className="px-2 py-2">{row.seasonIndex ?? '—'}</td>
-                                            <td className="px-2 py-2">{row.previewOnly ? 'Preview' : 'Live'}</td>
+                                            <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
                                             <td className="px-2 py-2 text-muted">
                                                 {row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}
                                             </td>
@@ -458,9 +473,9 @@ export const OverlaysDashboard: React.FC = () => {
                                                     type="button"
                                                     className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
                                                     disabled={busy !== null}
-                                                    onClick={() => void runAction('Reset', () => overlaysApi.resetOne(row.ratingKey))}
+                                                    onClick={() => void runAction('reset', () => overlaysApi.resetOne(row.ratingKey))}
                                                 >
-                                                    Reset
+                                                    {t('overlays.actions.reset')}
                                                 </button>
                                             </td>
                                         </tr>
@@ -473,26 +488,26 @@ export const OverlaysDashboard: React.FC = () => {
             )}
 
             {tab === 'settings' && (
-                <DashboardPanel title="Settings" subtitle="Module behaviour, schedule, and library scope.">
+                <DashboardPanel title={t('overlays.settings.title')} subtitle={t('overlays.settings.subtitle')}>
                     <SettingsToggleRow
-                        title="Module enabled"
+                        title={t('overlays.settings.moduleEnabled')}
                         checked={configDraft.enabled !== false}
                         onChange={(enabled) => setConfigDraft((prev) => ({ ...prev, enabled }))}
                     />
                     <SettingsToggleRow
-                        title="Default to preview mode (scheduled too)"
+                        title={t('overlays.settings.defaultPreviewMode')}
                         checked={configDraft.previewMode === true}
                         onChange={(previewMode) => setConfigDraft((prev) => ({ ...prev, previewMode }))}
                     />
                     <SettingsToggleRow
-                        title="Skip if Kometa Overlay label present"
+                        title={t('overlays.settings.skipKometa')}
                         checked={configDraft.skipIfKometaOverlayLabel !== false}
                         onChange={(skipIfKometaOverlayLabel) => setConfigDraft((prev) => ({ ...prev, skipIfKometaOverlayLabel }))}
                     />
 
                     <div className="grid gap-4 border-b border-border/40 py-4 md:grid-cols-2">
                         <label className="block">
-                            <span className={fieldLabelClass}>New season window (days)</span>
+                            <span className={fieldLabelClass}>{t('overlays.fields.newSeasonWindowDays')}</span>
                             <input
                                 type="number"
                                 min={1}
@@ -505,11 +520,11 @@ export const OverlaysDashboard: React.FC = () => {
                                 }))}
                             />
                             <span className="mt-1 block text-[11px] text-muted">
-                                How long after S01 airs a season stays eligible (1–365).
+                                {t('overlays.settings.windowHint')}
                             </span>
                         </label>
                         <label className="block">
-                            <span className={fieldLabelClass}>Schedule hours (0 = off)</span>
+                            <span className={fieldLabelClass}>{t('overlays.fields.scheduleHours')}</span>
                             <input
                                 type="number"
                                 min={0}
@@ -525,7 +540,7 @@ export const OverlaysDashboard: React.FC = () => {
                     </div>
 
                     <div className="border-b border-border/40 py-4">
-                        <span className={fieldLabelClass}>Overlay preset</span>
+                        <span className={fieldLabelClass}>{t('overlays.settings.overlayPreset')}</span>
                         <CustomSelect
                             className="mt-1.5 max-w-md"
                             value={configDraft.overlayPresetId || 'new-season'}
@@ -536,13 +551,13 @@ export const OverlaysDashboard: React.FC = () => {
 
                     <div className="py-4">
                         <div className="mb-2 flex items-center justify-between gap-2">
-                            <span className={fieldLabelClass}>TV libraries (empty = all)</span>
+                            <span className={fieldLabelClass}>{t('overlays.settings.tvLibraries')}</span>
                             <button type="button" className="text-xs font-semibold text-plex underline" onClick={() => void loadSections()}>
-                                Load sections
+                                {t('overlays.actions.loadSections')}
                             </button>
                         </div>
                         {sections.length === 0 ? (
-                            <p className="text-xs text-muted">Load sections to pick specific TV libraries.</p>
+                            <p className="text-xs text-muted">{t('overlays.settings.loadSectionsHint')}</p>
                         ) : (
                             <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border bg-background/40 p-3">
                                 {sections.map((section) => {
@@ -574,15 +589,15 @@ export const OverlaysDashboard: React.FC = () => {
                         disabled={busy !== null}
                         onClick={() => void saveSettings()}
                     >
-                        <Save className="h-4 w-4" /> Save settings
+                        <Save className="h-4 w-4" /> {t('overlays.actions.saveSettings')}
                     </button>
                 </DashboardPanel>
             )}
 
             {tab === 'import' && (
-                <DashboardPanel title="Import log" subtitle="Migrate from the standalone plex-new-season-overlay tool.">
+                <DashboardPanel title={t('overlays.import.title')} subtitle={t('overlays.import.subtitle')}>
                     <p className="text-sm text-muted">
-                        Paste your standalone <code>overlaid_log.json</code> to migrate without re-stamping already-overlaid shows.
+                        {t('overlays.import.bodyBeforeLog')} <code>overlaid_log.json</code> {t('overlays.import.bodyAfterLog')}
                     </p>
                     <textarea
                         className="mt-3 min-h-[220px] w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex"
@@ -602,29 +617,33 @@ export const OverlaysDashboard: React.FC = () => {
                             type="button"
                             className={primaryButtonClass}
                             disabled={busy !== null || !importText.trim()}
-                            onClick={() => void runAction('Import', async () => {
+                            onClick={() => void runAction('importLog', async () => {
                                 const parsed = JSON.parse(importText);
                                 await overlaysApi.importLog(parsed, importMode);
                             })}
                         >
-                            <Upload className="h-4 w-4" /> Import log
+                            <Upload className="h-4 w-4" /> {t('overlays.actions.importLog')}
                         </button>
                         <button
                             type="button"
                             className={buttonClass}
                             disabled={busy !== null || !workerReady}
-                            onClick={() => void runAction('Reconcile', async () => {
+                            onClick={() => void runAction('reconcile', async () => {
                                 setReconcile(await overlaysApi.reconcile());
                             })}
                         >
-                            Reconcile dry-run
+                            {t('overlays.actions.reconcileDryRun')}
                         </button>
                     </div>
                     {reconcile && (
                         <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
-                            <p className="font-semibold">Reconcile</p>
+                            <p className="font-semibold">{t('overlays.reconcile.title')}</p>
                             <p className="mt-1 text-muted">
-                                Would add {reconcile.wouldAddCount ?? 0} · convert {reconcile.wouldConvertCount ?? 0} · remove {reconcile.wouldRemoveCount ?? 0}
+                                {t('overlays.reconcile.summary', {
+                                    add: reconcile.wouldAddCount ?? 0,
+                                    convert: reconcile.wouldConvertCount ?? 0,
+                                    remove: reconcile.wouldRemoveCount ?? 0,
+                                })}
                             </p>
                         </div>
                     )}
@@ -632,14 +651,14 @@ export const OverlaysDashboard: React.FC = () => {
             )}
 
             {tab === 'activity' && (
-                <DashboardPanel title="Activity" subtitle="Recent worker output this session.">
+                <DashboardPanel title={t('overlays.activity.title')} subtitle={t('overlays.activity.subtitle')}>
                     {status?.running && (
                         <p className="mb-3 inline-flex items-center gap-2 text-sm text-plex">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Running {status.command || '…'}
+                            <Loader2 className="h-4 w-4 animate-spin" /> {t('overlays.activity.running', { command: status.command || '…' })}
                         </p>
                     )}
                     {activity.length === 0 ? (
-                        <p className="text-sm text-muted">No activity yet this session.</p>
+                        <p className="text-sm text-muted">{t('overlays.activity.empty')}</p>
                     ) : (
                         <ul className="max-h-[480px] space-y-1 overflow-y-auto font-mono text-xs">
                             {activity.map((entry: any, index: number) => (
@@ -664,7 +683,7 @@ export const OverlaysDashboard: React.FC = () => {
             {configDraft.enabled !== false && workerReady && (
                 <p className="inline-flex items-center gap-2 text-xs text-muted">
                     <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
-                    Worker ready · data in <code>config/overlays/</code>
+                    {t('overlays.footer.workerReadyBeforePath')} <code>config/overlays/</code>
                 </p>
             )}
         </DashboardPageShell>
