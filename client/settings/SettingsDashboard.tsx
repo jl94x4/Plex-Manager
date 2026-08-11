@@ -69,6 +69,7 @@ import {
     DEFAULT_MEDIA_AUTOMATION_SETTINGS,
     type MediaAutomationSettingsConfig,
 } from '../media-automation/types';
+import { useDiscoverI18n } from '../discovery/i18n';
 
 const normalizeArrInstancesFromSettings = (settings: Record<string, any> = {}): ArrInstance[] => {
     if (Array.isArray(settings.arrInstances) && settings.arrInstances.length > 0) {
@@ -234,6 +235,7 @@ const getUploadedBrandingImagePath = (file: File, assetName: 'logo' | 'backgroun
 };
 
 export const SettingsDashboard: React.FC = () => {
+    const { t } = useDiscoverI18n();
     const [statusDraft, setStatusDraft] = useState<any>(null);
     const [isLoading, setLoading] = useState(true);
     const [configLoadError, setConfigLoadError] = useState<string | null>(null);
@@ -255,9 +257,9 @@ export const SettingsDashboard: React.FC = () => {
             const sConf = await apiFetch('/api/status/config');
             setStatusConfig(sConf);
         } catch (e) {
-            addToast(e instanceof Error ? e.message : 'Failed to load status monitor config', 'error');
+            addToast(e instanceof Error ? e.message : t('settings.statusMonitor.loadConfigFailed'), 'error');
         }
-    }, [addToast]);
+    }, [addToast, t]);
 
     useEffect(() => {
         const fetchConfig = async () => {
@@ -3445,7 +3447,7 @@ export const SettingsDashboard: React.FC = () => {
 
                     {activeTab === 'status' && (
                         <div className="mb-8 animate-fade-in">
-                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Status Monitor</h3>
+                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">{t('settings.statusMonitor.title')}</h3>
                             <StatusMonitorSettings
                                 config={statusConfig}
                                 onChange={setStatusDraft}
