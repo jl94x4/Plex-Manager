@@ -217,17 +217,50 @@ def _has_kometa_overlay_label(item) -> bool:
     return False
 
 
-def _apply_overlay(base_img: Image.Image, overlay_img: Image.Image) -> Image.Image:
+def _apply_overlay(
+    base_img: Image.Image,
+    overlay_img: Image.Image,
+    *,
+    width_ratio: float = 0.85,
+    max_height_ratio: float | None = None,
+    bottom_clip_ratio: float = 0.30,
+) -> Image.Image:
+    """
+    Composite banner onto art, Netflix-style: hang slightly off the bottom so
+    rounded bottom corners are clipped into a straight flush edge.
+    """
     base_img = base_img.convert("RGBA")
     overlay_img = overlay_img.convert("RGBA")
     width, height = base_img.size
-    new_width = int(width * 0.85)
-    new_height = int(overlay_img.height * (new_width / overlay_img.width))
+    new_width = max(1, int(width * max(0.05, min(1.0, width_ratio))))
+    new_height = max(1, int(overlay_img.height * (new_width / overlay_img.width)))
+    if max_height_ratio is not None:
+        max_h = max(1, int(height * max(0.05, min(1.0, max_height_ratio))))
+        if new_height > max_h:
+            scale = max_h / new_height
+            new_width = max(1, int(new_width * scale))
+            new_height = max_h
     resized = overlay_img.resize((new_width, new_height), Image.LANCZOS)
+
+    # Crop the bottom of the badge so side corners become vertical at the frame edge.
+    clip = max(0, min(new_height - 1, int(new_height * max(0.0, min(0.6, bottom_clip_ratio)))))
+    keep_h = max(1, new_height - clip)
+    cropped = resized.crop((0, 0, new_width, keep_h))
     x = int((width - new_width) / 2)
-    y = height - new_height
-    base_img.paste(resized, (x, y), resized)
+    y = height - keep_h
+    base_img.paste(cropped, (x, y), cropped)
     return base_img
+
+
+def _apply_episode_overlay(base_img: Image.Image, overlay_img: Image.Image) -> Image.Image:
+    """Netflix-sized badge on landscape episode thumbs (not the show-poster 85% banner)."""
+    return _apply_overlay(
+        base_img,
+        overlay_img,
+        width_ratio=0.38,
+        max_height_ratio=0.14,
+        bottom_clip_ratio=0.30,
+    )
 
 
 def _download_poster(plex: PlexServer, thumb_path: str) -> Image.Image | None:
@@ -830,7 +863,7 @@ def process_episode_overlay(
         if saved:
             _progress(progress, f"Backed up episode thumb: {meta.get('showTitle') or ''} — {meta.get('title')}")
 
-    result = _apply_overlay(thumb.copy(), overlay_img)
+    result = _apply_episode_overlay(thumb.copy(), overlay_img)
     safe = _sanitize_filename(f"{meta.get('showTitle') or 'show'}_{meta.get('title') or rating_key}")
     now = datetime.now()
     entry = {
@@ -1459,7 +1492,7 @@ def generate_overlay_samples(config: dict, progress: ProgressFn | None = None) -
         _progress(progress, "Using placeholder episode thumb")
 
     show_out = _apply_overlay(show_img.copy(), show_banner)
-    episode_out = _apply_overlay(episode_img.copy(), episode_banner)
+    episode_out = _apply_episode_overlay(episode_img.copy(), episode_banner)
 
     show_path = samples / "show.png"
     episode_path = samples / "episode.png"
