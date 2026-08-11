@@ -24,6 +24,7 @@ export type OverlaysConfig = {
     newSeasonDays?: number;
     newEpisodeEnabled?: boolean;
     newEpisodeDays?: number;
+    skipNewEpisodeOnBinge?: boolean;
     librarySectionIds?: string[];
     overlayPresetId?: string;
     scheduleHours?: number;

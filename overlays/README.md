@@ -26,4 +26,5 @@ pip install -r overlays/requirements.txt
 
 - Skips items with a Kometa `Overlay` label by default (`skipIfKometaOverlayLabel`)
 - New Episode stamps **episode thumbnails only** for episodes aired within `newEpisodeDays` (default 6)
+- `skipNewEpisodeOnBinge` (default on): if 3+ episodes of the same season share an air date, skip episode badges and rely on New Season
 - Prefer off-hours if Poster Sets / Kometa also rewrite posters on the same libraries

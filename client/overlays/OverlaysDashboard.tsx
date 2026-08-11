@@ -53,6 +53,7 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     newSeasonDays: 21,
     newEpisodeEnabled: true,
     newEpisodeDays: 6,
+    skipNewEpisodeOnBinge: true,
     librarySectionIds: [],
     overlayPresetId: 'new-season',
     scheduleHours: 24,
@@ -683,6 +684,12 @@ export const OverlaysDashboard: React.FC = () => {
                         description={t('overlays.settings.newEpisodeEnabledHint')}
                         checked={configDraft.newEpisodeEnabled !== false}
                         onChange={(newEpisodeEnabled) => setConfigDraft((prev) => ({ ...prev, newEpisodeEnabled }))}
+                    />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.skipNewEpisodeOnBinge')}
+                        description={t('overlays.settings.skipNewEpisodeOnBingeHint')}
+                        checked={configDraft.skipNewEpisodeOnBinge !== false}
+                        onChange={(skipNewEpisodeOnBinge) => setConfigDraft((prev) => ({ ...prev, skipNewEpisodeOnBinge }))}
                     />
 
                     <div className="grid gap-4 border-b border-border/40 py-4 md:grid-cols-2">

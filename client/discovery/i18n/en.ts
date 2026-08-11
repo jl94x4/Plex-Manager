@@ -562,6 +562,8 @@ export const en = {
             skipKometa: 'Skip if Kometa Overlay label present',
             newEpisodeEnabled: 'New Episode overlays enabled',
             newEpisodeEnabledHint: 'Stamp episode thumbs with a New Episode banner for recently aired episodes.',
+            skipNewEpisodeOnBinge: 'Skip New Episode on binge season drops',
+            skipNewEpisodeOnBingeHint: 'When 3+ episodes of the same season air on the same day, skip episode badges and rely on the New Season banner instead. On by default.',
             windowHint: 'How long after S01 airs a season stays eligible (1–365).',
             newEpisodeWindowHint: 'How long after an episode airs it keeps the New Episode badge (1–30, default 6).',
             overlayPreset: 'New Season overlay preset',

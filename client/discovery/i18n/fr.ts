@@ -564,6 +564,8 @@ export const fr: DeepPartial<EnCatalog> = {
             skipKometa: 'Ignorer si le label Kometa Overlay est présent',
             newEpisodeEnabled: 'Overlays New Episode activés',
             newEpisodeEnabledHint: 'Applique une bannière New Episode sur les vignettes des épisodes récemment diffusés.',
+            skipNewEpisodeOnBinge: 'Ignorer New Episode pour les sorties binge',
+            skipNewEpisodeOnBingeHint: 'Si 3 épisodes ou plus de la même saison sortent le même jour, n’applique pas les badges d’épisode et laisse la bannière New Season. Activé par défaut.',
             windowHint: 'Durée pendant laquelle une saison reste éligible après la diffusion de S01 (1–365).',
             newEpisodeWindowHint: 'Durée pendant laquelle un épisode conserve le badge New Episode après diffusion (1–30, 6 par défaut).',
             overlayPreset: 'Préréglage New Season',

@@ -774,6 +774,38 @@ def _search_recent_episodes(section, cutoff: datetime):
     return _client_filter(candidates)
 
 
+def _filter_binge_drop_keys(
+    meta_by_key: dict[str, dict],
+    *,
+    min_count: int = 3,
+) -> set[str]:
+    """
+    Episodes that belong to a same-day season dump (binge release).
+    Group by show + season + calendar air date; ≥ min_count → binge.
+    """
+    from collections import defaultdict
+
+    groups: dict[tuple, list[str]] = defaultdict(list)
+    for key, meta in meta_by_key.items():
+        show_key = str(meta.get("showKey") or "").strip()
+        season_raw = meta.get("seasonIndex")
+        aired_raw = str(meta.get("airedAt") or "")
+        day = aired_raw[:10]
+        if not show_key or season_raw is None or len(day) < 10:
+            continue
+        try:
+            season = int(season_raw)
+        except (TypeError, ValueError):
+            continue
+        groups[(show_key, season, day)].append(key)
+
+    binge: set[str] = set()
+    for keys in groups.values():
+        if len(keys) >= min_count:
+            binge.update(keys)
+    return binge
+
+
 def discover_new_episodes(
     plex: PlexServer,
     config: dict,
@@ -786,6 +818,10 @@ def discover_new_episodes(
     episode_by_key: dict[str, Any] = {}
     meta_by_key: dict[str, dict] = {}
     window_days = max(1, (datetime.now() - cutoff).days)
+    skip_binge = _as_bool(
+        config.get("skipNewEpisodeOnBinge", config.get("skip_new_episode_on_binge")),
+        True,
+    )
 
     for section in _iter_tv_sections(plex, config):
         _progress(progress, f"Scanning {section.title} for new episodes…")
@@ -816,16 +852,35 @@ def discover_new_episodes(
             if aired is None or aired < cutoff:
                 continue
             show_title = getattr(show, "title", None) if show is not None else None
+            show_key = str(
+                getattr(show, "ratingKey", None)
+                or getattr(ep, "grandparentRatingKey", None)
+                or ""
+            )
             should_have.add(key)
             episode_by_key[key] = ep
             meta_by_key[key] = {
                 "title": getattr(ep, "title", None) or key,
                 "showTitle": show_title or "",
+                "showKey": show_key,
                 "seasonIndex": getattr(ep, "parentIndex", None) or getattr(ep, "seasonNumber", None),
                 "episodeIndex": getattr(ep, "index", None),
                 "airedAt": aired.isoformat(),
                 "library": section.title,
             }
+
+    if skip_binge and should_have:
+        binge_keys = _filter_binge_drop_keys(meta_by_key, min_count=3)
+        if binge_keys:
+            _progress(
+                progress,
+                f"Binge skip: dropping {len(binge_keys)} episode badge(s) "
+                f"(same-day season dump — New Season covers these)",
+            )
+            should_have -= binge_keys
+            for key in binge_keys:
+                episode_by_key.pop(key, None)
+                meta_by_key.pop(key, None)
 
     _progress(progress, f"Eligible new episodes: {len(should_have)}")
     return should_have, episode_by_key, meta_by_key
