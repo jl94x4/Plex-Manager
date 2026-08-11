@@ -552,6 +552,11 @@ export const fr: DeepPartial<EnCatalog> = {
             title: 'Galerie d’aperçu',
             subtitle: 'Composites récents issus de l’aperçu / des échantillons (sans modifier l’art Plex live).',
             empty: 'Aucun fichier d’aperçu. Lancez Aperçu pour remplir config/overlays/preview/.',
+            rows: {
+                posters: 'Affiches',
+                seasons: 'Saisons',
+                episodes: 'Épisodes',
+            },
         },
         placement: {
             title: 'Placement de la bannière',

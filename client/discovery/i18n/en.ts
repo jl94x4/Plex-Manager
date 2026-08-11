@@ -550,6 +550,11 @@ export const en = {
             title: 'Preview gallery',
             subtitle: 'Recent composites from Preview / samples (does not change live Plex art).',
             empty: 'No preview files yet. Run Preview to populate config/overlays/preview/.',
+            rows: {
+                posters: 'Posters',
+                seasons: 'Seasons',
+                episodes: 'Episodes',
+            },
         },
         placement: {
             title: 'Banner placement',

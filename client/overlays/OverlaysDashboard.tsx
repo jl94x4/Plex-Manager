@@ -888,19 +888,54 @@ export const OverlaysDashboard: React.FC = () => {
                     {gallery.length === 0 ? (
                         <p className="text-sm text-muted">{t('overlays.gallery.empty')}</p>
                     ) : (
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                            {gallery.map((item) => (
-                                <figure key={item.url} className="space-y-1">
-                                    <img
-                                        src={`${item.url}&t=${item.mtime}`}
-                                        alt={item.name}
-                                        className="aspect-[2/3] w-full rounded-md border border-border object-cover bg-background/60"
-                                    />
-                                    <figcaption className="truncate text-[11px] text-muted" title={item.name}>
-                                        {item.kind}: {item.name}
-                                    </figcaption>
-                                </figure>
-                            ))}
+                        <div className="space-y-6">
+                            {([
+                                {
+                                    id: 'show' as const,
+                                    title: t('overlays.gallery.rows.posters'),
+                                    aspect: 'aspect-[2/3]',
+                                    grid: 'grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
+                                },
+                                {
+                                    id: 'season' as const,
+                                    title: t('overlays.gallery.rows.seasons'),
+                                    aspect: 'aspect-[2/3]',
+                                    grid: 'grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6',
+                                },
+                                {
+                                    id: 'episode' as const,
+                                    title: t('overlays.gallery.rows.episodes'),
+                                    aspect: 'aspect-video',
+                                    grid: 'grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4',
+                                },
+                            ]).map((row) => {
+                                const items = gallery.filter((item) => item.kind === row.id);
+                                if (items.length === 0) return null;
+                                return (
+                                    <section key={row.id} className="space-y-2">
+                                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
+                                            {row.title}
+                                            <span className="ml-2 font-semibold normal-case tracking-normal text-muted/70">
+                                                ({items.length})
+                                            </span>
+                                        </h3>
+                                        <div className={row.grid}>
+                                            {items.map((item) => (
+                                                <figure key={item.url} className="space-y-1">
+                                                    <img
+                                                        src={`${item.url}&t=${item.mtime}`}
+                                                        alt={item.name}
+                                                        className={`${row.aspect} w-full rounded-md border border-border object-cover bg-background/60`}
+                                                    />
+                                                    <figcaption className="truncate text-[11px] text-muted" title={item.name}>
+                                                        {item.name}
+                                                    </figcaption>
+                                                </figure>
+                                            ))}
+                                        </div>
+                                    </section>
+                                );
+                            })}
                         </div>
                     )}
                 </DashboardPanel>
