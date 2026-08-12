@@ -73,6 +73,7 @@ import {
 import { loadPosterSetsAudit } from './lib/poster-sets/audit.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 import { createTtlLruCache } from './lib/memory-cache.js';
+import { createSwrCache } from './lib/swr-cache.js';
 import { asArray, extractPlexItemBytes } from './lib/plex-stats-bytes.js';
 
 const resolveAppVersion = () => {
@@ -1576,6 +1577,45 @@ const apiCache = createTtlLruCache({
     maxEntries: 300,
     defaultTtlMs: 60_000,
 });
+
+/** Shared media-server sessions cache for Now Playing / watching count (SWR). */
+const mediaSessionsSwr = createSwrCache({ name: 'media-sessions' });
+const MEDIA_SESSIONS_FRESH_MS = 8_000;
+const MEDIA_SESSIONS_STALE_MS = 45_000;
+const PLEX_SESSIONS_SWR_KEY = 'plex_status_sessions';
+const jellyfinSessionsSwrKey = (type = 'jellyfin') => `${type}_sessions`;
+
+const fetchPlexStatusSessions = async (uri, config) => (
+    fetch(`${uri}/status/sessions?X-Plex-Token=${config.plexToken}`, {
+        headers: plexClientHeaders(config.plexToken),
+    })
+        .then((r) => r.json())
+        .catch(() => null)
+);
+
+const getPlexStatusSessionsSwr = async (uri, config) => {
+    const { value, stale, ageMs } = await mediaSessionsSwr.get(
+        PLEX_SESSIONS_SWR_KEY,
+        () => fetchPlexStatusSessions(uri, config),
+        { freshMs: MEDIA_SESSIONS_FRESH_MS, staleMs: MEDIA_SESSIONS_STALE_MS },
+    );
+    return { sessionsData: value, stale, ageMs };
+};
+
+const getJellyfinSessionsSwr = async (config) => {
+    const mediaServerType = config.mediaServerType || 'jellyfin';
+    const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
+    const { value, stale, ageMs } = await mediaSessionsSwr.get(
+        jellyfinSessionsSwrKey(mediaServerType),
+        async () => (
+            fetchWithTimeout(`${baseUrl}/Sessions`, { headers: jellyfinHeaders(config.jellyfinApiKey) }, 15000)
+                .then((r) => (r.ok ? r.json() : []))
+                .catch(() => [])
+        ),
+        { freshMs: MEDIA_SESSIONS_FRESH_MS, staleMs: MEDIA_SESSIONS_STALE_MS },
+    );
+    return { sessions: value, stale, ageMs };
+};
 
 /**
  * Wraps an expensive async fetcher function with a TTL cache.
@@ -13627,22 +13667,15 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
 app.get('/api/streams/watching-count', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
-        const mediaServerType = config.mediaServerType || 'plex';
 
         if (isEmbyLikeMediaServer(config)) {
             if (!isJellyfinConfigured(config)) {
                 return res.json({ count: 0, available: false });
             }
-            const count = await withCache(`${mediaServerType}_watching_count`, 8000, async () => {
-                const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
-                const sessions = await fetchWithTimeout(`${baseUrl}/Sessions`, { headers: jellyfinHeaders(config.jellyfinApiKey) }, 15000)
-                    .then((r) => (r.ok ? r.json() : []))
-                    .catch(() => []);
-                const activeSessions = (Array.isArray(sessions) ? sessions : [])
-                    .filter((session) => session?.NowPlayingItem);
-                return activeSessions.length;
-            });
-            return res.json({ count, available: true });
+            const { sessions } = await getJellyfinSessionsSwr(config);
+            const activeSessions = plexSessionAsArray(sessions)
+                .filter((session) => session?.NowPlayingItem);
+            return res.json({ count: activeSessions.length, available: true });
         }
 
         if (!config.plexToken || !config.serverIdentifier) {
@@ -13652,17 +13685,9 @@ app.get('/api/streams/watching-count', requireAuth, requireMember, async (req, r
         const uri = await getPlexConnectionUri(config);
         if (!uri) return res.json({ count: 0, available: false });
 
-        const count = await withCache('plex_watching_count', 8000, async () => {
-            const sessionsData = await fetch(`${uri}/status/sessions?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) })
-                .then((r) => r.json())
-                .catch(() => null);
-            const activeSessions = Array.isArray(sessionsData?.MediaContainer?.Metadata)
-                ? sessionsData.MediaContainer.Metadata
-                : [];
-            return activeSessions.length;
-        });
-
-        res.json({ count, available: true });
+        const { sessionsData } = await getPlexStatusSessionsSwr(uri, config);
+        const activeSessions = plexSessionAsArray(sessionsData?.MediaContainer?.Metadata);
+        res.json({ count: activeSessions.length, available: true });
     } catch (e) {
         log(`Watching count error: ${e.message}`);
         res.json({ count: 0, available: false, error: e.message });
@@ -13687,11 +13712,7 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
                 return res.json({ available: false, enabled: true, session: null });
             }
             const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
-            const sessions = await withCache('jellyfin_now_playing_sessions', 5000, async () => (
-                fetchWithTimeout(`${baseUrl}/Sessions`, { headers: jellyfinHeaders(config.jellyfinApiKey) }, 15000)
-                    .then((r) => (r.ok ? r.json() : []))
-                    .catch(() => [])
-            ));
+            const { sessions, stale } = await getJellyfinSessionsSwr(config);
             const mine = plexSessionAsArray(sessions).find((session) => (
                 session?.NowPlayingItem
                 && sessionBelongsToJellyfinUser(session, {
@@ -13699,7 +13720,7 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
                     username: req.user?.username || localUser?.username,
                 })
             ));
-            if (!mine) return res.json({ available: true, enabled: true, session: null });
+            if (!mine) return res.json({ available: true, enabled: true, session: null, stale: !!stale });
 
             let mapped = mapJellyfinSessionToNowPlaying(mine);
             if (mapped && !mapped.tmdbId && mapped.jellyfinSeriesId) {
@@ -13726,6 +13747,7 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
             return res.json({
                 available: true,
                 enabled: true,
+                stale: !!stale,
                 session: mapped
                     ? {
                         mediaType: mapped.mediaType,
@@ -13748,11 +13770,7 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
         if (!uri) return res.json({ available: false, enabled: true, session: null });
 
         const accountId = await resolveLocalPlexAccountId(config, uri, req.user).catch(() => null);
-        const sessionsData = await withCache('plex_now_playing_sessions', 5000, async () => (
-            fetch(`${uri}/status/sessions?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) })
-                .then((r) => r.json())
-                .catch(() => null)
-        ));
+        const { sessionsData, stale } = await getPlexStatusSessionsSwr(uri, config);
         const list = plexSessionAsArray(sessionsData?.MediaContainer?.Metadata);
 
         const username = req.user?.username || localUser?.username || '';
@@ -13779,7 +13797,7 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
             email,
             aliases,
         });
-        if (!mineMeta) return res.json({ available: true, enabled: true, session: null });
+        if (!mineMeta) return res.json({ available: true, enabled: true, session: null, stale: !!stale });
 
         let mapped = mapPlexSessionToNowPlaying(mineMeta);
         if (mapped && !mapped.tmdbId) {
@@ -13804,6 +13822,7 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
         return res.json({
             available: true,
             enabled: true,
+            stale: !!stale,
             session: mapped
                 ? {
                     mediaType: mapped.mediaType,
@@ -25929,7 +25948,11 @@ async function monitorConcurrentSessions() {
         const uri = await getPlexConnectionUri(config);
         if (!uri) return;
 
-        const sessionsRes = await fetch(`${uri}/status/sessions?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
+        const sessionsRes = await fetchPlexStatusSessions(uri, config);
+        // Warm Now Playing / watching-count SWR so Home polls stay near-instant.
+        if (sessionsRes) {
+            mediaSessionsSwr.put(PLEX_SESSIONS_SWR_KEY, sessionsRes);
+        }
 
         if (sessionsRes && sessionsRes.MediaContainer) {
             const currentStreams = sessionsRes.MediaContainer.size || 0;
