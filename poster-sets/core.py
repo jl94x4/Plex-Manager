@@ -2311,14 +2311,31 @@ def apply_url(
     rating_key = str(hint.get("ratingKey") or hint.get("rating_key") or "").strip() or None
     hint_title = str(hint.get("title") or "").strip() or None
     if rating_key:
-        emit(progress, f"Pinning apply to Plex ratingKey {rating_key}")
+        emit(
+            progress,
+            f"Pinning apply to Plex ratingKey {rating_key}"
+            + (f' (“{hint_title}” only)' if hint_title else ""),
+        )
 
     def _stamp(poster: dict) -> dict:
+        """Attach Plex connection; only pin ratingKey to posters for the hinted title.
+
+        Library applies pass the open title's ratingKey. Multi-title franchise sets must
+        still resolve other movies/shows by their own poster titles — otherwise every
+        asset lands on the focused item and the rest of the set never updates.
+        """
         stamped = {**poster, "_config": config}
+        poster_title = str(poster.get("title") or "").strip()
+        pin_ok = False
         if rating_key:
+            if hint_title:
+                pin_ok = (not poster_title) or _plex_titles_exactly_match(hint_title, poster_title)
+            elif (selected_count or 0) == 1 or asset_count == 1:
+                pin_ok = True
+        if pin_ok:
             stamped["_ratingKey"] = rating_key
-        if hint_title:
-            stamped["_plexHintTitle"] = hint_title
+            if hint_title:
+                stamped["_plexHintTitle"] = hint_title
         if plex is not None:
             stamped["_plex"] = plex
         return stamped

@@ -244,7 +244,12 @@ export function LibraryTitleDetailPanel({
     const loadSetsForTitle = useCallback(async (
         title: PosterSetsSearchTitle,
         libraryItem?: LibraryRecentItem | null,
+        generation?: number,
     ) => {
+        const gen = generation ?? loadGenRef.current;
+        const stillCurrent = () => gen === loadGenRef.current;
+        if (!stillCurrent()) return;
+
         setBusy('search');
         setSearchSets([]);
         setSelectedTitle(title);
@@ -264,6 +269,7 @@ export function LibraryTitleDetailPanel({
                 preferredCreators,
                 tpdbConfigured,
                 onPartial: (partial) => {
+                    if (!stillCurrent()) return;
                     if ((partial.sets?.length || 0) > 0) {
                         setSearchSets(partial.sets || []);
                         setSearchContext(partial.title || title.title);
@@ -280,6 +286,7 @@ export function LibraryTitleDetailPanel({
                     }
                 },
                 onMediuxSettled: (mediux) => {
+                    if (!stillCurrent()) return;
                     setMediuxSettled(true);
                     setLoading(false);
                     setBusy((current) => (current === 'search' ? null : current));
@@ -288,6 +295,7 @@ export function LibraryTitleDetailPanel({
                     }
                 },
                 onTpdbSettled: (tpdb) => {
+                    if (!stillCurrent()) return;
                     setTpdbSettled(true);
                     if (tpdb?.fromCache) setTpdbFromCache(true);
                     setLoading(false);
@@ -296,6 +304,7 @@ export function LibraryTitleDetailPanel({
                     setLoadingMoreSets(false);
                 },
             });
+            if (!stillCurrent()) return;
             // Never wipe painted MediUX sets with an empty final merge.
             setSearchSets((prev) => {
                 const next = response.sets || [];
@@ -340,8 +349,10 @@ export function LibraryTitleDetailPanel({
                 }
             }
         } catch (error) {
+            if (!stillCurrent()) return;
             toast(error instanceof Error ? error.message : 'Failed to load sets', 'error');
         } finally {
+            if (!stillCurrent()) return;
             // Don't clobber an in-flight preview/apply/watch started during TPDB wait.
             setBusy((current) => (current === 'search' ? null : current));
             setLoadingMoreSets(false);
@@ -379,9 +390,10 @@ export function LibraryTitleDetailPanel({
                     provider: 'mediux',
                     thumbUrl: '',
                 };
+                if (generation !== loadGenRef.current) return;
                 setLoading(false);
                 setLoadingMoreSets(true);
-                await loadSetsForTitle(directTitle, libraryItem);
+                await loadSetsForTitle(directTitle, libraryItem, generation);
                 return;
             }
 
@@ -417,7 +429,7 @@ export function LibraryTitleDetailPanel({
             if (autoMatch) {
                 setLoading(false);
                 setLoadingMoreSets(true);
-                await loadSetsForTitle(autoMatch, libraryItem);
+                await loadSetsForTitle(autoMatch, libraryItem, generation);
                 return;
             }
 
@@ -633,7 +645,14 @@ export function LibraryTitleDetailPanel({
 
     const applyMatched = async () => {
         const target = String(selectedSet?.url || preview?.url || '').trim();
-        if (!target || !preview) return;
+        if (!target) {
+            toast('This set is missing a URL.', 'error');
+            return;
+        }
+        if (!preview) {
+            toast('Load the set preview first.', 'error');
+            return;
+        }
         const matchedIds = (preview.assets || []).filter((asset) => asset.matched === true).map((asset) => asset.id);
         const ids = matchedIds.length ? matchedIds : selectedAssetIds;
         if (!ids.length) {
@@ -658,6 +677,135 @@ export function LibraryTitleDetailPanel({
             toast(queuePaused
                 ? `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'} (queue paused).`
                 : `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'}.`);
+            onApplied?.();
+            await refreshTitleStatus();
+            setPreview(null);
+            setSelectedSet(null);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const applySelected = async () => {
+        const target = String(selectedSet?.url || preview?.url || '').trim();
+        if (!target) {
+            toast('This set is missing a URL.', 'error');
+            return;
+        }
+        if (!preview) {
+            toast('Load the set preview first.', 'error');
+            return;
+        }
+        if (!selectedAssetIds.length) {
+            toast('Select at least one asset to apply.', 'error');
+            return;
+        }
+        const ids = [...selectedAssetIds];
+        setBusy('apply');
+        try {
+            await posterSetsApi.apply(
+                target,
+                ids,
+                currentSetMeta(),
+                undefined,
+                filtersForSelectedIds(ids),
+                {
+                    ratingKey: item.id,
+                    title: item.title,
+                    mediaType: item.mediaType,
+                },
+                selectedAssetsForIds(ids),
+            );
+            toast(queuePaused
+                ? `Queued ${ids.length} selected asset(s) (queue paused).`
+                : `Queued ${ids.length} selected asset(s).`);
+            onApplied?.();
+            await refreshTitleStatus();
+            setPreview(null);
+            setSelectedSet(null);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const applyEntire = async () => {
+        const target = String(selectedSet?.url || preview?.url || '').trim();
+        if (!target) {
+            toast('This set is missing a URL.', 'error');
+            return;
+        }
+        if (!preview) {
+            toast('Load the set preview first.', 'error');
+            return;
+        }
+        const ok = await askConfirm('Queue the entire set, including posters not matched in your libraries?', {
+            title: 'Queue full set?',
+            confirmLabel: 'Add to queue',
+            cancelLabel: 'Cancel',
+        });
+        if (!ok) return;
+        setBusy('apply');
+        try {
+            // No selectedIds + no plexHint: multi-title franchise sets resolve each poster by title.
+            await posterSetsApi.apply(
+                target,
+                undefined,
+                currentSetMeta(),
+                undefined,
+                titleCardsOnly ? TITLE_CARD_ONLY_FILTERS : undefined,
+            );
+            toast(queuePaused
+                ? 'Added full set to queue (paused — resume in Queue tab).'
+                : 'Queued full set apply.');
+            onApplied?.();
+            await refreshTitleStatus();
+            setPreview(null);
+            setSelectedSet(null);
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const applyUnmatched = async () => {
+        const target = String(selectedSet?.url || preview?.url || '').trim();
+        if (!target || !preview) {
+            toast('Load the set preview first.', 'error');
+            return;
+        }
+        const unmatchedIds = (preview.assets || []).filter((asset) => asset.matched === false).map((asset) => asset.id);
+        if (!unmatchedIds.length) {
+            toast('No unmatched posters to queue.', 'error');
+            return;
+        }
+        const ok = await askConfirm(
+            `Queue ${unmatchedIds.length} unmatched poster${unmatchedIds.length === 1 ? '' : 's'} for apply?`,
+            {
+                title: 'Queue unmatched?',
+                confirmLabel: 'Add to queue',
+                cancelLabel: 'Cancel',
+            },
+        );
+        if (!ok) return;
+        setBusy('apply');
+        try {
+            await posterSetsApi.apply(
+                target,
+                unmatchedIds,
+                currentSetMeta(),
+                undefined,
+                filtersForSelectedIds(unmatchedIds),
+                undefined,
+                selectedAssetsForIds(unmatchedIds),
+            );
+            toast(queuePaused
+                ? `Queued ${unmatchedIds.length} unmatched poster(s) (queue paused).`
+                : `Queued ${unmatchedIds.length} unmatched poster(s).`);
             onApplied?.();
             await refreshTitleStatus();
             setPreview(null);
@@ -981,7 +1129,10 @@ export function LibraryTitleDetailPanel({
                                         type="button"
                                         className={`${fieldClass} text-left transition hover:border-plex/40`}
                                         disabled={interactionLocked}
-                                        onClick={() => void loadSetsForTitle(title, item)}
+                                        onClick={() => {
+                                            const generation = ++loadGenRef.current;
+                                            void loadSetsForTitle(title, item, generation);
+                                        }}
                                     >
                                         <span className="font-semibold text-text">{title.title}</span>
                                         {title.year ? <span className="text-muted"> ({title.year})</span> : null}
@@ -1161,9 +1312,9 @@ export function LibraryTitleDetailPanel({
                                 closeLabel="Back to sets"
                                 onToggleShowAssets={() => setShowAssets((value) => !value)}
                                 onQueueMatched={() => void applyMatched()}
-                                onQueueSelected={() => void applyMatched()}
-                                onQueueEntire={() => void applyMatched()}
-                                onQueueUnmatched={() => {}}
+                                onQueueSelected={() => void applySelected()}
+                                onQueueEntire={() => void applyEntire()}
+                                onQueueUnmatched={() => void applyUnmatched()}
                                 onQueueNewSinceWatch={() => {}}
                                 onSelectMatched={() => {
                                     const ids = (preview.assets || []).filter((a) => a.matched === true).map((a) => a.id);
