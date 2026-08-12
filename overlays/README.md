@@ -26,6 +26,12 @@ Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on *
 - **Recently Added** — Plex `addedAt` within window; skipped if Live or New Season already claimed the show
 - **TOP 10** — top-rated shows (audience/rating); corner badge, can stack with bottom badges
 - **TMDB air-date fallback** — when Plex lacks `originallyAvailableAt`, resolve dates via TMDB (portal API key) for recently-added undated episodes; applies to New Episode / New Season / Live
+- **Media info (4K/HDR/Atmos)** — Kometa-style top-left from Plex streams
+- **Show status** — AIRING / RETURNING / ENDED / CANCELED (Kometa left mid)
+- **Ratings** — Plex audience/rating badge (Kometa right)
+- **Network** — Plex network/studio pill (Kometa lower-left)
+
+Placement tab edits New Season/Episode targets **and** these Kometa-style slots (defaults match Kometa offsets on a 1000×1500 poster).
 
 ## Placement
 

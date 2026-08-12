@@ -5,7 +5,7 @@ import { DashboardPanel } from '../shared/dashboard/DashboardChrome';
 import type { OverlayPlacementKind, OverlaysPlacement } from './api';
 import { DEFAULT_OVERLAY_PLACEMENT } from './api';
 
-type Kind = 'show' | 'season' | 'episode';
+export type PlacementKind = 'show' | 'season' | 'episode' | 'media' | 'status' | 'ratings' | 'network';
 
 type Props = {
     placement: OverlaysPlacement;
@@ -15,7 +15,7 @@ type Props = {
     busy: boolean;
     onChange: (next: OverlaysPlacement) => void;
     onSave: () => void;
-    onResetKind: (kind: Kind) => void;
+    onResetKind: (kind: PlacementKind) => void;
 };
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
@@ -23,12 +23,17 @@ const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px
 const fieldInputClass = 'mt-1.5 w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
-const kindBaseUrl = (kind: Kind, bust: number) => {
+const KIND_ORDER: PlacementKind[] = ['show', 'season', 'episode', 'media', 'status', 'ratings', 'network'];
+
+const kindBaseUrl = (kind: PlacementKind, bust: number) => {
     const sampleKind = kind === 'episode' ? 'episode-base' : 'show-base';
     return `/api/overlays/sample/${sampleKind}?t=${encodeURIComponent(String(bust))}`;
 };
 
-const kindBannerUrl = (kind: Kind, seasonPresetId: string, episodePresetId: string, bust: number) => {
+const kindBannerUrl = (kind: PlacementKind, seasonPresetId: string, episodePresetId: string, bust: number) => {
+    if (kind === 'media' || kind === 'status' || kind === 'ratings' || kind === 'network') {
+        return `/api/overlays/preset-file?id=${encodeURIComponent(`placement-${kind}`)}&kind=season&t=${encodeURIComponent(String(bust))}`;
+    }
     const id = kind === 'show' ? seasonPresetId : episodePresetId;
     const presetKind = kind === 'show' ? 'season' : 'episode';
     return `/api/overlays/preset-file?id=${encodeURIComponent(id)}&kind=${presetKind}&t=${encodeURIComponent(String(bust))}`;
@@ -73,7 +78,7 @@ export const PlacementEditor: React.FC<Props> = ({
     onResetKind,
 }) => {
     const { t } = useDiscoverI18n();
-    const [kind, setKind] = useState<Kind>('show');
+    const [kind, setKind] = useState<PlacementKind>('show');
     const [baseFailed, setBaseFailed] = useState(false);
     const [bannerNat, setBannerNat] = useState({ w: 800, h: 200 });
     const stageRef = useRef<HTMLDivElement | null>(null);
@@ -119,135 +124,138 @@ export const PlacementEditor: React.FC<Props> = ({
         });
     }, [placement, kind, current, onChange]);
 
-    const onPointerMove = useCallback((e: PointerEvent) => {
-        const drag = dragRef.current;
-        if (!drag) return;
-        const dx = e.clientX - drag.startX;
-        const dy = e.clientY - drag.startY;
-        const { artW, artH, orig } = drag;
-        if (drag.mode === 'move') {
-            const box = bannerBox(artW, artH, bannerNat.w, bannerNat.h, orig);
-            const newLeft = box.left + dx;
-            const newTop = box.top + dy;
-            const ax = orig.anchorX || 'center';
-            const ay = orig.anchorY || 'bottom';
-            let anchorX = ax === 'left' ? newLeft : ax === 'right' ? newLeft + box.width : newLeft + box.width / 2;
-            let anchorY = ay === 'top' ? newTop : ay === 'center' ? newTop + box.keepH / 2 : newTop + box.keepH;
-            patchKind({
-                x: Math.max(0, Math.min(1, anchorX / artW)),
-                y: Math.max(0, Math.min(1, anchorY / artH)),
-            });
-        } else {
-            const deltaRatio = dx / artW;
-            const nextWidth = Math.max(0.05, Math.min(1, orig.width + deltaRatio));
-            patchKind({ width: nextWidth });
-        }
-    }, [bannerNat.h, bannerNat.w, patchKind]);
-
-    const onPointerUp = useCallback(() => {
-        dragRef.current = null;
-        window.removeEventListener('pointermove', onPointerMove);
-        window.removeEventListener('pointerup', onPointerUp);
-    }, [onPointerMove]);
-
-    const startDrag = (mode: 'move' | 'resize') => (e: React.PointerEvent) => {
+    const onPointerDownMove = (e: React.PointerEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
         dragRef.current = {
-            mode,
+            mode: 'move',
             startX: e.clientX,
             startY: e.clientY,
             orig: { ...current },
             artW: artSize.w,
             artH: artSize.h,
         };
-        window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener('pointerup', onPointerUp);
     };
 
-    useEffect(() => () => {
-        window.removeEventListener('pointermove', onPointerMove);
-        window.removeEventListener('pointerup', onPointerUp);
-    }, [onPointerMove, onPointerUp]);
+    const onPointerDownResize = (e: React.PointerEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+        dragRef.current = {
+            mode: 'resize',
+            startX: e.clientX,
+            startY: e.clientY,
+            orig: { ...current },
+            artW: artSize.w,
+            artH: artSize.h,
+        };
+    };
+
+    useEffect(() => {
+        const onMove = (e: PointerEvent) => {
+            const drag = dragRef.current;
+            if (!drag) return;
+            const dx = e.clientX - drag.startX;
+            const dy = e.clientY - drag.startY;
+            if (drag.mode === 'move') {
+                const nx = Math.max(0, Math.min(1, drag.orig.x + dx / drag.artW));
+                const ny = Math.max(0, Math.min(1, drag.orig.y + dy / drag.artH));
+                patchKind({ x: nx, y: ny });
+            } else {
+                const nw = Math.max(0.05, Math.min(1, drag.orig.width + dx / drag.artW));
+                patchKind({ width: nw });
+            }
+        };
+        const onUp = () => { dragRef.current = null; };
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        return () => {
+            window.removeEventListener('pointermove', onMove);
+            window.removeEventListener('pointerup', onUp);
+        };
+    }, [patchKind]);
 
     const box = bannerBox(artSize.w, artSize.h, bannerNat.w, bannerNat.h, current);
-    const aspectClass = kind === 'episode' ? 'aspect-video max-w-xl' : 'aspect-[2/3] max-w-sm';
+    const kindLabel = (k: PlacementKind) => t(`overlays.placement.kinds.${k}`);
 
     return (
         <DashboardPanel title={t('overlays.placement.title')} subtitle={t('overlays.placement.subtitle')}>
+            <p className="mb-3 text-sm text-muted">{t('overlays.placement.hint')}</p>
             <div className="mb-4 flex flex-wrap gap-2">
-                {(['show', 'season', 'episode'] as Kind[]).map((id) => (
+                {KIND_ORDER.map((k) => (
                     <button
-                        key={id}
+                        key={k}
                         type="button"
-                        className={`${buttonClass} ${kind === id ? 'border-plex bg-plex/20 text-plex' : ''}`}
-                        onClick={() => setKind(id)}
+                        className={`rounded-md px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${
+                            kind === k ? 'bg-plex text-background' : 'border border-white/15 bg-white/5 text-text'
+                        }`}
+                        onClick={() => setKind(k)}
                     >
-                        {t(`overlays.placement.kinds.${id}`)}
+                        {kindLabel(k)}
                     </button>
                 ))}
             </div>
 
-            <p className="mb-3 text-sm text-muted">{t('overlays.placement.hint')}</p>
-
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_240px]">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
                 <div
                     ref={stageRef}
-                    className={`relative mx-auto w-full overflow-hidden rounded-lg border border-border bg-black/40 ${aspectClass}`}
+                    className="relative mx-auto w-full max-w-[420px] overflow-hidden rounded-lg border border-border/60 bg-black/40"
                 >
                     {!baseFailed ? (
                         <img
                             ref={artRef}
                             src={kindBaseUrl(kind, sampleBust)}
                             alt=""
-                            className="h-full w-full object-contain"
-                            draggable={false}
+                            className="block w-full"
                             onLoad={measureArt}
                             onError={() => setBaseFailed(true)}
                         />
                     ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-zinc-800 to-zinc-950 p-4 text-center text-xs text-muted">
+                        <div className="flex aspect-[2/3] items-center justify-center p-6 text-center text-sm text-muted">
                             {t('overlays.placement.needSample')}
                         </div>
                     )}
-                    <div
-                        className="absolute cursor-move touch-none"
-                        style={{
-                            left: box.left,
-                            top: box.top,
-                            width: box.width,
-                            height: box.keepH,
-                            overflow: 'hidden',
-                        }}
-                        onPointerDown={startDrag('move')}
-                    >
-                        <img
-                            src={kindBannerUrl(kind, seasonPresetId, episodePresetId, sampleBust)}
-                            alt=""
-                            className="pointer-events-none block max-w-none"
+                    {!baseFailed && (
+                        <div
+                            className="absolute cursor-move border border-plex/80 bg-plex/10"
                             style={{
+                                left: box.left,
+                                top: box.top,
                                 width: box.width,
-                                height: box.height,
-                                objectFit: 'fill',
+                                height: box.keepH,
+                                overflow: 'hidden',
                             }}
-                            draggable={false}
-                            onLoad={(e) => {
-                                const img = e.currentTarget;
-                                if (img.naturalWidth > 0) {
-                                    setBannerNat({ w: img.naturalWidth, h: img.naturalHeight });
-                                }
-                            }}
-                        />
-                        <button
-                            type="button"
-                            aria-label={t('overlays.placement.resize')}
-                            className="absolute -right-1 -bottom-1 h-4 w-4 cursor-se-resize rounded-sm border border-white/40 bg-plex"
-                            onPointerDown={startDrag('resize')}
-                        />
-                    </div>
-                    <div className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded bg-black/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white/80">
-                        <Move className="h-3 w-3" /> {t('overlays.placement.dragHint')}
-                    </div>
+                            onPointerDown={onPointerDownMove}
+                            title={t('overlays.placement.dragHint')}
+                        >
+                            <img
+                                src={kindBannerUrl(kind, seasonPresetId, episodePresetId, sampleBust)}
+                                alt=""
+                                className="pointer-events-none max-w-none"
+                                style={{
+                                    width: box.width,
+                                    height: box.height,
+                                    marginTop: -box.clip,
+                                    objectFit: 'contain',
+                                }}
+                                onLoad={(e) => {
+                                    const img = e.currentTarget;
+                                    if (img.naturalWidth > 0) {
+                                        setBannerNat({ w: img.naturalWidth, h: img.naturalHeight });
+                                    }
+                                }}
+                            />
+                            <div
+                                className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize bg-plex"
+                                onPointerDown={onPointerDownResize}
+                                title={t('overlays.placement.resize')}
+                            />
+                            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-40">
+                                <Move className="h-5 w-5 text-white" />
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="space-y-3">
@@ -257,10 +265,9 @@ export const PlacementEditor: React.FC<Props> = ({
                             type="number"
                             min={5}
                             max={100}
-                            step={1}
                             className={fieldInputClass}
-                            value={Math.round(current.width * 100)}
-                            onChange={(e) => patchKind({ width: Math.max(0.05, Math.min(1, Number(e.target.value) / 100 || 0.05)) })}
+                            value={Math.round((current.width || 0.5) * 100)}
+                            onChange={(e) => patchKind({ width: Math.max(0.05, Math.min(1, (Number(e.target.value) || 50) / 100)) })}
                         />
                     </label>
                     <label className="block">
@@ -269,10 +276,9 @@ export const PlacementEditor: React.FC<Props> = ({
                             type="number"
                             min={0}
                             max={100}
-                            step={1}
                             className={fieldInputClass}
-                            value={Math.round(current.x * 100)}
-                            onChange={(e) => patchKind({ x: Math.max(0, Math.min(1, Number(e.target.value) / 100 || 0)) })}
+                            value={Math.round((current.x || 0) * 100)}
+                            onChange={(e) => patchKind({ x: Math.max(0, Math.min(1, (Number(e.target.value) || 0) / 100)) })}
                         />
                     </label>
                     <label className="block">
@@ -281,33 +287,21 @@ export const PlacementEditor: React.FC<Props> = ({
                             type="number"
                             min={0}
                             max={100}
-                            step={1}
                             className={fieldInputClass}
-                            value={Math.round(current.y * 100)}
-                            onChange={(e) => patchKind({ y: Math.max(0, Math.min(1, Number(e.target.value) / 100 || 0)) })}
+                            value={Math.round((current.y || 0) * 100)}
+                            onChange={(e) => patchKind({ y: Math.max(0, Math.min(1, (Number(e.target.value) || 0) / 100)) })}
                         />
                     </label>
-                    <div className="flex flex-wrap gap-2 pt-2">
-                        <button
-                            type="button"
-                            className={buttonClass}
-                            disabled={busy}
-                            onClick={() => onResetKind(kind)}
-                        >
-                            <RotateCcw className="h-4 w-4" /> {t('overlays.placement.resetKind')}
-                        </button>
-                        <button
-                            type="button"
-                            className={primaryButtonClass}
-                            disabled={busy}
-                            onClick={onSave}
-                        >
-                            <Save className="h-4 w-4" /> {t('overlays.placement.save')}
-                        </button>
-                    </div>
+                    <button type="button" className={buttonClass} disabled={busy} onClick={() => onResetKind(kind)}>
+                        <RotateCcw className="h-4 w-4" />
+                        {t('overlays.placement.resetKind')}
+                    </button>
+                    <button type="button" className={primaryButtonClass} disabled={busy} onClick={onSave}>
+                        <Save className="h-4 w-4" />
+                        {t('overlays.placement.save')}
+                    </button>
                 </div>
             </div>
         </DashboardPanel>
     );
 };
-

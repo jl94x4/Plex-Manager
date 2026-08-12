@@ -32,6 +32,10 @@ export type OverlaysPlacement = {
     show: OverlayPlacementKind;
     season: OverlayPlacementKind;
     episode: OverlayPlacementKind;
+    media?: OverlayPlacementKind;
+    status?: OverlayPlacementKind;
+    ratings?: OverlayPlacementKind;
+    network?: OverlayPlacementKind;
 };
 
 export type OverlayPlacement = OverlaysPlacement;
@@ -63,6 +67,42 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
         anchorY: 'bottom',
         bottomClip: 0.10,
     },
+    media: {
+        x: 0.015,
+        y: 0.01,
+        width: 0.305,
+        maxHeight: 0.18,
+        anchorX: 'left',
+        anchorY: 'top',
+        bottomClip: 0,
+    },
+    status: {
+        x: 0.015,
+        y: 0.22,
+        width: 0.305,
+        maxHeight: 0.09,
+        anchorX: 'left',
+        anchorY: 'top',
+        bottomClip: 0,
+    },
+    ratings: {
+        x: 0.985,
+        y: 0.5,
+        width: 0.16,
+        maxHeight: 0.14,
+        anchorX: 'right',
+        anchorY: 'center',
+        bottomClip: 0,
+    },
+    network: {
+        x: 0.015,
+        y: 0.66,
+        width: 0.305,
+        maxHeight: 0.09,
+        anchorX: 'left',
+        anchorY: 'bottom',
+        bottomClip: 0,
+    },
 };
 
 export type OverlaysConfig = {
@@ -82,6 +122,12 @@ export type OverlaysConfig = {
     top10Enabled?: boolean;
     top10Count?: number;
     tmdbAirDateFallback?: boolean;
+    mediaInfoEnabled?: boolean;
+    statusOverlayEnabled?: boolean;
+    statusAiringDays?: number;
+    ratingsOverlayEnabled?: boolean;
+    ratingsMinimum?: number;
+    networkOverlayEnabled?: boolean;
     librarySectionIds?: string[];
     overlayPresetId?: string;
     episodeOverlayPresetId?: string;

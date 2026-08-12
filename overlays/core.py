@@ -121,6 +121,10 @@ def _resolve_paths(config: dict) -> dict[str, Path]:
         "recentlyAddedLog": root / "recently_added_log.json",
         "liveLog": root / "live_log.json",
         "top10Log": root / "top10_log.json",
+        "mediaLog": root / "media_log.json",
+        "statusLog": root / "status_log.json",
+        "ratingsLog": root / "ratings_log.json",
+        "networkLog": root / "network_log.json",
         "overlay": overlay_path,
         "episodeOverlay": episode_overlay_path,
         "assets": assets_dir,
@@ -346,6 +350,42 @@ DEFAULT_PLACEMENT: dict[str, dict[str, Any]] = {
         "anchorX": "center",
         "anchorY": "bottom",
         "bottomClip": 0.10,
+    },
+    "media": {
+        "x": 0.015,
+        "y": 0.01,
+        "width": 0.305,
+        "maxHeight": 0.18,
+        "anchorX": "left",
+        "anchorY": "top",
+        "bottomClip": 0.0,
+    },
+    "status": {
+        "x": 0.015,
+        "y": 0.22,
+        "width": 0.305,
+        "maxHeight": 0.09,
+        "anchorX": "left",
+        "anchorY": "top",
+        "bottomClip": 0.0,
+    },
+    "ratings": {
+        "x": 0.985,
+        "y": 0.50,
+        "width": 0.16,
+        "maxHeight": 0.14,
+        "anchorX": "right",
+        "anchorY": "center",
+        "bottomClip": 0.0,
+    },
+    "network": {
+        "x": 0.015,
+        "y": 0.66,
+        "width": 0.305,
+        "maxHeight": 0.09,
+        "anchorX": "left",
+        "anchorY": "bottom",
+        "bottomClip": 0.0,
     },
 }
 
@@ -1845,8 +1885,17 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
 
     from tmdb_dates import create_resolver_from_config
     from modes_extra import run_live_overlays, run_recently_added_overlays, run_top10_overlays
+    from modes_kometa import run_all_kometa_style, ensure_placement_preview_badges
+
+    try:
+        ensure_placement_preview_badges(paths["assets"])
+    except Exception:
+        pass
 
     resolver = create_resolver_from_config(config, paths=paths, progress=progress)
+
+    # Kometa-style corner/side badges first (media/status/ratings/network), then bottom banners.
+    kometa_summary = run_all_kometa_style(plex, config, paths, preview_mode, progress)
 
     live_summary = run_live_overlays(plex, config, paths, preview_mode, progress, resolver=resolver)
     reserved: set[str] = set(live_summary.get("liveKeys") or [])
@@ -2000,6 +2049,9 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
     }
     summary.update(live_summary)
     summary.update(recent_summary)
+    summary.update(kometa_summary)
+    if kometa_summary.get("kometaStyleErrors"):
+        summary["errors"] = [*(summary.get("errors") or []), *kometa_summary["kometaStyleErrors"]]
 
     episode_summary = run_new_episode_overlays(
         plex, config, paths, preview_mode, progress, resolver=resolver
@@ -2352,7 +2404,15 @@ def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
     from modes_extra import _clear_mode_backup, _restore_show_mode, _load_log as _load_extra_log, _save_log as _save_extra_log
 
     extras_removed = 0
-    for mode, log_key in (("live", "liveLog"), ("recently", "recentlyAddedLog"), ("top10", "top10Log")):
+    for mode, log_key in (
+        ("live", "liveLog"),
+        ("recently", "recentlyAddedLog"),
+        ("top10", "top10Log"),
+        ("media", "mediaLog"),
+        ("status", "statusLog"),
+        ("ratings", "ratingsLog"),
+        ("network", "networkLog"),
+    ):
         extra_log = _load_extra_log(paths[log_key])
         for key in list(extra_log.keys()):
             entry = extra_log.get(key) or {}

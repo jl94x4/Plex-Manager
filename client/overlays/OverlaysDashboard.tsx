@@ -67,6 +67,12 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     top10Enabled: false,
     top10Count: 10,
     tmdbAirDateFallback: true,
+    mediaInfoEnabled: false,
+    statusOverlayEnabled: false,
+    statusAiringDays: 14,
+    ratingsOverlayEnabled: false,
+    ratingsMinimum: 0,
+    networkOverlayEnabled: false,
     librarySectionIds: [],
     overlayPresetId: 'new-season',
     episodeOverlayPresetId: 'new-episode',
@@ -303,6 +309,10 @@ export const OverlaysDashboard: React.FC = () => {
         show: { ...DEFAULT_OVERLAY_PLACEMENT.show, ...(configDraft.placement?.show || {}) },
         season: { ...DEFAULT_OVERLAY_PLACEMENT.season, ...(configDraft.placement?.season || {}) },
         episode: { ...DEFAULT_OVERLAY_PLACEMENT.episode, ...(configDraft.placement?.episode || {}) },
+        media: { ...DEFAULT_OVERLAY_PLACEMENT.media!, ...(configDraft.placement?.media || {}) },
+        status: { ...DEFAULT_OVERLAY_PLACEMENT.status!, ...(configDraft.placement?.status || {}) },
+        ratings: { ...DEFAULT_OVERLAY_PLACEMENT.ratings!, ...(configDraft.placement?.ratings || {}) },
+        network: { ...DEFAULT_OVERLAY_PLACEMENT.network!, ...(configDraft.placement?.network || {}) },
     };
 
     const savePlacement = () => runAction('saveSettings', async () => {
@@ -317,7 +327,7 @@ export const OverlaysDashboard: React.FC = () => {
         }
     });
 
-    const resetPlacementKind = (kind: 'show' | 'season' | 'episode') => {
+    const resetPlacementKind = (kind: 'show' | 'season' | 'episode' | 'media' | 'status' | 'ratings' | 'network') => {
         setConfigDraft((prev) => ({
             ...prev,
             placement: {
@@ -326,7 +336,11 @@ export const OverlaysDashboard: React.FC = () => {
                 show: { ...DEFAULT_OVERLAY_PLACEMENT.show, ...(prev.placement?.show || {}) },
                 season: { ...DEFAULT_OVERLAY_PLACEMENT.season, ...(prev.placement?.season || {}) },
                 episode: { ...DEFAULT_OVERLAY_PLACEMENT.episode, ...(prev.placement?.episode || {}) },
-                [kind]: { ...DEFAULT_OVERLAY_PLACEMENT[kind] },
+                media: { ...DEFAULT_OVERLAY_PLACEMENT.media!, ...(prev.placement?.media || {}) },
+                status: { ...DEFAULT_OVERLAY_PLACEMENT.status!, ...(prev.placement?.status || {}) },
+                ratings: { ...DEFAULT_OVERLAY_PLACEMENT.ratings!, ...(prev.placement?.ratings || {}) },
+                network: { ...DEFAULT_OVERLAY_PLACEMENT.network!, ...(prev.placement?.network || {}) },
+                [kind]: { ...DEFAULT_OVERLAY_PLACEMENT[kind]! },
             },
         }));
     };
@@ -1069,6 +1083,30 @@ export const OverlaysDashboard: React.FC = () => {
                         checked={configDraft.tmdbAirDateFallback !== false}
                         onChange={(tmdbAirDateFallback) => setConfigDraft((prev) => ({ ...prev, tmdbAirDateFallback }))}
                     />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.mediaInfoEnabled')}
+                        description={t('overlays.settings.mediaInfoEnabledHint')}
+                        checked={configDraft.mediaInfoEnabled === true}
+                        onChange={(mediaInfoEnabled) => setConfigDraft((prev) => ({ ...prev, mediaInfoEnabled }))}
+                    />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.statusOverlayEnabled')}
+                        description={t('overlays.settings.statusOverlayEnabledHint')}
+                        checked={configDraft.statusOverlayEnabled === true}
+                        onChange={(statusOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, statusOverlayEnabled }))}
+                    />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.ratingsOverlayEnabled')}
+                        description={t('overlays.settings.ratingsOverlayEnabledHint')}
+                        checked={configDraft.ratingsOverlayEnabled === true}
+                        onChange={(ratingsOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, ratingsOverlayEnabled }))}
+                    />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.networkOverlayEnabled')}
+                        description={t('overlays.settings.networkOverlayEnabledHint')}
+                        checked={configDraft.networkOverlayEnabled === true}
+                        onChange={(networkOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, networkOverlayEnabled }))}
+                    />
 
                     <div className="grid gap-4 border-b border-border/40 py-4 md:grid-cols-2">
                         <label className="block">
@@ -1147,6 +1185,35 @@ export const OverlaysDashboard: React.FC = () => {
                                 onChange={(e) => setConfigDraft((prev) => ({
                                     ...prev,
                                     top10Count: Math.max(1, Math.min(50, Number(e.target.value) || 10)),
+                                }))}
+                            />
+                        </label>
+                        <label className="block">
+                            <span className={fieldLabelClass}>{t('overlays.fields.statusAiringDays')}</span>
+                            <input
+                                type="number"
+                                min={1}
+                                max={90}
+                                className={fieldInputClass}
+                                value={configDraft.statusAiringDays ?? 14}
+                                onChange={(e) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    statusAiringDays: Math.max(1, Math.min(90, Number(e.target.value) || 14)),
+                                }))}
+                            />
+                        </label>
+                        <label className="block">
+                            <span className={fieldLabelClass}>{t('overlays.fields.ratingsMinimum')}</span>
+                            <input
+                                type="number"
+                                min={0}
+                                max={10}
+                                step={0.1}
+                                className={fieldInputClass}
+                                value={configDraft.ratingsMinimum ?? 0}
+                                onChange={(e) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    ratingsMinimum: Math.max(0, Math.min(10, Number(e.target.value) || 0)),
                                 }))}
                             />
                         </label>
