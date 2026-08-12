@@ -37,12 +37,13 @@ export const isStandaloneDisplayMode = () => {
 };
 
 /**
- * Firefox Android leaves `position:fixed; bottom:0` stranded when the dynamic
- * toolbar shows/hides. Pin the bar so its bottom edge matches the *visual*
- * viewport bottom (layout-viewport coordinates).
+ * Firefox Android + iOS Safari/PWA leave `position:fixed; bottom:0` stranded
+ * when the dynamic toolbar collapses (or the layout viewport is shorter than
+ * the screen). Pin the bar so its bottom edge matches the visible viewport,
+ * and extend to the layout bottom when chrome is gone so no black gap remains.
  *
- * Chrome / Chromium PWA and iOS (tabs + standalone) must not use this path —
- * plain CSS `bottom:0` (+ display-mode safe-area on iOS) is correct there.
+ * Chrome / Chromium Android PWA must not use this path — plain CSS `bottom:0`
+ * is correct there.
  */
 export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
     useEffect(() => {
@@ -69,7 +70,13 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
 
             const vv = window.visualViewport;
             const barH = Math.max(bar.offsetHeight || 0, 56);
-            const layoutBottom = window.innerHeight;
+            // Prefer the largest known layout height — iOS Safari often keeps
+            // innerHeight short after the URL bar collapses.
+            const layoutBottom = Math.max(
+                window.innerHeight || 0,
+                document.documentElement?.clientHeight || 0,
+                vv ? Math.ceil(vv.height + vv.offsetTop) : 0,
+            );
             let dockBottom = layoutBottom;
 
             if (vv) {
@@ -83,8 +90,8 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
                     // Toolbar is visible over the page: keep the bar above it.
                     dockBottom = visualBottom;
                 } else {
-                    // Toolbar is collapsed: extend to Firefox's layout viewport so
-                    // the gesture area is painted instead of leaving a bottom gap.
+                    // Toolbar collapsed / PWA: pin to the full layout bottom so
+                    // the home-indicator / gesture area is covered (bleed paints below).
                     dockBottom = Math.max(layoutBottom, visualBottom);
                 }
             }

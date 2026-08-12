@@ -181,6 +181,10 @@
     overflow-x: clip;
     max-width: 100%;
     height: 100%;
+    /* iOS Safari: 100% alone can stay short after the URL bar collapses. */
+    min-height: 100%;
+    min-height: -webkit-fill-available;
+    min-height: 100dvh;
   }
 
   body {
@@ -188,6 +192,9 @@
     overflow-x: clip;
     max-width: 100%;
     height: 100%;
+    min-height: 100%;
+    min-height: -webkit-fill-available;
+    min-height: 100dvh;
     /* Avoid iOS Safari rubber-banding a short body under the fixed app shell. */
     overscroll-behavior: none;
   }
@@ -197,12 +204,16 @@
     max-width: 100%;
     overflow-x: clip;
     height: 100%;
+    min-height: 100%;
+    min-height: -webkit-fill-available;
+    min-height: 100dvh;
   }
 
   /*
    * iOS bottom nav: in Safari *tabs*, viewport-fit=cover still reports a home-
    * indicator inset even though Safari’s chrome already clears it — that created
    * the tall empty band under the icons. Only pad when installed (standalone).
+   * A painted bleed under the bar (see Navigation) covers any leftover gap.
    */
   .ios-mobile-bottom-nav {
     padding-bottom: 0;

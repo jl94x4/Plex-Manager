@@ -11313,7 +11313,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
     const [installBannerDismissed, setInstallBannerDismissed] = useState(false);
     const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplayMode());
-    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav });
+    // Firefox + iOS both strand fixed bottom:0 when chrome collapses; Chromium Android does not.
+    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: portalMobileBottomNav });
     const mobileThemeRef = useRef<HTMLDivElement>(null);
     const [mobileThemePos, setMobileThemePos] = useState<{ top: number; right: number } | null>(null);
     const isFirefoxMobile = typeof navigator !== 'undefined'
@@ -12008,8 +12009,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
             {/* Mobile Bottom Nav
                 Chrome / PWA Chromium: plain fixed bottom:0 (do not change).
-                Firefox mobile: portal + visualViewport dock.
-                iOS: portal + CSS bottom:0; safe-area only in standalone (see .ios-mobile-bottom-nav). */}
+                Firefox + iOS: portal + visualViewport dock + bleed under the bar. */}
             {(() => {
                 const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
                 // Keep More reachable for Install even when every nav item fits the bar.
@@ -12054,22 +12054,19 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 if (portalMobileBottomNav && typeof document !== 'undefined') {
                     // Portal to body so no ancestor creates a fixed containing block.
-                    // Firefox: hook sets top from visualViewport; bleed fills gesture-bar gap.
-                    // iOS: CSS bottom:0; safe-area pad only when installed to home screen.
+                    // Hook docks via visualViewport; bleed paints any leftover home-indicator gap.
                     return ReactDOM.createPortal(
                         <div
-                            ref={firefoxMobileNav ? firefoxNavBarRef : undefined}
+                            ref={firefoxNavBarRef}
                             className={`md:hidden fixed inset-x-0 bottom-0 w-full max-w-full nav-shell border-t z-[310] overflow-visible ${bottomSafeClass}`}
                             style={{ bottom: 0 }}
                         >
                             {navInner}
-                            {firefoxMobileNav && (
-                                <div
-                                    className="absolute inset-x-0 w-full max-w-full nav-shell pointer-events-none"
-                                    style={{ top: '100%', height: 120, borderTop: 'none' }}
-                                    aria-hidden="true"
-                                />
-                            )}
+                            <div
+                                className="absolute inset-x-0 w-full max-w-full nav-shell pointer-events-none"
+                                style={{ top: '100%', height: 160, borderTop: 'none' }}
+                                aria-hidden="true"
+                            />
                         </div>,
                         document.body
                     );
