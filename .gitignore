@@ -88,3 +88,10 @@ static/logo.png
 # Accidental local config dumps
 config.backup-*/
 
+# Local scratch / vendored experiments (not part of the app)
+project/
+scripts/debug-*
+scripts/fix-poster-sets-*.mjs
+scripts/rebuild-poster-sets-*.mjs
+scripts/split-poster-sets-*.mjs
+
