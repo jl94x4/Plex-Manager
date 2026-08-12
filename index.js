@@ -75,6 +75,21 @@ import { loadPosterSetsAudit } from './lib/poster-sets/audit.js';
 import { createWatchStatsLookup } from './lib/media-automation/watch-stats.js';
 import { createTtlLruCache } from './lib/memory-cache.js';
 import { createSwrCache } from './lib/swr-cache.js';
+import {
+    dashboardRecentSwr,
+    tautulliStatsSwr,
+    tautulliGraphsSwr,
+    jellystatAnalyticsSwr,
+    DASHBOARD_RECENT_FRESH_MS,
+    DASHBOARD_RECENT_STALE_MS,
+    TAUTULLI_STATS_FRESH_MS,
+    TAUTULLI_STATS_STALE_MS,
+    TAUTULLI_GRAPHS_FRESH_MS,
+    TAUTULLI_GRAPHS_STALE_MS,
+    JELLYSTAT_ANALYTICS_FRESH_MS,
+    JELLYSTAT_ANALYTICS_STALE_MS,
+    pageSwrStats,
+} from './lib/page-swr-cache.js';
 import { asArray, extractPlexItemBytes } from './lib/plex-stats-bytes.js';
 
 const resolveAppVersion = () => {
@@ -11686,6 +11701,12 @@ app.post('/api/tasks/run/:taskId', requireAdmin, async (req, res) => {
                         }, 'kometa');
                         break;
                     }
+                    case 'achievementsBackfill':
+                        await runAchievementsBackfillJob('manual');
+                        break;
+                    case 'personalAnalyticsWarm':
+                        await runPersonalAnalyticsWarmJob('manual');
+                        break;
                     default:
                         markTaskEnd(task, new Error('Invalid system task'));
                 }
@@ -11736,6 +11757,7 @@ app.get('/api/admin/diagnostics', requireAdmin, async (req, res) => {
                     api: apiCache.stats(),
                     plexMetadata: plexMetadataCache.stats(),
                     personalAnalytics: personalAnalyticsCache.stats(),
+                    pageSwr: pageSwrStats(),
                 },
             },
             integrations: {
@@ -13260,63 +13282,77 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
 
         if (sectionsData && sectionsData.MediaContainer && sectionsData.MediaContainer.Directory) {
             const sections = sectionsData.MediaContainer.Directory;
-            const sectionPromises = sections.map(section =>
-                fetch(`${uri}/library/sections/${section.key}/recentlyAdded?X-Plex-Token=${config.plexToken}&X-Plex-Container-Start=0&X-Plex-Container-Size=${limit}`, { headers: plexClientHeaders(config.plexToken) })
-                    .then(r => r.json())
-                    .then(data => ({ sectionType: section.type, data }))
-                    .catch(() => ({ sectionType: section.type, data: null }))
-            );
+            const recentKey = `plex:${config.serverIdentifier || 'default'}:${limit}`;
+            const { value: recent } = await dashboardRecentSwr.get(
+                recentKey,
+                async () => {
+                    const sectionPromises = sections.map((section) =>
+                        fetch(`${uri}/library/sections/${section.key}/recentlyAdded?X-Plex-Token=${config.plexToken}&X-Plex-Container-Start=0&X-Plex-Container-Size=${limit}`, { headers: plexClientHeaders(config.plexToken) })
+                            .then((r) => r.json())
+                            .then((data) => ({ sectionType: section.type, data }))
+                            .catch(() => ({ sectionType: section.type, data: null }))
+                    );
 
-            const results = await Promise.all(sectionPromises);
+                    const results = await Promise.all(sectionPromises);
+                    let movies = [];
+                    let shows = [];
+                    let music = [];
 
-            results.forEach(({ sectionType, data }) => {
-                if (data && data.MediaContainer && data.MediaContainer.Metadata) {
-                    data.MediaContainer.Metadata.forEach(m => {
-                        const ratingKey = String(m.grandparentRatingKey || m.parentRatingKey || m.ratingKey || '');
-                        const isMusic = sectionType === 'artist';
-                        const item = {
-                            ratingKey,
-                            sourceRatingKey: String(m.ratingKey || ''),
-                            title: isMusic ? (m.title || m.parentTitle || m.grandparentTitle) : (m.grandparentTitle || m.parentTitle || m.title),
-                            parentTitle: isMusic ? (m.parentTitle || m.grandparentTitle || null) : undefined,
-                            type: m.type,
-                            year: m.year,
-                            thumb: m.grandparentThumb || m.parentThumb || m.thumb,
-                            addedAt: m.addedAt,
-                            tags: extractMediaDisplayTags(m),
-                            plexUrl: `https://app.plex.tv/desktop/#!/server/${config.serverIdentifier}/details?key=${encodeURIComponent(m.key)}`
-                        };
+                    results.forEach(({ sectionType, data }) => {
+                        if (data && data.MediaContainer && data.MediaContainer.Metadata) {
+                            data.MediaContainer.Metadata.forEach((m) => {
+                                const ratingKey = String(m.grandparentRatingKey || m.parentRatingKey || m.ratingKey || '');
+                                const isMusic = sectionType === 'artist';
+                                const item = {
+                                    ratingKey,
+                                    sourceRatingKey: String(m.ratingKey || ''),
+                                    title: isMusic ? (m.title || m.parentTitle || m.grandparentTitle) : (m.grandparentTitle || m.parentTitle || m.title),
+                                    parentTitle: isMusic ? (m.parentTitle || m.grandparentTitle || null) : undefined,
+                                    type: m.type,
+                                    year: m.year,
+                                    thumb: m.grandparentThumb || m.parentThumb || m.thumb,
+                                    addedAt: m.addedAt,
+                                    tags: extractMediaDisplayTags(m),
+                                    plexUrl: `https://app.plex.tv/desktop/#!/server/${config.serverIdentifier}/details?key=${encodeURIComponent(m.key)}`
+                                };
 
-                        if (sectionType === 'movie') recentMovies.push(item);
-                        else if (sectionType === 'show') recentShows.push(item);
-                        else if (sectionType === 'artist') recentMusic.push(item);
+                                if (sectionType === 'movie') movies.push(item);
+                                else if (sectionType === 'show') shows.push(item);
+                                else if (sectionType === 'artist') music.push(item);
+                            });
+                        }
                     });
-                }
-            });
 
-            const processList = (list) => {
-                const unique = [];
-                const seen = new Set();
-                list.sort((a, b) => b.addedAt - a.addedAt);
-                for (const item of list) {
-                    const dedupeKey = item.ratingKey || item.title;
-                    if (!seen.has(dedupeKey)) {
-                        seen.add(dedupeKey);
-                        unique.push(item);
-                        if (unique.length >= limit) break;
-                    }
-                }
-                return unique;
-            };
+                    const processList = (list) => {
+                        const unique = [];
+                        const seen = new Set();
+                        list.sort((a, b) => b.addedAt - a.addedAt);
+                        for (const item of list) {
+                            const dedupeKey = item.ratingKey || item.title;
+                            if (!seen.has(dedupeKey)) {
+                                seen.add(dedupeKey);
+                                unique.push(item);
+                                if (unique.length >= limit) break;
+                            }
+                        }
+                        return unique;
+                    };
 
-            recentMovies = processList(recentMovies);
-            recentShows = processList(recentShows);
-            recentMusic = processList(recentMusic);
+                    movies = processList(movies);
+                    shows = processList(shows);
+                    music = processList(music);
 
-            [recentMovies, recentShows] = await Promise.all([
-                enrichRecentItemsWithMediaTags(uri, config, recentMovies),
-                enrichRecentItemsWithMediaTags(uri, config, recentShows)
-            ]);
+                    [movies, shows] = await Promise.all([
+                        enrichRecentItemsWithMediaTags(uri, config, movies),
+                        enrichRecentItemsWithMediaTags(uri, config, shows)
+                    ]);
+                    return { recentMovies: movies, recentShows: shows, recentMusic: music };
+                },
+                { freshMs: DASHBOARD_RECENT_FRESH_MS, staleMs: DASHBOARD_RECENT_STALE_MS },
+            );
+            recentMovies = recent?.recentMovies || [];
+            recentShows = recent?.recentShows || [];
+            recentMusic = recent?.recentMusic || [];
         }
 
         res.json({ activeSessions, recentMovies, recentShows, recentMusic });
@@ -13771,13 +13807,25 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
         }
 
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 250);
-        const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
-        const [sessions, movies, episodes, music] = await Promise.all([
-            fetchWithTimeout(`${baseUrl}/Sessions`, { headers: jellyfinHeaders(config.jellyfinApiKey) }, 15000).then((r) => r.ok ? r.json() : []).catch(() => []),
-            fetchJellyfinItems(config, 'Movie', limit).catch((e) => { log(`Jellyfin movies fetch failed: ${e.message}`); return []; }),
-            fetchJellyfinItems(config, 'Episode', limit).catch((e) => { log(`Jellyfin episodes fetch failed: ${e.message}`); return []; }),
-            fetchJellyfinItems(config, 'MusicAlbum,Audio', limit).catch((e) => { log(`Jellyfin music fetch failed: ${e.message}`); return []; }),
+        const recentKey = `jf:${String(config.jellyfinUrl || '').trim().toLowerCase()}:${limit}`;
+        const [{ sessions }, { value: recent }] = await Promise.all([
+            getJellyfinSessionsSwr(config),
+            dashboardRecentSwr.get(
+                recentKey,
+                async () => {
+                    const [movies, episodes, music] = await Promise.all([
+                        fetchJellyfinItems(config, 'Movie', limit).catch((e) => { log(`Jellyfin movies fetch failed: ${e.message}`); return []; }),
+                        fetchJellyfinItems(config, 'Episode', limit).catch((e) => { log(`Jellyfin episodes fetch failed: ${e.message}`); return []; }),
+                        fetchJellyfinItems(config, 'MusicAlbum,Audio', limit).catch((e) => { log(`Jellyfin music fetch failed: ${e.message}`); return []; }),
+                    ]);
+                    return { movies, episodes, music };
+                },
+                { freshMs: DASHBOARD_RECENT_FRESH_MS, staleMs: DASHBOARD_RECENT_STALE_MS },
+            ),
         ]);
+        const movies = recent?.movies || [];
+        const episodes = recent?.episodes || [];
+        const music = recent?.music || [];
 
         const hideConfig = config.hideStreamUsers === true ? 'anonymous' : (config.hideStreamUsers || 'false');
         const activeSessions = (Array.isArray(sessions) ? sessions : [])
@@ -14429,106 +14477,112 @@ app.get('/api/tautulli/stats', requireAuth, requireMember, async (req, res) => {
         }
         const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
         const apiKey = config.tautulliApiKey;
+        const cacheKey = `tautulli-stats:${tUrl}`;
+        const { value: payload } = await tautulliStatsSwr.get(
+            cacheKey,
+            async () => {
+                /**
+                 * Bare get_home_stats only returns cards enabled on the Tautulli homepage.
+                 * If "Most Concurrent" / "Top Libraries" aren't enabled, every record stays 0
+                 * even when period plays from Plex analytics look fine (issue #104).
+                 * Request those stats by id, using a long window for peak/lifetime-style records.
+                 */
+                const fetchHomeStat = async (statId, { timeRange = 3650, statsCount = 50 } = {}) => {
+                    const params = new URLSearchParams({
+                        apikey: apiKey,
+                        cmd: 'get_home_stats',
+                        stat_id: String(statId),
+                        stats_count: String(statsCount),
+                        time_range: String(Math.max(1, Number(timeRange) || 3650)),
+                    });
+                    const body = await fetchWithTimeout(`${tUrl}/api/v2?${params.toString()}`, {
+                        headers: { Accept: 'application/json' },
+                    }, 8000).then((r) => r.json()).catch(() => null);
+                    const data = body?.response?.data;
+                    if (Array.isArray(data)) {
+                        return data.find((entry) => entry?.stat_id === statId) || data[0] || null;
+                    }
+                    if (data && typeof data === 'object') return data;
+                    return null;
+                };
 
-        /**
-         * Bare get_home_stats only returns cards enabled on the Tautulli homepage.
-         * If "Most Concurrent" / "Top Libraries" aren't enabled, every record stays 0
-         * even when period plays from Plex analytics look fine (issue #104).
-         * Request those stats by id, using a long window for peak/lifetime-style records.
-         */
-        const fetchHomeStat = async (statId, { timeRange = 3650, statsCount = 50 } = {}) => {
-            const params = new URLSearchParams({
-                apikey: apiKey,
-                cmd: 'get_home_stats',
-                stat_id: String(statId),
-                stats_count: String(statsCount),
-                time_range: String(Math.max(1, Number(timeRange) || 3650)),
-            });
-            const payload = await fetchWithTimeout(`${tUrl}/api/v2?${params.toString()}`, {
-                headers: { Accept: 'application/json' },
-            }, 8000).then((r) => r.json()).catch(() => null);
-            const data = payload?.response?.data;
-            if (Array.isArray(data)) {
-                return data.find((entry) => entry?.stat_id === statId) || data[0] || null;
-            }
-            if (data && typeof data === 'object') return data;
-            return null;
-        };
+                const [concurrentStat, librariesStat] = await Promise.all([
+                    fetchHomeStat('most_concurrent'),
+                    fetchHomeStat('top_libraries', { statsCount: 100 }),
+                ]);
 
-        const [concurrentStat, librariesStat] = await Promise.all([
-            fetchHomeStat('most_concurrent'),
-            fetchHomeStat('top_libraries', { statsCount: 100 }),
-        ]);
+                let streamsRecord = 0;
+                let totalPlays = 0;
+                let totalTimeStr = '';
+                let tvPlays = 0;
+                let moviePlays = 0;
+                let musicPlays = 0;
+                let totalDurationSec = 0;
+                let transcodeRecord = 0;
+                let directPlayRecord = 0;
+                let directStreamRecord = 0;
 
-        let streamsRecord = 0;
-        let totalPlays = 0;
-        let totalTimeStr = '';
-        let tvPlays = 0;
-        let moviePlays = 0;
-        let musicPlays = 0;
-        let totalDurationSec = 0;
-        let transcodeRecord = 0;
-        let directPlayRecord = 0;
-        let directStreamRecord = 0;
+                const concurrentRows = Array.isArray(concurrentStat?.rows) ? concurrentStat.rows : [];
+                for (const row of concurrentRows) {
+                    const title = String(row?.title || '').toLowerCase();
+                    const count = Number(row?.count) || 0;
+                    if (!title) continue;
+                    if (title.includes('transcode')) transcodeRecord = Math.max(transcodeRecord, count);
+                    else if (title.includes('direct play')) directPlayRecord = Math.max(directPlayRecord, count);
+                    else if (title.includes('direct stream')) directStreamRecord = Math.max(directStreamRecord, count);
+                    else if (title.includes('concurrent') && title.includes('stream')) {
+                        streamsRecord = Math.max(streamsRecord, count);
+                    }
+                }
 
-        const concurrentRows = Array.isArray(concurrentStat?.rows) ? concurrentStat.rows : [];
-        for (const row of concurrentRows) {
-            const title = String(row?.title || '').toLowerCase();
-            const count = Number(row?.count) || 0;
-            if (!title) continue;
-            if (title.includes('transcode')) transcodeRecord = Math.max(transcodeRecord, count);
-            else if (title.includes('direct play')) directPlayRecord = Math.max(directPlayRecord, count);
-            else if (title.includes('direct stream')) directStreamRecord = Math.max(directStreamRecord, count);
-            else if (title.includes('concurrent') && title.includes('stream')) {
-                streamsRecord = Math.max(streamsRecord, count);
-            }
-        }
+                const libraryRows = Array.isArray(librariesStat?.rows) ? librariesStat.rows : [];
+                for (const lib of libraryRows) {
+                    const plays = Number(lib?.total_plays ?? lib?.total_play ?? lib?.plays) || 0;
+                    const duration = Number(lib?.total_duration ?? lib?.duration) || 0;
+                    totalPlays += plays;
+                    totalDurationSec += duration;
 
-        const libraryRows = Array.isArray(librariesStat?.rows) ? librariesStat.rows : [];
-        for (const lib of libraryRows) {
-            const plays = Number(lib?.total_plays ?? lib?.total_play ?? lib?.plays) || 0;
-            const duration = Number(lib?.total_duration ?? lib?.duration) || 0;
-            totalPlays += plays;
-            totalDurationSec += duration;
+                    const sectionType = String(
+                        lib?.section_type || lib?.sectionType || lib?.media_type || lib?.mediaType || '',
+                    ).trim().toLowerCase();
+                    if (sectionType === 'show' || sectionType === 'episode' || sectionType === 'tv') {
+                        tvPlays += plays;
+                    } else if (sectionType === 'movie') {
+                        moviePlays += plays;
+                    } else if (sectionType === 'artist' || sectionType === 'album' || sectionType === 'track' || sectionType === 'music') {
+                        musicPlays += plays;
+                    } else {
+                        const name = String(lib?.section_name || lib?.title || '').toLowerCase();
+                        if (/\b(tv|show|series|anime)\b/.test(name)) tvPlays += plays;
+                        else if (/\b(movie|film|cinema)\b/.test(name)) moviePlays += plays;
+                        else if (/\b(music|audio|artist)\b/.test(name)) musicPlays += plays;
+                    }
+                }
 
-            const sectionType = String(
-                lib?.section_type || lib?.sectionType || lib?.media_type || lib?.mediaType || '',
-            ).trim().toLowerCase();
-            if (sectionType === 'show' || sectionType === 'episode' || sectionType === 'tv') {
-                tvPlays += plays;
-            } else if (sectionType === 'movie') {
-                moviePlays += plays;
-            } else if (sectionType === 'artist' || sectionType === 'album' || sectionType === 'track' || sectionType === 'music') {
-                musicPlays += plays;
-            } else {
-                // Title heuristic when section_type is missing/renamed.
-                const name = String(lib?.section_name || lib?.title || '').toLowerCase();
-                if (/\b(tv|show|series|anime)\b/.test(name)) tvPlays += plays;
-                else if (/\b(movie|film|cinema)\b/.test(name)) moviePlays += plays;
-                else if (/\b(music|audio|artist)\b/.test(name)) musicPlays += plays;
-            }
-        }
+                if (totalDurationSec > 0) {
+                    const days = Math.floor(totalDurationSec / 86400);
+                    const hrs = Math.floor((totalDurationSec % 86400) / 3600);
+                    const mins = Math.floor((totalDurationSec % 3600) / 60);
+                    if (days > 0) totalTimeStr = `${days} days, ${hrs} hrs`;
+                    else if (hrs > 0) totalTimeStr = `${hrs} hrs, ${mins} mins`;
+                    else totalTimeStr = `${Math.max(1, mins)} mins`;
+                }
 
-        if (totalDurationSec > 0) {
-            const days = Math.floor(totalDurationSec / 86400);
-            const hrs = Math.floor((totalDurationSec % 86400) / 3600);
-            const mins = Math.floor((totalDurationSec % 3600) / 60);
-            if (days > 0) totalTimeStr = `${days} days, ${hrs} hrs`;
-            else if (hrs > 0) totalTimeStr = `${hrs} hrs, ${mins} mins`;
-            else totalTimeStr = `${Math.max(1, mins)} mins`;
-        }
-
-        return res.json({
-            streamsRecord,
-            transcodeRecord,
-            directPlayRecord,
-            directStreamRecord,
-            totalPlays,
-            tvPlays,
-            moviePlays,
-            musicPlays,
-            totalTimeStr,
-        });
+                return {
+                    streamsRecord,
+                    transcodeRecord,
+                    directPlayRecord,
+                    directStreamRecord,
+                    totalPlays,
+                    tvPlays,
+                    moviePlays,
+                    musicPlays,
+                    totalTimeStr,
+                };
+            },
+            { freshMs: TAUTULLI_STATS_FRESH_MS, staleMs: TAUTULLI_STATS_STALE_MS },
+        );
+        return res.json(payload);
     } catch (e) {
         log(`Tautulli Error: ${e.message}`);
         res.status(500).json({ error: 'Failed to connect to Tautulli' });
@@ -14544,41 +14598,51 @@ app.get('/api/tautulli/graphs', requireAuth, requireMember, async (req, res) => 
         const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
         const days = req.query.days || 30;
         const yAxis = req.query.y_axis || 'plays';
-
-        const endpoints = [
-            'get_plays_by_date',
-            'get_plays_by_dayofweek',
-            'get_plays_by_hourofday',
-            'get_plays_by_stream_type',
-            'get_plays_by_stream_resolution',
-            'get_plays_by_top_10_platforms',
-            'get_concurrent_streams_by_stream_type',
-            'get_plays_by_source_resolution',
-            'get_plays_by_top_10_users'
-        ];
-        const results = await Promise.all(
-            endpoints.map(cmd => {
-                let url = `${tUrl}/api/v2?apikey=${config.tautulliApiKey}&cmd=${cmd}&time_range=${days}`;
-                if (cmd !== 'get_concurrent_streams_by_stream_type') {
-                    url += `&y_axis=${yAxis}`;
-                }
-                return fetch(url, { headers: { 'Accept': 'application/json' } })
-                    .then(r => r.json())
-                    .then(j => ({ cmd, data: j?.response?.data || {} }))
-                    .catch(e => ({ cmd, data: {} }));
-            })
+        const cacheKey = `tautulli-graphs:${tUrl}:${days}:${yAxis}`;
+        const { value: rawPayload } = await tautulliGraphsSwr.get(
+            cacheKey,
+            async () => {
+                const endpoints = [
+                    'get_plays_by_date',
+                    'get_plays_by_dayofweek',
+                    'get_plays_by_hourofday',
+                    'get_plays_by_stream_type',
+                    'get_plays_by_stream_resolution',
+                    'get_plays_by_top_10_platforms',
+                    'get_concurrent_streams_by_stream_type',
+                    'get_plays_by_source_resolution',
+                    'get_plays_by_top_10_users'
+                ];
+                const results = await Promise.all(
+                    endpoints.map((cmd) => {
+                        let url = `${tUrl}/api/v2?apikey=${config.tautulliApiKey}&cmd=${cmd}&time_range=${days}`;
+                        if (cmd !== 'get_concurrent_streams_by_stream_type') {
+                            url += `&y_axis=${yAxis}`;
+                        }
+                        return fetch(url, { headers: { 'Accept': 'application/json' } })
+                            .then((r) => r.json())
+                            .then((j) => ({ cmd, data: j?.response?.data || {} }))
+                            .catch(() => ({ cmd, data: {} }));
+                    })
+                );
+                const payload = {};
+                results.forEach((r) => {
+                    payload[r.cmd] = r.data;
+                });
+                return payload;
+            },
+            { freshMs: TAUTULLI_GRAPHS_FRESH_MS, staleMs: TAUTULLI_GRAPHS_STALE_MS },
         );
-
-        const payload = {};
-        results.forEach(r => {
-            payload[r.cmd] = r.data;
-        });
+        const payload = { ...rawPayload };
         const shouldObfuscateUsernames = shouldObfuscateAnalyticsViewers(req.user, config);
         if (shouldObfuscateUsernames && payload.get_plays_by_top_10_users && Array.isArray(payload.get_plays_by_top_10_users.series)) {
-            payload.get_plays_by_top_10_users.series = payload.get_plays_by_top_10_users.series.map((series, index) => ({
-                ...series,
-                name: `Viewer ${index + 1}`
-            }));
+            payload.get_plays_by_top_10_users = {
+                ...payload.get_plays_by_top_10_users,
+                series: payload.get_plays_by_top_10_users.series.map((series, index) => ({
+                    ...series,
+                    name: `Viewer ${index + 1}`
+                })),
+            };
         }
 
         return res.json(payload);
@@ -14947,7 +15011,55 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
         const requestedDays = req.query.days || 30;
         const days = normalizeAnalyticsDaysForJellystat(requestedDays);
         const postBody = { days };
-        const [
+        const cacheKey = `jellystat:${analyticsProvider.provider}:${days}`;
+        const { value: bundle } = await jellystatAnalyticsSwr.get(
+            cacheKey,
+            async () => {
+                const [
+                    libraryTypeTotals,
+                    viewsByHour,
+                    libraryOverview,
+                    libraryMetadata,
+                    mostViewedLibraries,
+                    mostActiveUsers,
+                    mostUsedClients,
+                    mostViewedMovies,
+                    mostViewedShows,
+                    mostViewedMusic,
+                    playbackMethods,
+                    dailyViews,
+                ] = await Promise.all([
+                    fetchJellystatJson(config, '/stats/getViewsByLibraryType', { query: { days } }).catch((e) => { log(e.message); return {}; }),
+                    fetchJellystatJson(config, '/stats/getViewsByHour', { query: { days } }).catch((e) => { log(e.message); return {}; }),
+                    fetchJellystatJson(config, '/stats/getLibraryOverview', { query: { days } }).catch((e) => { log(e.message); return []; }),
+                    fetchJellystatJson(config, '/stats/getLibraryMetadata').catch((e) => { log(e.message); return []; }),
+                    fetchJellystatJson(config, '/stats/getMostViewedLibraries', { method: 'POST', body: postBody }).catch((e) => { log(e.message); return []; }),
+                    fetchJellystatJson(config, '/stats/getMostActiveUsers', { method: 'POST', body: postBody }).catch((e) => { log(e.message); return []; }),
+                    fetchJellystatJson(config, '/stats/getMostUsedClient', { method: 'POST', body: postBody }).catch((e) => { log(e.message); return []; }),
+                    fetchJellystatJson(config, '/stats/getMostViewedByType', { method: 'POST', body: { ...postBody, type: 'Movie' } }).catch((e) => { log(e.message); return []; }),
+                    fetchJellystatJson(config, '/stats/getMostViewedByType', { method: 'POST', body: { ...postBody, type: 'Series' } }).catch((e) => { log(e.message); return []; }),
+                    fetchJellystatJson(config, '/stats/getMostViewedByType', { method: 'POST', body: { ...postBody, type: 'Audio' } }).catch((e) => { log(e.message); return []; }),
+                    fetchJellystatJson(config, '/stats/getPlaybackMethodStats', { method: 'POST', body: postBody }).catch((e) => { log(e.message); return []; }),
+                    fetchJellystatJson(config, '/stats/getViewsOverTime', { query: { days: Math.min(days, 365) } }).catch((e) => { log(e.message); return []; }),
+                ]);
+                return {
+                    libraryTypeTotals,
+                    viewsByHour,
+                    libraryOverview,
+                    libraryMetadata,
+                    mostViewedLibraries,
+                    mostActiveUsers,
+                    mostUsedClients,
+                    mostViewedMovies,
+                    mostViewedShows,
+                    mostViewedMusic,
+                    playbackMethods,
+                    dailyViews,
+                };
+            },
+            { freshMs: JELLYSTAT_ANALYTICS_FRESH_MS, staleMs: JELLYSTAT_ANALYTICS_STALE_MS },
+        );
+        const {
             libraryTypeTotals,
             viewsByHour,
             libraryOverview,
@@ -14960,20 +15072,7 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
             mostViewedMusic,
             playbackMethods,
             dailyViews,
-        ] = await Promise.all([
-            fetchJellystatJson(config, '/stats/getViewsByLibraryType', { query: { days } }).catch((e) => { log(e.message); return {}; }),
-            fetchJellystatJson(config, '/stats/getViewsByHour', { query: { days } }).catch((e) => { log(e.message); return {}; }),
-            fetchJellystatJson(config, '/stats/getLibraryOverview', { query: { days } }).catch((e) => { log(e.message); return []; }),
-            fetchJellystatJson(config, '/stats/getLibraryMetadata').catch((e) => { log(e.message); return []; }),
-            fetchJellystatJson(config, '/stats/getMostViewedLibraries', { method: 'POST', body: postBody }).catch((e) => { log(e.message); return []; }),
-            fetchJellystatJson(config, '/stats/getMostActiveUsers', { method: 'POST', body: postBody }).catch((e) => { log(e.message); return []; }),
-            fetchJellystatJson(config, '/stats/getMostUsedClient', { method: 'POST', body: postBody }).catch((e) => { log(e.message); return []; }),
-            fetchJellystatJson(config, '/stats/getMostViewedByType', { method: 'POST', body: { ...postBody, type: 'Movie' } }).catch((e) => { log(e.message); return []; }),
-            fetchJellystatJson(config, '/stats/getMostViewedByType', { method: 'POST', body: { ...postBody, type: 'Series' } }).catch((e) => { log(e.message); return []; }),
-            fetchJellystatJson(config, '/stats/getMostViewedByType', { method: 'POST', body: { ...postBody, type: 'Audio' } }).catch((e) => { log(e.message); return []; }),
-            fetchJellystatJson(config, '/stats/getPlaybackMethodStats', { method: 'POST', body: postBody }).catch((e) => { log(e.message); return []; }),
-            fetchJellystatJson(config, '/stats/getViewsOverTime', { query: { days: Math.min(days, 365) } }).catch((e) => { log(e.message); return []; }),
-        ]);
+        } = bundle;
 
         const peakHours = new Array(24).fill(0);
         if (Array.isArray(viewsByHour?.stats)) {
@@ -15010,10 +15109,7 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
         });
         const activeStreams = await (async () => {
             try {
-                const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
-                const sessions = await fetchWithTimeout(`${baseUrl}/Sessions`, { headers: jellyfinHeaders(config.jellyfinApiKey) }, 10000)
-                    .then((r) => (r.ok ? r.json() : []))
-                    .catch(() => []);
+                const { sessions } = await getJellyfinSessionsSwr(config);
                 return (Array.isArray(sessions) ? sessions : []).filter((session) => session?.NowPlayingItem).length;
             } catch {
                 return 0;
@@ -15942,7 +16038,123 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
     }
 });
 
-registerAchievementsRoutes(app, {
+const ACHIEVEMENTS_BACKFILL_INTERVAL_MS = 30 * 60 * 1000;
+const PERSONAL_ANALYTICS_WARM_INTERVAL_MS = 10 * 60 * 1000;
+const PERSONAL_ANALYTICS_WARM_MAX_USERS = 8;
+let achievementsHttp = null;
+
+const runAchievementsBackfillJob = async (reason = 'scheduled') => {
+    const job = systemJobs.achievementsBackfill;
+    if (job.running) return null;
+    markTaskStart(job);
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!config.achievementsEnabled) {
+            job.nextRun = new Date(Date.now() + ACHIEVEMENTS_BACKFILL_INTERVAL_MS).toISOString();
+            markTaskEnd(job, null);
+            return { skipped: true, reason: 'disabled' };
+        }
+        const result = await achievementsHttp?.runLeaderboardBackfill?.();
+        job.nextRun = new Date(Date.now() + ACHIEVEMENTS_BACKFILL_INTERVAL_MS).toISOString();
+        markTaskEnd(job, null);
+        log(`[AchievementsBackfill] ${reason}: ${result?.reason || 'ok'}`);
+        return result;
+    } catch (error) {
+        job.nextRun = new Date(Date.now() + ACHIEVEMENTS_BACKFILL_INTERVAL_MS).toISOString();
+        markTaskEnd(job, error);
+        log(`[AchievementsBackfill] ${reason} failed: ${error.message}`);
+        return null;
+    }
+};
+
+const runPersonalAnalyticsWarmJob = async (reason = 'scheduled') => {
+    const job = systemJobs.personalAnalyticsWarm;
+    if (job.running) return null;
+    markTaskStart(job);
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex'
+            || !config.plexToken || !config.serverIdentifier) {
+            job.nextRun = new Date(Date.now() + PERSONAL_ANALYTICS_WARM_INTERVAL_MS).toISOString();
+            markTaskEnd(job, null);
+            return { skipped: true, reason: 'not-plex' };
+        }
+        const uri = await getPlexConnectionUri(config);
+        if (!uri) {
+            job.nextRun = new Date(Date.now() + PERSONAL_ANALYTICS_WARM_INTERVAL_MS).toISOString();
+            markTaskEnd(job, null);
+            return { skipped: true, reason: 'no-uri' };
+        }
+        const users = await loadFile(USERS_PATH, []);
+        const fromCache = [];
+        // Prefer accounts already in the Wrap-Up cache (recent Home visitors).
+        for (const key of personalAnalyticsCache.keys()) {
+            const match = String(key).match(/^v5:([^:]+):/);
+            if (match) fromCache.push(match[1]);
+        }
+        const uniqueCached = [...new Set(fromCache)];
+        const fromUsers = (Array.isArray(users) ? users : [])
+            .filter((u) => u?.plexAccountId && u.plexAccessStatus !== 'revoked')
+            .sort((a, b) => Date.parse(b.lastLogin || b.joiningDate || 0) - Date.parse(a.lastLogin || a.joiningDate || 0))
+            .map((u) => String(u.plexAccountId));
+        const candidates = [...new Set([...uniqueCached, ...fromUsers])].slice(0, PERSONAL_ANALYTICS_WARM_MAX_USERS);
+
+        let warmed = 0;
+        for (const accountID of candidates) {
+            const user = (Array.isArray(users) ? users : []).find((u) => String(u.plexAccountId) === String(accountID)) || {};
+            for (const daysKey of ['30', '7']) {
+                const cacheKey = `v5:${accountID}:${daysKey}`;
+                const cached = personalAnalyticsCache.get(cacheKey);
+                if (cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS) continue;
+                try {
+                    const fakeReq = {
+                        user: {
+                            username: user.username,
+                            email: user.email,
+                            isAdmin: false,
+                            plexAccountId: accountID,
+                        },
+                        query: { days: daysKey },
+                    };
+                    const payload = await buildPersonalWrapUpAnalyticsPayload({
+                        req: fakeReq,
+                        config,
+                        uri,
+                        accountID,
+                        daysKey,
+                    });
+                    personalAnalyticsCache.set(cacheKey, { at: Date.now(), payload });
+                    warmed += 1;
+                } catch (error) {
+                    log(`[PersonalAnalyticsWarm] ${accountID}/${daysKey}: ${error.message}`);
+                }
+            }
+        }
+        job.nextRun = new Date(Date.now() + PERSONAL_ANALYTICS_WARM_INTERVAL_MS).toISOString();
+        markTaskEnd(job, null);
+        log(`[PersonalAnalyticsWarm] ${reason}: warmed=${warmed} users=${candidates.length}`);
+        return { warmed };
+    } catch (error) {
+        job.nextRun = new Date(Date.now() + PERSONAL_ANALYTICS_WARM_INTERVAL_MS).toISOString();
+        markTaskEnd(job, error);
+        log(`[PersonalAnalyticsWarm] ${reason} failed: ${error.message}`);
+        return null;
+    }
+};
+
+const startAchievementsBackfillBackgroundTask = () => {
+    systemJobs.achievementsBackfill.nextRun = new Date(Date.now() + 45_000).toISOString();
+    setTimeout(() => { void runAchievementsBackfillJob('startup'); }, 45_000);
+    setInterval(() => { void runAchievementsBackfillJob('scheduled'); }, ACHIEVEMENTS_BACKFILL_INTERVAL_MS);
+};
+
+const startPersonalAnalyticsWarmBackgroundTask = () => {
+    systemJobs.personalAnalyticsWarm.nextRun = new Date(Date.now() + 90_000).toISOString();
+    setTimeout(() => { void runPersonalAnalyticsWarmJob('startup'); }, 90_000);
+    setInterval(() => { void runPersonalAnalyticsWarmJob('scheduled'); }, PERSONAL_ANALYTICS_WARM_INTERVAL_MS);
+};
+
+achievementsHttp = registerAchievementsRoutes(app, {
     requireAuth,
     requireMember,
     requireAdmin,
@@ -16985,6 +17197,26 @@ const systemJobs = {
         id: 'editionsProcess',
         name: 'Editions: Process',
         description: 'Writes Plex Edition titles from the Editions worker (process all / one / reset / backup).',
+        lastRun: null,
+        nextRun: null,
+        running: false,
+        lastDurationMs: null,
+        lastError: null,
+    },
+    achievementsBackfill: {
+        id: 'achievementsBackfill',
+        name: 'Achievements Backfill',
+        description: 'Rescores portal achievement snapshots off the request path (every 30 minutes).',
+        lastRun: null,
+        nextRun: null,
+        running: false,
+        lastDurationMs: null,
+        lastError: null,
+    },
+    personalAnalyticsWarm: {
+        id: 'personalAnalyticsWarm',
+        name: 'Personal Analytics Warm',
+        description: 'Refreshes Wrap-Up caches for recently active accounts so Home paints from SWR.',
         lastRun: null,
         nextRun: null,
         running: false,
@@ -26392,6 +26624,8 @@ app.listen(PORT, BIND_HOST, async () => {
     // Background cache builders: reuse on-disk cache and schedule next run by interval.
     startTrendingStatsBackgroundTask();
     startAnalyticsStatsBackgroundTask();
+    startAchievementsBackfillBackgroundTask();
+    startPersonalAnalyticsWarmBackgroundTask();
     startUpgraderIndexBackgroundTask();
     startPortalRequestStatusSyncBackgroundTask();
     startSeerrAvailableNotifyBackgroundTask();

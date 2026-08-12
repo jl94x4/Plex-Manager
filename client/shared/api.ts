@@ -49,3 +49,17 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
     if (response.status === 204) return;
     return response.json();
 };
+
+/** Deduplicate concurrent identical GETs (Home Wrap-Up + achievements widget). */
+const inflightGets = new Map<string, Promise<any>>();
+export const apiFetchShared = (url: string, options: RequestInit = {}) => {
+    const method = String(options.method || 'GET').toUpperCase();
+    if (method !== 'GET' || options.body) return apiFetch(url, options);
+    const existing = inflightGets.get(url);
+    if (existing) return existing;
+    const pending = apiFetch(url, options).finally(() => {
+        inflightGets.delete(url);
+    });
+    inflightGets.set(url, pending);
+    return pending;
+};

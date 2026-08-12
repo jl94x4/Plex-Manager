@@ -33,7 +33,7 @@ import { MediaAutomationHomeWidget } from '../media-automation/MediaAutomationHo
 import { AchievementsHomeWidget } from '../achievements/AchievementsDashboard';
 import { UnlockCelebration } from '../achievements/UnlockCelebration';
 import { tAchievements } from '../achievements/i18n';
-import { apiFetch } from '../shared/api';
+import { apiFetch, apiFetchShared } from '../shared/api';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
 
@@ -47,7 +47,7 @@ const AchievementsHomeWidgetConnected: React.FC = () => {
         let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
         const load = () => {
-            apiFetch('/api/achievements/me?view=summary')
+            apiFetchShared('/api/achievements/me?view=summary')
                 .then((data) => {
                     if (cancelled || data?.homeWidgetEnabled === false) {
                         if (!cancelled) setSummary(null);

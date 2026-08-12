@@ -6,7 +6,7 @@ import { ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area, X
 import { SettingsDashboard } from './settings/SettingsDashboard';
 import { LibraryMaintenancePanel } from './maintenance/LibraryMaintenancePanel';
 import { appConfirm } from './shared/confirm';
-import { apiFetch } from './shared/api';
+import { apiFetch, apiFetchShared } from './shared/api';
 import { InAppNotificationsBell } from './shared/InAppNotificationsBell';
 import { getPublicOrigin, logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath } from './shared/basePath';
 import { formatDate, getDaysUntilExpiry, getAccessProgressPct, addMonths, addYears, formatTime, formatEventName, formatDateTime, hexToRgb, formatSizeCeil, formatStreamingHour } from './shared/format';
@@ -7701,7 +7701,7 @@ export const UserDashboard: React.FC<{
         const load = async () => {
             try {
                 // Phase 1 — all-time from achievements snapshot (usually instant / cacheable).
-                const me = await apiFetch('/api/achievements/me?view=summary').catch(() => null);
+                const me = await apiFetchShared('/api/achievements/me?view=summary').catch(() => null);
                 if (cancelled) return;
                 if (!me?.enabled) {
                     setWrapUpAchievements(null);
@@ -11333,7 +11333,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             return;
         }
         let cancelled = false;
-        apiFetch('/api/achievements/me?view=summary')
+        apiFetchShared('/api/achievements/me?view=summary')
             .then((data) => {
                 if (!cancelled) setProfileAchievements(data);
             })
