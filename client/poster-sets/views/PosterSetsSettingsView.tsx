@@ -1383,7 +1383,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                         />
                         <SettingsToggleRow
                             title="Gotify digest when watchers queue new art"
-                            description="Send a Gotify digest when set watchers enqueue new posters. Requires Gotify enabled under Settings â†’ Notifications."
+                            description="Send a Gotify digest when set watchers enqueue new posters. Requires Gotify enabled under Settings → Notifications."
                             checked={configDraft.notifyOnWatcherDigest !== false}
                             onChange={(next) => setConfigDraft((prev) => ({ ...prev, notifyOnWatcherDigest: next }))}
                         />

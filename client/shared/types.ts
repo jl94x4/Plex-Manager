@@ -151,9 +151,9 @@ export interface AppSettings {
     sidebarIdentityPosition?: 'top' | 'bottom';
     backgroundImageUrl?: string;
     navOrder?: string[];
-    /** Server-wide nav keys hidden from the sidebar/mobile bar (Settings → Navigation). */
+    /** Server-wide nav keys hidden from the sidebar/mobile bar (Settings → Layout → Navigation). */
     navHiddenKeys?: string[];
-    /** Members / non-admin nav order (Settings → Navigation → Users). */
+    /** Members / non-admin nav order (Settings → Layout → Navigation → Users). */
     memberNavOrder?: string[];
     /** Members / non-admin hidden nav keys. */
     memberNavHiddenKeys?: string[];

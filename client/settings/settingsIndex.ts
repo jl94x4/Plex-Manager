@@ -1,5 +1,5 @@
 export const SETTINGS_TABS = [
-    'plex', 'smtp', 'notifications', 'gotify', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'navigation', 'home-layout',
+    'plex', 'notifications', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'layout',
     'achievements', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'overlays', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
 ] as const;
 
@@ -28,8 +28,9 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'contact/whatsapp', tabId: 'contact', sectionId: 'whatsapp', label: 'WhatsApp Number', group: 'Portal', keywords: ['whatsapp', 'phone', 'number'] },
     { id: 'contact/email', tabId: 'contact', sectionId: 'email', label: 'Contact Email', group: 'Portal', keywords: ['email', 'mail', 'support'] },
 
-    { id: 'navigation', tabId: 'navigation', label: 'Navigation', group: 'Portal', keywords: ['menu', 'order', 'sidebar', 'nav', 'downloads', 'members'] },
-    { id: 'home-layout', tabId: 'home-layout', label: 'Home Layout', group: 'Portal', keywords: ['dashboard', 'widgets', 'sections', 'home', 'layout', 'reorder', 'hide'] },
+    { id: 'layout', tabId: 'layout', label: 'Layout', group: 'Portal', keywords: ['layout', 'navigation', 'menu', 'order', 'sidebar', 'home', 'dashboard', 'widgets', 'sections', 'reorder', 'hide', 'downloads', 'members'] },
+    { id: 'layout/navigation', tabId: 'layout', sectionId: 'navigation', label: 'Navigation', group: 'Portal', keywords: ['menu', 'order', 'sidebar', 'nav', 'downloads', 'members'] },
+    { id: 'layout/home-layout', tabId: 'layout', sectionId: 'home-layout', label: 'Home Layout', group: 'Portal', keywords: ['dashboard', 'widgets', 'sections', 'home', 'layout', 'reorder', 'hide'] },
     { id: 'achievements', tabId: 'achievements', label: 'Achievements', group: 'Portal', keywords: ['xp', 'badges', 'leaderboard', 'gamification', 'achievements', 'level'] },
 
     { id: 'plex', tabId: 'plex', label: 'Media Player', group: 'Media Stack', keywords: ['plex', 'jellyfin', 'media', 'player', 'server'] },
@@ -62,8 +63,8 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
 
     { id: 'status', tabId: 'status', label: 'Status Monitor', group: 'Media Stack', keywords: ['uptime', 'health', 'services', 'monitor'] },
 
-    { id: 'smtp', tabId: 'smtp', label: 'SMTP Alerts', group: 'Comms', keywords: ['mail', 'smtp', 'email', 'alerts', 'test'] },
-    { id: 'notifications', tabId: 'notifications', label: 'Notifications', group: 'Comms', keywords: ['notifications', 'bell', 'web push', 'discord', 'request available', 'vapid', 'in-app', 'test'] },
+    { id: 'notifications', tabId: 'notifications', label: 'Notifications', group: 'Comms', keywords: ['notifications', 'bell', 'web push', 'discord', 'request available', 'vapid', 'in-app', 'test', 'smtp', 'mail', 'email', 'gotify', 'alerts'] },
+    { id: 'notifications/smtp', tabId: 'notifications', sectionId: 'smtp', label: 'SMTP Alerts', group: 'Comms', keywords: ['mail', 'smtp', 'email', 'alerts', 'test'] },
     { id: 'notifications/status', tabId: 'notifications', sectionId: 'notifications-status', label: 'Notification Health', group: 'Comms', keywords: ['health', 'status', 'vapid', 'smtp', 'discord', 'job'] },
     { id: 'notifications/request-available', tabId: 'notifications', sectionId: 'notifications-request-available', label: 'Request Available Alerts', group: 'Comms', keywords: ['request available', 'email', 'in-app', 'push', 'discord'] },
     { id: 'notifications/not-released', tabId: 'notifications', sectionId: 'notifications-not-released', label: 'Not Released Yet', group: 'Comms', keywords: ['release', 'digital', 'theatrical', 'calendar', 'unreleased'] },
@@ -72,7 +73,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'notifications/webhook', tabId: 'notifications', sectionId: 'notifications-webhook', label: 'Generic Webhook', group: 'Comms', keywords: ['webhook', 'json', 'http', 'integration'] },
     { id: 'notifications/test', tabId: 'notifications', sectionId: 'notifications-test', label: 'Send Test Notification', group: 'Comms', keywords: ['test', 'send', 'bell'] },
     { id: 'notifications/recent', tabId: 'notifications', sectionId: 'notifications-recent', label: 'Recent Notifications', group: 'Comms', keywords: ['history', 'log', 'recent', 'bell'] },
-    { id: 'gotify', tabId: 'gotify', label: 'Gotify Alerts', group: 'Comms', keywords: ['gotify', 'push', 'alerts', 'notifications', 'rules', 'self hosted'] },
+    { id: 'notifications/gotify', tabId: 'notifications', sectionId: 'gotify', label: 'Gotify Alerts', group: 'Comms', keywords: ['gotify', 'push', 'alerts', 'notifications', 'rules', 'self hosted'] },
     { id: 'newsletter', tabId: 'newsletter', label: 'Newsletter', group: 'Comms', keywords: ['digest', 'send', 'frequency', 'weekly', 'monthly'] },
     { id: 'broadcast', tabId: 'broadcast', label: 'Broadcast Email', group: 'Comms', keywords: ['announcement', 'bulk', 'users', 'broadcast'] },
     { id: 'invites', tabId: 'invites', label: 'Invites', group: 'Comms', keywords: ['invite', 'link', 'code'] },
@@ -117,8 +118,23 @@ export const parseSettingsHash = (hash: string): { tabId: SettingsTabId | null; 
     const raw = hash.replace(/^#/, '').trim();
     if (!raw) return { tabId: null, sectionId: null };
     if (raw === 'system/upgrader') return { tabId: 'upgrader', sectionId: null };
+
+    // Legacy tab hashes → merged Layout / Notifications sections.
+    const legacyTabRedirects: Record<string, { tabId: SettingsTabId; sectionId: string }> = {
+        navigation: { tabId: 'layout', sectionId: 'navigation' },
+        'home-layout': { tabId: 'layout', sectionId: 'home-layout' },
+        smtp: { tabId: 'notifications', sectionId: 'smtp' },
+        gotify: { tabId: 'notifications', sectionId: 'gotify' },
+    };
+    if (legacyTabRedirects[raw]) {
+        return legacyTabRedirects[raw];
+    }
+
     const [tabPart, ...sectionParts] = raw.split('/');
     const normalizedTabPart = tabPart === 'media-player' ? 'plex' : tabPart;
+    if (!sectionParts.length && legacyTabRedirects[normalizedTabPart]) {
+        return legacyTabRedirects[normalizedTabPart];
+    }
     const tabId = SETTINGS_TABS.includes(normalizedTabPart as SettingsTabId) ? normalizedTabPart as SettingsTabId : null;
     const sectionId = sectionParts.length > 0 ? sectionParts.join('/') : null;
     return { tabId, sectionId };

@@ -114,7 +114,7 @@ export const SettingsSearchPanel: React.FC<{
 const SETTINGS_INDEX_TAB_LABEL = (tabId: string) => {
     const labels: Record<string, string> = {
         plex: 'Media Player',
-        'home-layout': 'Home Layout',
+        layout: 'Layout',
         'stream-rules': 'Stream Rules',
     };
     return labels[tabId] || tabId.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());

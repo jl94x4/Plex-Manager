@@ -15,7 +15,7 @@ export type NavFeatureFlags = {
     downloads?: boolean;
 };
 
-/** Default sidebar order matching Settings → Navigation stock layout. */
+/** Default sidebar order matching Settings → Layout → Navigation stock layout. */
 export const DEFAULT_NAV_ORDER = [
     'home',
     'discover',
@@ -195,7 +195,7 @@ export const isRequestNavEnabled = (requestAppType?: string | null, requestUrl?:
     return true;
 };
 
-/** Keys that cannot be hidden via Settings → Navigation (prevents lockout). */
+/** Keys that cannot be hidden via Settings → Layout → Navigation (prevents lockout). */
 export const ALWAYS_VISIBLE_NAV_KEYS = new Set(['home', 'settings', 'logout']);
 
 /** Members never see Settings; Home + Logout stay always visible in their layout. */

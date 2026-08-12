@@ -31,7 +31,7 @@ The **Requests** nav item (admin) is the approval inbox:
 | Quick actions | Approve, edit, decline, retry failed, delete |
 | Issues / Blocklist | Admin tools for reported issues and blocked titles |
 
-The Home dashboard can show a **Pending Requests** widget. Reorder or hide it under **Settings → Home Layout**.
+The Home dashboard can show a **Pending Requests** widget. Reorder or hide it under **Settings → Layout → Home Layout**.
 
 ## Settings
 

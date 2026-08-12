@@ -7,14 +7,12 @@ import {
     BookOpen,
     RefreshCw,
     Server,
-    Mail,
     Bell,
     Newspaper,
     Trash2,
     Layers,
     Palette,
-    Navigation as NavigationIcon,
-    Home,
+    LayoutDashboard,
     Activity,
     UserPlus,
     ListTodo,
@@ -160,16 +158,13 @@ const APP_ICONS: Record<string, string> = {
 
 const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
     plex: Server,
-    smtp: Mail,
     notifications: Bell,
-    gotify: Radio,
     newsletter: Newspaper,
     cleanup: Trash2,
     mediastack: Layers,
     request: BookOpen,
     branding: Palette,
-    navigation: NavigationIcon,
-    'home-layout': Home,
+    layout: LayoutDashboard,
     status: Activity,
     invites: UserPlus,
     tasks: ListTodo,
@@ -2231,216 +2226,216 @@ export const SettingsDashboard: React.FC = () => {
                             </div>
                         )}
 
-                    {activeTab === 'smtp' && (
-                        <div className="mb-8">
-                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">SMTP Email Notifications</h3>
-                            <div className="flex flex-col md:flex-row gap-4 mb-4">
-                                <div className="flex-2">
-                                    <label htmlFor="smtpHost">SMTP Host</label>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpHost" type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.mailgun.org" />
-                                </div>
-                                <div className="flex-1">
-                                    <label htmlFor="smtpPort">Port</label>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpPort" type="number" value={smtpPort} onChange={e => setSmtpPort(Number(e.target.value))} placeholder="587" />
-                                </div>
-                            </div>
-                            <div className="flex flex-col md:flex-row gap-4 mb-4">
-                                <div className="flex-1">
-                                    <label htmlFor="smtpUser">SMTP Username</label>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpUser" type="text" value={smtpUser} onChange={e => setSmtpUser(e.target.value)} placeholder="postmaster@yourdomain.com" />
-                                </div>
-                                <div className="flex-1">
-                                    <label htmlFor="smtpPass">SMTP Password</label>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpPass" type="password" value={smtpPass} onChange={e => setSmtpPass(e.target.value)} placeholder="••••••••••••" />
-                                </div>
-                            </div>
-                            <div className="flex flex-col md:flex-row gap-4 mb-4 md:items-center">
-                                <div className="flex-[2]">
-                                    <label htmlFor="smtpFrom">Sender Address (From)</label>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpFrom" type="text" value={smtpFrom} onChange={e => setSmtpFrom(e.target.value)} placeholder="Server Manager Portal <noreply@yourdomain.com>" />
-                                </div>
-                                <div className="flex-1">
-                                    <SettingsToggleRow
-                                        title="SSL / Secure"
-                                        checked={smtpSecure}
-                                        onChange={setSmtpSecure}
-                                        border={false}
-                                        className="!py-0"
-                                    />
-                                </div>
-                            </div>
-                            <div className="mb-4">
-                                <SettingFieldLabel
-                                    htmlFor="emailDaysBefore"
-                                    hint={<SettingHint>Automated notification email will be sent when user has this many days left.</SettingHint>}
-                                >
-                                    Warning Alert Threshold (Days Before Expiry)
-                                </SettingFieldLabel>
-                                <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="emailDaysBefore" type="number" value={emailDaysBefore} onChange={e => setEmailDaysBefore(Number(e.target.value))} min="0" />
-                            </div>
-
-                            <div className="mt-6 space-y-3">
-                                <h4 className="font-bold text-text">Test SMTP Settings</h4>
+                    {activeTab === 'notifications' && (
+                        <div className="mb-8 space-y-10">
+                            <section id={getSettingsSectionElementId('smtp')} className="scroll-mt-24">
+                                <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">SMTP Email Notifications</h3>
                                 <div className="flex flex-col md:flex-row gap-4 mb-4">
+                                    <div className="flex-2">
+                                        <label htmlFor="smtpHost">SMTP Host</label>
+                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpHost" type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.mailgun.org" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label htmlFor="smtpPort">Port</label>
+                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpPort" type="number" value={smtpPort} onChange={e => setSmtpPort(Number(e.target.value))} placeholder="587" />
+                                    </div>
+                                </div>
+                                <div className="flex flex-col md:flex-row gap-4 mb-4">
+                                    <div className="flex-1">
+                                        <label htmlFor="smtpUser">SMTP Username</label>
+                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpUser" type="text" value={smtpUser} onChange={e => setSmtpUser(e.target.value)} placeholder="postmaster@yourdomain.com" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label htmlFor="smtpPass">SMTP Password</label>
+                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpPass" type="password" value={smtpPass} onChange={e => setSmtpPass(e.target.value)} placeholder="••••••••••••" />
+                                    </div>
+                                </div>
+                                <div className="flex flex-col md:flex-row gap-4 mb-4 md:items-center">
+                                    <div className="flex-[2]">
+                                        <label htmlFor="smtpFrom">Sender Address (From)</label>
+                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpFrom" type="text" value={smtpFrom} onChange={e => setSmtpFrom(e.target.value)} placeholder="Server Manager Portal <noreply@yourdomain.com>" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <SettingsToggleRow
+                                            title="SSL / Secure"
+                                            checked={smtpSecure}
+                                            onChange={setSmtpSecure}
+                                            border={false}
+                                            className="!py-0"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="mb-4">
+                                    <SettingFieldLabel
+                                        htmlFor="emailDaysBefore"
+                                        hint={<SettingHint>Automated notification email will be sent when user has this many days left.</SettingHint>}
+                                    >
+                                        Warning Alert Threshold (Days Before Expiry)
+                                    </SettingFieldLabel>
+                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="emailDaysBefore" type="number" value={emailDaysBefore} onChange={e => setEmailDaysBefore(Number(e.target.value))} min="0" />
+                                </div>
+
+                                <div className="mt-6 space-y-3">
+                                    <h4 className="font-bold text-text">Test SMTP Settings</h4>
+                                    <div className="flex flex-col md:flex-row gap-4 mb-4">
+                                        <input
+                                            type="email"
+                                            value={testRecipient}
+                                            onChange={e => setTestRecipient(e.target.value)}
+                                            placeholder="test-recipient@gmail.com"
+                                            className="flex-grow p-3 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                        />
+                                        <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={handleTestEmail} disabled={isTestingSmtp || !testRecipient}>
+                                            {isTestingSmtp ? 'Sending...' : 'Send Test'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <NotificationsSettingsTab
+                                requestAvailableNotifyEnabled={requestAvailableNotifyEnabled}
+                                setRequestAvailableNotifyEnabled={setRequestAvailableNotifyEnabled}
+                                requestAvailableNotifyEmail={requestAvailableNotifyEmail}
+                                setRequestAvailableNotifyEmail={setRequestAvailableNotifyEmail}
+                                requestAvailableNotifyInApp={requestAvailableNotifyInApp}
+                                setRequestAvailableNotifyInApp={setRequestAvailableNotifyInApp}
+                                requestAvailableNotifyWebPush={requestAvailableNotifyWebPush}
+                                setRequestAvailableNotifyWebPush={setRequestAvailableNotifyWebPush}
+                                requestAvailableNotifyDiscord={requestAvailableNotifyDiscord}
+                                setRequestAvailableNotifyDiscord={setRequestAvailableNotifyDiscord}
+                                requestAvailableDiscordWebhookUrl={requestAvailableDiscordWebhookUrl}
+                                setRequestAvailableDiscordWebhookUrl={setRequestAvailableDiscordWebhookUrl}
+                                requestNotReleasedNotifyEnabled={requestNotReleasedNotifyEnabled}
+                                setRequestNotReleasedNotifyEnabled={setRequestNotReleasedNotifyEnabled}
+                                requestNotReleasedNotifyEmail={requestNotReleasedNotifyEmail}
+                                setRequestNotReleasedNotifyEmail={setRequestNotReleasedNotifyEmail}
+                                requestNotReleasedNotifyInApp={requestNotReleasedNotifyInApp}
+                                setRequestNotReleasedNotifyInApp={setRequestNotReleasedNotifyInApp}
+                                requestNotReleasedNotifyWebPush={requestNotReleasedNotifyWebPush}
+                                setRequestNotReleasedNotifyWebPush={setRequestNotReleasedNotifyWebPush}
+                                notifyReleaseDatePreference={notifyReleaseDatePreference}
+                                setNotifyReleaseDatePreference={setNotifyReleaseDatePreference}
+                                webPushEnabled={webPushEnabled}
+                                setWebPushEnabled={setWebPushEnabled}
+                                notificationTemplates={notificationTemplates}
+                                setNotificationTemplates={setNotificationTemplates}
+                                notificationTemplateDefaults={notificationTemplateDefaults}
+                                notificationTemplateEvents={notificationTemplateEvents}
+                                notificationTemplateFields={notificationTemplateFields}
+                                ntfyEnabled={ntfyEnabled}
+                                setNtfyEnabled={setNtfyEnabled}
+                                ntfyServerUrl={ntfyServerUrl}
+                                setNtfyServerUrl={setNtfyServerUrl}
+                                ntfyTopic={ntfyTopic}
+                                setNtfyTopic={setNtfyTopic}
+                                ntfyToken={ntfyToken}
+                                setNtfyToken={setNtfyToken}
+                                ntfyPriority={ntfyPriority}
+                                setNtfyPriority={setNtfyPriority}
+                                ntfyEvents={ntfyEvents}
+                                setNtfyEvents={setNtfyEvents}
+                                webhookEnabled={webhookEnabled}
+                                setWebhookEnabled={setWebhookEnabled}
+                                webhookUrl={webhookUrl}
+                                setWebhookUrl={setWebhookUrl}
+                                webhookHeadersJson={webhookHeadersJson}
+                                setWebhookHeadersJson={setWebhookHeadersJson}
+                                webhookEvents={webhookEvents}
+                                setWebhookEvents={setWebhookEvents}
+                                onOpenGotify={() => {
+                                    setActiveSectionId('gotify');
+                                    setScrollToSection('gotify');
+                                }}
+                                onOpenSmtp={() => {
+                                    setActiveSectionId('smtp');
+                                    setScrollToSection('smtp');
+                                }}
+                                addToast={addToast}
+                                getSettingsSectionElementId={getSettingsSectionElementId}
+                            />
+
+                            <section id={getSettingsSectionElementId('gotify')} className="scroll-mt-24">
+                                <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Gotify Push Alerts</h3>
+                                <p className="text-sm text-muted mb-4 max-w-2xl">
+                                    Admin automation alerts (expiry, sync, revoke). Member request-available / in-app / web push channels are configured in the sections above.
+                                </p>
+                                <SettingsToggleRow
+                                    title="Enable Gotify Alerts"
+                                    description="Send admin push alerts for important portal automation events."
+                                    checked={gotifyEnabled}
+                                    onChange={setGotifyEnabled}
+                                    className="mb-4"
+                                />
+                                <div className="flex flex-col md:flex-row gap-4 mb-4">
+                                    <div className="flex-[2]">
+                                        <label htmlFor="gotifyUrl">Gotify Server URL</label>
+                                        <input
+                                            className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                            id="gotifyUrl"
+                                            type="url"
+                                            value={gotifyUrl}
+                                            onChange={e => setGotifyUrl(e.target.value)}
+                                            placeholder="https://gotify.example.com"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label htmlFor="gotifyPriority">Priority</label>
+                                        <input
+                                            className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                            id="gotifyPriority"
+                                            type="number"
+                                            min={0}
+                                            max={10}
+                                            value={gotifyPriority}
+                                            onChange={e => setGotifyPriority(Number(e.target.value))}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="mb-4">
+                                    <label htmlFor="gotifyToken">Application Token</label>
                                     <input
-                                        type="email"
-                                        value={testRecipient}
-                                        onChange={e => setTestRecipient(e.target.value)}
-                                        placeholder="test-recipient@gmail.com"
-                                        className="flex-grow p-3 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                        className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                        id="gotifyToken"
+                                        type="password"
+                                        value={gotifyToken}
+                                        onChange={e => setGotifyToken(e.target.value)}
+                                        placeholder="Gotify app token"
                                     />
-                                    <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={handleTestEmail} disabled={isTestingSmtp || !testRecipient}>
-                                        {isTestingSmtp ? 'Sending...' : 'Send Test'}
+                                </div>
+                                <div className="mt-6 rounded-lg border border-border bg-background/40 p-4">
+                                    <h4 className="font-bold text-text mb-3">Alert Rules</h4>
+                                    <div className="space-y-1">
+                                        {[
+                                            ['expiryWarning', 'Access Expiry Warnings', 'Alert when a user reaches the configured expiry-warning threshold.'],
+                                            ['accessRevoked', 'Access Revoked', 'Alert when expired access is revoked automatically.'],
+                                            ['newUserSynced', 'New Users During Sync', 'Alert when a Plex/Jellyfin sync discovers new users.'],
+                                            ['requestPending', 'New Media Requests', 'Alert when a member submits a request that needs approval.'],
+                                            ['syncFailure', 'Sync Failures', 'Alert when a manual user sync fails.'],
+                                            ['syncSuccess', 'Sync Success', 'Alert after every successful manual user sync.'],
+                                        ].map(([key, title, description]) => (
+                                            <SettingsToggleRow
+                                                key={key}
+                                                title={title}
+                                                description={description}
+                                                checked={alertRules[key] !== false}
+                                                onChange={(checked) => setAlertRules(prev => ({ ...prev, [key]: checked }))}
+                                                border={false}
+                                                className="!py-3"
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="mt-6 space-y-3">
+                                    <h4 className="font-bold text-text">Test Gotify Settings</h4>
+                                    <button
+                                        className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                        onClick={handleTestGotify}
+                                        disabled={isTestingGotify || !gotifyUrl || !gotifyToken}
+                                    >
+                                        {isTestingGotify ? 'Sending...' : 'Send Test'}
                                     </button>
                                 </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'notifications' && (
-                        <NotificationsSettingsTab
-                            requestAvailableNotifyEnabled={requestAvailableNotifyEnabled}
-                            setRequestAvailableNotifyEnabled={setRequestAvailableNotifyEnabled}
-                            requestAvailableNotifyEmail={requestAvailableNotifyEmail}
-                            setRequestAvailableNotifyEmail={setRequestAvailableNotifyEmail}
-                            requestAvailableNotifyInApp={requestAvailableNotifyInApp}
-                            setRequestAvailableNotifyInApp={setRequestAvailableNotifyInApp}
-                            requestAvailableNotifyWebPush={requestAvailableNotifyWebPush}
-                            setRequestAvailableNotifyWebPush={setRequestAvailableNotifyWebPush}
-                            requestAvailableNotifyDiscord={requestAvailableNotifyDiscord}
-                            setRequestAvailableNotifyDiscord={setRequestAvailableNotifyDiscord}
-                            requestAvailableDiscordWebhookUrl={requestAvailableDiscordWebhookUrl}
-                            setRequestAvailableDiscordWebhookUrl={setRequestAvailableDiscordWebhookUrl}
-                            requestNotReleasedNotifyEnabled={requestNotReleasedNotifyEnabled}
-                            setRequestNotReleasedNotifyEnabled={setRequestNotReleasedNotifyEnabled}
-                            requestNotReleasedNotifyEmail={requestNotReleasedNotifyEmail}
-                            setRequestNotReleasedNotifyEmail={setRequestNotReleasedNotifyEmail}
-                            requestNotReleasedNotifyInApp={requestNotReleasedNotifyInApp}
-                            setRequestNotReleasedNotifyInApp={setRequestNotReleasedNotifyInApp}
-                            requestNotReleasedNotifyWebPush={requestNotReleasedNotifyWebPush}
-                            setRequestNotReleasedNotifyWebPush={setRequestNotReleasedNotifyWebPush}
-                            notifyReleaseDatePreference={notifyReleaseDatePreference}
-                            setNotifyReleaseDatePreference={setNotifyReleaseDatePreference}
-                            webPushEnabled={webPushEnabled}
-                            setWebPushEnabled={setWebPushEnabled}
-                            notificationTemplates={notificationTemplates}
-                            setNotificationTemplates={setNotificationTemplates}
-                            notificationTemplateDefaults={notificationTemplateDefaults}
-                            notificationTemplateEvents={notificationTemplateEvents}
-                            notificationTemplateFields={notificationTemplateFields}
-                            ntfyEnabled={ntfyEnabled}
-                            setNtfyEnabled={setNtfyEnabled}
-                            ntfyServerUrl={ntfyServerUrl}
-                            setNtfyServerUrl={setNtfyServerUrl}
-                            ntfyTopic={ntfyTopic}
-                            setNtfyTopic={setNtfyTopic}
-                            ntfyToken={ntfyToken}
-                            setNtfyToken={setNtfyToken}
-                            ntfyPriority={ntfyPriority}
-                            setNtfyPriority={setNtfyPriority}
-                            ntfyEvents={ntfyEvents}
-                            setNtfyEvents={setNtfyEvents}
-                            webhookEnabled={webhookEnabled}
-                            setWebhookEnabled={setWebhookEnabled}
-                            webhookUrl={webhookUrl}
-                            setWebhookUrl={setWebhookUrl}
-                            webhookHeadersJson={webhookHeadersJson}
-                            setWebhookHeadersJson={setWebhookHeadersJson}
-                            webhookEvents={webhookEvents}
-                            setWebhookEvents={setWebhookEvents}
-                            onOpenGotify={() => setActiveTab('gotify')}
-                            onOpenSmtp={() => setActiveTab('smtp')}
-                            addToast={addToast}
-                            getSettingsSectionElementId={getSettingsSectionElementId}
-                        />
-                    )}
-
-                    {activeTab === 'gotify' && (
-                        <div className="mb-8">
-                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Gotify Push Alerts</h3>
-                            <p className="text-sm text-muted mb-4 max-w-2xl">
-                                Admin automation alerts (expiry, sync, revoke). For member request-available / in-app / web push, use{' '}
-                                <button type="button" className="font-bold text-plex hover:underline" onClick={() => setActiveTab('notifications')}>
-                                    Notifications
-                                </button>
-                                .
-                            </p>
-                            <SettingsToggleRow
-                                title="Enable Gotify Alerts"
-                                description="Send admin push alerts for important portal automation events."
-                                checked={gotifyEnabled}
-                                onChange={setGotifyEnabled}
-                                className="mb-4"
-                            />
-                            <div className="flex flex-col md:flex-row gap-4 mb-4">
-                                <div className="flex-[2]">
-                                    <label htmlFor="gotifyUrl">Gotify Server URL</label>
-                                    <input
-                                        className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
-                                        id="gotifyUrl"
-                                        type="url"
-                                        value={gotifyUrl}
-                                        onChange={e => setGotifyUrl(e.target.value)}
-                                        placeholder="https://gotify.example.com"
-                                    />
-                                </div>
-                                <div className="flex-1">
-                                    <label htmlFor="gotifyPriority">Priority</label>
-                                    <input
-                                        className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
-                                        id="gotifyPriority"
-                                        type="number"
-                                        min={0}
-                                        max={10}
-                                        value={gotifyPriority}
-                                        onChange={e => setGotifyPriority(Number(e.target.value))}
-                                    />
-                                </div>
-                            </div>
-                            <div className="mb-4">
-                                <label htmlFor="gotifyToken">Application Token</label>
-                                <input
-                                    className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
-                                    id="gotifyToken"
-                                    type="password"
-                                    value={gotifyToken}
-                                    onChange={e => setGotifyToken(e.target.value)}
-                                    placeholder="Gotify app token"
-                                />
-                            </div>
-                            <div className="mt-6 rounded-lg border border-border bg-background/40 p-4">
-                                <h4 className="font-bold text-text mb-3">Alert Rules</h4>
-                                <div className="space-y-1">
-                                    {[
-                                        ['expiryWarning', 'Access Expiry Warnings', 'Alert when a user reaches the configured expiry-warning threshold.'],
-                                        ['accessRevoked', 'Access Revoked', 'Alert when expired access is revoked automatically.'],
-                                        ['newUserSynced', 'New Users During Sync', 'Alert when a Plex/Jellyfin sync discovers new users.'],
-                                        ['requestPending', 'New Media Requests', 'Alert when a member submits a request that needs approval.'],
-                                        ['syncFailure', 'Sync Failures', 'Alert when a manual user sync fails.'],
-                                        ['syncSuccess', 'Sync Success', 'Alert after every successful manual user sync.'],
-                                    ].map(([key, title, description]) => (
-                                        <SettingsToggleRow
-                                            key={key}
-                                            title={title}
-                                            description={description}
-                                            checked={alertRules[key] !== false}
-                                            onChange={(checked) => setAlertRules(prev => ({ ...prev, [key]: checked }))}
-                                            border={false}
-                                            className="!py-3"
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="mt-6 space-y-3">
-                                <h4 className="font-bold text-text">Test Gotify Settings</h4>
-                                <button
-                                    className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                                    onClick={handleTestGotify}
-                                    disabled={isTestingGotify || !gotifyUrl || !gotifyToken}
-                                >
-                                    {isTestingGotify ? 'Sending...' : 'Send Test'}
-                                </button>
-                            </div>
+                            </section>
                         </div>
                     )}
 
@@ -3390,8 +3385,36 @@ export const SettingsDashboard: React.FC = () => {
                         </div>
                     )}
 
-                    {activeTab === 'home-layout' && (
-                        <HomeLayoutSettings layout={dashboardLayout} onChange={updateDashboardLayout} />
+                    {activeTab === 'layout' && (
+                        <div className="mb-8 space-y-10">
+                            <section id={getSettingsSectionElementId('navigation')} className="scroll-mt-24">
+                                <NavigationOrderSettings
+                                    navOrder={navOrder}
+                                    onChange={setNavOrder}
+                                    navHiddenKeys={navHiddenKeys}
+                                    onHiddenKeysChange={setNavHiddenKeys}
+                                    memberNavOrder={memberNavOrder}
+                                    onMemberNavOrderChange={setMemberNavOrder}
+                                    memberNavHiddenKeys={memberNavHiddenKeys}
+                                    onMemberNavHiddenKeysChange={setMemberNavHiddenKeys}
+                                    downloadsVisibleToMembers={downloadsVisibleToMembers}
+                                    onDownloadsVisibleToMembersChange={setDownloadsVisibleToMembers}
+                                    featureStatus={{
+                                        upgrader: upgraderEnabled,
+                                        collexions: collexionsEnabled,
+                                        scanner: scannerEnabled,
+                                        mediaAutomation: mediaAutomationEnabled,
+                                        posterSets: posterSetsEnabled,
+                                        overlays: overlaysEnabled,
+                                        achievements: achievementsEnabled,
+                                        maintenance: maintenanceExperimentalEnabled,
+                                    }}
+                                />
+                            </section>
+                            <section id={getSettingsSectionElementId('home-layout')} className="scroll-mt-24">
+                                <HomeLayoutSettings layout={dashboardLayout} onChange={updateDashboardLayout} />
+                            </section>
+                        </div>
                     )}
 
                     {activeTab === 'achievements' && (
@@ -3418,31 +3441,6 @@ export const SettingsDashboard: React.FC = () => {
                                 setAchievementsSeasons={setAchievementsSeasons}
                             />
                         </div>
-                    )}
-
-                    {activeTab === 'navigation' && (
-                        <NavigationOrderSettings
-                            navOrder={navOrder}
-                            onChange={setNavOrder}
-                            navHiddenKeys={navHiddenKeys}
-                            onHiddenKeysChange={setNavHiddenKeys}
-                            memberNavOrder={memberNavOrder}
-                            onMemberNavOrderChange={setMemberNavOrder}
-                            memberNavHiddenKeys={memberNavHiddenKeys}
-                            onMemberNavHiddenKeysChange={setMemberNavHiddenKeys}
-                            downloadsVisibleToMembers={downloadsVisibleToMembers}
-                            onDownloadsVisibleToMembersChange={setDownloadsVisibleToMembers}
-                            featureStatus={{
-                                upgrader: upgraderEnabled,
-                                collexions: collexionsEnabled,
-                                scanner: scannerEnabled,
-                                mediaAutomation: mediaAutomationEnabled,
-                                posterSets: posterSetsEnabled,
-                                overlays: overlaysEnabled,
-                                achievements: achievementsEnabled,
-                                maintenance: maintenanceExperimentalEnabled,
-                            }}
-                        />
                     )}
 
                     {activeTab === 'broadcast' && (

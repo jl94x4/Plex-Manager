@@ -392,7 +392,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                     </h3>
                     <p className="text-sm text-muted max-w-2xl mt-2">
                         Hub for request-available alerts, browser push, Discord, in-app bell history, and send-to-myself tests.
-                        Gotify admin alerts stay under their own tab.
+                        SMTP and Gotify admin alerts are on this same page (above and below).
                     </p>
                 </div>
                 <button
@@ -420,7 +420,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         <Pill
                             ok={!!status?.email?.smtpReady}
                             label="Email (SMTP)"
-                            detail={status?.email?.smtpReady ? 'SMTP looks configured.' : 'Configure under SMTP Alerts.'}
+                            detail={status?.email?.smtpReady ? 'SMTP looks configured.' : 'Configure under SMTP above.'}
                         />
                         <Pill
                             ok={!!status?.webPush?.enabled && !!status?.webPush?.vapidReady}
@@ -435,7 +435,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         <Pill
                             ok={!!status?.gotify?.configured}
                             label="Gotify"
-                            detail={status?.gotify?.configured ? 'Admin Gotify alerts ready.' : 'Optional — configure under Gotify Alerts.'}
+                            detail={status?.gotify?.configured ? 'Admin Gotify alerts ready.' : 'Optional — configure Gotify below.'}
                         />
                         <Pill
                             ok={!!status?.ntfy?.configured}
