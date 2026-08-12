@@ -257,8 +257,8 @@ const UserCard: React.FC<{
     }
 
     return (
-        <div className={`relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 p-5 shadow-lg border-l-4 ${borderClass} ${glowClass} hover:-translate-y-0.5 transition-all duration-300 flex flex-col cursor-pointer ${isSelected ? 'border-sky-400/40 shadow-lg shadow-sky-500/10 bg-black/35' : ''}`} onClick={handleCardClick}>
-            <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full blur-2xl bg-sky-400/10" />
+        <div className={`relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 p-5 shadow-lg border-l-4 ${borderClass} ${glowClass} hover:-translate-y-0.5 transition-all duration-300 flex flex-col cursor-pointer ${isSelected ? 'border-plex/40 shadow-lg shadow-plex/10 bg-black/35' : ''}`} onClick={handleCardClick}>
+            <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full blur-2xl bg-plex/10" />
             <div className="relative flex justify-between items-start mb-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                     <input className="w-4 h-4 flex-shrink-0 appearance-none rounded-full border border-muted checked:bg-plex checked:border-plex transition-colors cursor-pointer relative checked:after:content-[''] checked:after:block checked:after:w-1.5 checked:after:h-1.5 checked:after:bg-background checked:after:rounded-full checked:after:absolute checked:after:top-1/2 checked:after:left-1/2 checked:after:-translate-x-1/2 checked:after:-translate-y-1/2"
@@ -327,7 +327,7 @@ const UserCard: React.FC<{
                     </button>
                 )}
                 {onViewAs && (
-                    <button className="rounded-lg border border-sky-400/30 bg-sky-500/10 px-3 py-1.5 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-500/20 flex items-center justify-center gap-1.5" onClick={onViewAs} title="View portal as this user">
+                    <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onViewAs} title="View portal as this user">
                         <Eye className="w-3.5 h-3.5" />
                         View as
                     </button>
@@ -5330,7 +5330,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             <ToastContainer toasts={toasts} setToasts={setToasts} />
 
             <DashboardHero
-                accent="sky"
+                accent="plex"
                 eyebrow="User Management"
                 title="Users"
                 description={isConfigured ? (
@@ -5346,7 +5346,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                     <div className="flex flex-wrap items-center gap-2">
                         <button
                             type="button"
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-400 px-4 py-2.5 text-sm font-bold text-black transition-colors hover:bg-sky-300 disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-4 py-2.5 text-sm font-bold text-background transition-colors hover:bg-plex-hover disabled:opacity-50"
                             onClick={handleImportUsers}
                             disabled={isLoading}
                         >
@@ -5355,7 +5355,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                         </button>
                         <button
                             type="button"
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-400/40 bg-sky-500/10 px-4 py-2.5 text-sm font-bold text-sky-100 transition-colors hover:bg-sky-500/20 disabled:opacity-50"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-bold text-text transition-colors hover:bg-white/5 disabled:opacity-50"
                             onClick={handleBackfillJoiningDates}
                             disabled={isLoading}
                             title="Set Joined from each user's earliest play on this server (only moves dates earlier)"
@@ -5373,8 +5373,8 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                         <DashboardStatCard
                             label="Total Users"
                             value={userStats.total}
-                            icon={<Users className="h-4 w-4 text-sky-300" />}
-                            glow={dashboardGlowClass('sky')}
+                            icon={<Users className="h-4 w-4 text-plex" />}
+                            glow={dashboardGlowClass('plex')}
                         />
                         <DashboardStatCard
                             label="Active"
@@ -5441,7 +5441,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     placeholder="Search by username or email..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pr-10 pl-10 text-sm text-text outline-none transition focus:border-sky-400/40 focus:ring-1 focus:ring-sky-400/20"
+                                    className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pr-10 pl-10 text-sm text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
                                 />
                                 {searchQuery && (
                                     <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text text-xl" onClick={() => setSearchQuery('')}>×</button>
@@ -5470,7 +5470,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                         subtitle={`${selectedUserIds.length} user${selectedUserIds.length === 1 ? '' : 's'} selected`}
                         className="mb-6"
                         badge={(
-                            <span className="rounded-full border border-sky-400/30 bg-sky-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-sky-200">
+                            <span className="rounded-full border border-plex/30 bg-plex/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-plex">
                                 {selectedUserIds.length} selected
                             </span>
                         )}
@@ -5496,7 +5496,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                         type="date"
                                         value={bulkCustomDate}
                                         onChange={(e) => setBulkCustomDate(e.target.value)}
-                                        className="cursor-pointer rounded-xl border border-white/10 bg-black/20 p-2 text-sm text-text outline-none focus:border-sky-400/40"
+                                        className="cursor-pointer rounded-xl border border-white/10 bg-black/20 p-2 text-sm text-text outline-none focus:border-plex/40"
                                     />
                                     <button
                                         type="button"
@@ -5535,7 +5535,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     ) : (
                                         <div className="mb-3 flex flex-wrap gap-2">
                                             {bulkLibraries.map((lib) => (
-                                                <label key={lib.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 transition-colors hover:border-sky-400/30">
+                                                <label key={lib.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 transition-colors hover:border-plex/30">
                                                     <input
                                                         type="checkbox"
                                                         checked={bulkSelectedLibraries.includes(lib.id)}
