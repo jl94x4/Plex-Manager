@@ -595,12 +595,24 @@ def process_single_movie(
 
     movie_data = detailed_movie if detailed_movie else movie
 
-    # gets the filename
+    # Prefer the highest-resolution version so filename modules (Cut/Source) match Resolution.
     media_list = movie_data.get('Media', [])
     if not media_list:
         return
 
-    first_media = media_list[0]
+    def _res_rank(media):
+        raw = str(media.get('videoResolution') or '').strip().upper()
+        if raw in ('2160', '2160P'):
+            raw = '4K'
+        elif raw.isdigit():
+            raw = f'{raw}P'
+        order = ['SD', '480P', '576P', '720P', '1080P', '1440P', '2K', '4K', '8K']
+        if raw in order:
+            return (order.index(raw), int(media.get('bitrate') or 0))
+        digits = ''.join(ch for ch in raw if ch.isdigit())
+        return (int(digits) if digits else -1, int(media.get('bitrate') or 0))
+
+    first_media = max(media_list, key=_res_rank)
     media_parts = first_media.get('Part', [])
     if not media_parts:
         return
@@ -679,46 +691,45 @@ def update_movie(server, token, movie, module_results, modules):
     """
     movie_id = movie['ratingKey']
     title = movie.get('title', 'Unknown')
+    current = str(movie.get('editionTitle') or '').strip()
 
-    clear_params = {
-        'type': 1,
-        'id': movie_id,
-        'editionTitle.value': '',
-        'editionTitle.locked': 0
-    }
-    session = get_session()
-    session.put(
-        f'{server}/library/metadata/{movie_id}',
-        headers={'X-Plex-Token': token},
-        params=clear_params
-    )
-
+    edition_title = ''
     if module_results:
-        # Get template settings and format the edition title
         template_format, separator, max_length = get_template_settings()
         edition_title = format_edition_title(
             module_results, modules, template_format, separator, max_length
-        )
+        ) or ''
 
-        if edition_title:
-            params = {
+    if edition_title == current:
+        logger.info(f'{title}: unchanged ({edition_title or "empty"})')
+        return True
+
+    session = get_session()
+    if not edition_title:
+        session.put(
+            f'{server}/library/metadata/{movie_id}',
+            headers={'X-Plex-Token': token},
+            params={
                 'type': 1,
                 'id': movie_id,
-                'editionTitle.value': edition_title,
-                'editionTitle.locked': 1
-            }
-
-            session.put(
-                f'{server}/library/metadata/{movie_id}',
-                headers={'X-Plex-Token': token},
-                params=params
-            )
-            logger.info(f'{title}: {edition_title}')
-        else:
-            logger.info(f'{title}: Cleared edition information')
-    else:
+                'editionTitle.value': '',
+                'editionTitle.locked': 0,
+            },
+        )
         logger.info(f'{title}: Cleared edition information')
+        return True
 
+    session.put(
+        f'{server}/library/metadata/{movie_id}',
+        headers={'X-Plex-Token': token},
+        params={
+            'type': 1,
+            'id': movie_id,
+            'editionTitle.value': edition_title,
+            'editionTitle.locked': 1,
+        },
+    )
+    logger.info(f'{title}: {edition_title}')
     return True
 
 def reset_movies(server, token, skip_libraries, max_workers, batch_size):

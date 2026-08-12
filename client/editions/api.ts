@@ -26,6 +26,8 @@ export type EditionsConfig = {
         hideWhenEnglish: boolean;
     };
     webhookEnabled: boolean;
+    scheduleHours: number;
+    lastFullRunAt?: string | null;
 };
 
 export type EditionsStatus = {

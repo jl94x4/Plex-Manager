@@ -51,7 +51,7 @@ const MODULE_HINTS: Record<string, string> = {
     Language: 'Audio language',
     Rating: 'IMDb / RT score',
     Release: 'Criterion…',
-    Resolution: '1080p / 4K',
+    Resolution: 'Highest available (4K over 1080p)',
     ShortFilm: 'Short film tag',
     Size: 'File size',
     Source: 'BluRay / Remux…',
@@ -70,6 +70,8 @@ const emptyConfig = (): EditionsConfig => ({
     template: { format: 'auto', separator: ' • ', maxLength: 0 },
     tmdbLanguage: { hideWhenEnglish: true },
     webhookEnabled: false,
+    scheduleHours: 6,
+    lastFullRunAt: null,
 });
 
 export const EditionsDashboard: React.FC = () => {
@@ -553,12 +555,12 @@ export const EditionsDashboard: React.FC = () => {
                 </DashboardPanel>
 
                 <DashboardPanel
-                    title="Webhook"
-                    subtitle="Auto-process newly added movies from Plex library.new events."
+                    title="Keep editions current"
+                    subtitle="New movies via webhook; version upgrades (1080p → 4K) on a full library pass."
                 >
                     <SettingsToggleRow
                         title="Enable Editions webhook"
-                        description="Accept POSTs at the URL below when Editions is enabled in Settings."
+                        description="Process a movie when Plex sends library.new (new title or a new version)."
                         checked={config.webhookEnabled}
                         onChange={(checked) => setConfig((prev) => ({ ...prev, webhookEnabled: checked }))}
                     />
@@ -567,8 +569,27 @@ export const EditionsDashboard: React.FC = () => {
                         <code className="text-xs break-all text-plex">{webhookUrl}</code>
                         <p className="text-[11px] text-muted mt-2">Health: <code>{webhookUrl.replace(/\/webhook$/, '/webhook/healthz')}</code></p>
                     </div>
+                    <div className="mt-4">
+                        <p className="text-xs font-bold uppercase tracking-wider text-muted mb-2">Scheduled full run</p>
+                        <CustomSelect
+                            value={String(config.scheduleHours ?? 6)}
+                            onChange={(value) => setConfig((prev) => ({ ...prev, scheduleHours: Number(value) }))}
+                            options={[
+                                { value: '0', label: 'Off' },
+                                { value: '6', label: 'Every 6 hours' },
+                                { value: '12', label: 'Every 12 hours' },
+                                { value: '24', label: 'Every 24 hours' },
+                            ]}
+                        />
+                        <p className="text-[11px] text-muted mt-2">
+                            Re-stamps the whole movie library so Edition titles pick the highest available resolution.
+                            {config.lastFullRunAt
+                                ? ` Last full run: ${new Date(config.lastFullRunAt).toLocaleString()}.`
+                                : ' First automatic run waits one full interval after the portal starts (or click Process all).'}
+                        </p>
+                    </div>
                     <button type="button" onClick={handleSave} disabled={saving} className="mt-3 px-3 py-2 rounded-lg bg-plex text-black text-sm font-bold disabled:opacity-50">
-                        Save webhook setting
+                        Save webhook & schedule
                     </button>
                 </DashboardPanel>
             </div>

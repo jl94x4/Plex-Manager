@@ -62,6 +62,7 @@ import {
 import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook, startTpdbCacheDailyRefresh } from './lib/poster-sets/index.js';
 import { createOverlaysRouter } from './lib/overlays/index.js';
 import { createEditionsRouter } from './lib/editions/index.js';
+import { startEditionsScheduler, runEditionsScheduledJob } from './lib/editions/scheduler.js';
 import { startOverlaysScheduler, startOverlaysBundleScheduler, runOverlaysScheduledJob } from './lib/overlays/scheduler.js';
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
@@ -11707,6 +11708,21 @@ app.post('/api/tasks/run/:taskId', requireAdmin, async (req, res) => {
                     case 'personalAnalyticsWarm':
                         await runPersonalAnalyticsWarmJob('manual');
                         break;
+                    case 'editionsProcess': {
+                        const cfg = await loadFile(CONFIG_PATH, {});
+                        if (!cfg.editionsEnabled) {
+                            throw new Error('Editions is disabled. Enable it in Settings → Editions first.');
+                        }
+                        await runEditionsScheduledJob({
+                            loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+                            resolvePlex: resolveOverlaysPlex,
+                            markTaskStart,
+                            markTaskEnd,
+                            systemJob: systemJobs.editionsProcess,
+                            log,
+                        });
+                        break;
+                    }
                     default:
                         markTaskEnd(task, new Error('Invalid system task'));
                 }
@@ -17196,7 +17212,7 @@ const systemJobs = {
     editionsProcess: {
         id: 'editionsProcess',
         name: 'Editions: Process',
-        description: 'Writes Plex Edition titles from the Editions worker (process all / one / reset / backup).',
+        description: 'Full library Edition restamp (highest resolution). Runs on the Editions schedule (default every 6 hours).',
         lastRun: null,
         nextRun: null,
         running: false,
@@ -26670,6 +26686,19 @@ app.listen(PORT, BIND_HOST, async () => {
         log('[overlays] Core / Recently Added / Kometa schedulers started');
     } catch (error) {
         log(`[overlays] Scheduler startup failed: ${error.message}`);
+    }
+    try {
+        startEditionsScheduler({
+            loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+            resolvePlex: resolveOverlaysPlex,
+            markTaskStart,
+            markTaskEnd,
+            systemJob: systemJobs.editionsProcess,
+            log,
+        });
+        log('[editions] Full-run scheduler started');
+    } catch (error) {
+        log(`[editions] Scheduler startup failed: ${error.message}`);
     }
     // Never block portal boot on Media Automation (watcher/scans can hang on big mounts).
     void mediaAutomationService.start()
