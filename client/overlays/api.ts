@@ -277,7 +277,7 @@ export const overlaysApi = {
     resetOne: (ratingKey: string, kind?: 'show' | 'episode' | 'seasonEpisode') => (
         apiFetch(`${ROOT}/reset-one`, json({ ratingKey, kind }))
     ),
-    resetAll: () => apiFetch(`${ROOT}/reset-all`, json({})),
+    resetAll: (scope: 'all' | 'shows' | 'episodes' = 'all') => apiFetch(`${ROOT}/reset-all`, json({ scope })),
     resetBingeGroup: (ratingKeys: string[]) => apiFetch(`${ROOT}/reset-binge-group`, json({ ratingKeys })),
     previewGallery: () => apiFetch(`${ROOT}/preview-gallery`) as Promise<{ items: Array<{
         name: string;

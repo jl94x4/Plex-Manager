@@ -123,7 +123,8 @@ def main() -> int:
             return 0
 
         if args.command == "reset-all":
-            write_event("result", **reset_all(config, progress=progress))
+            scope = str(request.get("scope") or request.get("kind") or "all").strip() or "all"
+            write_event("result", **reset_all(config, progress=progress, scope=scope))
             return 0
 
         if args.command == "revert-kometa":

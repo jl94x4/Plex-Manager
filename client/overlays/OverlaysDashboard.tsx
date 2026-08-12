@@ -33,7 +33,7 @@ import { OverlayJobCard } from './OverlayJobCard';
 
 type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'advanced' | 'activity';
 type JobCardId = 'banners' | 'recently' | 'kometa';
-type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'promote' | 'resetAll' | 'run' | 'runRecently' | 'runKometa' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample' | 'revertKometa';
+type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'promote' | 'resetAll' | 'resetShows' | 'resetEpisodes' | 'run' | 'runRecently' | 'runKometa' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample' | 'revertKometa';
 
 type SampleMeta = {
     exists: boolean;
@@ -720,7 +720,10 @@ export const OverlaysDashboard: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tab]);
 
-    const canResetAll = trackedTotal > 0 && !jobRunning && busy !== 'resetAll';
+    const resetBusy = busy === 'resetAll' || busy === 'resetShows' || busy === 'resetEpisodes';
+    const canResetAll = trackedTotal > 0 && !jobRunning && !resetBusy;
+    const canResetShows = showCount > 0 && !jobRunning && !resetBusy;
+    const canResetEpisodes = episodeCount > 0 && !jobRunning && !resetBusy;
     const canRevertKometa = kometaItems.length > 0 && !jobRunning && busy !== 'revertKometa' && workerReady;
     const previewOnlyShows = status?.previewOnlyShows ?? shows.filter((row) => row.previewOnly).length;
     const previewOnlyEpisodes = status?.previewOnlyEpisodes ?? episodes.filter((row) => row.previewOnly).length;
@@ -728,19 +731,39 @@ export const OverlaysDashboard: React.FC = () => {
     const previewOnlyTotal = previewOnlyShows + previewOnlyEpisodes + previewOnlySeasons;
     const canPromote = previewOnlyTotal > 0 && !jobRunning && busy !== 'promote' && workerReady;
 
-    const resetAll = () => {
+    const resetOverlays = (scope: 'all' | 'shows' | 'episodes') => {
         void (async () => {
+            const confirmKey = scope === 'shows'
+                ? 'overlays.resetShowsConfirm'
+                : scope === 'episodes'
+                    ? 'overlays.resetEpisodesConfirm'
+                    : 'overlays.resetAllConfirm';
+            const titleKey = scope === 'shows'
+                ? 'overlays.resetShowsTitle'
+                : scope === 'episodes'
+                    ? 'overlays.resetEpisodesTitle'
+                    : 'overlays.resetAllTitle';
+            const actionId: ActionId = scope === 'shows'
+                ? 'resetShows'
+                : scope === 'episodes'
+                    ? 'resetEpisodes'
+                    : 'resetAll';
+            const confirmLabel = scope === 'shows'
+                ? t('overlays.actions.resetShows')
+                : scope === 'episodes'
+                    ? t('overlays.actions.resetEpisodes')
+                    : t('overlays.actions.resetAllOverlays');
             const ok = await askConfirm(
-                t('overlays.resetAllConfirm', { count: showCount, episodes: episodeCount }),
+                t(confirmKey, { count: showCount, episodes: episodeCount }),
                 {
-                    title: t('overlays.resetAllTitle'),
-                    confirmLabel: t('overlays.actions.resetAll'),
+                    title: t(titleKey),
+                    confirmLabel,
                     cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
                     danger: true,
                 },
             );
             if (!ok) return;
-            await runAction('resetAll', () => overlaysApi.resetAll());
+            await runAction(actionId, () => overlaysApi.resetAll(scope));
         })();
     };
 
@@ -820,6 +843,14 @@ export const OverlaysDashboard: React.FC = () => {
                                 {t('overlays.actions.promote')}
                             </button>
                         ) : null}
+                        <button
+                            type="button"
+                            className={`${buttonClass} border-amber-500/40 text-amber-100`}
+                            disabled={!canResetAll}
+                            onClick={() => resetOverlays('all')}
+                        >
+                            <RotateCcw className="h-4 w-4" /> {t('overlays.actions.resetAllOverlays')}
+                        </button>
                     </>
                 )}
             />
@@ -1826,10 +1857,10 @@ export const OverlaysDashboard: React.FC = () => {
                         <button
                             type="button"
                             className={`${buttonClass} border-amber-500/40 text-amber-100`}
-                            disabled={!canResetAll}
-                            onClick={resetAll}
+                            disabled={!canResetShows}
+                            onClick={() => resetOverlays('shows')}
                         >
-                            <RotateCcw className="h-4 w-4" /> {t('overlays.actions.resetAllOverlays')}
+                            <RotateCcw className="h-4 w-4" /> {t('overlays.actions.resetShows')}
                         </button>
                     )}
                 >
@@ -1881,6 +1912,16 @@ export const OverlaysDashboard: React.FC = () => {
                 <DashboardPanel
                     title={t('overlays.episodes.title')}
                     subtitle={t('overlays.episodes.subtitle')}
+                    controls={(
+                        <button
+                            type="button"
+                            className={`${buttonClass} border-amber-500/40 text-amber-100`}
+                            disabled={!canResetEpisodes}
+                            onClick={() => resetOverlays('episodes')}
+                        >
+                            <RotateCcw className="h-4 w-4" /> {t('overlays.actions.resetEpisodes')}
+                        </button>
+                    )}
                 >
                     {episodes.length === 0 ? (
                         <p className="text-sm text-muted">{t('overlays.episodes.empty')}</p>
@@ -2290,14 +2331,6 @@ export const OverlaysDashboard: React.FC = () => {
                                 onClick={() => void saveSettings()}
                             >
                                 <Save className="h-4 w-4" /> {t('overlays.actions.saveSettings')}
-                            </button>
-                            <button
-                                type="button"
-                                className={`${buttonClass} border-amber-500/40 text-amber-100`}
-                                disabled={!canResetAll}
-                                onClick={resetAll}
-                            >
-                                <RotateCcw className="h-4 w-4" /> {t('overlays.actions.resetAll')}
                             </button>
                         </div>
                     </DashboardPanel>

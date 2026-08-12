@@ -2594,19 +2594,38 @@ def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None,
     }
 
 
-def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
-    """Reset every show + episode currently logged and clear both logs."""
+def reset_all(config: dict, progress: ProgressFn | None = None, scope: str | None = None) -> dict:
+    """Reset logged overlays.
+
+    scope:
+      - all (default) — shows + episodes + Kometa + extra mode logs
+      - shows — New Season show log only
+      - episodes — New Episode (+ season NE) log only
+    """
     paths = _resolve_paths(config)
     plex = _connect(config)
+    want = str(scope or "all").strip().lower()
+    if want in {"show", "shows", "new-season", "new_season"}:
+        want = "shows"
+    elif want in {"episode", "episodes", "new-episode", "new_episode"}:
+        want = "episodes"
+    else:
+        want = "all"
+
     log = _load_log(paths["log"])
     episode_log = _load_log(paths["episodeLog"])
-    keys = list(log.keys())
-    episode_keys = list(episode_log.keys())
+    keys = list(log.keys()) if want in {"all", "shows"} else []
+    episode_keys = list(episode_log.keys()) if want in {"all", "episodes"} else []
     removed = 0
     episodes_removed = 0
     restored_from_backup = 0
     failed: list[str] = []
-    _progress(progress, f"Resetting {len(keys)} show overlay(s) and {len(episode_keys)} episode overlay(s)…")
+    if want == "shows":
+        _progress(progress, f"Resetting {len(keys)} New Season show overlay(s)…")
+    elif want == "episodes":
+        _progress(progress, f"Resetting {len(episode_keys)} New Episode overlay(s)…")
+    else:
+        _progress(progress, f"Resetting {len(keys)} show overlay(s) and {len(episode_keys)} episode overlay(s)…")
 
     for key in keys:
         entry = log.get(key) or {}
@@ -2658,46 +2677,56 @@ def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
         if key in episode_log:
             del episode_log[key]
 
-    from modes_extra import _clear_mode_backup, _restore_show_mode, _load_log as _load_extra_log, _save_log as _save_extra_log
-
-    # Unified Kometa-parity overlays (resolution/edition/audio/format/status/ratings/network)
     kometa_removed = 0
-    try:
-        from kometa_engine import revert_kometa
-        kometa_result = revert_kometa(config, rating_key=None, progress=progress)
-        kometa_removed = int(kometa_result.get("reverted") or 0)
-        failed.extend(kometa_result.get("failed") or [])
-    except Exception as exc:
-        failed.append(f"kometa revert: {exc}")
-
     extras_removed = 0
-    for mode, log_key in (
-        ("live", "liveLog"),
-        ("recently", "recentlyAddedLog"),
-        ("top10", "top10Log"),
-        ("media", "mediaLog"),
-        ("status", "statusLog"),
-        ("ratings", "ratingsLog"),
-        ("network", "networkLog"),
-    ):
-        extra_log = _load_extra_log(paths[log_key])
-        for key in list(extra_log.keys()):
-            entry = extra_log.get(key) or {}
-            title = entry.get("title") or key
-            try:
-                show = plex.fetchItem(f"/library/metadata/{key}")
-                _restore_show_mode(show, paths, mode, progress)
-                extras_removed += 1
-            except Exception as exc:
-                failed.append(f"{mode} {title}: {exc}")
-            _clear_mode_backup(paths, mode, key)
-            del extra_log[key]
-        _save_extra_log(paths[log_key], extra_log)
+    if want == "all":
+        try:
+            from kometa_engine import revert_kometa
+            kometa_result = revert_kometa(config, rating_key=None, progress=progress)
+            kometa_removed = int(kometa_result.get("reverted") or 0)
+            failed.extend(kometa_result.get("failed") or [])
+        except Exception as exc:
+            failed.append(f"kometa revert: {exc}")
 
-    _save_log(paths["log"], log)
-    _save_log(paths["episodeLog"], episode_log)
+        from modes_extra import _clear_mode_backup, _restore_show_mode, _load_log as _load_extra_log, _save_log as _save_extra_log
+
+        for mode, log_key in (
+            ("live", "liveLog"),
+            ("recently", "recentlyAddedLog"),
+            ("top10", "top10Log"),
+            ("media", "mediaLog"),
+            ("status", "statusLog"),
+            ("ratings", "ratingsLog"),
+            ("network", "networkLog"),
+        ):
+            extra_log = _load_extra_log(paths[log_key])
+            for key in list(extra_log.keys()):
+                entry = extra_log.get(key) or {}
+                title = entry.get("title") or key
+                try:
+                    show = plex.fetchItem(f"/library/metadata/{key}")
+                    _restore_show_mode(show, paths, mode, progress)
+                    extras_removed += 1
+                except Exception as exc:
+                    failed.append(f"{mode} {title}: {exc}")
+                _clear_mode_backup(paths, mode, key)
+                del extra_log[key]
+            _save_extra_log(paths[log_key], extra_log)
+
+    if want in {"all", "shows"}:
+        _save_log(paths["log"], log)
+    if want in {"all", "episodes"}:
+        _save_log(paths["episodeLog"], episode_log)
+
+    remaining_shows = len(_load_log(paths["log"])) if want == "shows" else len(log)
+    remaining_eps = len(_load_log(paths["episodeLog"])) if want == "episodes" else len(episode_log)
+    if want == "all":
+        remaining_shows = len(log)
+        remaining_eps = len(episode_log)
+
     summary = {
         "ok": True,
+        "scope": want,
         "requested": len(keys) + len(episode_keys),
         "removed": removed,
         "episodesRemoved": episodes_removed,
@@ -2705,15 +2734,15 @@ def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
         "kometaRemoved": kometa_removed,
         "restoredFromBackup": restored_from_backup,
         "failed": failed,
-        "remaining": len(log),
-        "episodesRemaining": len(episode_log),
+        "remaining": remaining_shows,
+        "episodesRemaining": remaining_eps,
         "backupsDir": str(paths["backups"]),
         "finishedAt": datetime.now().isoformat(),
     }
     _progress(
         progress,
-        f"Reset complete — shows {removed}/{len(keys)}, episodes {episodes_removed}/{len(episode_keys)} "
-        f"({restored_from_backup} from file backups)",
+        f"Reset ({want}) complete — shows −{removed}, episodes −{episodes_removed}"
+        + (f", kometa −{kometa_removed}, extras −{extras_removed}" if want == "all" else ""),
     )
     return summary
 
