@@ -9,6 +9,7 @@ export const issueStatusBadgeClass = (statusLabel: string) => {
     const value = String(statusLabel || '').toLowerCase();
     if (value === 'open') return 'bg-amber-500/15 border-amber-500/30 text-amber-200';
     if (value === 'resolved') return 'bg-green-500/15 border-green-500/30 text-green-300';
+    if (value === 'closed') return 'bg-white/5 border-white/10 text-white/60';
     return 'bg-white/5 border-white/10 text-white/60';
 };
 

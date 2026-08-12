@@ -100,10 +100,28 @@ const normalizeArrInstancesFromSettings = (settings: Record<string, any> = {}): 
     return instances;
 };
 
+const DOWNLOAD_CLIENT_TYPE_LABELS: Record<DownloadClientConfig['type'], string> = {
+    qbittorrent: 'qBittorrent',
+    rdtclient: 'Real-Debrid Client',
+    transmission: 'Transmission',
+    bittorrent: 'BitTorrent',
+    deluge: 'Deluge',
+    sabnzbd: 'SABnzbd',
+    nzbget: 'NZBGet',
+};
+
+const downloadClientUrlPlaceholder = (type: DownloadClientConfig['type']) => (
+    type === 'transmission' ? 'http://localhost:9091'
+        : type === 'deluge' ? 'http://localhost:8112'
+            : type === 'nzbget' ? 'http://localhost:6789'
+                : type === 'rdtclient' ? 'http://localhost:6500'
+                    : 'http://localhost:8080'
+);
+
 const createEmptyDownloadClient = (type: DownloadClientConfig['type'] = 'qbittorrent'): DownloadClientConfig => ({
     id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${type}-${Date.now()}`,
     type,
-    name: type === 'transmission' ? 'Transmission' : type === 'bittorrent' ? 'BitTorrent' : type === 'deluge' ? 'Deluge' : type === 'sabnzbd' ? 'SABnzbd' : type === 'nzbget' ? 'NZBGet' : 'qBittorrent',
+    name: DOWNLOAD_CLIENT_TYPE_LABELS[type] || 'qBittorrent',
     url: '',
     username: '',
     password: '',
@@ -147,6 +165,7 @@ const APP_ICONS: Record<string, string> = {
     ombi: `${SELFHST_ICON_BASE}/ombi.svg`,
     download: `${SELFHST_ICON_BASE}/qbittorrent.svg`,
     qbittorrent: `${SELFHST_ICON_BASE}/qbittorrent.svg`,
+    rdtclient: 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/rdt-client.svg',
     transmission: `${SELFHST_ICON_BASE}/transmission.svg`,
     bittorrent: `${SIMPLE_ICON_BASE}/bittorrent`,
     deluge: `${SELFHST_ICON_BASE}/deluge.svg`,
@@ -493,6 +512,7 @@ export const SettingsDashboard: React.FC = () => {
     const [overlaysEnabled, setOverlaysEnabled] = useState(false);
     const [editionsEnabled, setEditionsEnabled] = useState(false);
     const [achievementsEnabled, setAchievementsEnabled] = useState(false);
+    const [supportTicketsEnabled, setSupportTicketsEnabled] = useState(true);
     const [achievementsLeaderboardEnabled, setAchievementsLeaderboardEnabled] = useState(true);
     const [achievementsHomeWidgetEnabled, setAchievementsHomeWidgetEnabled] = useState(true);
     const [achievementsShowOnProfile, setAchievementsShowOnProfile] = useState(true);
@@ -1230,6 +1250,9 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.achievementsEnabled !== undefined) {
                 setAchievementsEnabled(!!initialSettings.achievementsEnabled);
             }
+            if (initialSettings.supportTicketsEnabled !== undefined) {
+                setSupportTicketsEnabled(initialSettings.supportTicketsEnabled !== false);
+            }
             if (initialSettings.achievementsLeaderboardEnabled !== undefined) {
                 setAchievementsLeaderboardEnabled(initialSettings.achievementsLeaderboardEnabled !== false);
             }
@@ -1742,6 +1765,7 @@ export const SettingsDashboard: React.FC = () => {
             overlaysEnabled,
             editionsEnabled,
             achievementsEnabled,
+            supportTicketsEnabled,
             achievementsLeaderboardEnabled,
             achievementsHomeWidgetEnabled,
             achievementsShowOnProfile,
@@ -2642,7 +2666,7 @@ export const SettingsDashboard: React.FC = () => {
                             </div>
 
                             <div id={getSettingsSectionElementId('download-clients')} className="scroll-mt-24">
-                            <IntegrationHeading app="download" title="Download Clients" subtitle="qBittorrent, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet status sources" className="mt-10" />
+                            <IntegrationHeading app="download" title="Download Clients" subtitle="qBittorrent, Real-Debrid Client, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet status sources" className="mt-10" />
                             <div className="flex items-center justify-between gap-3 mb-4">
                                 <p className="text-sm text-muted">These clients feed the Download Status page.</p>
                                 <button
@@ -2659,7 +2683,7 @@ export const SettingsDashboard: React.FC = () => {
                             ) : (
                                 <div className="space-y-4">
                                     {downloadClients.map((client) => {
-                                        const clientLabel = client.type === 'transmission' ? 'Transmission' : client.type === 'bittorrent' ? 'BitTorrent' : client.type === 'deluge' ? 'Deluge' : client.type === 'sabnzbd' ? 'SABnzbd' : client.type === 'nzbget' ? 'NZBGet' : 'qBittorrent';
+                                        const clientLabel = DOWNLOAD_CLIENT_TYPE_LABELS[client.type] || 'qBittorrent';
                                         return (
                                         <div key={client.id} className="rounded-xl border border-border bg-background/40 p-4">
                                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 pb-3 border-b border-border/50">
@@ -2688,9 +2712,17 @@ export const SettingsDashboard: React.FC = () => {
                                                 <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">Type</label>
                                                 <CustomSelect
                                                     value={client.type}
-                                                    onChange={(type) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, type: type as DownloadClientConfig['type'], name: entry.name || createEmptyDownloadClient(type as DownloadClientConfig['type']).name } : entry))}
+                                                    onChange={(type) => setDownloadClients(downloadClients.map((entry) => {
+                                                        if (entry.id !== client.id) return entry;
+                                                        const nextType = type as DownloadClientConfig['type'];
+                                                        const previousLabel = DOWNLOAD_CLIENT_TYPE_LABELS[entry.type] || 'qBittorrent';
+                                                        const nextLabel = DOWNLOAD_CLIENT_TYPE_LABELS[nextType] || 'qBittorrent';
+                                                        const name = !entry.name || entry.name === previousLabel ? nextLabel : entry.name;
+                                                        return { ...entry, type: nextType, name };
+                                                    }))}
                                                     options={[
                                                         { label: 'qBittorrent', value: 'qbittorrent' },
+                                                        { label: 'Real-Debrid Client', value: 'rdtclient' },
                                                         { label: 'Transmission', value: 'transmission' },
                                                         { label: 'BitTorrent', value: 'bittorrent' },
                                                         { label: 'Deluge', value: 'deluge' },
@@ -2705,7 +2737,10 @@ export const SettingsDashboard: React.FC = () => {
                                             </div>
                                             <div className="md:col-span-2">
                                                 <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">URL</label>
-                                                <input className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm" value={client.url} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, url: e.target.value } : entry))} placeholder={client.type === 'transmission' ? 'http://localhost:9091' : client.type === 'deluge' ? 'http://localhost:8112' : client.type === 'nzbget' ? 'http://localhost:6789' : 'http://localhost:8080'} />
+                                                <input className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm" value={client.url} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, url: e.target.value } : entry))} placeholder={downloadClientUrlPlaceholder(client.type)} />
+                                                {client.type === 'rdtclient' && (
+                                                    <p className="text-[11px] text-muted mt-1">RDT-Client emulates the qBittorrent API. Default port is 6500.</p>
+                                                )}
                                             </div>
                                             <div>
                                                 <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{client.type === 'sabnzbd' ? 'Username (Optional)' : 'Username'}</label>
@@ -3415,6 +3450,7 @@ export const SettingsDashboard: React.FC = () => {
                                         overlays: overlaysEnabled,
                                         editions: editionsEnabled,
                                         achievements: achievementsEnabled,
+                                        support: supportTicketsEnabled,
                                         maintenance: maintenanceExperimentalEnabled,
                                     }}
                                 />
@@ -4331,6 +4367,23 @@ export const SettingsDashboard: React.FC = () => {
                     {activeTab === 'system' && (
                         <div className="mb-8 animate-fade-in space-y-6">
                             <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">System</h3>
+                            <section id={getSettingsSectionElementId('support-tickets')} className="space-y-3 scroll-mt-24">
+                                <SettingsToggleRow
+                                    title="Support tickets"
+                                    hint={<SettingHint>Let members message you from the portal (open / resolved / closed tickets, unread badges, and in-app notifications). No Discord or email required.</SettingHint>}
+                                    checked={supportTicketsEnabled}
+                                    onChange={setSupportTicketsEnabled}
+                                />
+                                {supportTicketsEnabled && (
+                                    <button
+                                        type="button"
+                                        className="mt-1 px-4 py-2 rounded-md font-bold transition-all bg-plex text-background hover:bg-plex-hover"
+                                        onClick={() => window.location.assign(portalUrl('/support'))}
+                                    >
+                                        Open Support inbox
+                                    </button>
+                                )}
+                            </section>
                             <section id={getSettingsSectionElementId('health')} className="space-y-4 mb-8 scroll-mt-24">
                                 <div className="flex items-center justify-between">
                                     <h4 className="font-bold text-text">Health Dashboard</h4>

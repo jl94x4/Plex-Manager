@@ -65,6 +65,7 @@ import { createEditionsRouter } from './lib/editions/index.js';
 import { startEditionsScheduler, runEditionsScheduledJob } from './lib/editions/scheduler.js';
 import { startOverlaysScheduler, startOverlaysBundleScheduler, runOverlaysScheduledJob } from './lib/overlays/scheduler.js';
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
+import { registerSupportTicketRoutes } from './lib/support-tickets/http.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext } from './lib/achievements/index.js';
 import { loadAchievementsState } from './lib/achievements/store.js';
@@ -1180,6 +1181,7 @@ import {
     DISCOVERY_AVAILABILITY_CACHE_PATH,
     REQUESTS_DIR,
     ISSUES_DIR,
+    SUPPORT_TICKETS_DIR,
     BLOCKLIST_DIR,
     WATCHLIST_DIR,
     MEDIA_AUTOMATION_DIR,
@@ -4352,6 +4354,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         editions: !!config.editionsEnabled && isPlexMediaServer,
         achievements: !!config.achievementsEnabled,
         achievementsLeaderboard: !!config.achievementsEnabled && config.achievementsLeaderboardEnabled !== false,
+        support: config.supportTicketsEnabled !== false,
         // Portal engine unlocks Discover; Seerr URL still works when using Seerr as engine.
         request: portalRequestNav || seerrRequestNav,
         requestsQueue: portalRequestNav || requestAppService.isRequestAppConfigured(config),
@@ -4471,21 +4474,34 @@ const DASHBOARD_RECENTLY_ADDED_WIDGETS = ['recentMovies', 'recentShows', 'recent
 const DASHBOARD_WIDGETS = [...DASHBOARD_MAIN_GRID_WIDGETS, ...DASHBOARD_RECENTLY_ADDED_WIDGETS];
 const DASHBOARD_WIDGET_SIZES = ['compact', 'normal', 'wide', 'full'];
 
-const DOWNLOAD_CLIENT_TYPES = ['qbittorrent', 'transmission', 'bittorrent', 'deluge', 'sabnzbd', 'nzbget'];
+const DOWNLOAD_CLIENT_TYPES = ['qbittorrent', 'rdtclient', 'transmission', 'bittorrent', 'deluge', 'sabnzbd', 'nzbget'];
+const DOWNLOAD_CLIENT_TYPE_ALIASES = {
+    'rdt-client': 'rdtclient',
+    rdt_client: 'rdtclient',
+    'real-debrid': 'rdtclient',
+    realdebrid: 'rdtclient',
+    'real-debrid-client': 'rdtclient',
+};
 const downloadClientLabel = (type) => ({
     qbittorrent: 'qBittorrent',
+    rdtclient: 'Real-Debrid Client',
     transmission: 'Transmission',
     bittorrent: 'BitTorrent',
     deluge: 'Deluge',
     sabnzbd: 'SABnzbd',
     nzbget: 'NZBGet',
 }[type] || 'Download Client');
+const normalizeDownloadClientType = (raw) => {
+    const value = String(raw || '').toLowerCase();
+    const aliased = DOWNLOAD_CLIENT_TYPE_ALIASES[value] || value;
+    return DOWNLOAD_CLIENT_TYPES.includes(aliased) ? aliased : 'qbittorrent';
+};
 
 const normalizeDownloadClients = (incoming, existing = [], { resolveSecret = (v) => v, resolveConfigIntegrationUrl = (v) => String(v || '').trim(), secretMask = SECRET_MASK } = {}) => {
     if (!Array.isArray(incoming)) return Array.isArray(existing) ? existing : [];
     const existingById = new Map((Array.isArray(existing) ? existing : []).map((entry) => [String(entry.id), entry]));
     return incoming.slice(0, 20).map((raw, index) => {
-        const type = DOWNLOAD_CLIENT_TYPES.includes(String(raw?.type || '').toLowerCase()) ? String(raw.type).toLowerCase() : 'qbittorrent';
+        const type = normalizeDownloadClientType(raw?.type);
         const id = String(raw?.id || `${type}-${Date.now()}-${index}`);
         const previous = existingById.get(id) || {};
         const safeUrl = resolveConfigIntegrationUrl(raw?.url, previous.url || '');
@@ -4772,6 +4788,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 overlaysEnabled: !!config.overlaysEnabled,
                 editionsEnabled: !!config.editionsEnabled,
                 achievementsEnabled: !!config.achievementsEnabled,
+                supportTicketsEnabled: config.supportTicketsEnabled !== false,
                 achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
                 achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
                 achievementsShowOnProfile: config.achievementsShowOnProfile !== false,
@@ -4934,6 +4951,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 overlaysEnabled: false,
                 editionsEnabled: false,
                 achievementsEnabled: false,
+                supportTicketsEnabled: true,
                 achievementsLeaderboardEnabled: true,
                 achievementsHomeWidgetEnabled: true,
                 achievementsShowOnProfile: true,
@@ -5005,7 +5023,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -5431,6 +5449,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         achievementsEnabled: achievementsEnabled !== undefined
             ? !!achievementsEnabled
             : !!existingConfig.achievementsEnabled,
+        supportTicketsEnabled: supportTicketsEnabled !== undefined
+            ? !!supportTicketsEnabled
+            : (existingConfig.supportTicketsEnabled !== false),
         achievementsLeaderboardEnabled: achievementsLeaderboardEnabled !== undefined
             ? !!achievementsLeaderboardEnabled
             : (existingConfig.achievementsLeaderboardEnabled !== false),
@@ -6185,9 +6206,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
             const existing = downloadClientId
                 ? (Array.isArray(stored.downloadClients) ? stored.downloadClients : []).find((entry) => String(entry.id) === String(downloadClientId))
                 : null;
-            const clientType = DOWNLOAD_CLIENT_TYPES.includes(String(downloadClientType || existing?.type || '').toLowerCase())
-                ? String(downloadClientType || existing?.type).toLowerCase()
-                : 'qbittorrent';
+            const clientType = normalizeDownloadClientType(downloadClientType || existing?.type);
             const client = {
                 id: String(downloadClientId || existing?.id || 'test'),
                 type: clientType,
@@ -16292,6 +16311,23 @@ achievementsHttp = registerAchievementsRoutes(app, {
         const payload = await response.json().catch(() => null);
         return Array.isArray(payload?.Items) ? payload.Items : [];
     },
+});
+
+registerSupportTicketRoutes(app, {
+    requireAuth,
+    requireMember,
+    requireAdmin,
+    loadFile,
+    CONFIG_PATH,
+    USERS_PATH,
+    dataDir: SUPPORT_TICKETS_DIR,
+    createInAppNotification,
+    appendAuditLog,
+    resolveLocalUser: async (sessionUser) => {
+        const users = await loadFile(USERS_PATH, []);
+        return findLocalUserForSession(users, sessionUser);
+    },
+    log,
 });
 
 /** Resolve portal user id / username / plexAccountId → Plex accountID for analytics APIs. */

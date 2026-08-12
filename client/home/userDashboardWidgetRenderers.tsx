@@ -500,6 +500,11 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
             case 'support': {
                 const showTempAccessMessage = isActiveShortTermTrial(user, daysLeft);
                 const hasContactOptions = !!(publicConfig?.contactWhatsApp || publicConfig?.contactEmail);
+                const ticketsEnabled = sessionInfo?.navFeatures?.support !== false;
+                const openSupportInbox = (compose = false) => {
+                    window.history.pushState({}, '', portalUrl(compose ? '/support?compose=1' : '/support'));
+                    window.dispatchEvent(new PopStateEvent('popstate'));
+                };
                 return (
                     <div className="glass-card p-4 md:p-5 shadow-lg flex flex-col">
                         {showTempAccessMessage ? (
@@ -523,8 +528,17 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                                 </p>
                             </div>
                         )}
-                        {hasContactOptions ? (
+                        {hasContactOptions || ticketsEnabled ? (
                             <div className="flex flex-col gap-3 mt-auto">
+                                {ticketsEnabled && (
+                                    <button
+                                        type="button"
+                                        onClick={() => openSupportInbox(true)}
+                                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border bg-plex/10 border-plex/30 text-plex hover:bg-plex/20"
+                                    >
+                                        {t('homeDashboard.openSupportTicket')}
+                                    </button>
+                                )}
                                 {publicConfig?.contactWhatsApp && (
                                     <a href={`https://wa.me/${String(publicConfig.contactWhatsApp).replace(/\D/g, '')}`} target="_blank" rel="noreferrer"
                                         className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border bg-[#25D366]/10 border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366]/20">

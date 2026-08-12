@@ -43,6 +43,7 @@ export const fr: DeepPartial<EnCatalog> = {
         logs: 'Journaux',
         analytics: 'Analyses',
         achievements: 'Succès',
+        support: 'Assistance',
         downloads: 'Téléchargements',
         calendar: 'Calendrier',
         cleaner: 'Nettoyage',
@@ -267,6 +268,7 @@ export const fr: DeepPartial<EnCatalog> = {
         openRequestQueue: 'Ouvrir la file des demandes',
         openHome: 'Ouvrir l’accueil',
         openSettings: 'Ouvrir les réglages',
+        openSupport: 'Ouvrir le ticket d’assistance',
         openLink: 'Ouvrir',
     },
     home: {
@@ -376,6 +378,7 @@ export const fr: DeepPartial<EnCatalog> = {
         needHelp: 'Besoin d’aide ?',
         contactOwnerHint: 'Contactez le propriétaire pour prolonger votre accès, signaler un problème ou obtenir de l’aide.',
         contactNotConfigured: 'Les coordonnées de contact n’ont pas encore été configurées par le propriétaire du serveur.',
+        openSupportTicket: 'Contacter l’admin',
         email: 'E-mail',
         totalCatalog: 'Catalogue total',
         catalogSummary: '{movies} films · {shows} séries · {episodes} épisodes',

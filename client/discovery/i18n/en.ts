@@ -41,6 +41,7 @@ export const en = {
         logs: 'Logs',
         analytics: 'Analytics',
         achievements: 'Achievements',
+        support: 'Support',
         downloads: 'Downloads',
         calendar: 'Calendar',
         cleaner: 'Cleaner',
@@ -265,6 +266,7 @@ export const en = {
         openRequestQueue: 'Open request queue',
         openHome: 'Open Home',
         openSettings: 'Open Settings',
+        openSupport: 'Open support ticket',
         openLink: 'Open',
     },
     home: {
@@ -374,6 +376,7 @@ export const en = {
         needHelp: 'Need Help?',
         contactOwnerHint: 'Contact the owner to extend your access, report an issue, or get support.',
         contactNotConfigured: 'Contact details have not been configured by the server owner yet.',
+        openSupportTicket: 'Message the admin',
         email: 'Email',
         totalCatalog: 'Total Catalog',
         catalogSummary: '{movies} movies · {shows} shows · {episodes} episodes',

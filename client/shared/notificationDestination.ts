@@ -8,6 +8,7 @@ export type NotificationDestination =
     | { kind: 'requests'; reviewId?: number; labelKey: string }
     | { kind: 'home'; labelKey: string }
     | { kind: 'settings'; labelKey: string }
+    | { kind: 'support'; path: string; labelKey: string }
     | { kind: 'external'; href: string; labelKey: string };
 
 export type NotificationLike = {
@@ -56,6 +57,14 @@ export const resolveNotificationDestination = (item: NotificationLike): Notifica
             labelKey: href.includes('/requests')
                 ? 'notifications.openMyRequests'
                 : 'notifications.openInDiscover',
+        };
+    }
+
+    if (href.startsWith('/support') || type === 'support_ticket') {
+        return {
+            kind: 'support',
+            path: href.startsWith('/support') ? href : '/support',
+            labelKey: 'notifications.openSupport',
         };
     }
 

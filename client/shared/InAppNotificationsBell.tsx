@@ -10,6 +10,7 @@ import {
     Clapperboard,
     ClipboardList,
     Inbox,
+    LifeBuoy,
     Sparkles,
     Trash2,
     Tv,
@@ -67,6 +68,8 @@ const typeVisual = (type?: string) => {
             return { Icon: Calendar, tone: 'text-sky-300 bg-sky-500/15 border-sky-500/30' };
         case 'admin_test':
             return { Icon: Bell, tone: 'text-plex bg-plex/15 border-plex/30' };
+        case 'support_ticket':
+            return { Icon: LifeBuoy, tone: 'text-plex bg-plex/15 border-plex/30' };
         default:
             return { Icon: Inbox, tone: 'text-plex bg-plex/15 border-plex/30' };
     }
@@ -286,6 +289,10 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         }
         if (dest.kind === 'settings') {
             onNavigate?.('settings');
+            return;
+        }
+        if (dest.kind === 'support') {
+            onNavigate?.('support', { path: dest.path });
             return;
         }
         if (dest.kind === 'external' && dest.href.startsWith('/')) {

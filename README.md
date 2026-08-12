@@ -45,7 +45,7 @@ Server Portal can connect to the apps that usually surround a Plex, Jellyfin, or
 | **Requests** | Built-in portal (default) or Seerr | Discover, request queue, approvals — Seerr optional as engine or history import |
 | **ARR apps** | Sonarr, Radarr, Lidarr | Calendars, queues, history, download matching, and upgrader actions where supported |
 | **Subtitles** | Bazarr | Multi-instance subtitle widgets, tools, version display, and connection tests |
-| **Download clients** | qBittorrent, Transmission, BitTorrent, Deluge, SABnzbd, NZBGet | Unified Download Status page with progress, speed, source filters, client health, and ARR matching |
+| **Download clients** | qBittorrent, Real-Debrid Client, Transmission, BitTorrent, Deluge, SABnzbd, NZBGet | Unified Download Status page with progress, speed, source filters, client health, and ARR matching |
 | **Notifications** | Gotify, SMTP email | Alert rules, access notifications, expiry warnings, inactivity notices, welcome emails, and newsletters |
 | **Metadata and artwork** | TMDB | Trending slideshow, posters, backdrops, and Discover enrichment |
 
@@ -151,7 +151,7 @@ Browse your Sonarr, Radarr, Lidarr, Bazarr, and download-client activity directl
 - **Month Navigation** - Browse releases by month with auto-advance to the next month that has content
 - **Smart ID Matching** - Uses IMDb, TMDB, and TVDB IDs to accurately map and display metadata
 - **Bazarr Tools** - Multi-instance subtitle widgets and quick subtitle tooling
-- **Download Status** - Unified view of qBittorrent, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet downloads with Sonarr/Radarr/Lidarr filters
+- **Download Status** - Unified view of qBittorrent, Real-Debrid Client, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet downloads with Sonarr/Radarr/Lidarr filters
 
 Configure ARR apps, Bazarr, request apps, and download clients in **Settings → Media Stack**.
 
@@ -590,7 +590,7 @@ All configuration is managed through the **Settings UI** in the browser. Key opt
 | Home Layout | Section order and visibility for the user home page, including Pending Requests |
 | ARR Instances | Sonarr, Radarr, and Lidarr URLs/API keys for calendars, queues, history, and download matching |
 | Bazarr Instances | Subtitle widgets, tools, version display, and connection tests |
-| Download Clients | qBittorrent, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet for the Download Status page |
+| Download Clients | qBittorrent, Real-Debrid Client, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet for the Download Status page |
 | Request App (optional) | Seerr / Jellyseerr URL and API key — use as request engine, Discover metadata source, or history import |
 | Tautulli / Jellystat | Tautulli for Plex analytics, Jellystat for Jellyfin analytics |
 | Alerts | Gotify connection and alert rules |

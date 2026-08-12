@@ -10,6 +10,7 @@ export type NavFeatureFlags = {
     achievements?: boolean;
     /** Achievements XP/badge leaderboard (requires achievements). Default true when achievements on. */
     achievementsLeaderboard?: boolean;
+    support?: boolean;
     request?: boolean;
     requestsQueue?: boolean;
     /** When false, Downloads is hidden from non-admins. Default/undefined = visible. */
@@ -36,6 +37,7 @@ export const DEFAULT_NAV_ORDER = [
     'status',
     // After the usual primary/secondary slots so stock mobile bars stay uncrowded.
     'achievements',
+    'support',
     'maintenance',
     'about',
     'preferences',
@@ -53,6 +55,7 @@ export const NAV_ITEM_LABELS: Record<string, string> = {
     request: 'Discover & Request',
     analytics: 'Analytics',
     achievements: 'Achievements',
+    support: 'Support',
     users: 'Users',
     downloads: 'Downloads',
     upgrader: 'Upgrader',
@@ -118,6 +121,8 @@ const LEGACY_DEFAULT_NAV_ORDERS = [
     ['home', 'discover', 'request', 'analytics', 'achievements', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
     // Pre-Preferences page stock order.
     ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'mediastack', 'requests', 'status', 'achievements', 'maintenance', 'about', 'settings', 'logout'],
+    // Pre-support-tickets stock order.
+    ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'editions', 'mediastack', 'requests', 'status', 'achievements', 'maintenance', 'about', 'preferences', 'settings', 'logout'],
 ];
 
 const sameOrder = (a: string[], b: string[]) => (
@@ -312,6 +317,7 @@ export const filterNavOrder = (
     const overlaysEnabled = !!features.overlays;
     const editionsEnabled = !!features.editions;
     const achievementsEnabled = !!features.achievements;
+    const supportEnabled = features.support !== false;
     const requestsQueueEnabled = !!features.requestsQueue;
     const requestEnabled = features.request !== false || requestsQueueEnabled;
     const hidden = new Set(
@@ -335,6 +341,7 @@ export const filterNavOrder = (
         if (key === 'overlays' && !overlaysEnabled) return false;
         if (key === 'editions' && !editionsEnabled) return false;
         if (key === 'achievements' && !achievementsEnabled) return false;
+        if (key === 'support' && !supportEnabled) return false;
         if (key === 'request' && !requestEnabled) return false;
         if (key === 'requests' && !requestsQueueEnabled) return false;
         return true;

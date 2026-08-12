@@ -38,6 +38,13 @@ const resolveNotificationDestination = (item = {}) => {
             labelKey: href.includes('/requests') ? 'notifications.openMyRequests' : 'notifications.openInDiscover',
         };
     }
+    if (href.startsWith('/support') || type === 'support_ticket') {
+        return {
+            kind: 'support',
+            path: href.startsWith('/support') ? href : '/support',
+            labelKey: 'notifications.openSupport',
+        };
+    }
     if (href.startsWith('/requests')) {
         return { kind: 'requests', reviewId: parseReviewId(href, meta), labelKey: 'notifications.openRequestQueue' };
     }
@@ -99,4 +106,13 @@ test('declined without href opens my requests', () => {
 test('admin test opens home', () => {
     const dest = resolveNotificationDestination({ type: 'admin_test', href: '/portal' });
     assert.equal(dest.kind, 'home');
+});
+
+test('support ticket href opens support inbox', () => {
+    const dest = resolveNotificationDestination({
+        type: 'support_ticket',
+        href: '/support?ticket=12',
+    });
+    assert.equal(dest.kind, 'support');
+    assert.equal(dest.path, '/support?ticket=12');
 });

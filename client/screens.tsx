@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal } from 'lucide-react';
+import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal, LifeBuoy } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 
 import { SettingsDashboard } from './settings/SettingsDashboard';
@@ -99,6 +99,7 @@ const STATUS_SERVICE_ICONS: Record<string, string> = {
     lidarr: `${STATUS_ICON_BASE}/lidarr.svg`,
     bazarr: `${STATUS_ICON_BASE}/bazarr.svg`,
     qbittorrent: `${STATUS_ICON_BASE}/qbittorrent.svg`,
+    rdtclient: 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/rdt-client.svg',
     transmission: `${STATUS_ICON_BASE}/transmission.svg`,
     bittorrent: `${SIMPLE_STATUS_ICON_BASE}/bittorrent`,
     deluge: `${STATUS_ICON_BASE}/deluge.svg`,
@@ -2245,6 +2246,7 @@ const DOWNLOADS_CLIENT_FILTER_KEY = 'portal-downloads-client-filter';
 
 const downloadClientTypeLabel = (type: string) => ({
     qbittorrent: 'qBittorrent',
+    rdtclient: 'Real-Debrid Client',
     transmission: 'Transmission',
     bittorrent: 'BitTorrent',
     deluge: 'Deluge',
@@ -2401,6 +2403,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
     const downloadClientIcon = (type: string) => {
         const normalized = String(type || '').toLowerCase();
         if (normalized === 'bittorrent') return 'https://cdn.simpleicons.org/bittorrent';
+        if (normalized === 'rdtclient') return 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/rdt-client.svg';
         if (['qbittorrent', 'transmission', 'deluge', 'sabnzbd', 'nzbget'].includes(normalized)) return `${STATUS_ICON_BASE}/${normalized}.svg`;
         return `${STATUS_ICON_BASE}/qbittorrent.svg`;
     };
@@ -11252,7 +11255,7 @@ export const MaintenanceDashboard: React.FC = () => {
 interface NavigationProps {
     currentRoute: string;
     onNavigate: (
-        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about',
+        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'achievements' | 'support',
         options?: { hash?: string; reviewId?: number; path?: string },
     ) => void;
     onLogout: () => void;
@@ -11270,6 +11273,7 @@ interface NavigationProps {
     activeTheme: string;
     setActiveTheme: (theme: string) => void;
     pendingRequestCount?: number;
+    supportUnreadCount?: number;
     watchingCount?: number;
     downloadCount?: number;
     mediaAutomationActiveCount?: number;
@@ -11279,7 +11283,7 @@ interface NavigationProps {
     sidebarIdentityPosition?: 'top' | 'bottom';
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom' }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, supportUnreadCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom' }) => {
     const { t } = useDiscoverI18n();
     const serverIcon = customLogoUrl ? resolvePortalAssetUrl(customLogoUrl) : (adminThumb ? (adminThumb.startsWith('http') ? adminThumb : portalUrl(`/api/plex/image?path=${encodeURIComponent(adminThumb)}&width=256&height=256`)) : logoUrl());
     const providerName = String(mediaServerType || 'plex').toLowerCase() === 'jellyfin'
@@ -11491,6 +11495,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'logs': { label: t('navigation.logs'), icon: FileText, route: 'logs', adminOnly: true },
         'analytics': { label: t('navigation.analytics'), icon: BarChart3, route: 'analytics', adminOnly: false },
         'achievements': { label: t('navigation.achievements'), icon: Trophy, route: 'achievements', adminOnly: false },
+        'support': { label: t('navigation.support'), icon: LifeBuoy, route: 'support', adminOnly: false },
         'downloads': { label: t('navigation.downloads'), icon: DownloadCloud, route: 'downloads', adminOnly: false },
         'mediastack': { label: t('navigation.calendar'), icon: Calendar, route: 'mediastack', adminOnly: false },
         'maintenance': { label: t('navigation.cleaner'), icon: Shield, route: 'maintenance', adminOnly: true },
@@ -11522,6 +11527,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const getNavBadgeCount = (key: string) => {
         if (key === 'requests') return pendingRequestCount;
+        if (key === 'support') return supportUnreadCount;
         if (key === 'discover' && showDashboardWatchingBadge) return watchingCount;
         if (key === 'downloads') return downloadCount;
         if (key === 'media-automation') return mediaAutomationActiveCount;

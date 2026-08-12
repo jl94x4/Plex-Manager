@@ -99,7 +99,7 @@ export interface ArrInstance {
 
 export interface DownloadClientConfig {
     id: string;
-    type: 'qbittorrent' | 'transmission' | 'bittorrent' | 'deluge' | 'sabnzbd' | 'nzbget';
+    type: 'qbittorrent' | 'rdtclient' | 'transmission' | 'bittorrent' | 'deluge' | 'sabnzbd' | 'nzbget';
     name: string;
     url: string;
     username?: string;

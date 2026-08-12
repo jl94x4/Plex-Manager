@@ -20,6 +20,7 @@ type NavFeatureStatus = {
     overlays?: boolean;
     editions?: boolean;
     achievements?: boolean;
+    support?: boolean;
     maintenance?: boolean;
 };
 
@@ -47,6 +48,7 @@ const FEATURE_OFF_HINT: Record<string, string> = {
     overlays: 'Feature off — enable under Settings → Overlays',
     editions: 'Feature off — enable under Settings → Editions',
     achievements: 'Feature off — enable under Settings → Achievements',
+    support: 'Feature off — enable under Settings → System',
     maintenance: 'Feature off — enable under Settings → Cleanup',
 };
 
@@ -244,6 +246,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                         if (key === 'overlays' && featureStatus?.overlays === false) return FEATURE_OFF_HINT.overlays;
                         if (key === 'editions' && featureStatus?.editions === false) return FEATURE_OFF_HINT.editions;
                         if (key === 'achievements' && featureStatus?.achievements === false) return FEATURE_OFF_HINT.achievements;
+                        if (key === 'support' && featureStatus?.support === false) return FEATURE_OFF_HINT.support;
                         if (key === 'maintenance' && featureStatus?.maintenance === false) return FEATURE_OFF_HINT.maintenance;
                         return null;
                     })();
