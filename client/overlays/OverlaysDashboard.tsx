@@ -551,27 +551,42 @@ export const OverlaysDashboard: React.FC = () => {
                 other.rows.push(row);
                 continue;
             }
-            const ruleId = String(fam.extra?.ruleId || fam.name || '').trim();
-            const rule = collectionRules.find((r) => r.id === ruleId);
-            // Prefer the user-editable rule name so renames show on the list immediately.
-            const title = String(
-                rule?.name
-                || fam.text
-                || fam.extra?.collectionTitle
-                || rule?.collectionTitle
-                || ruleId
-                || 'Collection',
-            ).trim() || 'Collection';
-            const library = String(
-                fam.extra?.library || rule?.library || row.library || '',
-            ).trim();
-            const id = ruleId ? `collection:${ruleId}` : `collection:${title}:${library}`;
-            let section = byId.get(id);
-            if (!section) {
-                section = { id, title, library, kind: 'collection', ruleId, rows: [] };
-                byId.set(id, section);
+            const badgeRows = Array.isArray(fam.extra?.badges) && fam.extra.badges.length > 0
+                ? fam.extra.badges.filter((b: any) => b && typeof b === 'object')
+                : [{
+                    ruleId: fam.extra?.ruleId || fam.name,
+                    name: fam.text || fam.name,
+                    collectionTitle: fam.extra?.collectionTitle,
+                    library: fam.extra?.library,
+                }];
+            const seenRule = new Set<string>();
+            for (const badge of badgeRows) {
+                const ruleId = String(badge.ruleId || fam.extra?.ruleId || fam.name || '').trim();
+                if (ruleId && seenRule.has(ruleId)) continue;
+                if (ruleId) seenRule.add(ruleId);
+                const rule = collectionRules.find((r) => r.id === ruleId);
+                // Prefer the user-editable rule name so renames show on the list immediately.
+                const title = String(
+                    rule?.name
+                    || badge.name
+                    || fam.text
+                    || badge.collectionTitle
+                    || fam.extra?.collectionTitle
+                    || rule?.collectionTitle
+                    || ruleId
+                    || 'Collection',
+                ).trim() || 'Collection';
+                const library = String(
+                    badge.library || fam.extra?.library || rule?.library || row.library || '',
+                ).trim();
+                const id = ruleId ? `collection:${ruleId}` : `collection:${title}:${library}`;
+                let section = byId.get(id);
+                if (!section) {
+                    section = { id, title, library, kind: 'collection', ruleId, rows: [] };
+                    byId.set(id, section);
+                }
+                section.rows.push(row);
             }
-            section.rows.push(row);
         }
         // Always show configured rules as their own collapsible section (even with 0 stamps).
         for (const rule of collectionRules) {

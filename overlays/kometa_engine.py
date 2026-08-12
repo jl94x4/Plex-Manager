@@ -10,6 +10,7 @@ backup per item — movies included — enabling per-item and bulk revert.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -219,41 +220,93 @@ def _item_library_title(item) -> str:
     return ""
 
 
-def _library_matches(item_or_coll, expected_library: str) -> bool:
-    expected = str(expected_library or "").strip().lower()
+def _item_library_section_id(item) -> str:
+    for attr in ("librarySectionID", "librarySectionId", "sectionId"):
+        try:
+            value = getattr(item, attr, None)
+            if value is not None and str(value).strip() != "":
+                return str(value).strip()
+        except Exception:
+            continue
+    try:
+        section = item.section() if callable(getattr(item, "section", None)) else None
+        if section is not None:
+            key = getattr(section, "key", None) or getattr(section, "ratingKey", None)
+            if key is not None:
+                return str(key).rstrip("/").split("/")[-1]
+    except Exception:
+        pass
+    return ""
+
+
+def _normalize_library_label(value: str) -> str:
+    """Compare library titles ignoring emoji/punctuation (🎬 Movies 🍿 == Movies)."""
+    text = str(value or "").casefold()
+    text = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE)
+    return " ".join(text.split())
+
+
+def _library_labels_match(actual: str, expected: str) -> bool:
+    a = _normalize_library_label(actual)
+    b = _normalize_library_label(expected)
+    return bool(a and b and a == b)
+
+
+def _library_matches(item_or_coll, expected_library: str, *, expected_section_id: str = "") -> bool:
+    expected_id = str(expected_section_id or "").strip()
+    if expected_id:
+        actual_id = _item_library_section_id(item_or_coll)
+        if actual_id and actual_id == expected_id:
+            return True
+    expected = str(expected_library or "").strip()
     if not expected:
         return False
-    actual = _item_library_title(item_or_coll).lower()
-    return bool(actual) and actual == expected
+    actual = _item_library_title(item_or_coll)
+    return _library_labels_match(actual, expected)
+
+
+def _libraries_compatible(actual: str, expected: str, *, actual_id: str = "", expected_id: str = "") -> bool:
+    """True when child belongs to the rule library (empty actual = unknown → allow)."""
+    if expected_id and actual_id and expected_id == actual_id:
+        return True
+    if not actual or not str(actual).strip():
+        return True  # partial Plex children often omit librarySectionTitle
+    if not expected or not str(expected).strip():
+        return False
+    return _library_labels_match(actual, expected)
 
 
 def _iter_collection_children(coll, *, page_size: int = 100):
-    """Yield every child of a Plex collection (paginated — default container size is not enough)."""
+    """Yield every child of a Plex collection.
+
+    Prefer coll.items() — plexapi already paginates fetchItems to completion.
+    Manual container_start loops double-fetch and can confuse smart collections.
+    """
+    try:
+        items = coll.items()
+        if items is not None:
+            yield from items
+            return
+    except Exception:
+        pass
     key = getattr(coll, "key", None)
     if not key:
-        try:
-            yield from (coll.items() or [])
-        except Exception:
-            return
         return
+    children_key = f"{key}/children" if not str(key).rstrip("/").endswith("/children") else str(key)
     start = 0
     size = max(20, int(page_size or 100))
     while True:
         try:
-            batch = coll.fetchItems(f"{key}/children", container_start=start, container_size=size)
+            batch = coll.fetchItems(children_key, container_start=start, container_size=size, maxresults=size)
         except TypeError:
-            # Older plexapi: no container kwargs
             try:
-                yield from (coll.items() or [])
+                batch = coll.fetchItems(children_key)
             except Exception:
                 return
+            for item in batch or []:
+                yield item
             return
         except Exception:
-            try:
-                if start == 0:
-                    yield from (coll.items() or [])
-            except Exception:
-                return
             return
         if not batch:
             break
@@ -288,10 +341,12 @@ def _resolve_collection_member_keys(
     collection_rating_key: str,
     *,
     library: str,
+    library_section_id: str = "",
     progress: ProgressFn | None = None,
 ) -> set[str]:
     key = str(collection_rating_key or "").strip()
     expected_library = str(library or "").strip()
+    expected_section_id = str(library_section_id or "").strip()
     if not key or not expected_library:
         return set()
     try:
@@ -299,16 +354,26 @@ def _resolve_collection_member_keys(
     except Exception as exc:
         _progress(progress, f"Collection {key}: fetch failed ({exc})")
         return set()
-    if not _library_matches(coll, expected_library):
+    if not _library_matches(coll, expected_library, expected_section_id=expected_section_id):
         actual = _item_library_title(coll) or "?"
         _progress(
             progress,
-            f"Collection {key}: skipped — library mismatch (expected '{expected_library}', got '{actual}')",
+            f"Collection {key}: skipped — library mismatch "
+            f"(expected '{expected_library}', got '{actual}')",
         )
         return set()
     members: set[str] = set()
     skipped_mismatch = 0
     skipped_empty = 0
+    child_count_hint = None
+    for attr in ("childCount", "collectionSize", "size"):
+        try:
+            raw = getattr(coll, attr, None)
+            if raw is not None and str(raw).strip() != "":
+                child_count_hint = int(raw)
+                break
+        except Exception:
+            continue
     try:
         for item in _iter_collection_children(coll):
             rk = _collection_member_target_key(item)
@@ -317,15 +382,27 @@ def _resolve_collection_member_keys(
                 continue
             # coll.items()/children often omit librarySectionTitle on partial objects.
             # The collection itself is already library-scoped — only exclude when the
-            # child reports a *different* library title (smart multi-library edge case).
+            # child reports a clearly different library (emoji/punctuation-normalized).
             actual = _item_library_title(item)
-            if actual and actual.strip().lower() != expected_library.strip().lower():
+            actual_id = _item_library_section_id(item)
+            if not _libraries_compatible(
+                actual,
+                expected_library,
+                actual_id=actual_id,
+                expected_id=expected_section_id,
+            ):
                 skipped_mismatch += 1
                 continue
             members.add(rk)
     except Exception as exc:
         _progress(progress, f"Collection {key}: items() failed ({exc})")
         return set()
+    if child_count_hint is not None and child_count_hint > len(members):
+        _progress(
+            progress,
+            f"Collection {key}: Plex childCount={child_count_hint} but resolved {len(members)} "
+            f"stampable member(s) — some children may be seasons/episodes or filtered",
+        )
     if skipped_mismatch or skipped_empty:
         _progress(
             progress,
@@ -355,6 +432,19 @@ def _resolve_custom_preset_path(paths: dict, image_id: str) -> Path | None:
     return None
 
 
+def _fetch_plex_item(plex, rating_key: str):
+    key = str(rating_key or "").strip()
+    if not key:
+        return None
+    try:
+        return plex.fetchItem(int(key))
+    except Exception:
+        try:
+            return plex.fetchItem(key)
+        except Exception:
+            return None
+
+
 def _apply_custom_collection_winners(
     plex,
     config: dict,
@@ -364,12 +454,17 @@ def _apply_custom_collection_winners(
     progress: ProgressFn | None = None,
     errors: list[str] | None = None,
 ) -> None:
-    """Inject custom_collection winners from live Plex membership (first matching rule wins)."""
+    """Inject custom_collection winners from live Plex membership.
+
+    An item may belong to multiple configured collections — all matching badges
+    are stacked (previously first-rule-wins hid later collections from the tracked list).
+    """
     rules = _custom_collection_rules(config)
     if not rules:
         return
-    # ratingKey -> first matching rule + resolved image path
-    member_rule: dict[str, tuple[dict, Path]] = {}
+    # ratingKey -> ordered list of (rule, image_path)
+    member_badges: dict[str, list[tuple[dict, Path]]] = {}
+    rule_members: dict[str, set[str]] = {}
     for rule in rules:
         if not rule.get("library"):
             msg = f"custom_collection {rule['id']}: library is required — skipped"
@@ -381,8 +476,10 @@ def _apply_custom_collection_winners(
             plex,
             rule["collectionRatingKey"],
             library=rule["library"],
+            library_section_id=rule.get("librarySectionId") or "",
             progress=progress,
         )
+        rule_members[rule["id"]] = set(members)
         _progress(
             progress,
             f"Collection badge '{rule.get('name') or rule['id']}' [{rule['library']}]: {len(members)} member(s)",
@@ -395,39 +492,83 @@ def _apply_custom_collection_winners(
             _progress(progress, msg)
             continue
         for rk in members:
-            if rk not in member_rule:
-                member_rule[rk] = (rule, image_path)
+            member_badges.setdefault(rk, []).append((rule, image_path))
 
-    for rk, (rule, image_path) in member_rule.items():
-        winner = Winner(
-            family="custom_collection",
-            name=str(rule["id"]),
-            key=str(rule["image"]),
-            text=str(rule.get("name") or rule["id"]),
-            image_rel=str(image_path),
-            extra={
+    queued_by_rule: dict[str, int] = {rule["id"]: 0 for rule in rules}
+    dropped = 0
+    for rk, badge_rows in member_badges.items():
+        # Library scope: item must fit at least one matching rule's library.
+        primary_rule, primary_path = badge_rows[0]
+        expected_libs = [(r, p) for r, p in badge_rows]
+        row = should.get(rk)
+        item = row.get("item") if row else None
+        if item is None:
+            item = _fetch_plex_item(plex, rk)
+            if item is None:
+                msg = f"custom_collection fetch failed for ratingKey={rk}"
+                if errors is not None:
+                    errors.append(msg)
+                _progress(progress, msg)
+                dropped += 1
+                continue
+        item_type = str(getattr(item, "type", "") or "").lower()
+        if item_type == "episode":
+            _progress(progress, f"Collection badge skip {rk}: episode art is not stamped")
+            dropped += 1
+            continue
+        actual_lib = _item_library_title(item)
+        actual_id = _item_library_section_id(item)
+        compatible_rows: list[tuple[dict, Path]] = []
+        for rule, image_path in expected_libs:
+            if _libraries_compatible(
+                actual_lib,
+                str(rule.get("library") or "").strip(),
+                actual_id=actual_id,
+                expected_id=str(rule.get("librarySectionId") or "").strip(),
+            ):
+                compatible_rows.append((rule, image_path))
+        if not compatible_rows:
+            title = getattr(item, "title", None) or rk
+            msg = (
+                f"Collection badge skip '{title}': library "
+                f"'{actual_lib or '?'}' did not match any collection rule"
+            )
+            if errors is not None:
+                errors.append(msg)
+            _progress(progress, msg)
+            dropped += 1
+            continue
+
+        badges_extra = []
+        for rule, image_path in compatible_rows:
+            badges_extra.append({
                 "ruleId": rule["id"],
+                "name": str(rule.get("name") or rule["id"]),
                 "collectionRatingKey": rule["collectionRatingKey"],
                 "collectionTitle": rule.get("collectionTitle") or "",
                 "library": rule.get("library") or "",
+                "image": rule["image"],
+                "imagePath": str(image_path),
+            })
+            queued_by_rule[rule["id"]] = queued_by_rule.get(rule["id"], 0) + 1
+
+        primary_rule, primary_path = compatible_rows[0]
+        winner = Winner(
+            family="custom_collection",
+            name=str(primary_rule["id"]),
+            key=str(primary_rule["image"]),
+            text=str(primary_rule.get("name") or primary_rule["id"]),
+            image_rel=str(primary_path),
+            extra={
+                "ruleId": primary_rule["id"],
+                "collectionRatingKey": primary_rule["collectionRatingKey"],
+                "collectionTitle": primary_rule.get("collectionTitle") or "",
+                "library": primary_rule.get("library") or "",
+                "badges": badges_extra,
             },
         )
-        row = should.get(rk)
         if row is None:
-            try:
-                item = plex.fetchItem(int(rk))
-            except Exception as exc:
-                if errors is not None:
-                    errors.append(f"custom_collection fetch {rk}: {exc}")
-                continue
-            item_type = str(getattr(item, "type", "") or "").lower()
-            if item_type == "episode":
-                continue  # collection badges are for show/movie posters
-            actual_lib = _item_library_title(item)
-            expected_lib = str(rule.get("library") or "").strip()
-            if actual_lib and expected_lib and actual_lib.strip().lower() != expected_lib.lower():
-                continue
-            library = actual_lib or expected_lib
+            library = actual_lib or str(primary_rule.get("library") or "")
             row = {
                 "item": item,
                 "library": library,
@@ -435,13 +576,20 @@ def _apply_custom_collection_winners(
                 "winners": {},
             }
             should[rk] = row
-        else:
-            actual_lib = _item_library_title(row.get("item"))
-            expected_lib = str(rule.get("library") or "").strip()
-            if actual_lib and expected_lib and actual_lib.strip().lower() != expected_lib.lower():
-                continue
-        if "custom_collection" not in row["winners"]:
-            row["winners"]["custom_collection"] = winner
+        row["winners"]["custom_collection"] = winner
+
+    for rule in rules:
+        rid = rule["id"]
+        total = len(rule_members.get(rid) or [])
+        queued = int(queued_by_rule.get(rid) or 0)
+        if total and queued != total:
+            _progress(
+                progress,
+                f"Collection badge '{rule.get('name') or rid}': queued {queued}/{total} "
+                f"for stamping (see skip lines above for the rest)",
+            )
+    if dropped:
+        _progress(progress, f"Custom collection: {dropped} member(s) could not be queued")
 
 
 # ---------------------------------------------------------------------------
@@ -632,8 +780,19 @@ def _signature(winners: dict[str, Winner], config: dict) -> str:
     parts = []
     for family, winner in sorted(winners.items()):
         part = f"{family}:{winner.name}"
-        if family == "custom_collection" and winner.key:
-            part = f"{part}:{winner.key}"
+        if family == "custom_collection":
+            badges = (winner.extra or {}).get("badges") if isinstance(winner.extra, dict) else None
+            if isinstance(badges, list) and badges:
+                badge_keys = []
+                for badge in badges:
+                    if not isinstance(badge, dict):
+                        continue
+                    badge_keys.append(
+                        f"{badge.get('ruleId') or ''}:{badge.get('image') or badge.get('imagePath') or ''}"
+                    )
+                part = f"{family}:{','.join(sorted(badge_keys))}"
+            elif winner.key:
+                part = f"{part}:{winner.key}"
         parts.append(part)
     style = [
         f"audiostyle={_cfg(config, 'audioCodecStyle', 'audio_codec_style', 'compact')}",
@@ -656,6 +815,20 @@ def _download_original(plex, item) -> Image.Image | None:
     from core import _download_poster
 
     return _download_poster(plex, getattr(item, "thumb", None) or "")
+
+
+def _item_poster_thumb(item) -> str:
+    """Plex thumb URL token — changes whenever poster art is replaced."""
+    return str(getattr(item, "thumb", None) or "").strip()
+
+
+def _reload_item_thumb(item) -> str:
+    try:
+        if hasattr(item, "reload") and callable(item.reload):
+            item.reload()
+    except Exception:
+        pass
+    return _item_poster_thumb(item)
 
 
 def _add_overlay_label(item) -> None:
@@ -1026,12 +1199,19 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
         sig = _signature(winners, config)
         try:
             wanted_labels = _winner_label_names(winners)
+            current_thumb = _item_poster_thumb(item)
+            tracked_thumb = str(existing.get("posterThumb") or "").strip() if isinstance(existing, dict) else ""
+            # Signature alone is not enough: New Season / manual / TPDB poster replaces wipe
+            # the badge while leaving the log Live with the same winners → silent skip.
+            # Plex thumb URLs bump whenever art changes, so mismatch forces a restamp.
+            art_unchanged = bool(tracked_thumb) and tracked_thumb == current_thumb
             if (
                 existing
                 and not preview_mode
                 and not bool(existing.get("preview_only"))
                 and not bool(existing.get("needsRestamp"))
                 and existing.get("signature") == sig
+                and art_unchanged
             ):
                 # Already stamped — still backfill / refresh Plex Labels when missing or drifted.
                 prev_labels = existing.get("overlayLabels") if isinstance(existing.get("overlayLabels"), list) else None
@@ -1044,6 +1224,22 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                         errors.append(f"kometa labels {getattr(item, 'title', key)}: {exc}")
                 skipped += 1
                 continue
+            if (
+                existing
+                and not preview_mode
+                and not bool(existing.get("preview_only"))
+                and existing.get("signature") == sig
+                and not art_unchanged
+            ):
+                why = "poster changed since last stamp" if tracked_thumb else "no poster thumb recorded yet"
+                _progress(
+                    progress,
+                    f"Restamping {getattr(item, 'title', key)} ({why})",
+                )
+
+            # Preview rows must always be restamped on a live Run (never left as Preview).
+            if existing and bool(existing.get("preview_only")) and not preview_mode:
+                _progress(progress, f"Promoting preview → live: {getattr(item, 'title', key)}")
 
             backup = _backup_file(paths, key)
             if backup.exists():
@@ -1064,15 +1260,18 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                             f"Using New Season backup as kometa base: {getattr(item, 'title', key)}",
                         )
                     else:
+                        # Never silently drop collection badges — compose onto current art.
                         _progress(
                             progress,
-                            f"Skipping {getattr(item, 'title', key)} — poster already carries an overlay marker and no backup exists",
+                            f"No clean backup for {getattr(item, 'title', key)} "
+                            f"(overlay marker present) — composing onto current poster",
                         )
-                        continue
+                        original = poster.convert("RGBA")
                 if not preview_mode:
                     backup.parent.mkdir(parents=True, exist_ok=True)
-                    original.save(backup)
-                    _progress(progress, f"Backed up original: {getattr(item, 'title', key)}")
+                    if not backup.exists():
+                        original.save(backup)
+                        _progress(progress, f"Backed up original: {getattr(item, 'title', key)}")
 
             result = compose_poster(original, winners, config=config, paths=paths)
             safe = _sanitize(f"{getattr(item, 'title', key)}_kometa")
@@ -1105,6 +1304,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 finally:
                     if temp.exists():
                         temp.unlink()
+                entry["posterThumb"] = _reload_item_thumb(item) or current_thumb
                 prev_labels = (
                     list(existing.get("overlayLabels") or [])
                     if isinstance(existing, dict) and isinstance(existing.get("overlayLabels"), list)
@@ -1125,6 +1325,10 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 family_counts[family] = family_counts.get(family, 0) + 1
         except Exception as exc:
             errors.append(f"kometa {getattr(item, 'title', key)}: {exc}")
+            _progress(progress, f"Kometa stamp failed for {getattr(item, 'title', key)}: {exc}")
+            if existing and isinstance(existing, dict) and bool(existing.get("preview_only")) and not preview_mode:
+                # Keep preview flag but mark for another attempt on the next live run.
+                log[key] = {**existing, "needsRestamp": True}
 
     # Prune entries no longer eligible
     for key in list(log.keys()):
