@@ -129,6 +129,7 @@ def _resolve_paths(config: dict) -> dict[str, Path]:
         "episodeOverlay": episode_overlay_path,
         "assets": assets_dir,
         "customPresets": custom_dir,
+        "kometaImages": root / "kometa-images",
     }
 
 
@@ -1888,7 +1889,7 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
     from modes_kometa import run_all_kometa_style, ensure_placement_preview_badges
 
     try:
-        ensure_placement_preview_badges(paths["assets"])
+        ensure_placement_preview_badges(paths["assets"], paths=paths)
     except Exception:
         pass
 

@@ -29,6 +29,9 @@ docs/.vitepress/.temp
 # Runtime data (config/ directory — see config/README.md)
 config/
 
+# Cached Kometa overlay images (downloaded at runtime from Kometa GitHub)
+overlays/assets/kometa-images/
+
 # Legacy root-level data files (pre-config/ migration)
 config.json
 users.json

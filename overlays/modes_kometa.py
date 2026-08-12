@@ -84,7 +84,12 @@ def _save_log(path: Path, log: dict) -> None:
     path.write_text(json.dumps(log, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def _find_font(size: int):
+def _find_font(size: int, *, weight: str = "medium", paths: dict | None = None):
+    try:
+        from kometa_images import ensure_font
+        return ensure_font(paths=paths, size=size, weight=weight)
+    except Exception:
+        pass
     candidates = [
         Path(r"C:\Windows\Fonts\arialbd.ttf"),
         Path(r"C:\Windows\Fonts\segoeuib.ttf"),
@@ -122,27 +127,42 @@ def placement_for(config: dict | None, kind: str) -> dict:
     return out
 
 
-def render_pill(lines: list[str], *, accent: tuple[int, int, int, int] | None = None) -> Image.Image:
-    """Kometa-ish translucent rounded pill (stacked text lines)."""
+def render_pill(
+    lines: list[str],
+    *,
+    accent: tuple[int, int, int, int] | None = None,
+    width: int = 305,
+    height: int = 105,
+    font_size: int = 50,
+    paths: dict | None = None,
+) -> Image.Image:
+    """Kometa-style translucent rounded pill (305×105 defaults for status/network text)."""
     lines = [str(x).strip() for x in lines if str(x).strip()]
     if not lines:
         lines = ["—"]
-    h_line = 78
-    pad_x = 28
-    pad_y = 18
-    gap = 6
-    font = _find_font(42)
-    dummy = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
-    widths = []
-    for line in lines:
-        bb = dummy.textbbox((0, 0), line, font=font)
-        widths.append(bb[2] - bb[0])
-    w = max(widths) + pad_x * 2
-    h = pad_y * 2 + h_line * len(lines) + gap * max(0, len(lines) - 1)
+    # Multi-line: grow height; single-line: fixed Kometa box.
+    if len(lines) == 1:
+        w, h = width, height
+    else:
+        h_line = max(48, font_size + 16)
+        pad_y = 18
+        gap = 6
+        w = width
+        h = pad_y * 2 + h_line * len(lines) + gap * max(0, len(lines) - 1)
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     bg = accent or (0, 0, 0, 153)  # #00000099
-    draw.rounded_rectangle([0, 0, w, h], radius=30, fill=bg)
+    draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=30, fill=bg)
+    font = _find_font(font_size, weight="medium", paths=paths)
+    if len(lines) == 1:
+        line = lines[0]
+        bb = draw.textbbox((0, 0), line, font=font)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        draw.text(((w - tw) / 2 - bb[0], (h - th) / 2 - bb[1]), line, font=font, fill=(255, 255, 255, 255))
+        return img
+    h_line = max(48, font_size + 16)
+    pad_y = 18
+    gap = 6
     y = pad_y
     for line in lines:
         bb = draw.textbbox((0, 0), line, font=font)
@@ -153,28 +173,109 @@ def render_pill(lines: list[str], *, accent: tuple[int, int, int, int] | None = 
     return img
 
 
-def render_rating_badge(score: float) -> Image.Image:
+def render_media_badge(meta: dict, *, paths: dict | None = None) -> Image.Image | None:
+    """Composite official Kometa resolution (+ optional Atmos) PNGs."""
+    from kometa_images import atmos_rel, load_image, resolution_rel, stack_images
+
+    res = meta.get("resolution")
+    hdr = bool(meta.get("hdr"))
+    dv = bool(meta.get("dolbyVision") or meta.get("dolby_vision"))
+    hlg = bool(meta.get("hlg"))
+    atmos = bool(meta.get("atmos"))
+    truehd = bool(meta.get("truehdAtmos") or meta.get("truehd_atmos"))
+
+    rel = resolution_rel(res, hdr=hdr, dolby_vision=dv, hlg=hlg)
+    parts: list[Image.Image] = []
+    if rel:
+        img = load_image(rel, paths=paths)
+        if img is not None:
+            parts.append(img)
+    if atmos:
+        aimg = load_image(atmos_rel(truehd=truehd), paths=paths)
+        if aimg is not None:
+            parts.append(aimg)
+    stacked = stack_images(parts, gap=12, align="left")
+    if stacked is not None:
+        return stacked
+    # Offline / download failure → text fallback matching prior behavior
+    lines = meta.get("lines") or []
+    if not lines:
+        return None
+    return render_pill(lines, paths=paths)
+
+
+def render_status_badge(label: str, *, paths: dict | None = None) -> Image.Image:
+    """Kometa status is text-only (AIRING / RETURNING / …) on a 305×105 backdrop."""
+    return render_pill([str(label or "STATUS").upper()], font_size=50, paths=paths)
+
+
+def render_rating_badge(score: float, *, paths: dict | None = None, source: str = "tmdb") -> Image.Image:
+    """Score text + official Kometa rating logo (TMDb / Audience / …)."""
+    from kometa_images import load_image, rating_logo_rel
+
     text = f"{score:.1f}".rstrip("0").rstrip(".") if score < 10 else f"{score:.0f}"
-    # Compact square-ish Kometa ratings style
-    size = 160
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([0, 0, size, size], radius=30, fill=(0, 0, 0, 153))
-    font = _find_font(72)
-    label = _find_font(28)
-    bb = draw.textbbox((0, 0), text, font=font)
+    logo = load_image(rating_logo_rel(source), paths=paths)
+    font = _find_font(63, weight="bold", paths=paths)
+    pad = 15
+    radius = 30
+    gap = 12
+
+    dummy = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    bb = dummy.textbbox((0, 0), text, font=font)
     tw, th = bb[2] - bb[0], bb[3] - bb[1]
-    draw.text(((size - tw) / 2 - bb[0], size * 0.28 - th / 2 - bb[1]), text, font=font, fill=(255, 255, 255, 255))
-    tag = "TMDB"
-    lb = draw.textbbox((0, 0), tag, font=label)
-    lw, lh = lb[2] - lb[0], lb[3] - lb[1]
-    draw.text(((size - lw) / 2 - lb[0], size * 0.72 - lh / 2 - lb[1]), tag, font=label, fill=(255, 200, 80, 255))
+
+    logo_w = logo.width if logo is not None else 0
+    logo_h = logo.height if logo is not None else 0
+    content_w = logo_w + (gap if logo is not None else 0) + tw
+    content_h = max(logo_h, th)
+    w = content_w + pad * 2
+    h = max(105, content_h + pad * 2)
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=radius, fill=(0, 0, 0, 153))
+    x = pad
+    if logo is not None:
+        ly = (h - logo_h) // 2
+        img.alpha_composite(logo, (x, ly))
+        x += logo_w + gap
+    draw.text((x - bb[0], (h - th) / 2 - bb[1]), text, font=font, fill=(255, 255, 255, 255))
     return img
 
 
+def render_network_badge(label: str, *, paths: dict | None = None) -> Image.Image:
+    """Official Kometa network/color/{Name}.png, with text fallback."""
+    from kometa_images import load_image, resolve_network_key
+
+    key = resolve_network_key(label, paths=paths)
+    if key:
+        img = load_image(f"network/color/{key}.png", paths=paths)
+        if img is not None:
+            # Wrap in Kometa-sized translucent plate when logo is smaller than back_width
+            plate_w, plate_h = 305, 105
+            if img.width <= plate_w and img.height <= plate_h:
+                plate = Image.new("RGBA", (plate_w, plate_h), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(plate)
+                draw.rounded_rectangle([0, 0, plate_w - 1, plate_h - 1], radius=30, fill=(0, 0, 0, 153))
+                ox = (plate_w - img.width) // 2
+                oy = (plate_h - img.height) // 2
+                plate.alpha_composite(img, (ox, oy))
+                return plate
+            return img
+    return render_pill([str(label or "NETWORK")[:24]], paths=paths)
+
+
 def _inspect_media(show) -> dict[str, Any]:
-    """Best-effort resolution / HDR / Atmos from a show's episodes."""
-    info = {"resolution": None, "hdr": False, "atmos": False, "label": None}
+    """Best-effort resolution / HDR / DV / Atmos from a show's episodes."""
+    info = {
+        "resolution": None,
+        "hdr": False,
+        "dolbyVision": False,
+        "hlg": False,
+        "atmos": False,
+        "truehdAtmos": False,
+        "label": None,
+        "lines": [],
+    }
     try:
         episodes = list(show.episodes() or [])
     except Exception:
@@ -202,7 +303,10 @@ def _inspect_media(show) -> dict[str, Any]:
             elif width > 0 or vres:
                 res = (vres or "SD").upper()
             hdr = False
+            dv = False
+            hlg = False
             atmos = False
+            truehd_atmos = False
             try:
                 parts = list(getattr(media, "parts", None) or [])
             except Exception:
@@ -219,15 +323,19 @@ def _inspect_media(show) -> dict[str, Any]:
                     codec = str(getattr(stream, "codec", "") or "")
                     blob = f"{title} {display} {codec}".lower()
                     if stype in (1, "1", "video") or "video" in str(stype).lower():
-                        if any(x in blob for x in ("hdr", "dolby vision", "dovi", "hlg", "pq")):
-                            hdr = True
+                        if any(x in blob for x in ("dolby vision", "dovi", "dvhe", "dvh1")):
+                            dv = True
                         if str(getattr(stream, "DOVIPresent", "") or "").lower() in {"1", "true"}:
-                            hdr = True
-                        if str(getattr(stream, "colorTrc", "") or "").lower() in {"smpte2084", "arib-std-b67"}:
+                            dv = True
+                        if "hlg" in blob or str(getattr(stream, "colorTrc", "") or "").lower() in {"arib-std-b67"}:
+                            hlg = True
+                        if any(x in blob for x in ("hdr", "pq")) or str(getattr(stream, "colorTrc", "") or "").lower() in {"smpte2084"}:
                             hdr = True
                     if stype in (2, "2", "audio") or "audio" in str(stype).lower():
                         if "atmos" in blob:
                             atmos = True
+                            if "truehd" in blob:
+                                truehd_atmos = True
             if res and (
                 info["resolution"] is None
                 or (res == "4K")
@@ -235,18 +343,27 @@ def _inspect_media(show) -> dict[str, Any]:
             ):
                 info["resolution"] = res
             info["hdr"] = info["hdr"] or hdr
+            info["dolbyVision"] = info["dolbyVision"] or dv
+            info["hlg"] = info["hlg"] or hlg
             info["atmos"] = info["atmos"] or atmos
-            if info["resolution"] == "4K" and info["hdr"] and info["atmos"]:
+            info["truehdAtmos"] = info["truehdAtmos"] or truehd_atmos
+            if info["resolution"] == "4K" and (info["hdr"] or info["dolbyVision"]) and info["atmos"]:
                 break
-        if info["resolution"] == "4K" and info["hdr"] and info["atmos"]:
+        if info["resolution"] == "4K" and (info["hdr"] or info["dolbyVision"]) and info["atmos"]:
             break
 
     lines = []
     if info["resolution"]:
         line = info["resolution"]
-        if info["hdr"]:
+        if info["dolbyVision"]:
+            line = f"{line} DV"
+        elif info["hlg"]:
+            line = f"{line} HLG"
+        elif info["hdr"]:
             line = f"{line} HDR"
         lines.append(line)
+    elif info["dolbyVision"]:
+        lines.append("DV")
     elif info["hdr"]:
         lines.append("HDR")
     if info["atmos"]:
@@ -484,7 +601,20 @@ def discover_media(plex, config, sections, progress=None, skip_kometa=True):
                     "show": show,
                     "library": section.title,
                     "lines": lines,
-                    "signature": "|".join(lines),
+                    "resolution": info.get("resolution"),
+                    "hdr": bool(info.get("hdr")),
+                    "dolbyVision": bool(info.get("dolbyVision")),
+                    "hlg": bool(info.get("hlg")),
+                    "atmos": bool(info.get("atmos")),
+                    "truehdAtmos": bool(info.get("truehdAtmos")),
+                    "signature": "|".join(
+                        [
+                            str(info.get("resolution") or ""),
+                            "dv" if info.get("dolbyVision") else ("hlg" if info.get("hlg") else ("hdr" if info.get("hdr") else "")),
+                            "atmos" if info.get("atmos") else "",
+                            "truehd" if info.get("truehdAtmos") else "",
+                        ]
+                    ),
                 }
         except Exception as exc:
             _progress(progress, f"Media scan failed for {getattr(section, 'title', '?')}: {exc}")
@@ -585,7 +715,7 @@ def run_media_overlays(plex, config, paths, preview_mode, progress=None):
         enabled_snake="media_info_enabled",
         log_key="mediaLog",
         discover_fn=discover_media,
-        render_fn=lambda meta: render_pill(meta.get("lines") or []),
+        render_fn=lambda meta: render_media_badge(meta, paths=paths),
     )
 
 
@@ -602,12 +732,13 @@ def run_status_overlays(plex, config, paths, preview_mode, progress=None):
         enabled_snake="status_overlay_enabled",
         log_key="statusLog",
         discover_fn=discover_status,
-        render_fn=lambda meta: render_pill([meta.get("statusLabel") or "STATUS"]),
+        render_fn=lambda meta: render_status_badge(meta.get("statusLabel") or "STATUS", paths=paths),
     )
 
 
 def run_ratings_overlays(plex, config, paths, preview_mode, progress=None):
     paths.setdefault("ratingsLog", paths["root"] / "ratings_log.json")
+    source = str(config.get("ratingsSource") or config.get("ratings_source") or "tmdb").strip() or "tmdb"
     return _run_generic_mode(
         plex=plex,
         config=config,
@@ -619,7 +750,7 @@ def run_ratings_overlays(plex, config, paths, preview_mode, progress=None):
         enabled_snake="ratings_overlay_enabled",
         log_key="ratingsLog",
         discover_fn=discover_ratings,
-        render_fn=lambda meta: render_rating_badge(float(meta.get("score") or 0)),
+        render_fn=lambda meta: render_rating_badge(float(meta.get("score") or 0), paths=paths, source=source),
     )
 
 
@@ -636,24 +767,46 @@ def run_network_overlays(plex, config, paths, preview_mode, progress=None):
         enabled_snake="network_overlay_enabled",
         log_key="networkLog",
         discover_fn=discover_network,
-        render_fn=lambda meta: render_pill([meta.get("network") or "NETWORK"]),
+        render_fn=lambda meta: render_network_badge(meta.get("network") or "NETWORK", paths=paths),
     )
 
 
-def ensure_placement_preview_badges(assets_dir: Path) -> None:
-    """Write sample badges for the Placement editor (idempotent)."""
+def ensure_placement_preview_badges(assets_dir: Path, paths: dict | None = None) -> None:
+    """Write sample badges for the Placement editor using official Kometa images when available."""
     assets_dir = Path(assets_dir)
     assets_dir.mkdir(parents=True, exist_ok=True)
+    cache_paths = paths
+    if cache_paths is None:
+        cache_paths = {"root": assets_dir.parent.parent if assets_dir.name == "presets" else assets_dir.parent}
+        # Prefer config/overlays/kometa-images when assets live under overlays/assets/presets
+        try:
+            from kometa_images import default_cache_dir, prefetch_common
+            cache_dir = default_cache_dir(cache_paths)
+            cache_paths = {**cache_paths, "kometaImages": cache_dir}
+            prefetch_common(paths=cache_paths)
+        except Exception:
+            pass
+
     samples = {
-        "placement-media.png": render_pill(["4K HDR", "ATMOS"]),
-        "placement-status.png": render_pill(["RETURNING"]),
-        "placement-ratings.png": render_rating_badge(8.4),
-        "placement-network.png": render_pill(["HBO"]),
+        "placement-media.png": render_media_badge(
+            {"resolution": "4K", "hdr": True, "atmos": True, "lines": ["4K HDR", "ATMOS"]},
+            paths=cache_paths,
+        ),
+        "placement-status.png": render_status_badge("RETURNING", paths=cache_paths),
+        "placement-ratings.png": render_rating_badge(8.4, paths=cache_paths),
+        "placement-network.png": render_network_badge("HBO", paths=cache_paths),
     }
     for name, img in samples.items():
-        path = assets_dir / name
-        if path.exists():
+        if img is None:
             continue
+        path = assets_dir / name
+        # Refresh when missing or still an old generated pill (force update once via mtime/size heuristic)
+        try:
+            if path.exists() and path.stat().st_size > 500:
+                # Always refresh so Placement editor picks up real Kometa art after upgrade
+                pass
+        except Exception:
+            pass
         img.save(path)
 
 
@@ -666,6 +819,13 @@ def run_all_kometa_style(plex, config, paths, preview_mode, progress=None) -> di
         ("networkLog", "network_log.json"),
     ):
         paths.setdefault(key, paths["root"] / filename)
+
+    try:
+        from kometa_images import prefetch_common
+        _progress(progress, "Caching Kometa overlay images…")
+        prefetch_common(paths=paths)
+    except Exception as exc:
+        _progress(progress, f"Kometa image cache: {exc}")
 
     summary = {}
     summary.update(run_media_overlays(plex, config, paths, preview_mode, progress))
