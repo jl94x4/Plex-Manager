@@ -210,6 +210,34 @@ BOTTOM_PLACEMENT = {
     "bottomClip": 0.08,
 }
 
+
+def _recently_placement(config: dict | None) -> dict:
+    try:
+        from core import _placement_for
+        return _placement_for(config, "recently")
+    except Exception:
+        return dict(BOTTOM_PLACEMENT)
+
+
+def _recently_badge_path(paths: dict, config: dict | None = None) -> Path:
+    configured = paths.get("recentlyAddedOverlay")
+    if configured and Path(configured).exists():
+        return Path(configured)
+    preset_id = str(
+        (config or {}).get("recentlyAddedPresetId")
+        or (config or {}).get("recently_added_preset_id")
+        or "recently-added"
+    ).strip() or "recently-added"
+    custom = Path(paths.get("customPresets") or ".") / f"{preset_id}.png"
+    if custom.exists():
+        return custom
+    assets = Path(paths.get("assets") or ".")
+    for name in (f"{preset_id}.png", "recently-added.png", "new-season.png"):
+        hit = assets / name
+        if hit.exists():
+            return hit
+    return assets / "recently-added.png"
+
 TOP10_PLACEMENT = {
     "x": 0.0,
     "y": 0.0,
@@ -509,11 +537,12 @@ def run_recently_added_overlays(
 
     reserved = reserved_keys or set()
     log = _load_log(log_path)
-    asset = paths["assets"] / "recently-added.png"
+    asset = _recently_badge_path(paths, config)
     if not asset.exists():
-        return {"recentlyAddedEnabled": True, "recentlyAdded": 0, "recentlyRemoved": 0, "recentlyTotal": 0, "recentlyErrors": ["missing recently-added.png"]}
+        return {"recentlyAddedEnabled": True, "recentlyAdded": 0, "recentlyRemoved": 0, "recentlyTotal": 0, "recentlyErrors": [f"missing overlay asset ({asset.name})"]}
 
     badge = Image.open(asset)
+    placement = _recently_placement(config)
     sections = list(_iter_tv_sections(plex, config, bundle="recently"))
     if not sections:
         _progress(progress, "No TV libraries in Recently Added scope (check the library selector on this card).")
@@ -534,10 +563,10 @@ def run_recently_added_overlays(
                     preview_mode=True,
                     progress=progress,
                     mode="recently",
-                    placement=BOTTOM_PLACEMENT,
+                    placement=placement,
                     apply_fn=_apply_with_explicit_placement,
                     library=meta.get("library") or "",
-                    extra_meta={"addedAt": meta.get("addedAt")},
+                    extra_meta={"addedAt": meta.get("addedAt"), "presetId": asset.stem},
                 )
                 if existing is None:
                     log[key] = entry
@@ -556,10 +585,10 @@ def run_recently_added_overlays(
                 preview_mode=False,
                 progress=progress,
                 mode="recently",
-                placement=BOTTOM_PLACEMENT,
+                placement=placement,
                 apply_fn=_apply_with_explicit_placement,
                 library=meta.get("library") or "",
-                extra_meta={"addedAt": meta.get("addedAt")},
+                extra_meta={"addedAt": meta.get("addedAt"), "presetId": asset.stem},
             )
             log[key] = {**(existing or {}), **entry, "preview_only": False}
             added += 1

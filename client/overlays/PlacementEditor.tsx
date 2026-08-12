@@ -1,19 +1,29 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Move, RotateCcw, Save } from 'lucide-react';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { DashboardPanel } from '../shared/dashboard/DashboardChrome';
+import { CustomSelect } from '../shared/ui';
 import type { OverlayPlacementKind, OverlaysPlacement } from './api';
 import { DEFAULT_OVERLAY_PLACEMENT } from './api';
 
-export type PlacementKind = 'show' | 'season' | 'episode' | 'media' | 'status' | 'ratings' | 'network';
+export type PlacementKind = 'show' | 'season' | 'episode' | 'recently' | 'media' | 'status' | 'ratings' | 'network';
+
+type PresetOption = { value: string; label: string };
 
 type Props = {
     placement: OverlaysPlacement;
     seasonPresetId: string;
     episodePresetId: string;
+    recentlyPresetId: string;
+    seasonPresetOptions: PresetOption[];
+    episodePresetOptions: PresetOption[];
+    recentlyPresetOptions: PresetOption[];
     sampleBust: number;
     busy: boolean;
     onChange: (next: OverlaysPlacement) => void;
+    onSeasonPresetChange: (id: string) => void;
+    onEpisodePresetChange: (id: string) => void;
+    onRecentlyPresetChange: (id: string) => void;
     onSave: () => void;
     onResetKind: (kind: PlacementKind) => void;
 };
@@ -23,16 +33,25 @@ const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px
 const fieldInputClass = 'mt-1.5 w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
-const KIND_ORDER: PlacementKind[] = ['show', 'season', 'episode', 'media', 'status', 'ratings', 'network'];
+const KIND_ORDER: PlacementKind[] = ['show', 'season', 'episode', 'recently', 'media', 'status', 'ratings', 'network'];
 
 const kindBaseUrl = (kind: PlacementKind, bust: number) => {
     const sampleKind = kind === 'episode' ? 'episode-base' : 'show-base';
     return `/api/overlays/sample/${sampleKind}?t=${encodeURIComponent(String(bust))}`;
 };
 
-const kindBannerUrl = (kind: PlacementKind, seasonPresetId: string, episodePresetId: string, bust: number) => {
+const kindBannerUrl = (
+    kind: PlacementKind,
+    seasonPresetId: string,
+    episodePresetId: string,
+    recentlyPresetId: string,
+    bust: number,
+) => {
     if (kind === 'media' || kind === 'status' || kind === 'ratings' || kind === 'network') {
         return `/api/overlays/preset-file?id=${encodeURIComponent(`placement-${kind}`)}&kind=season&t=${encodeURIComponent(String(bust))}`;
+    }
+    if (kind === 'recently') {
+        return `/api/overlays/preset-file?id=${encodeURIComponent(recentlyPresetId || 'recently-added')}&kind=season&t=${encodeURIComponent(String(bust))}`;
     }
     const id = kind === 'show' ? seasonPresetId : episodePresetId;
     const presetKind = kind === 'show' ? 'season' : 'episode';
@@ -71,9 +90,16 @@ export const PlacementEditor: React.FC<Props> = ({
     placement,
     seasonPresetId,
     episodePresetId,
+    recentlyPresetId,
+    seasonPresetOptions,
+    episodePresetOptions,
+    recentlyPresetOptions,
     sampleBust,
     busy,
     onChange,
+    onSeasonPresetChange,
+    onEpisodePresetChange,
+    onRecentlyPresetChange,
     onSave,
     onResetKind,
 }) => {
@@ -93,7 +119,7 @@ export const PlacementEditor: React.FC<Props> = ({
         artH: number;
     } | null>(null);
 
-    const current = placement[kind] || DEFAULT_OVERLAY_PLACEMENT[kind];
+    const current = placement[kind] || DEFAULT_OVERLAY_PLACEMENT[kind] || DEFAULT_OVERLAY_PLACEMENT.show;
 
     const measureArt = useCallback(() => {
         const stage = stageRef.current;
@@ -179,6 +205,50 @@ export const PlacementEditor: React.FC<Props> = ({
     const kindLabel = (k: PlacementKind) => t(`overlays.placement.kinds.${k}`);
     const stageAspectClass = kind === 'episode' ? 'aspect-video' : 'aspect-[2/3]';
 
+    const presetControls = useMemo(() => {
+        if (kind === 'show') {
+            return {
+                label: t('overlays.settings.overlayPreset'),
+                value: seasonPresetId || 'new-season',
+                options: seasonPresetOptions.length ? seasonPresetOptions : [{ value: 'new-season', label: 'new-season' }],
+                onChange: onSeasonPresetChange,
+            };
+        }
+        if (kind === 'season' || kind === 'episode') {
+            return {
+                label: t('overlays.settings.episodeOverlayPreset'),
+                value: episodePresetId || 'new-episode',
+                options: episodePresetOptions.length ? episodePresetOptions : [{ value: 'new-episode', label: 'new-episode' }],
+                onChange: onEpisodePresetChange,
+            };
+        }
+        if (kind === 'recently') {
+            return {
+                label: t('overlays.settings.recentlyAddedPreset'),
+                value: recentlyPresetId || 'recently-added',
+                options: recentlyPresetOptions.length
+                    ? recentlyPresetOptions
+                    : [{ value: 'recently-added', label: 'recently-added' }],
+                onChange: onRecentlyPresetChange,
+            };
+        }
+        return null;
+    }, [
+        kind,
+        t,
+        seasonPresetId,
+        episodePresetId,
+        recentlyPresetId,
+        seasonPresetOptions,
+        episodePresetOptions,
+        recentlyPresetOptions,
+        onSeasonPresetChange,
+        onEpisodePresetChange,
+        onRecentlyPresetChange,
+    ]);
+
+    const bannerSrc = kindBannerUrl(kind, seasonPresetId, episodePresetId, recentlyPresetId, sampleBust);
+
     return (
         <DashboardPanel title={t('overlays.placement.title')} subtitle={t('overlays.placement.subtitle')}>
             <p className="mb-3 text-sm text-muted">{t('overlays.placement.hint')}</p>
@@ -232,7 +302,8 @@ export const PlacementEditor: React.FC<Props> = ({
                             title={t('overlays.placement.dragHint')}
                         >
                             <img
-                                src={kindBannerUrl(kind, seasonPresetId, episodePresetId, sampleBust)}
+                                key={bannerSrc}
+                                src={bannerSrc}
                                 alt=""
                                 draggable={false}
                                 className="pointer-events-none max-w-none select-none"
@@ -270,6 +341,18 @@ export const PlacementEditor: React.FC<Props> = ({
 
                 <div className="space-y-3">
                     <p className="text-[11px] text-muted">{t('overlays.placement.outlineHint')}</p>
+                    {presetControls && (
+                        <div>
+                            <span className={fieldLabelClass}>{presetControls.label}</span>
+                            <CustomSelect
+                                className="mt-1.5"
+                                value={presetControls.value}
+                                onChange={presetControls.onChange}
+                                options={presetControls.options}
+                            />
+                            <span className="mt-1 block text-[11px] text-muted">{t('overlays.placement.presetHint')}</span>
+                        </div>
+                    )}
                     <label className="block">
                         <span className={fieldLabelClass}>{t('overlays.placement.width')}</span>
                         <input
@@ -317,7 +400,7 @@ export const PlacementEditor: React.FC<Props> = ({
                         />
                         <span className="mt-1 block text-[11px] text-muted">{t('overlays.placement.maxHeightHint')}</span>
                     </label>
-                    {(kind === 'show' || kind === 'season' || kind === 'episode') && (
+                    {(kind === 'show' || kind === 'season' || kind === 'episode' || kind === 'recently') && (
                         <label className="block">
                             <span className={fieldLabelClass}>{t('overlays.placement.bottomClip')}</span>
                             <input

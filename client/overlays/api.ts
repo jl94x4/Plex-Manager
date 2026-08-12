@@ -36,6 +36,7 @@ export type OverlaysPlacement = {
     status?: OverlayPlacementKind;
     ratings?: OverlayPlacementKind;
     network?: OverlayPlacementKind;
+    recently?: OverlayPlacementKind;
 };
 
 export type OverlayPlacement = OverlaysPlacement;
@@ -103,6 +104,14 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
         anchorY: 'bottom',
         bottomClip: 0,
     },
+    recently: {
+        x: 0.5,
+        y: 1.0,
+        width: 0.72,
+        anchorX: 'center',
+        anchorY: 'bottom',
+        bottomClip: 0.08,
+    },
 };
 
 export type MediaInfoParts = {
@@ -127,6 +136,7 @@ export type OverlaysConfig = {
     skipNewEpisodeOnBinge?: boolean;
     recentlyAddedEnabled?: boolean;
     recentlyAddedDays?: number;
+    recentlyAddedPresetId?: string;
     liveScheduleEnabled?: boolean;
     liveScheduleDays?: number;
     top10Enabled?: boolean;
@@ -274,7 +284,7 @@ export const overlaysApi = {
     importLog: (log: Record<string, unknown>, mode: 'merge' | 'replace' = 'merge') => (
         apiFetch(`${ROOT}/import-log`, json({ mode, log }))
     ),
-    resetOne: (ratingKey: string, kind?: 'show' | 'episode' | 'seasonEpisode') => (
+    resetOne: (ratingKey: string, kind?: 'show' | 'episode' | 'seasonEpisode' | 'recently' | 'live' | 'top10') => (
         apiFetch(`${ROOT}/reset-one`, json({ ratingKey, kind }))
     ),
     resetAll: (scope: 'all' | 'shows' | 'episodes' = 'all') => apiFetch(`${ROOT}/reset-all`, json({ scope })),

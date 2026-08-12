@@ -74,6 +74,7 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     skipNewEpisodeOnBinge: true,
     recentlyAddedEnabled: false,
     recentlyAddedDays: 7,
+    recentlyAddedPresetId: 'recently-added',
     liveScheduleEnabled: false,
     liveScheduleDays: 1,
     top10Enabled: false,
@@ -461,7 +462,11 @@ export const OverlaysDashboard: React.FC = () => {
 
     const seasonPresetOptions = useMemo(
         () => (status?.presets || [])
-            .filter((preset: { kind?: string }) => (preset.kind || 'season') === 'season')
+            .filter((preset: { kind?: string; id?: string }) => {
+                const id = String(preset.id || '').toLowerCase();
+                if (id === 'recently-added') return false;
+                return (preset.kind || 'season') === 'season';
+            })
             .map((preset: { id: string; source?: string }) => ({
                 value: preset.id,
                 label: preset.source === 'custom' ? `${preset.id} (custom)` : preset.id,
@@ -478,6 +483,23 @@ export const OverlaysDashboard: React.FC = () => {
             })),
         [status?.presets],
     );
+
+    const recentlyPresetOptions = useMemo(() => {
+        const season = (status?.presets || [])
+            .filter((preset: { kind?: string }) => (preset.kind || 'season') === 'season')
+            .map((preset: { id: string; source?: string }) => ({
+                value: preset.id,
+                label: preset.source === 'custom' ? `${preset.id} (custom)` : preset.id,
+            }));
+        if (!season.some((opt) => opt.value === 'recently-added')) {
+            return [{ value: 'recently-added', label: 'recently-added' }, ...season];
+        }
+        // Prefer recently-added first in the list.
+        return [
+            ...season.filter((opt) => opt.value === 'recently-added'),
+            ...season.filter((opt) => opt.value !== 'recently-added'),
+        ];
+    }, [status?.presets]);
 
     const bingeGroups = useMemo(() => {
         const map = new Map<string, any[]>();
@@ -567,6 +589,7 @@ export const OverlaysDashboard: React.FC = () => {
         show: { ...DEFAULT_OVERLAY_PLACEMENT.show, ...(configDraft.placement?.show || {}) },
         season: { ...DEFAULT_OVERLAY_PLACEMENT.season, ...(configDraft.placement?.season || {}) },
         episode: { ...DEFAULT_OVERLAY_PLACEMENT.episode, ...(configDraft.placement?.episode || {}) },
+        recently: { ...DEFAULT_OVERLAY_PLACEMENT.recently!, ...(configDraft.placement?.recently || {}) },
         media: { ...DEFAULT_OVERLAY_PLACEMENT.media!, ...(configDraft.placement?.media || {}) },
         status: { ...DEFAULT_OVERLAY_PLACEMENT.status!, ...(configDraft.placement?.status || {}) },
         ratings: { ...DEFAULT_OVERLAY_PLACEMENT.ratings!, ...(configDraft.placement?.ratings || {}) },
@@ -574,7 +597,12 @@ export const OverlaysDashboard: React.FC = () => {
     };
 
     const savePlacement = () => runAction('saveSettings', async () => {
-        const saved = await overlaysApi.saveConfig({ placement: placementDraft });
+        const saved = await overlaysApi.saveConfig({
+            placement: placementDraft,
+            overlayPresetId: configDraft.overlayPresetId,
+            episodeOverlayPresetId: configDraft.episodeOverlayPresetId,
+            recentlyAddedPresetId: configDraft.recentlyAddedPresetId,
+        });
         if (saved?.config) {
             setConfigDraft((prev) => ({ ...prev, ...saved.config, placement: saved.config.placement || placementDraft }));
         }
@@ -585,22 +613,23 @@ export const OverlaysDashboard: React.FC = () => {
         }
     });
 
-    const resetPlacementKind = (kind: 'show' | 'season' | 'episode' | 'media' | 'status' | 'ratings' | 'network') => {
-        setConfigDraft((prev) => ({
-            ...prev,
-            placement: {
+    const resetPlacementKind = (kind: 'show' | 'season' | 'episode' | 'recently' | 'media' | 'status' | 'ratings' | 'network') => {
+        setConfigDraft((prev) => {
+            const nextPlacement = {
                 ...DEFAULT_OVERLAY_PLACEMENT,
                 ...(prev.placement || {}),
                 show: { ...DEFAULT_OVERLAY_PLACEMENT.show, ...(prev.placement?.show || {}) },
                 season: { ...DEFAULT_OVERLAY_PLACEMENT.season, ...(prev.placement?.season || {}) },
                 episode: { ...DEFAULT_OVERLAY_PLACEMENT.episode, ...(prev.placement?.episode || {}) },
+                recently: { ...DEFAULT_OVERLAY_PLACEMENT.recently!, ...(prev.placement?.recently || {}) },
                 media: { ...DEFAULT_OVERLAY_PLACEMENT.media!, ...(prev.placement?.media || {}) },
                 status: { ...DEFAULT_OVERLAY_PLACEMENT.status!, ...(prev.placement?.status || {}) },
                 ratings: { ...DEFAULT_OVERLAY_PLACEMENT.ratings!, ...(prev.placement?.ratings || {}) },
                 network: { ...DEFAULT_OVERLAY_PLACEMENT.network!, ...(prev.placement?.network || {}) },
                 [kind]: { ...DEFAULT_OVERLAY_PLACEMENT[kind]! },
-            },
-        }));
+            };
+            return { ...prev, placement: nextPlacement };
+        });
     };
 
     const applySampleResult = (payload: {
@@ -1210,6 +1239,36 @@ export const OverlaysDashboard: React.FC = () => {
                                             recentlyAddedScheduleHours: Number(e.target.value) || 0,
                                         }))}
                                     />
+                                </label>
+                            </div>
+                            <div>
+                                <span className={fieldLabelClass}>{t('overlays.settings.recentlyAddedPreset')}</span>
+                                <CustomSelect
+                                    className="mt-1.5"
+                                    value={configDraft.recentlyAddedPresetId || 'recently-added'}
+                                    onChange={(recentlyAddedPresetId) => setConfigDraft((prev) => ({ ...prev, recentlyAddedPresetId }))}
+                                    options={recentlyPresetOptions.length
+                                        ? recentlyPresetOptions
+                                        : [{ value: 'recently-added', label: 'recently-added' }]}
+                                />
+                                <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-plex">
+                                    <input
+                                        type="file"
+                                        accept="image/png"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            e.target.value = '';
+                                            if (!file) return;
+                                            void runAction('saveSettings', async () => {
+                                                const up = await overlaysApi.uploadPreset('season', file);
+                                                const id = up?.preset?.id;
+                                                if (id) setConfigDraft((prev) => ({ ...prev, recentlyAddedPresetId: id }));
+                                                await refresh();
+                                            });
+                                        }}
+                                    />
+                                    {t('overlays.settings.uploadSeasonPreset')}
                                 </label>
                             </div>
                             {renderLibraryPicker('recentlyAddedLibrarySectionIds', 'overlays.settings.librariesHintRecently', 'show')}
@@ -1875,6 +1934,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <th className="px-2 py-2">{t('overlays.table.library')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.key')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.season')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.type')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.mode')}</th>
                                         <th className="px-2 py-2">{t('overlays.table.when')}</th>
                                         <th className="px-2 py-2" />
@@ -1882,11 +1942,20 @@ export const OverlaysDashboard: React.FC = () => {
                                 </thead>
                                 <tbody>
                                     {shows.map((row) => (
-                                        <tr key={row.ratingKey} className="border-t border-white/10">
+                                        <tr key={`${row.overlayMode || 'new-season'}:${row.ratingKey}`} className="border-t border-white/10">
                                             <td className="px-2 py-2 font-medium">{row.title}</td>
                                             <td className="px-2 py-2 text-muted">{row.library || '—'}</td>
                                             <td className="px-2 py-2 tabular-nums text-muted">{row.ratingKey}</td>
                                             <td className="px-2 py-2">{row.seasonIndex ?? '—'}</td>
+                                            <td className="px-2 py-2">
+                                                {row.overlayMode === 'recently'
+                                                    ? t('overlays.table.typeRecently')
+                                                    : row.overlayMode === 'live'
+                                                        ? t('overlays.table.typeLive')
+                                                        : row.overlayMode === 'top10'
+                                                            ? t('overlays.table.typeTop10')
+                                                            : t('overlays.table.typeNewSeason')}
+                                            </td>
                                             <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
                                             <td className="px-2 py-2 text-muted">
                                                 {row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}
@@ -1896,7 +1965,14 @@ export const OverlaysDashboard: React.FC = () => {
                                                     type="button"
                                                     className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
                                                     disabled={busy !== null}
-                                                    onClick={() => void runAction('reset', () => overlaysApi.resetOne(row.ratingKey, 'show'))}
+                                                    onClick={() => void runAction('reset', () => overlaysApi.resetOne(
+                                                        row.ratingKey,
+                                                        row.overlayMode === 'recently'
+                                                            || row.overlayMode === 'live'
+                                                            || row.overlayMode === 'top10'
+                                                            ? row.overlayMode
+                                                            : 'show',
+                                                    ))}
                                                 >
                                                     {t('overlays.actions.reset')}
                                                 </button>
@@ -2194,9 +2270,16 @@ export const OverlaysDashboard: React.FC = () => {
                     placement={placementDraft}
                     seasonPresetId={configDraft.overlayPresetId || 'new-season'}
                     episodePresetId={configDraft.episodeOverlayPresetId || 'new-episode'}
+                    recentlyPresetId={configDraft.recentlyAddedPresetId || 'recently-added'}
+                    seasonPresetOptions={seasonPresetOptions}
+                    episodePresetOptions={episodePresetOptions}
+                    recentlyPresetOptions={recentlyPresetOptions}
                     sampleBust={sampleBust}
                     busy={busy !== null}
                     onChange={(next) => setConfigDraft((prev) => ({ ...prev, placement: next }))}
+                    onSeasonPresetChange={(overlayPresetId) => setConfigDraft((prev) => ({ ...prev, overlayPresetId }))}
+                    onEpisodePresetChange={(episodeOverlayPresetId) => setConfigDraft((prev) => ({ ...prev, episodeOverlayPresetId }))}
+                    onRecentlyPresetChange={(recentlyAddedPresetId) => setConfigDraft((prev) => ({ ...prev, recentlyAddedPresetId }))}
                     onSave={() => void savePlacement()}
                     onResetKind={resetPlacementKind}
                 />

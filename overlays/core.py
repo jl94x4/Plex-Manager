@@ -109,6 +109,28 @@ def _resolve_paths(config: dict) -> dict[str, Path]:
             episode_overlay_path = custom_hit
         elif (assets_dir / "new-episode.png").exists():
             episode_overlay_path = assets_dir / "new-episode.png"
+
+    recently_preset_id = str(
+        config.get("recentlyAddedPresetId")
+        or config.get("recently_added_preset_id")
+        or "recently-added"
+    ).strip() or "recently-added"
+    recently_overlay_path = Path(
+        str(
+            config.get("recentlyAddedOverlayPath")
+            or config.get("recently_added_overlay_path")
+            or (assets_dir / f"{recently_preset_id}.png")
+        )
+    )
+    if not recently_overlay_path.exists():
+        custom_hit = custom_dir / f"{recently_preset_id}.png"
+        if custom_hit.exists():
+            recently_overlay_path = custom_hit
+        elif (assets_dir / "recently-added.png").exists():
+            recently_overlay_path = assets_dir / "recently-added.png"
+        elif (assets_dir / "new-season.png").exists():
+            recently_overlay_path = assets_dir / "new-season.png"
+
     return {
         "root": root,
         "preview": preview,
@@ -128,6 +150,7 @@ def _resolve_paths(config: dict) -> dict[str, Path]:
         "kometaLog": root / "kometa_overlaid_log.json",
         "overlay": overlay_path,
         "episodeOverlay": episode_overlay_path,
+        "recentlyAddedOverlay": recently_overlay_path,
         "assets": assets_dir,
         "customPresets": custom_dir,
         "kometaImages": root / "kometa-images",
@@ -389,6 +412,14 @@ DEFAULT_PLACEMENT: dict[str, dict[str, Any]] = {
         "anchorY": "bottom",
         "bottomClip": 0.0,
     },
+    "recently": {
+        "x": 0.5,
+        "y": 1.0,
+        "width": 0.72,
+        "anchorX": "center",
+        "anchorY": "bottom",
+        "bottomClip": 0.08,
+    },
 }
 
 
@@ -396,6 +427,8 @@ def _placement_for(config: dict | None, kind: str) -> dict[str, Any]:
     defaults = DEFAULT_PLACEMENT.get(kind) or DEFAULT_PLACEMENT["show"]
     raw_root = (config or {}).get("placement") if isinstance(config, dict) else None
     raw = (raw_root or {}).get(kind) if isinstance(raw_root, dict) else None
+    if kind == "recently" and not isinstance(raw, dict) and isinstance(raw_root, dict):
+        raw = raw_root.get("recentlyAdded")
     if not isinstance(raw, dict):
         return dict(defaults)
     out = dict(defaults)
@@ -2579,6 +2612,41 @@ def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None,
         }
 
     show = plex.fetchItem(f"/library/metadata/{key}")
+
+    # Extra show modes (Recently Added / Live / Top 10) keep their own backups + logs.
+    from modes_extra import (
+        _clear_mode_backup,
+        _restore_show_mode,
+        _load_log as _load_extra_log,
+        _save_log as _save_extra_log,
+    )
+    for mode, log_key, prefer_names in (
+        ("recently", "recentlyAddedLog", {"recently", "recently-added", "recentlyadded"}),
+        ("live", "liveLog", {"live"}),
+        ("top10", "top10Log", {"top10", "top-10"}),
+    ):
+        prefer = (kind or "").lower().replace("_", "-") in prefer_names
+        extra_log = _load_extra_log(paths[log_key])
+        if prefer or (not prefer_show and not prefer_episode and not prefer_season_ne and key in extra_log):
+            if key not in extra_log and not prefer:
+                continue
+            had_backup = (paths["backups"] / mode / key / "show.png").exists()
+            restored = _restore_show_mode(show, paths, mode, progress)
+            if not restored and not had_backup:
+                # Fall back to New Season restore helpers when no mode backup exists.
+                remove_show_overlay(show, False, progress, paths=paths)
+            _clear_mode_backup(paths, mode, key)
+            if key in extra_log:
+                del extra_log[key]
+                _save_extra_log(paths[log_key], extra_log)
+            return {
+                "ok": True,
+                "kind": mode,
+                "ratingKey": key,
+                "title": getattr(show, "title", key),
+                "restoredFromBackup": bool(restored or had_backup),
+            }
+
     had_backup = (_backup_dir(paths, key) / "show.png").exists()
     remove_show_overlay(show, False, progress, paths=paths)
     _clear_backup_dir(paths, key)
