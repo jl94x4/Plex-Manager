@@ -207,7 +207,7 @@ BOTTOM_PLACEMENT = {
     "width": 0.72,
     "anchorX": "center",
     "anchorY": "bottom",
-    "bottomClip": 0.08,
+    "bottomClip": 0.10,
 }
 
 

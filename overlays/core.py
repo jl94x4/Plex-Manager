@@ -365,7 +365,7 @@ DEFAULT_PLACEMENT: dict[str, dict[str, Any]] = {
         "maxHeight": 0.14,
         "anchorX": "center",
         "anchorY": "bottom",
-        "bottomClip": 0.0,
+        "bottomClip": 0.10,
     },
     "episode": {
         "x": 0.5,
@@ -374,7 +374,7 @@ DEFAULT_PLACEMENT: dict[str, dict[str, Any]] = {
         "maxHeight": 0.18,
         "anchorX": "center",
         "anchorY": "bottom",
-        "bottomClip": 0.0,
+        "bottomClip": 0.10,
     },
     "media": {
         "x": 0.015,
@@ -418,7 +418,7 @@ DEFAULT_PLACEMENT: dict[str, dict[str, Any]] = {
         "width": 0.72,
         "anchorX": "center",
         "anchorY": "bottom",
-        "bottomClip": 0.08,
+        "bottomClip": 0.10,
     },
 }
 

@@ -57,7 +57,7 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
         maxHeight: 0.14,
         anchorX: 'center',
         anchorY: 'bottom',
-        bottomClip: 0,
+        bottomClip: 0.10,
     },
     episode: {
         x: 0.5,
@@ -66,7 +66,7 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
         maxHeight: 0.18,
         anchorX: 'center',
         anchorY: 'bottom',
-        bottomClip: 0,
+        bottomClip: 0.10,
     },
     media: {
         x: 0.015,
@@ -110,7 +110,7 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
         width: 0.72,
         anchorX: 'center',
         anchorY: 'bottom',
-        bottomClip: 0.08,
+        bottomClip: 0.10,
     },
 };
 
