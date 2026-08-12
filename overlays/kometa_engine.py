@@ -377,6 +377,55 @@ def _remove_overlay_label(item) -> None:
         pass
 
 
+def _normalize_label_name(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _winner_label_names(winners: dict) -> list[str]:
+    """Plex Labels for stamped overlays — e.g. 4K-HDR, TrueHD-Atmos."""
+    names: list[str] = []
+    seen: set[str] = set()
+    for winner in winners.values():
+        label = _normalize_label_name(getattr(winner, "name", None) or getattr(winner, "text", None))
+        if not label:
+            continue
+        key = label.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(label)
+    return names
+
+
+def _sync_plex_labels(item, wanted: list[str], previous: list[str] | None = None) -> list[str]:
+    """Add/remove Plex Labels so the item matches the current overlay set."""
+    want = [_normalize_label_name(name) for name in wanted]
+    want = [name for name in want if name]
+    prev = [_normalize_label_name(name) for name in (previous or [])]
+    prev = [name for name in prev if name]
+
+    want_keys = {name.casefold() for name in want}
+    prev_keys = {name.casefold() for name in prev}
+
+    for name in prev:
+        if name.casefold() in want_keys:
+            continue
+        try:
+            item.removeLabel(name)
+        except Exception:
+            pass
+
+    for name in want:
+        if name.casefold() in prev_keys:
+            continue
+        try:
+            item.addLabel(name)
+        except Exception:
+            pass
+
+    return want
+
+
 def _restore_item(plex, paths: dict, key: str, entry: dict, progress: ProgressFn | None) -> bool:
     """Kometa restore priority: disk backup, else fresh provider poster."""
     from core import _reset_poster
@@ -399,6 +448,9 @@ def _restore_item(plex, paths: dict, key: str, entry: dict, progress: ProgressFn
         ok = _reset_poster(item)
         if ok:
             _progress(progress, f"Reset poster to provider art: {entry.get('title') or key}")
+    overlay_labels = entry.get("overlayLabels") if isinstance(entry.get("overlayLabels"), list) else []
+    if overlay_labels:
+        _sync_plex_labels(item, [], previous=overlay_labels)
     if bool(entry.get("labeled")):
         _remove_overlay_label(item)
     _clear_backup(paths, key)
@@ -659,6 +711,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
         existing = log.get(key)
         sig = _signature(winners, config)
         try:
+            wanted_labels = _winner_label_names(winners)
             if (
                 existing
                 and not preview_mode
@@ -666,6 +719,15 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 and not bool(existing.get("needsRestamp"))
                 and existing.get("signature") == sig
             ):
+                # Already stamped — still backfill / refresh Plex Labels when missing or drifted.
+                prev_labels = existing.get("overlayLabels") if isinstance(existing.get("overlayLabels"), list) else None
+                if prev_labels is None or sorted(prev_labels) != sorted(wanted_labels):
+                    try:
+                        synced = _sync_plex_labels(item, wanted_labels, previous=prev_labels or [])
+                        existing = {**existing, "overlayLabels": synced}
+                        log[key] = existing
+                    except Exception as exc:
+                        errors.append(f"kometa labels {getattr(item, 'title', key)}: {exc}")
                 skipped += 1
                 continue
 
@@ -700,6 +762,11 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 "families": {family: winner.as_log() for family, winner in winners.items()},
                 "hasBackup": backup.exists(),
                 "labeled": bool(existing.get("labeled")) if isinstance(existing, dict) else False,
+                "overlayLabels": (
+                    list(existing.get("overlayLabels") or [])
+                    if isinstance(existing, dict) and isinstance(existing.get("overlayLabels"), list)
+                    else []
+                ),
             }
             if preview_mode:
                 out = Path(paths["preview"]) / f"{safe}.png"
@@ -714,6 +781,12 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 finally:
                     if temp.exists():
                         temp.unlink()
+                prev_labels = (
+                    list(existing.get("overlayLabels") or [])
+                    if isinstance(existing, dict) and isinstance(existing.get("overlayLabels"), list)
+                    else []
+                )
+                entry["overlayLabels"] = _sync_plex_labels(item, wanted_labels, previous=prev_labels)
                 if add_label:
                     _add_overlay_label(item)
                     entry["labeled"] = True
