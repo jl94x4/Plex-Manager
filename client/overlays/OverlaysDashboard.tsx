@@ -151,6 +151,62 @@ const textToKeys = (value: string) => value
     .map((s) => s.trim())
     .filter(Boolean);
 
+/** Gallery thumbnails: track load/error in React (imperative DOM hide caused false "failed" overlays). */
+const GalleryPreviewImage: React.FC<{
+    src: string;
+    alt: string;
+    className?: string;
+    failedLabel: string;
+}> = ({ src, alt, className, failedLabel }) => {
+    const [status, setStatus] = useState<'loading' | 'loaded' | 'failed'>('loading');
+    const [attempt, setAttempt] = useState(0);
+    const loadedSrcRef = React.useRef<string | null>(null);
+
+    useEffect(() => {
+        setStatus('loading');
+        setAttempt(0);
+        loadedSrcRef.current = null;
+    }, [src]);
+
+    const displaySrc = attempt > 0
+        ? `${src}${src.includes('?') ? '&' : '?'}retry=${attempt}`
+        : src;
+
+    return (
+        <>
+            {status !== 'failed' && (
+                <img
+                    key={displaySrc}
+                    src={displaySrc}
+                    alt={alt}
+                    loading="lazy"
+                    decoding="async"
+                    className={className}
+                    onLoad={() => {
+                        loadedSrcRef.current = src;
+                        setStatus('loaded');
+                    }}
+                    onError={() => {
+                        // Ignore late errors after a successful paint for this logical src.
+                        if (loadedSrcRef.current === src) return;
+                        if (attempt < 1) {
+                            setAttempt(1);
+                            setStatus('loading');
+                            return;
+                        }
+                        setStatus('failed');
+                    }}
+                />
+            )}
+            {status === 'failed' && (
+                <div className="absolute inset-0 flex items-center justify-center p-3 text-center text-[11px] text-muted">
+                    {failedLabel}
+                </div>
+            )}
+        </>
+    );
+};
+
 export const OverlaysDashboard: React.FC = () => {
     const { t } = useDiscoverI18n();
     const [tab, setTab] = useState<TabId>('overview');
@@ -248,6 +304,7 @@ export const OverlaysDashboard: React.FC = () => {
             void Promise.all([
                 overlaysApi.shows().then((showsRes) => setShows(showsRes.shows || [])),
                 overlaysApi.episodes().then((episodesRes) => setEpisodes(episodesRes.episodes || [])),
+                overlaysApi.previewGallery().then((res) => setGallery(res.items || [])).catch(() => {}),
             ]).catch(() => {});
         }
         wasRunningRef.current = running;
@@ -2062,33 +2119,24 @@ export const OverlaysDashboard: React.FC = () => {
                                             </span>
                                         </h3>
                                         <div className={row.grid}>
-                                            {items.map((item) => (
+                                            {items.map((item) => {
+                                                const src = `${item.url}${item.url.includes('?') ? '&' : '?'}t=${item.mtime}`;
+                                                return (
                                                 <figure key={item.rel || item.url} className="space-y-1">
                                                     <div className={`relative overflow-hidden rounded-md border border-border bg-background/60 ${row.aspect}`}>
-                                                        <img
-                                                            src={`${item.url}${item.url.includes('?') ? '&' : '?'}t=${item.mtime}`}
+                                                        <GalleryPreviewImage
+                                                            src={src}
                                                             alt={item.name}
-                                                            loading="lazy"
                                                             className="h-full w-full object-cover"
-                                                            onError={(e) => {
-                                                                const el = e.currentTarget;
-                                                                el.style.display = 'none';
-                                                                const sibling = el.nextElementSibling;
-                                                                if (sibling instanceof HTMLElement) sibling.hidden = false;
-                                                            }}
+                                                            failedLabel={t('overlays.gallery.loadFailed')}
                                                         />
-                                                        <div
-                                                            hidden
-                                                            className="absolute inset-0 flex items-center justify-center p-3 text-center text-[11px] text-muted"
-                                                        >
-                                                            {t('overlays.gallery.loadFailed')}
-                                                        </div>
                                                     </div>
                                                     <figcaption className="truncate text-[11px] text-muted" title={item.name}>
                                                         {item.name}
                                                     </figcaption>
                                                 </figure>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </section>
                                 );
