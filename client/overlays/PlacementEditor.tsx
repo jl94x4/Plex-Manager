@@ -311,16 +311,30 @@ export const PlacementEditor: React.FC<Props> = ({
             )}
         >
             <div className="grid gap-4 lg:grid-cols-[160px_minmax(200px,280px)_minmax(0,1fr)]">
-                {/* Target list */}
-                <aside className="min-w-0 rounded-xl border border-white/10 bg-black/20 p-2">
-                    <p className={`${fieldLabelClass} px-2.5 pb-1.5 pt-1`}>{t('overlays.placement.groupBanners')}</p>
-                    <div className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-                        {BANNER_KINDS.map(renderKindButton)}
+                {/* Target list — dropdown on mobile, side nav on desktop */}
+                <aside className="min-w-0">
+                    <div className="lg:hidden">
+                        <span className={fieldLabelClass}>{t('overlays.placement.target')}</span>
+                        <CustomSelect
+                            className="mt-1"
+                            value={kind}
+                            onChange={(id) => setKind(id as PlacementKind)}
+                            options={[
+                                ...BANNER_KINDS.map((k) => ({ value: k, label: `${t('overlays.placement.groupBanners')}: ${kindLabel(k)}` })),
+                                ...KOMETA_KINDS.map((k) => ({ value: k, label: `${t('overlays.placement.groupKometa')}: ${kindLabel(k)}` })),
+                            ]}
+                        />
                     </div>
-                    <div className="my-2 hidden border-t border-white/10 lg:block" />
-                    <p className={`${fieldLabelClass} mt-2 px-2.5 pb-1.5 pt-1 lg:mt-0`}>{t('overlays.placement.groupKometa')}</p>
-                    <div className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-                        {KOMETA_KINDS.map(renderKindButton)}
+                    <div className="hidden rounded-xl border border-white/10 bg-black/20 p-2 lg:block">
+                        <p className={`${fieldLabelClass} px-2.5 pb-1.5 pt-1`}>{t('overlays.placement.groupBanners')}</p>
+                        <div className="flex flex-col">
+                            {BANNER_KINDS.map(renderKindButton)}
+                        </div>
+                        <div className="my-2 border-t border-white/10" />
+                        <p className={`${fieldLabelClass} px-2.5 pb-1.5 pt-1`}>{t('overlays.placement.groupKometa')}</p>
+                        <div className="flex flex-col">
+                            {KOMETA_KINDS.map(renderKindButton)}
+                        </div>
                     </div>
                 </aside>
 

@@ -542,6 +542,7 @@ export const en = {
         workerMissingAfterCli: 'in the container or repo root. On Docker, rebuild the image so the overlays worker is bundled; locally run',
         workerMissingAfterCommand: '(or reuse the Poster Sets venv).',
         tabs: {
+            select: 'Section',
             overview: 'Overview',
             shows: 'Shows ({count}) · Eps ({episodes})',
             gallery: 'Gallery',
@@ -658,6 +659,7 @@ export const en = {
             outlineHint: 'Yellow outline is the drag handle — the PNG keeps its own corners.',
             groupBanners: 'Banners',
             groupKometa: 'Kometa',
+            target: 'Target',
             kinds: {
                 show: 'Show poster',
                 season: 'Season poster',

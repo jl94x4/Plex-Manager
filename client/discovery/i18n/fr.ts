@@ -544,6 +544,7 @@ export const fr: DeepPartial<EnCatalog> = {
         workerMissingAfterCli: 'dans le conteneur ou à la racine du dépôt. Avec Docker, reconstruisez l’image pour inclure le worker Overlays ; en local, exécutez',
         workerMissingAfterCommand: '(ou réutilisez le venv de Poster Sets).',
         tabs: {
+            select: 'Section',
             overview: 'Vue d’ensemble',
             shows: 'Séries ({count}) · Ép. ({episodes})',
             gallery: 'Galerie',
@@ -660,6 +661,7 @@ export const fr: DeepPartial<EnCatalog> = {
             outlineHint: 'Le contour jaune est la poignée — le PNG garde ses coins.',
             groupBanners: 'Bannières',
             groupKometa: 'Kometa',
+            target: 'Cible',
             kinds: {
                 show: 'Affiche série',
                 season: 'Affiche saison',

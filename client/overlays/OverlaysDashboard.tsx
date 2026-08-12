@@ -63,7 +63,20 @@ type SampleMeta = {
     episodeSource?: string | null;
 };
 
-const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
+const overlayShowTypeLabel = (row: any, t: (key: string, vars?: Record<string, unknown>) => string) => {
+    if (row.overlayMode === 'recently') return t('overlays.table.typeRecently');
+    if (row.overlayMode === 'live') return t('overlays.table.typeLive');
+    if (row.overlayMode === 'top10') return t('overlays.table.typeTop10');
+    return t('overlays.table.typeNewSeason');
+};
+
+const overlayResetKindForShow = (row: any) => (
+    row.overlayMode === 'recently'
+        || row.overlayMode === 'live'
+        || row.overlayMode === 'top10'
+        ? row.overlayMode
+        : 'show'
+);
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover disabled:opacity-50';
 const fieldInputClass = 'mt-1.5 w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
@@ -911,51 +924,53 @@ export const OverlaysDashboard: React.FC = () => {
             />
 
             <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
-                <div className="grid grid-cols-3 divide-x divide-white/10">
-                    <div className="flex min-w-0 flex-col items-center gap-1 px-2 py-2.5 text-center sm:items-start sm:px-3 sm:py-3 sm:text-left">
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+                <div className="flex flex-col divide-y divide-white/10 sm:grid sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                    <div className="flex min-w-0 items-center gap-3 px-3.5 py-3 sm:flex-col sm:items-start sm:gap-1 sm:px-3 sm:py-3">
+                        <div className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
                             {workerReady
                                 ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
                                 : <XCircle className="h-3.5 w-3.5 text-rose-300" />}
                             <span>{t('overlays.status.worker')}</span>
                         </div>
-                        <p className={`truncate text-sm font-semibold sm:text-[15px] ${workerReady ? 'text-text' : 'text-amber-100'}`}>
+                        <p className={`min-w-0 flex-1 text-sm font-semibold sm:w-full sm:flex-none sm:text-[15px] ${workerReady ? 'text-text' : 'text-amber-100'}`}>
                             {workerReady ? t('overlays.status.ready') : t('overlays.status.missing')}
                         </p>
                     </div>
-                    <div className="flex min-w-0 flex-col items-center gap-1 px-2 py-2.5 text-center sm:items-start sm:px-3 sm:py-3 sm:text-left">
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+                    <div className="flex min-w-0 items-center gap-3 px-3.5 py-3 sm:flex-col sm:items-start sm:gap-1 sm:px-3 sm:py-3">
+                        <div className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
                             <Layers className="h-3.5 w-3.5 text-sky-300" />
                             <span>{t('overlays.status.logged')}</span>
                         </div>
-                        <p className="truncate text-sm font-semibold tabular-nums sm:text-[15px]">
+                        <p className="min-w-0 flex-1 text-sm font-semibold tabular-nums sm:w-full sm:flex-none sm:text-[15px]">
                             {t('overlays.status.loggedCounts', {
                                 shows: status?.logCount ?? showCount,
                                 episodes: status?.episodeLogCount ?? episodeCount,
                             })}
                         </p>
                     </div>
-                    <div className="flex min-w-0 flex-col items-center gap-1 px-2 py-2.5 text-center sm:items-start sm:px-3 sm:py-3 sm:text-left">
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+                    <div className="flex min-w-0 items-start gap-3 px-3.5 py-3 sm:flex-col sm:gap-1 sm:px-3 sm:py-3">
+                        <div className="flex shrink-0 items-center gap-1.5 pt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted sm:pt-0">
                             <Clock3 className="h-3.5 w-3.5 text-plex" />
                             <span>{t('overlays.status.lastRun')}</span>
                         </div>
-                        <p className="truncate text-sm font-semibold sm:text-[15px]">
-                            {status?.lastRunAt
-                                ? new Date(status.lastRunAt).toLocaleString()
-                                : t('overlays.overview.never')}
-                        </p>
-                        <p className="truncate text-[11px] text-muted">
-                            {summary
-                                ? t('overlays.overview.lastRunHint', {
-                                    added: String(summary.added ?? 0),
-                                    removed: String(summary.removed ?? 0),
-                                    preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
-                                })
-                                : (configDraft.scheduleHours
-                                    ? t('overlays.status.everyHours', { hours: configDraft.scheduleHours })
-                                    : t('overlays.status.disabled'))}
-                        </p>
+                        <div className="min-w-0 flex-1 sm:w-full sm:flex-none">
+                            <p className="text-sm font-semibold leading-snug sm:text-[15px]">
+                                {status?.lastRunAt
+                                    ? new Date(status.lastRunAt).toLocaleString()
+                                    : t('overlays.overview.never')}
+                            </p>
+                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
+                                {summary
+                                    ? t('overlays.overview.lastRunHint', {
+                                        added: String(summary.added ?? 0),
+                                        removed: String(summary.removed ?? 0),
+                                        preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
+                                    })
+                                    : (configDraft.scheduleHours
+                                        ? t('overlays.status.everyHours', { hours: configDraft.scheduleHours })
+                                        : t('overlays.status.disabled'))}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -973,7 +988,17 @@ export const OverlaysDashboard: React.FC = () => {
                 </div>
             )}
 
-            <DashboardSubnav className="!flex">
+            <div className="md:hidden">
+                <span className={fieldLabelClass}>{t('overlays.tabs.select')}</span>
+                <CustomSelect
+                    className="mt-1.5"
+                    value={tab}
+                    onChange={(id) => setTab(id as TabId)}
+                    options={tabs.map(({ id, label }) => ({ value: id, label }))}
+                />
+            </div>
+
+            <DashboardSubnav className="!hidden md:!flex">
                 {tabs.map(({ id, label, icon: Icon }) => (
                     <button
                         key={id}
@@ -1952,7 +1977,51 @@ export const OverlaysDashboard: React.FC = () => {
                     {shows.length === 0 ? (
                         <p className="text-sm text-muted">{t('overlays.shows.empty')}</p>
                     ) : (
-                        <div className="overflow-x-auto">
+                        <>
+                            <div className="space-y-2 md:hidden">
+                                {shows.map((row) => (
+                                    <div
+                                        key={`${row.overlayMode || 'new-season'}:${row.ratingKey}`}
+                                        className="rounded-xl border border-white/10 bg-black/25 p-3"
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="font-semibold leading-snug text-text">{row.title}</p>
+                                                <p className="mt-1 text-xs text-muted">
+                                                    {[row.library, row.seasonIndex != null ? `S${row.seasonIndex}` : null]
+                                                        .filter(Boolean)
+                                                        .join(' · ') || '—'}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                disabled={busy !== null}
+                                                onClick={() => void runAction('reset', () => overlaysApi.resetOne(
+                                                    row.ratingKey,
+                                                    overlayResetKindForShow(row),
+                                                ))}
+                                            >
+                                                {t('overlays.actions.reset')}
+                                            </button>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                                            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
+                                                {overlayShowTypeLabel(row, t)}
+                                            </span>
+                                            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
+                                                {row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}
+                                            </span>
+                                            {row.timestamp ? (
+                                                <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
+                                                    {new Date(row.timestamp).toLocaleString()}
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="hidden overflow-x-auto md:block">
                             <table className="min-w-full text-left text-sm">
                                 <thead className="text-xs uppercase text-muted">
                                     <tr>
@@ -1973,15 +2042,7 @@ export const OverlaysDashboard: React.FC = () => {
                                             <td className="px-2 py-2 text-muted">{row.library || '—'}</td>
                                             <td className="px-2 py-2 tabular-nums text-muted">{row.ratingKey}</td>
                                             <td className="px-2 py-2">{row.seasonIndex ?? '—'}</td>
-                                            <td className="px-2 py-2">
-                                                {row.overlayMode === 'recently'
-                                                    ? t('overlays.table.typeRecently')
-                                                    : row.overlayMode === 'live'
-                                                        ? t('overlays.table.typeLive')
-                                                        : row.overlayMode === 'top10'
-                                                            ? t('overlays.table.typeTop10')
-                                                            : t('overlays.table.typeNewSeason')}
-                                            </td>
+                                            <td className="px-2 py-2">{overlayShowTypeLabel(row, t)}</td>
                                             <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
                                             <td className="px-2 py-2 text-muted">
                                                 {row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}
@@ -1993,11 +2054,7 @@ export const OverlaysDashboard: React.FC = () => {
                                                     disabled={busy !== null}
                                                     onClick={() => void runAction('reset', () => overlaysApi.resetOne(
                                                         row.ratingKey,
-                                                        row.overlayMode === 'recently'
-                                                            || row.overlayMode === 'live'
-                                                            || row.overlayMode === 'top10'
-                                                            ? row.overlayMode
-                                                            : 'show',
+                                                        overlayResetKindForShow(row),
                                                     ))}
                                                 >
                                                     {t('overlays.actions.reset')}
@@ -2007,7 +2064,8 @@ export const OverlaysDashboard: React.FC = () => {
                                     ))}
                                 </tbody>
                             </table>
-                        </div>
+                            </div>
+                        </>
                     )}
                 </DashboardPanel>
 
@@ -2028,7 +2086,112 @@ export const OverlaysDashboard: React.FC = () => {
                     {episodes.length === 0 ? (
                         <p className="text-sm text-muted">{t('overlays.episodes.empty')}</p>
                     ) : (
-                        <div className="overflow-x-auto">
+                        <>
+                            <div className="space-y-2 md:hidden">
+                                {episodeRowsGrouped.map((entry) => {
+                                    if (entry.type === 'group' && entry.groupId && entry.rows) {
+                                        const rows = entry.rows;
+                                        const first = rows[0];
+                                        const collapsed = collapsedBinges[entry.groupId] !== false;
+                                        return (
+                                            <div key={entry.groupId} className="rounded-xl border border-white/10 bg-black/25 p-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <button
+                                                        type="button"
+                                                        className="min-w-0 text-left"
+                                                        onClick={() => setCollapsedBinges((prev) => ({
+                                                            ...prev,
+                                                            [entry.groupId!]: !collapsed,
+                                                        }))}
+                                                    >
+                                                        <p className="font-semibold leading-snug text-text">
+                                                            {collapsed ? '▸' : '▾'}{' '}
+                                                            {t('overlays.episodes.bingeGroup', {
+                                                                show: first?.showTitle || '—',
+                                                                season: first?.seasonIndex ?? '?',
+                                                                count: rows.length,
+                                                            })}
+                                                        </p>
+                                                        <p className="mt-1 text-[11px] text-muted">{t('overlays.episodes.bingeTag')}</p>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                        disabled={busy !== null}
+                                                        onClick={() => void runAction(
+                                                            'reset',
+                                                            () => overlaysApi.resetBingeGroup(rows.map((r) => r.ratingKey)),
+                                                        )}
+                                                    >
+                                                        {t('overlays.actions.resetGroup')}
+                                                    </button>
+                                                </div>
+                                                {!collapsed && (
+                                                    <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
+                                                        {rows.map((row) => (
+                                                            <div key={row.ratingKey} className="rounded-lg border border-white/5 bg-black/20 px-2.5 py-2">
+                                                                <div className="flex items-start justify-between gap-2">
+                                                                    <div className="min-w-0">
+                                                                        <p className="text-sm font-medium text-text">{row.title}</p>
+                                                                        <p className="mt-0.5 text-[11px] text-muted">
+                                                                            {row.seasonIndex != null || row.episodeIndex != null
+                                                                                ? `S${row.seasonIndex ?? '?'}E${row.episodeIndex ?? '?'}`
+                                                                                : '—'}
+                                                                            {row.airedAt ? ` · ${new Date(row.airedAt).toLocaleString()}` : ''}
+                                                                        </p>
+                                                                    </div>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                                        disabled={busy !== null}
+                                                                        onClick={() => void runAction('reset', () => overlaysApi.resetOne(row.ratingKey, 'episode'))}
+                                                                    >
+                                                                        {t('overlays.actions.reset')}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    }
+                                    const row = entry.row;
+                                    if (!row) return null;
+                                    return (
+                                        <div key={row.ratingKey} className="rounded-xl border border-white/10 bg-black/25 p-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="font-semibold leading-snug text-text">{row.title}</p>
+                                                    <p className="mt-1 text-xs text-muted">
+                                                        {[row.showTitle, row.library].filter(Boolean).join(' · ') || '—'}
+                                                    </p>
+                                                    <p className="mt-0.5 text-[11px] text-muted">
+                                                        {row.seasonIndex != null || row.episodeIndex != null
+                                                            ? `S${row.seasonIndex ?? '?'}E${row.episodeIndex ?? '?'}`
+                                                            : '—'}
+                                                        {row.airedAt ? ` · ${new Date(row.airedAt).toLocaleString()}` : ''}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                    disabled={busy !== null}
+                                                    onClick={() => void runAction('reset', () => overlaysApi.resetOne(row.ratingKey, 'episode'))}
+                                                >
+                                                    {t('overlays.actions.reset')}
+                                                </button>
+                                            </div>
+                                            <div className="mt-2">
+                                                <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-muted">
+                                                    {row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <div className="hidden overflow-x-auto md:block">
                             <table className="min-w-full text-left text-sm">
                                 <thead className="text-xs uppercase text-muted">
                                     <tr>
@@ -2142,7 +2305,8 @@ export const OverlaysDashboard: React.FC = () => {
                                     })}
                                 </tbody>
                             </table>
-                        </div>
+                            </div>
+                        </>
                     )}
                 </DashboardPanel>
 
@@ -2163,7 +2327,48 @@ export const OverlaysDashboard: React.FC = () => {
                     {kometaItems.length === 0 ? (
                         <p className="text-sm text-muted">{t('overlays.kometa.empty')}</p>
                     ) : (
-                        <div className="overflow-x-auto">
+                        <>
+                            <div className="space-y-2 md:hidden">
+                                {kometaItems.map((row) => (
+                                    <div key={row.ratingKey} className="rounded-xl border border-white/10 bg-black/25 p-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="font-semibold leading-snug text-text">{row.title}</p>
+                                                <p className="mt-1 text-xs text-muted">{row.library || '—'}</p>
+                                                <p className="mt-1 text-[11px] leading-snug text-muted">
+                                                    {row.families && typeof row.families === 'object'
+                                                        ? Object.entries(row.families)
+                                                            .map(([family, meta]: [string, any]) => `${family}:${meta?.name || '?'}`)
+                                                            .join(', ')
+                                                        : '—'}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                disabled={busy !== null || jobRunning}
+                                                onClick={() => void runAction('revertKometa', async () => {
+                                                    await overlaysApi.revertKometa(row.ratingKey);
+                                                    await refresh();
+                                                })}
+                                            >
+                                                {t('overlays.actions.revert')}
+                                            </button>
+                                        </div>
+                                        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                                            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
+                                                {row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}
+                                            </span>
+                                            {row.timestamp ? (
+                                                <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
+                                                    {new Date(row.timestamp).toLocaleString()}
+                                                </span>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="hidden overflow-x-auto md:block">
                             <table className="min-w-full text-left text-sm">
                                 <thead className="text-xs uppercase text-muted">
                                     <tr>
@@ -2208,7 +2413,8 @@ export const OverlaysDashboard: React.FC = () => {
                                     ))}
                                 </tbody>
                             </table>
-                        </div>
+                            </div>
+                        </>
                     )}
                 </DashboardPanel>
                 </div>
