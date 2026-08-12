@@ -1,8 +1,7 @@
 import { portalUrl } from './basePath';
 import {
     DISCOVER_LOCALE_HEADER,
-    DISCOVER_UI_LOCALE_KEY,
-    normalizeDiscoverLocale,
+    readDiscoverUiLocale,
 } from '../discovery/i18n/types';
 
 /** Sent on every API call so mutating routes can reject cross-site CSRF. */
@@ -17,10 +16,10 @@ const needsDiscoverMetadataLocale = (url: string) => {
 };
 
 const discoverLocaleHeaders = (url: string): HeadersInit => {
-    if (typeof localStorage === 'undefined' || !needsDiscoverMetadataLocale(url)) return {};
+    if (!needsDiscoverMetadataLocale(url)) return {};
     try {
         return {
-            [DISCOVER_LOCALE_HEADER]: normalizeDiscoverLocale(localStorage.getItem(DISCOVER_UI_LOCALE_KEY)),
+            [DISCOVER_LOCALE_HEADER]: readDiscoverUiLocale(),
         };
     } catch {
         return {};

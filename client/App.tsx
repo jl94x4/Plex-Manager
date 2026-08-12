@@ -599,7 +599,10 @@ export const MainApp: React.FC = () => {
     };
 
     return (
-        <DiscoverI18nProvider>
+        <DiscoverI18nProvider
+            accountId={sessionInfo?.account?.id}
+            accountLocale={sessionInfo?.account?.uiLocale}
+        >
         {/* Viewport-locked shell on all breakpoints so mobile touch-scroll uses one root
             (#main-scroll-container). Nested overflow-x clip otherwise creates competing
             scrollports and breaks scrolling after opening a nav module (issue #92).

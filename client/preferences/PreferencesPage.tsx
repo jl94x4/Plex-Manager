@@ -6,6 +6,7 @@ import { DashboardHero, DashboardPageShell, DashboardPanel } from '../shared/das
 import { Toast, type ToastMessage } from '../shared/toast';
 import { subscribeWebPush, unsubscribeWebPush, webPushSupported } from '../shared/webPushSubscribe';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { DiscoverLocaleSelect } from '../discovery/i18n/DiscoverLocaleSelect';
 
 type Props = {
     sessionInfo: any;
@@ -179,6 +180,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
                 <DashboardPanel title={t('preferencesPage.unavailableTitle')} subtitle={t('preferencesPage.unavailableHint')} />
             ) : (
                 <div className="space-y-4">
+                    <DashboardPanel title={t('common.language')}>
+                        <DiscoverLocaleSelect />
+                    </DashboardPanel>
                     <DashboardPanel title={t('preferencesPage.newsletterTitle')} subtitle={t('preferencesPage.newsletterSubtitle')}>
                         <PrefToggle
                             title={t('homeDashboard.weeklyNewsletter')}
