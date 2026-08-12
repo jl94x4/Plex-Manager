@@ -215,12 +215,50 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
     const episodeCount = Number(serverStats.episodes) || 0;
     const trackCount = Number(serverStats.tracks) || 0;
 
-    // Distinct hues (not adjacent warm tones) so the stacked bar reads clearly — issue #100.
-    const segments = [
-        { label: t('mediaType.movies'), bytes: movies, count: movieCount, countLabel: t('homeDashboard.moviesLower'), icon: Film, color: 'bg-sky-400', dot: 'bg-sky-400' },
-        { label: t('homeDashboard.tvShows'), bytes: shows, count: showCount, countLabel: t('homeDashboard.showsLower'), icon: Tv, color: 'bg-emerald-400', dot: 'bg-emerald-400' },
-        { label: t('mediaType.music'), bytes: music, count: musicCount, countLabel: t('homeDashboard.albumsLower'), icon: Music, color: 'bg-violet-400', dot: 'bg-violet-400' },
-    ].filter((segment) => segment.bytes > 0 || segment.count > 0);
+    const libraryPalette = [
+        { color: 'bg-sky-400', dot: 'bg-sky-400', icon: Film },
+        { color: 'bg-emerald-400', dot: 'bg-emerald-400', icon: Tv },
+        { color: 'bg-violet-400', dot: 'bg-violet-400', icon: Music },
+        { color: 'bg-amber-400', dot: 'bg-amber-400', icon: Film },
+        { color: 'bg-rose-400', dot: 'bg-rose-400', icon: Tv },
+        { color: 'bg-cyan-400', dot: 'bg-cyan-400', icon: Music },
+    ];
+    const typeIcon = (type: string) => (type === 'artist' ? Music : type === 'show' ? Tv : Film);
+    const typeCountLabel = (type: string) => (
+        type === 'artist' ? t('homeDashboard.albumsLower')
+            : type === 'show' ? t('homeDashboard.showsLower')
+                : t('homeDashboard.moviesLower')
+    );
+
+    const libraryRows = Array.isArray(serverStats.libraries)
+        ? [...serverStats.libraries]
+            .filter((lib: any) => (Number(lib?.bytes) || 0) > 0 || (Number(lib?.count) || 0) > 0)
+            .sort((a: any, b: any) => (Number(b.bytes) || 0) - (Number(a.bytes) || 0))
+        : [];
+
+    const segments = libraryRows.length > 0
+        ? libraryRows.map((lib: any, index: number) => {
+            const palette = libraryPalette[index % libraryPalette.length];
+            return {
+                label: String(lib.title || 'Library'),
+                bytes: Number(lib.bytes) || 0,
+                count: Number(lib.count) || 0,
+                countLabel: typeCountLabel(String(lib.type || '')),
+                extra: Number(lib.episodes) > 0
+                    ? t('homeDashboard.episodeCountLabel', { count: Number(lib.episodes).toLocaleString() })
+                    : Number(lib.tracks) > 0
+                        ? t('homeDashboard.trackCountLabel', { count: Number(lib.tracks).toLocaleString() })
+                        : null,
+                icon: typeIcon(String(lib.type || '')),
+                color: palette.color,
+                dot: palette.dot,
+            };
+        })
+        : [
+            { label: t('mediaType.movies'), bytes: movies, count: movieCount, countLabel: t('homeDashboard.moviesLower'), extra: null, icon: Film, color: 'bg-sky-400', dot: 'bg-sky-400' },
+            { label: t('homeDashboard.tvShows'), bytes: shows, count: showCount, countLabel: t('homeDashboard.showsLower'), extra: null, icon: Tv, color: 'bg-emerald-400', dot: 'bg-emerald-400' },
+            { label: t('mediaType.music'), bytes: music, count: musicCount, countLabel: t('homeDashboard.albumsLower'), extra: null, icon: Music, color: 'bg-violet-400', dot: 'bg-violet-400' },
+        ].filter((segment) => segment.bytes > 0 || segment.count > 0);
 
     if (segments.length === 0) return null;
 
@@ -229,6 +267,9 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
         episodeCount > 0 ? t('homeDashboard.episodeCountLabel', { count: episodeCount.toLocaleString() }) : null,
         trackCount > 0 ? t('homeDashboard.trackCountLabel', { count: trackCount.toLocaleString() }) : null,
     ].filter(Boolean);
+    const failedNames = Array.isArray(serverStats.failedLibraries)
+        ? serverStats.failedLibraries.map((f: any) => f?.title).filter(Boolean)
+        : [];
 
     return (
         <div className="space-y-3">
@@ -264,6 +305,7 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
                                 <p className="text-sm font-bold text-text">{segment.label}</p>
                                 <p className="text-[11px] text-muted">
                                     {segment.count.toLocaleString()} {segment.countLabel}
+                                    {segment.extra ? ` · ${segment.extra}` : ''}
                                 </p>
                             </div>
                             <div className="text-right shrink-0">
@@ -274,6 +316,11 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
                     );
                 })}
             </div>
+            {failedNames.length > 0 ? (
+                <p className="text-[11px] text-amber-300/90">
+                    {t('homeDashboard.incompleteLibraries', { names: failedNames.join(', ') })}
+                </p>
+            ) : null}
         </div>
     );
 };

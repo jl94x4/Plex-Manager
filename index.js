@@ -6535,6 +6535,11 @@ const resolveLocalPlexAccountId = async (config, uri, sessionUser) => {
         || !!(adminCloudId && sessionPlexId && sessionPlexId === adminCloudId)
         || !!(adminCloudId && portalIds.includes(adminCloudId));
 
+    if (!isOwner && portalUser?.plexAccountId) {
+        const stored = String(portalUser.plexAccountId);
+        if (!(adminCloudId && stored === adminCloudId)) return stored;
+    }
+
     const { list: accounts } = await fetchPlexServerAccounts(uri, config);
 
     // PMS owner sessions use local account "1". Never treat the plex.tv cloud id as accountID.
@@ -6839,13 +6844,12 @@ const buildPlexStatsCache = async () => {
     log('[PlexStats] Starting background library size build...');
     try {
         const uri = await getPlexConnectionUri(config);
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 600000); // 10 min hard cap
-
-        const sectionsRes = await fetch(`${uri}/library/sections`, {
+        const PAGE_TIMEOUT_MS = 45_000;
+        const plexStatsFetch = (url) => fetchWithTimeout(url, {
             headers: plexClientHeaders(config.plexToken),
-            signal: controller.signal
-        });
+        }, PAGE_TIMEOUT_MS);
+
+        const sectionsRes = await plexStatsFetch(`${uri}/library/sections`);
         if (!sectionsRes.ok) throw new Error(`Sections request failed: ${sectionsRes.status}`);
         const { MediaContainer: { Directory: directories = [] } } = await sectionsRes.json();
 
@@ -6867,17 +6871,19 @@ const buildPlexStatsCache = async () => {
 
         // Plex JSON often returns a single Media/Part as an object, not a 1-item array
         // (especially music tracks). Iterating the object stringifies keys and skips size.
+        const libraries = [];
+        const failedLibraries = [];
 
         for (const dir of directories) {
             try {
                 // ── Item count (single zero-size request) ──
-                const countRes = await fetch(
+                let count = 0;
+                const countRes = await plexStatsFetch(
                     `${uri}/library/sections/${dir.key}/all?X-Plex-Container-Start=0&X-Plex-Container-Size=0`,
-                    { headers: plexClientHeaders(config.plexToken), signal: controller.signal }
                 );
                 if (countRes.ok) {
                     const { MediaContainer: mc } = await countRes.json();
-                    const count = mc.totalSize || mc.size || 0;
+                    count = mc.totalSize || mc.size || 0;
                     if (dir.type === 'movie') {
                         totalMoviesCount += count;
                     } else if (dir.type === 'show') {
@@ -6886,9 +6892,8 @@ const buildPlexStatsCache = async () => {
                         totalMusicCount += count;
                         totalArtistsCount += count;
                         // Also fetch album count (type 9)
-                        const albCountRes = await fetch(
+                        const albCountRes = await plexStatsFetch(
                             `${uri}/library/sections/${dir.key}/all?type=9&X-Plex-Container-Start=0&X-Plex-Container-Size=1`,
-                            { headers: plexClientHeaders(config.plexToken), signal: controller.signal }
                         );
                         if (albCountRes.ok) {
                             const { MediaContainer: albMc } = await albCountRes.json();
@@ -6900,21 +6905,34 @@ const buildPlexStatsCache = async () => {
                 // ── Bytes (paginated) ──
                 // movie=1, episode=4, track=10
                 const typeParam = dir.type === 'movie' ? '?type=1' : dir.type === 'show' ? '?type=4' : dir.type === 'artist' ? '?type=10' : '';
-                if (!typeParam) continue;
+                if (!typeParam) {
+                    libraries.push({
+                        key: String(dir.key),
+                        title: dir.title,
+                        type: dir.type,
+                        count,
+                        bytes: 0,
+                    });
+                    continue;
+                }
 
-                let start = 0, bytes = 0;
-                const PAGE = 1000;
+                let start = 0, bytes = 0, sectionEpisodes = 0, sectionTracks = 0;
+                const PAGE = 2000;
                 while (true) {
-                    const pageRes = await fetch(
+                    const pageRes = await plexStatsFetch(
                         `${uri}/library/sections/${dir.key}/all${typeParam}&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${PAGE}`,
-                        { headers: plexClientHeaders(config.plexToken), signal: controller.signal }
                     );
-                    if (!pageRes.ok) break;
+                    if (!pageRes.ok) throw new Error(`page ${start} failed: ${pageRes.status}`);
                     const { MediaContainer: { Metadata: items = [] } } = await pageRes.json();
                     if (items.length === 0) break;
                     
-                    if (dir.type === 'show') totalEpisodesCount += items.length;
-                    else if (dir.type === 'artist') totalTracksCount += items.length;
+                    if (dir.type === 'show') {
+                        sectionEpisodes += items.length;
+                        totalEpisodesCount += items.length;
+                    } else if (dir.type === 'artist') {
+                        sectionTracks += items.length;
+                        totalTracksCount += items.length;
+                    }
 
                     for (const item of items) {
                         let is4k = false;
@@ -6972,11 +6990,22 @@ const buildPlexStatsCache = async () => {
                 if (dir.type === 'movie') totalMoviesBytes += bytes;
                 else if (dir.type === 'show') totalShowsBytes += bytes;
                 else if (dir.type === 'artist') totalMusicBytes += bytes;
+
+                libraries.push({
+                    key: String(dir.key),
+                    title: dir.title,
+                    type: dir.type,
+                    count,
+                    bytes,
+                    ...(dir.type === 'show' ? { episodes: sectionEpisodes } : {}),
+                    ...(dir.type === 'artist' ? { tracks: sectionTracks } : {}),
+                });
+                log(`[PlexStats] ${dir.title}: ${count} items, ${bytes} bytes`);
             } catch (e) {
+                failedLibraries.push({ title: dir.title, type: dir.type, error: e.message });
                 log(`[PlexStats] Failed to fetch section "${dir.title}": ${e.message}`);
             }
         }
-        clearTimeout(timer);
 
         const totalVideoTitles = totalMoviesCount + totalShowsCount;
         const total4kTitles = total4kMovies + fourKShows.size;
@@ -6992,6 +7021,17 @@ const buildPlexStatsCache = async () => {
             deltas.tracks = totalTracksCount - (existingStats.tracks || 0);
         }
 
+        const existingTotalBytes = (Number(existingStats.moviesBytes) || 0)
+            + (Number(existingStats.showsBytes) || 0)
+            + (Number(existingStats.musicBytes) || 0);
+        const newTotalBytes = totalMoviesBytes + totalShowsBytes + totalMusicBytes;
+        if (failedLibraries.length && existingTotalBytes > newTotalBytes) {
+            const names = failedLibraries.map((f) => f.title).join(', ');
+            log(`[PlexStats] Incomplete build (failed: ${names}) — keeping previous cache (${existingTotalBytes} bytes > ${newTotalBytes} bytes)`);
+            markTaskEnd(systemJobs.plexStats, new Error(`Incomplete library size build: ${names}`));
+            return;
+        }
+
         const stats = {
             movies: totalMoviesCount, shows: totalShowsCount, music: totalMusicCount,
             episodes: totalEpisodesCount, artists: totalArtistsCount, albums: totalAlbumsCount, tracks: totalTracksCount,
@@ -7004,12 +7044,14 @@ const buildPlexStatsCache = async () => {
             resolutions,
             codecs,
             fileSizes,
+            libraries,
+            failedLibraries,
             generatedAt: Date.now()
         };
         cachedPlexStats = stats;
         await fs.writeFile(PLEX_STATS_CACHE_PATH, JSON.stringify(stats, null, 2));
-        log(`[PlexStats] Cache built and saved — movies: ${totalMoviesCount}, shows: ${totalShowsCount}, music: ${totalMusicCount} (${totalMusicBytes} bytes), episodes: ${totalEpisodesCount}, artists: ${totalArtistsCount}, albums: ${totalAlbumsCount}, tracks: ${totalTracksCount}`);
-        markTaskEnd(systemJobs.plexStats, null);
+        log(`[PlexStats] Cache built and saved — movies: ${totalMoviesCount}, shows: ${totalShowsCount}, music: ${totalMusicCount} (${totalMusicBytes} bytes), episodes: ${totalEpisodesCount}, artists: ${totalArtistsCount}, albums: ${totalAlbumsCount}, tracks: ${totalTracksCount}, libraries: ${libraries.length}${failedLibraries.length ? `, failed: ${failedLibraries.map((f) => f.title).join(', ')}` : ''}`);
+        markTaskEnd(systemJobs.plexStats, failedLibraries.length ? new Error(`Partial library size build: ${failedLibraries.map((f) => f.title).join(', ')}`) : null);
     } catch (e) {
         log(`[PlexStats] Build failed: ${e.message}`);
         markTaskEnd(systemJobs.plexStats, e);
@@ -7083,7 +7125,9 @@ app.get('/api/plex/stats/status', requireAdmin, async (req, res) => {
     return res.json({
         isBuilding: isBuildingPlexStats,
         lastGeneratedAt: stats?.generatedAt || null,
-        hasCache: !!stats
+        hasCache: !!stats,
+        libraryCount: Array.isArray(stats?.libraries) ? stats.libraries.length : 0,
+        failedLibraries: Array.isArray(stats?.failedLibraries) ? stats.failedLibraries : [],
     });
 });
 
@@ -16205,6 +16249,21 @@ achievementsHttp = registerAchievementsRoutes(app, {
     resolvePortalAccountId: async (req, config) => {
         const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
         if (mediaServerType === 'plex') {
+            const users = await loadFile(USERS_PATH, []);
+            const portalUser = findLocalUserForSession(users, req.user);
+            const stored = String(portalUser?.plexAccountId || '').trim();
+            const adminCloudId = String(config?.adminPlexId || '').trim();
+            // Snapshot /me should not wait on /identity + /accounts when we already
+            // know the local PMS account id (or the owner convention of "1").
+            if (stored && stored !== adminCloudId) return stored;
+            const impersonating = !!(req.user?.actor && req.user?.impersonatingUserId);
+            const ownerByPlexId = !impersonating && !!adminCloudId && [
+                req.user?.id,
+                req.user?.plexId,
+                portalUser?.id,
+                portalUser?.plexId,
+            ].filter(Boolean).some((id) => String(id) === adminCloudId);
+            if (ownerByPlexId) return '1';
             const uri = await getPlexConnectionUri(config);
             if (!uri) return null;
             return resolveLocalPlexAccountId(config, uri, req.user);

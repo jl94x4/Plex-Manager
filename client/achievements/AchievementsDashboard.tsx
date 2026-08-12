@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Award, Calendar, ChevronLeft, ChevronRight, Clapperboard, Clock, Disc3,
     Film, Flame, Lock, Music2, Sparkles, Trophy, X, Info, Medal, Target,
     Gauge, PlayCircle, ChevronDown, Share2, Bell, BellOff, Pin,
     ArrowDownRight, ArrowUpRight, Minus, Swords, Crosshair, Shield, type LucideIcon,
 } from 'lucide-react';
-import { apiFetch } from '../shared/api';
+import { apiFetch, apiFetchShared } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
@@ -18,6 +18,24 @@ import { LeaderboardDossierModal } from './LeaderboardDossierModal';
 
 const LEADERBOARD_PAGE_SIZE = 10;
 const LEADERBOARD_FETCH_LIMIT = 100;
+const ME_URL = '/api/achievements/me';
+const ME_SUMMARY_URL = '/api/achievements/me?view=summary';
+const ME_REFRESH_POLL_MS = 3500;
+
+const mergeMePayload = (prev: any, next: any) => {
+    if (!next) return prev;
+    if (!prev) return next;
+    const hasCatalog = Array.isArray(next.badges) && next.badges.length > 0;
+    if (hasCatalog) return { ...prev, ...next };
+    return {
+        ...prev,
+        ...next,
+        badges: prev.badges,
+        earned: Array.isArray(prev.earned) && prev.earned.length
+            ? prev.earned
+            : next.earned,
+    };
+};
 
 const BREAKDOWN_META: Record<string, { icon: LucideIcon; statKey?: string; tipKey: string }> = {
     uniqueMovies: { icon: Film, tipKey: 'xp.tip.uniqueMovies', statKey: 'uniqueMovies' },
@@ -529,10 +547,15 @@ export const XpBreakdownModal: React.FC<{
 export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ sessionInfo = null }) => {
     const { tAchievements } = useAchievementsI18n();
     const [data, setData] = useState<any>(null);
-    const [board, setBoard] = useState<any[]>([]);
+    const [board, setBoard] = useState<any[] | null>(null);
     const [boardPage, setBoardPage] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [catalogReady, setCatalogReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const celebratedRef = useRef<Set<string>>(new Set());
+    const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const dataRef = useRef<any>(null);
     const [category, setCategory] = useState('all');
     const [showEarnedOnly, setShowEarnedOnly] = useState(false);
     const [expandLadders, setExpandLadders] = useState(false);
@@ -560,39 +583,97 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
         return resolveLeaderboardAvatar(thumb, 72, 72);
     };
 
+    const applyMe = (me: any) => {
+        if (!me) return;
+        setData((prev: any) => {
+            const next = mergeMePayload(prev, me);
+            dataRef.current = next;
+            return next;
+        });
+        setRefreshing(!!me.refreshing);
+        if (Array.isArray(me.badges)) setCatalogReady(true);
+    };
+
+    const celebrateFrom = (me: any) => {
+        const newly = Array.isArray(me?.newlyEarnedIds)
+            ? me.newlyEarnedIds.map(String).filter(Boolean)
+            : [];
+        if (!newly.length) return;
+        const unseen = newly.filter((id: string) => !celebratedRef.current.has(id));
+        if (!unseen.length) return;
+        unseen.forEach((id: string) => celebratedRef.current.add(id));
+        if (me?.notifyOnUnlock !== false) {
+            const pool = [
+                ...(me.earned || []),
+                ...(me.badges || []),
+                ...(dataRef.current?.earned || []),
+                ...(dataRef.current?.badges || []),
+            ];
+            const unlocked = unseen.map((id: string) => (
+                pool.find((b: any) => String(b?.id) === id)
+                || { id, name: id, icon: '🏅' }
+            ));
+            setCelebrationBadges(unlocked);
+            if (unseen.length === 1) {
+                const badge = unlocked[0];
+                setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || unseen[0] }), 'success'));
+            } else {
+                setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: unseen.length }), 'success'));
+            }
+        }
+        void apiFetch('/api/achievements/me/ack-unlocks', {
+            method: 'POST',
+            body: JSON.stringify({ ids: newly }),
+        }).catch(() => null);
+    };
+
+    const scheduleRefreshPoll = (shouldPoll: boolean) => {
+        if (pollTimerRef.current) {
+            clearTimeout(pollTimerRef.current);
+            pollTimerRef.current = null;
+        }
+        if (!shouldPoll) return;
+        pollTimerRef.current = setTimeout(() => {
+            pollTimerRef.current = null;
+            void apiFetch(ME_URL).then((fresh) => {
+                applyMe(fresh);
+                celebrateFrom(fresh);
+            }).catch(() => null);
+        }, ME_REFRESH_POLL_MS);
+    };
+
     const load = useCallback(async () => {
-        setLoading(true);
         setError(null);
+        if (!dataRef.current) setLoading(true);
         try {
-            const mePromise = apiFetch('/api/achievements/me');
-            const lbPromise = apiFetch(`/api/achievements/leaderboard?limit=${LEADERBOARD_FETCH_LIMIT}`).catch(() => null);
-
-            const me = await mePromise;
-            setData(me);
-            setLoading(false);
-
-            const newly = Array.isArray(me?.newlyEarnedIds) ? me.newlyEarnedIds : [];
-            if (newly.length && me?.notifyOnUnlock !== false) {
-                const unlocked = newly.map((id: string) => (
-                    (me.earned || me.badges || []).find((b: any) => b.id === id)
-                    || { id, name: id, icon: '🏅' }
-                ));
-                setCelebrationBadges(unlocked);
-                if (newly.length === 1) {
-                    const badge = unlocked[0];
-                    setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedOne', { name: badge?.name || newly[0] }), 'success'));
-                } else {
-                    setToasts((prev) => pushToast(prev, tAchievements('toast.unlockedMany', { count: newly.length }), 'success'));
+            const lbPromise = apiFetchShared(`/api/achievements/leaderboard?limit=${LEADERBOARD_FETCH_LIMIT}`).catch(() => null);
+            void lbPromise.then((lb) => {
+                if (Array.isArray(lb?.entries)) {
+                    setBoard(lb.entries);
+                    setBoardPage(0);
                 }
-            }
-            if (newly.length) {
-                void apiFetch('/api/achievements/me/ack-unlocks', {
-                    method: 'POST',
-                    body: JSON.stringify({ ids: newly }),
-                }).catch(() => null);
-            }
+            });
+            const summaryPromise = apiFetchShared(ME_SUMMARY_URL).then((summary) => {
+                applyMe(summary);
+                setLoading(false);
+                celebrateFrom(summary);
+                if (summary?.refreshing) scheduleRefreshPoll(true);
+                return summary;
+            });
+            const mePromise = apiFetchShared(ME_URL).then((me) => {
+                applyMe(me);
+                setLoading(false);
+                celebrateFrom(me);
+                scheduleRefreshPoll(!!me?.refreshing);
+                return me;
+            });
 
-            if (me?.leaderboardEnabled) {
+            const [summary, me] = await Promise.all([
+                summaryPromise.catch(() => null),
+                mePromise,
+            ]);
+
+            if (me?.leaderboardEnabled !== false && summary?.leaderboardEnabled !== false) {
                 const lb = await lbPromise;
                 setBoard(Array.isArray(lb?.entries) ? lb.entries : []);
                 setBoardPage(0);
@@ -601,9 +682,15 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                 setBoardPage(0);
             }
         } catch (e: any) {
-            setError(e?.message || tAchievements('page.error'));
-            setLoading(false);
+            if (!dataRef.current) {
+                setError(e?.message || tAchievements('page.error'));
+                setLoading(false);
+            }
         }
+    }, []);
+
+    useEffect(() => () => {
+        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     }, []);
 
     useEffect(() => {
@@ -624,24 +711,25 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
         return grouped.filter((f) => f.earnedCount > 0);
     }, [badges, showEarnedOnly]);
 
-    const boardPageCount = Math.max(1, Math.ceil(board.length / LEADERBOARD_PAGE_SIZE));
+    const boardRows = board || [];
+    const boardPageCount = Math.max(1, Math.ceil(boardRows.length / LEADERBOARD_PAGE_SIZE));
     const safeBoardPage = Math.min(boardPage, boardPageCount - 1);
     const pageEntries = useMemo(
-        () => board.slice(
+        () => boardRows.slice(
             safeBoardPage * LEADERBOARD_PAGE_SIZE,
             safeBoardPage * LEADERBOARD_PAGE_SIZE + LEADERBOARD_PAGE_SIZE,
         ),
-        [board, safeBoardPage],
+        [boardRows, safeBoardPage],
     );
 
     const rivals = useMemo(() => {
-        const myIdx = board.findIndex((e) => e?.isMe);
+        const myIdx = boardRows.findIndex((e) => e?.isMe);
         if (myIdx < 0) return { above: null as any, below: null as any, me: null as any };
-        const me = board[myIdx];
-        const above = myIdx > 0 ? board[myIdx - 1] : null;
-        const below = myIdx < board.length - 1 ? board[myIdx + 1] : null;
+        const me = boardRows[myIdx];
+        const above = myIdx > 0 ? boardRows[myIdx - 1] : null;
+        const below = myIdx < boardRows.length - 1 ? boardRows[myIdx + 1] : null;
         return { above, below, me };
-    }, [board]);
+    }, [boardRows]);
 
     const pinnedIds = useMemo(
         () => (Array.isArray(data?.pinnedBadgeIds) ? data.pinnedBadgeIds.map(String) : []),
@@ -763,6 +851,11 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                     <p className="text-[10px] uppercase tracking-[0.3em] text-plex font-bold mb-1">{tAchievements('page.eyebrow')}</p>
                     <h1 className="text-3xl font-black text-text flex items-center gap-2">
                         <Trophy className="w-8 h-8 text-plex" /> {tAchievements('page.title')}
+                        {refreshing && (
+                            <span className="text-[10px] uppercase tracking-widest font-bold text-muted border border-white/10 rounded-full px-2 py-0.5">
+                                {tAchievements('page.refreshing')}
+                            </span>
+                        )}
                     </h1>
                     <p className="text-sm text-muted mt-1">
                         {tAchievements('page.badgesCount', {
@@ -938,7 +1031,9 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                             {data.leaderboardOptOut ? tAchievements('page.showMe') : tAchievements('page.hideMe')}
                         </button>
                     </div>
-                    {!board.length ? (
+                    {!board ? (
+                        <p className="text-sm text-muted">{tAchievements('page.loading')}</p>
+                    ) : !board.length ? (
                         <p className="text-sm text-muted">{tAchievements('page.noRankings')}</p>
                     ) : (
                         <div className="space-y-3">
@@ -1137,7 +1232,7 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                     );
                                 })}
                             </div>
-                            {board.length > LEADERBOARD_PAGE_SIZE && (
+                            {boardRows.length > LEADERBOARD_PAGE_SIZE && (
                                 <div className="flex items-center justify-between gap-3 pt-1">
                                     <button
                                         type="button"
@@ -1200,7 +1295,9 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
 
             {expandLadders ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {badges.map((badge: any) => (
+                    {!catalogReady ? (
+                        <p className="text-sm text-muted col-span-full">{tAchievements('page.loadingCatalog')}</p>
+                    ) : badges.map((badge: any) => (
                         <BadgeTile
                             key={badge.id}
                             badge={badge}
@@ -1210,7 +1307,9 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {families.map((family) => (
+                    {!catalogReady ? (
+                        <p className="text-sm text-muted col-span-full">{tAchievements('page.loadingCatalog')}</p>
+                    ) : families.map((family) => (
                         <LadderFamilyCard
                             key={family.key}
                             family={family}

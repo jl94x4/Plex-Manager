@@ -391,6 +391,7 @@ export const en = {
         serverLibrarySize: 'Server Library Size',
         buildingLibraryCache: 'Building library size cache in background...',
         buildingLibraryCacheHint: 'This runs once and may take a few minutes for large libraries. The page will auto-update when ready.',
+        incompleteLibraries: 'This cache is missing: {names}. Rebuild to include them.',
         serverStatsFailed: 'Could not load server statistics at this time.',
         providerActivity: '{provider} Activity',
         loadingProviderActivity: 'Loading {provider} activity...',

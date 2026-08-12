@@ -393,6 +393,7 @@ export const fr: DeepPartial<EnCatalog> = {
         serverLibrarySize: 'Taille de la bibliothèque serveur',
         buildingLibraryCache: 'Construction du cache de taille de la bibliothèque en arrière-plan...',
         buildingLibraryCacheHint: 'Cette opération s’exécute une seule fois et peut prendre quelques minutes pour les grandes bibliothèques. La page se mettra à jour automatiquement.',
+        incompleteLibraries: 'Ce cache ne contient pas : {names}. Relancez la construction pour les inclure.',
         serverStatsFailed: 'Impossible de charger les statistiques du serveur pour le moment.',
         providerActivity: 'Activité {provider}',
         loadingProviderActivity: 'Chargement de l’activité {provider}...',
