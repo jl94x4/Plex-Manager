@@ -114,6 +114,7 @@ export const en = {
         lastNDays: 'Last {days} Days',
         allTime: 'All Time',
         serverRank: 'Server Rank',
+        serverRankOverall: 'Overall',
         totalStreams: 'Total Streams',
         topBinge: 'Top Binge',
         topMovie: 'Top Movie',

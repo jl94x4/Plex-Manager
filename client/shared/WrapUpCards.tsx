@@ -63,6 +63,7 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
     const translate = t || ((key: string, vars?: Record<string, string | number>) => {
         const fallbacks: Record<string, string> = {
             'wrapUp.serverRank': 'Server Rank',
+            'wrapUp.serverRankOverall': 'Overall',
             'wrapUp.totalStreams': 'Total Streams',
             'wrapUp.topBinge': 'Top Binge',
             'wrapUp.topMovie': 'Top Movie',
@@ -138,6 +139,11 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
     const rankPct = hasRank && totalActiveUsers > 0
         ? Math.max(1, Math.round((leaderboardRank / totalActiveUsers) * 100))
         : null;
+    const isXpRank = analytics?.leaderboardSource === 'achievements' || analytics?.leaderboardMetric === 'xp';
+    const rankSub = [
+        isXpRank ? translate('wrapUp.serverRankOverall') : null,
+        rankPct ? translate('wrapUp.topPctOfUsers', { pct: rankPct }) : null,
+    ].filter(Boolean).join(' · ') || undefined;
 
     return [
         {
@@ -149,7 +155,7 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             value: hasRank ? (
                 <><span className="text-plex text-xl mr-0.5">#</span>{leaderboardRank}</>
             ) : translate('wrapUp.notRankedYet'),
-            subValue: rankPct ? translate('wrapUp.topPctOfUsers', { pct: rankPct }) : undefined,
+            subValue: rankSub,
         },
         {
             metric: 'Total Streams',

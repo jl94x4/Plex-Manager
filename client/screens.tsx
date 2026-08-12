@@ -6251,9 +6251,13 @@ const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | str
                 const percentile = hasRank && totalActiveUsers > 0 ? Math.max(1, Math.round((leaderboardRank / totalActiveUsers) * 100)) : null;
                 const progressPct = hasRank && totalActiveUsers > 0 ? Math.max(2, 100 - Math.round(((leaderboardRank - 1) / totalActiveUsers) * 100)) : 0;
                 const neighbourhood: any[] = analytics.leaderboardNeighbourhood || [];
-                const myPlays = analytics.myPlaysOnLeaderboard || analytics.totalPlays || 0;
+                const isXpRank = analytics.leaderboardSource === 'achievements' || analytics.leaderboardMetric === 'xp';
+                const myScore = isXpRank
+                    ? (analytics.myXp ?? analytics.myPlaysOnLeaderboard ?? 0)
+                    : (analytics.myPlaysOnLeaderboard || analytics.totalPlays || 0);
                 const userAbove = hasRank ? neighbourhood.find((u: any) => !u.isMe && u.rank < leaderboardRank) : null;
-                const playsToClimb = userAbove ? (userAbove.plays - myPlays + 1) : null;
+                const aboveScore = userAbove ? Number(userAbove.xp ?? userAbove.plays ?? 0) : 0;
+                const scoreToClimb = userAbove ? (aboveScore - Number(myScore) + 1) : null;
 
                 const rankEmoji = (leaderboardRank === 1) ? '🥇' : (leaderboardRank === 2) ? '🥈' : (leaderboardRank === 3) ? '🥉' : '🏆';
 
@@ -6261,7 +6265,11 @@ const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | str
                     <div className="flex flex-col items-center justify-center text-center p-6">
                         <span className="text-5xl mb-3">{rankEmoji}</span>
                         <h2 className="text-3xl font-black text-white mb-1">{hasRank ? `Rank #${leaderboardRank}` : 'Not ranked yet'}</h2>
-                        <p className="text-muted mb-5 text-sm">Out of {totalActiveUsers} active users</p>
+                        <p className="text-muted mb-5 text-sm">
+                            {isXpRank
+                                ? `Overall · out of ${totalActiveUsers} on the achievements board`
+                                : `Out of ${totalActiveUsers} active users`}
+                        </p>
 
                         {/* Progress bar */}
                         <div className="w-full mb-1">
@@ -6281,8 +6289,10 @@ const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | str
                         {/* Stats row */}
                         <div className="grid grid-cols-2 gap-3 w-full mt-4 mb-4">
                             <div className="bg-gradient-to-b from-white/10 to-white/5 border border-white/10 rounded-xl p-4 flex flex-col items-center shadow-lg">
-                                <span className="text-2xl font-black text-white mb-1">{myPlays}</span>
-                                <span className="text-[9px] text-muted uppercase tracking-widest font-black">My Streams</span>
+                                <span className="text-2xl font-black text-white mb-1">{myScore}</span>
+                                <span className="text-[9px] text-muted uppercase tracking-widest font-black">
+                                    {isXpRank ? 'My XP' : 'My Streams'}
+                                </span>
                             </div>
                             <div className="bg-gradient-to-b from-plex/20 to-plex/5 border border-plex/30 rounded-xl p-4 flex flex-col items-center shadow-lg relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-16 h-16 bg-plex/20 blur-xl -mr-5 -mt-5 rounded-full" />
@@ -6291,27 +6301,35 @@ const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | str
                             </div>
                         </div>
 
-                        {/* Plays to climb */}
-                        {playsToClimb !== null && playsToClimb > 0 && (
+                        {/* Score to climb */}
+                        {scoreToClimb !== null && scoreToClimb > 0 && (
                             <div className="w-full bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 mb-4 text-sm text-blue-300 font-medium">
-                                🎯 <strong>{playsToClimb} more stream{playsToClimb !== 1 ? 's' : ''}</strong> to overtake <strong>{userAbove?.username}</strong> (Rank #{userAbove?.rank})
+                                🎯 <strong>
+                                    {isXpRank
+                                        ? `${scoreToClimb.toLocaleString()} more XP`
+                                        : `${scoreToClimb} more stream${scoreToClimb !== 1 ? 's' : ''}`}
+                                </strong> to overtake <strong>{userAbove?.username}</strong> (Rank #{userAbove?.rank})
                             </div>
                         )}
-                        {playsToClimb === null && leaderboardRank === 1 && (
+                        {scoreToClimb === null && leaderboardRank === 1 && (
                             <div className="w-full bg-plex/10 border border-plex/30 rounded-xl px-4 py-3 mb-4 text-sm text-plex font-medium">
                                 👑 You're at the top of the leaderboard!
                             </div>
                         )}
                         {!hasRank && (
                             <div className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 mb-4 text-sm text-muted font-medium">
-                                Stream activity has not been matched to your account for this period yet.
+                                {isXpRank
+                                    ? 'Earn XP from watch history to appear on the overall server leaderboard.'
+                                    : 'Stream activity has not been matched to your account for this period yet.'}
                             </div>
                         )}
 
                         {/* Mini leaderboard neighbourhood */}
                         {neighbourhood.length > 0 && (
                             <div className="w-full">
-                                <p className="text-left text-xs uppercase tracking-widest font-bold text-muted mb-3 border-b border-white/10 pb-2">Your Leaderboard Position</p>
+                                <p className="text-left text-xs uppercase tracking-widest font-bold text-muted mb-3 border-b border-white/10 pb-2">
+                                    {isXpRank ? 'Overall Leaderboard Position' : 'Your Leaderboard Position'}
+                                </p>
                                 <div className="flex flex-col gap-1.5">
                                     {neighbourhood.map((u: any, i: number) => (
                                         <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2.5 border transition-all ${u.isMe
@@ -6324,7 +6342,11 @@ const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | str
                                                     {u.isMe ? <span className="inline-flex items-center gap-1.5">{u.username} <span className="text-[9px] text-plex font-black uppercase tracking-widest bg-plex/20 px-1.5 py-0.5 rounded">You</span></span> : u.username}
                                                 </span>
                                             </div>
-                                            <span className={`text-xs font-black whitespace-nowrap ${u.isMe ? 'text-plex' : 'text-gray-400'}`}>{u.plays} plays</span>
+                                            <span className={`text-xs font-black whitespace-nowrap ${u.isMe ? 'text-plex' : 'text-gray-400'}`}>
+                                                {isXpRank
+                                                    ? `${Number(u.xp ?? u.plays ?? 0).toLocaleString()} XP`
+                                                    : `${u.plays} plays`}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>
@@ -7579,7 +7601,13 @@ export const UserDashboard: React.FC<{
             leaderboardRank: data?.leaderboardRank || null,
             totalActiveUsers: data?.totalActiveUsers || 0,
             myPlaysOnLeaderboard: data?.myPlaysOnLeaderboard ?? null,
+            myXp: data?.myXp ?? null,
             leaderboardNeighbourhood: data?.leaderboardNeighbourhood || [],
+            leaderboardSource: data?.leaderboardSource || 'period_plays',
+            leaderboardMetric: data?.leaderboardMetric || 'plays',
+            periodLeaderboardRank: data?.periodLeaderboardRank ?? null,
+            periodPlaysOnLeaderboard: data?.periodPlaysOnLeaderboard ?? null,
+            periodActiveUsers: data?.periodActiveUsers ?? null,
             libraryHealth: data?.libraryHealth || null,
             heatmapData: data?.heatmapData || null,
         };

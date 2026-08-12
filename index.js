@@ -64,7 +64,8 @@ import { createOverlaysRouter } from './lib/overlays/index.js';
 import { startOverlaysScheduler, startOverlaysBundleScheduler, runOverlaysScheduledJob } from './lib/overlays/scheduler.js';
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
-import { isTautulliWatchHistorySource } from './lib/achievements/index.js';
+import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext } from './lib/achievements/index.js';
+import { loadAchievementsState } from './lib/achievements/store.js';
 import {
     backfillJoiningDatesFromHistory,
     getJoiningDateBackfillStatus,
@@ -14820,6 +14821,29 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
         const libraryHealth = buildJellystatLibraryHealth(topLibraries, libraryOverview, libraryMetadata, libraryTypeTotals);
         const heatmapData = buildJellystatHeatmap(dailyViews);
 
+        let leaderboardPayload = { ...leaderboardContext, leaderboardSource: 'period_plays', leaderboardMetric: 'plays' };
+        if (config.achievementsEnabled && config.achievementsLeaderboardEnabled !== false) {
+            try {
+                const jellyfinAccountId = req.user?.jellyfinId || String(req.user?.id || '').replace(/^jellyfin:/i, '') || null;
+                const achievementsState = await loadAchievementsState();
+                const shouldObfuscateUsernames = shouldObfuscateAnalyticsViewers(req.user, config);
+                const xpRank = buildAchievementsHomeRankContext(achievementsState, {
+                    accountId: jellyfinAccountId,
+                    obfuscate: shouldObfuscateUsernames,
+                });
+                if (xpRank) {
+                    leaderboardPayload = {
+                        ...xpRank,
+                        periodLeaderboardRank: leaderboardContext.leaderboardRank,
+                        periodPlaysOnLeaderboard: leaderboardContext.myPlaysOnLeaderboard,
+                        periodActiveUsers: leaderboardContext.totalActiveUsers,
+                    };
+                }
+            } catch (e) {
+                log(`Achievements home rank (Jellyfin) fallback to period plays: ${e.message}`);
+            }
+        }
+
         res.json({
             topUsers,
             topLibraries,
@@ -14836,7 +14860,7 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
             libraryHealth,
             heatmapData,
             dayOfWeekCounts: buildDayOfWeekCountsFromHeatmap(heatmapData),
-            ...leaderboardContext,
+            ...leaderboardPayload,
             requestedPeriodDays: requestedDays,
             cachePeriodDays: requestedDays,
             cacheFallback: false,
@@ -15445,11 +15469,14 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         const userEntry = trendingStats.leaderboards && trendingStats.leaderboards[periodKey] && accountID
             ? trendingStats.leaderboards[periodKey][accountID]
             : null;
-        const leaderboardRank = userEntry ? (typeof userEntry === 'object' ? userEntry.rank : userEntry) : null;
-        const myPlaysOnLeaderboard = userEntry ? (typeof userEntry === 'object' ? userEntry.plays : null) : null;
-        const totalActiveUsers = trendingStats.totalActiveUsers && trendingStats.totalActiveUsers[periodKey]
+        let leaderboardRank = userEntry ? (typeof userEntry === 'object' ? userEntry.rank : userEntry) : null;
+        let myPlaysOnLeaderboard = userEntry ? (typeof userEntry === 'object' ? userEntry.plays : null) : null;
+        let totalActiveUsers = trendingStats.totalActiveUsers && trendingStats.totalActiveUsers[periodKey]
             ? trendingStats.totalActiveUsers[periodKey]
             : 0;
+        const periodLeaderboardRank = leaderboardRank;
+        const periodPlaysOnLeaderboard = myPlaysOnLeaderboard;
+        const periodActiveUsers = totalActiveUsers;
 
         // Build a neighbourhood snapshot: the 2 users above and 2 below
         const users = await loadFile(USERS_PATH, []);
@@ -15486,6 +15513,33 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             });
         }
 
+        let leaderboardSource = 'period_plays';
+        let leaderboardMetric = 'plays';
+        let myXp = null;
+        // Canonical Home Server Rank = Achievements all-time XP when enabled.
+        // Analytics period still drives streams / wrap stats — not this rank.
+        if (config.achievementsEnabled && config.achievementsLeaderboardEnabled !== false) {
+            try {
+                const achievementsState = await loadAchievementsState();
+                const xpRank = buildAchievementsHomeRankContext(achievementsState, {
+                    accountId: accountID,
+                    obfuscate: shouldObfuscateUsernames,
+                    usernameMap,
+                });
+                if (xpRank) {
+                    leaderboardRank = xpRank.leaderboardRank;
+                    totalActiveUsers = xpRank.totalActiveUsers;
+                    myPlaysOnLeaderboard = xpRank.myPlaysOnLeaderboard;
+                    myXp = xpRank.myXp;
+                    leaderboardNeighbourhood = xpRank.leaderboardNeighbourhood;
+                    leaderboardSource = xpRank.leaderboardSource;
+                    leaderboardMetric = xpRank.leaderboardMetric;
+                }
+            } catch (e) {
+                log(`Achievements home rank fallback to period plays: ${e.message}`);
+            }
+        }
+
         const payload = {
             totalPlays,
             topLibraries,
@@ -15504,7 +15558,13 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             leaderboardRank,
             totalActiveUsers,
             myPlaysOnLeaderboard,
+            myXp,
             leaderboardNeighbourhood,
+            leaderboardSource,
+            leaderboardMetric,
+            periodLeaderboardRank,
+            periodPlaysOnLeaderboard,
+            periodActiveUsers,
             moviesCount,
             showsCount,
             musicCount,
@@ -15545,7 +15605,7 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         }
 
         const daysKey = personalAnalyticsDaysKey(req.query.days);
-        const cacheKey = `v4:${accountID}:${daysKey}`;
+        const cacheKey = `v5:${accountID}:${daysKey}`;
         const lite = String(req.query.lite || '') === '1' || String(req.query.fields || '') === 'recent';
         const cached = !lite ? personalAnalyticsCache.get(cacheKey) : null;
         const cacheFresh = cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS;

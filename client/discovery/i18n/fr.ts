@@ -116,6 +116,7 @@ export const fr: DeepPartial<EnCatalog> = {
         lastNDays: '{days} derniers jours',
         allTime: 'Tout le temps',
         serverRank: 'Classement serveur',
+        serverRankOverall: 'Global',
         totalStreams: 'Lectures totales',
         topBinge: 'Meilleur binge',
         topMovie: 'Meilleur film',
