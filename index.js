@@ -1593,11 +1593,32 @@ const fetchPlexStatusSessions = async (uri, config) => (
         .catch(() => null)
 );
 
-const getPlexStatusSessionsSwr = async (uri, config) => {
+const plexSessionsAreEmpty = (sessionsData) => {
+    const meta = sessionsData?.MediaContainer?.Metadata;
+    if (meta == null) return true;
+    if (Array.isArray(meta)) return meta.length === 0;
+    return !meta.ratingKey && !meta.key;
+};
+
+const getPlexStatusSessionsSwr = async (uri, config, { force = false } = {}) => {
+    if (force) {
+        const value = await mediaSessionsSwr.revalidate(
+            PLEX_SESSIONS_SWR_KEY,
+            () => fetchPlexStatusSessions(uri, config),
+        );
+        return { sessionsData: value, stale: false, ageMs: 0 };
+    }
+
+    const peeked = mediaSessionsSwr.peek(PLEX_SESSIONS_SWR_KEY);
+    // Empty session lists go stale quickly so Android / Web starts aren't masked.
+    const empty = peeked ? plexSessionsAreEmpty(peeked.value) : false;
+    const freshMs = empty ? 2_000 : MEDIA_SESSIONS_FRESH_MS;
+    const staleMs = empty ? 8_000 : MEDIA_SESSIONS_STALE_MS;
+
     const { value, stale, ageMs } = await mediaSessionsSwr.get(
         PLEX_SESSIONS_SWR_KEY,
         () => fetchPlexStatusSessions(uri, config),
-        { freshMs: MEDIA_SESSIONS_FRESH_MS, staleMs: MEDIA_SESSIONS_STALE_MS },
+        { freshMs, staleMs },
     );
     return { sessionsData: value, stale, ageMs };
 };
@@ -6463,9 +6484,28 @@ const resolveLocalPlexAccountId = async (config, uri, sessionUser) => {
     const norm = (v) => String(v || '').trim().toLowerCase();
     const users = await loadFile(USERS_PATH, []);
     const portalUser = findLocalUserForSession(users, sessionUser);
-    if (portalUser?.plexAccountId) return String(portalUser.plexAccountId);
+    const adminCloudId = String(config?.adminPlexId || '').trim();
+    const sessionPlexId = String(sessionUser?.plexId || '').trim();
+    const isOwner = !!sessionUser?.isAdmin
+        || !!(adminCloudId && sessionPlexId && sessionPlexId === adminCloudId);
 
     const { list: accounts } = await fetchPlexServerAccounts(uri, config);
+
+    // PMS owner sessions use local account "1". Never treat the plex.tv cloud id as accountID.
+    if (isOwner) {
+        const home = accounts.find((a) => String(a.id) === '1')
+            || accounts.find((a) => norm(a.name) === norm(sessionUser?.username))
+            || accounts[0];
+        if (home) return String(home.id);
+        return '1';
+    }
+
+    if (portalUser?.plexAccountId) {
+        const stored = String(portalUser.plexAccountId);
+        // Guard: cloud plex.tv ids are not valid local /accounts ids.
+        if (!(adminCloudId && stored === adminCloudId)) return stored;
+    }
+
     if (!accounts.length) {
         return sessionUser?.plexId ? String(sessionUser.plexId) : null;
     }
@@ -6485,13 +6525,84 @@ const resolveLocalPlexAccountId = async (config, uri, sessionUser) => {
         if (byPlexId) return String(byPlexId.id);
     }
 
-    // Home admin is usually local account 1, but only as a last resort for admins.
-    if (sessionUser?.isAdmin) {
-        const home = accounts.find((a) => String(a.id) === '1') || accounts[0];
-        if (home) return String(home.id);
+    return null;
+};
+
+/** Build identity keys for matching /status/sessions rows to the signed-in portal user. */
+const buildPlexNowPlayingIdentity = async (config, uri, reqUser, localUser = null) => {
+    // Match the *effective* portal user (impersonation target), never the real admin actor.
+    const impersonating = isImpersonatingSession(reqUser);
+    let isAdmin = false;
+    if (!impersonating) {
+        isAdmin = await resolveCurrentAdmin(reqUser, config).catch(() => false)
+            || !!reqUser?.isAdmin;
+    }
+    const adminCloudId = isAdmin
+        ? (String(config?.adminPlexId || '').trim() || await getAdminId(config).catch(() => null))
+        : null;
+
+    const accountId = await resolveLocalPlexAccountId(config, uri, {
+        ...reqUser,
+        isAdmin,
+        plexId: reqUser?.plexId || localUser?.plexId || adminCloudId,
+    }).catch(() => null);
+
+    const username = reqUser?.username || localUser?.username || '';
+    const email = reqUser?.email || localUser?.email || '';
+    const plexId = reqUser?.plexId || localUser?.plexId || adminCloudId || null;
+    const aliases = [username, email, localUser?.username, localUser?.email].filter(Boolean);
+
+    try {
+        const { map: accountMap, list: accounts } = await fetchPlexServerAccounts(uri, config);
+        const account = accountMap?.[String(accountId)];
+        if (account?.name) aliases.push(account.name);
+        if (account?.email) aliases.push(account.email);
+        if (isAdmin) {
+            const home = accounts.find((a) => String(a.id) === '1') || account;
+            if (home?.name) aliases.push(home.name);
+            if (home?.email) aliases.push(home.email);
+        }
+    } catch {
+        // identity still works from username / plex ids
     }
 
-    return null;
+    let ownerCloudId = null;
+    if (isAdmin && config?.plexToken) {
+        try {
+            const ownerRes = await apiFetch('https://plex.tv/api/v2/user', config.plexToken);
+            if (ownerRes.ok) {
+                const owner = await ownerRes.json();
+                for (const value of [owner?.username, owner?.title, owner?.friendlyName, owner?.email]) {
+                    if (value) aliases.push(String(value));
+                }
+                if (owner?.id != null) ownerCloudId = String(owner.id);
+            }
+        } catch {
+            // optional
+        }
+    }
+
+    const accountIds = [
+        accountId,
+        isAdmin ? '1' : null,
+        localUser?.plexAccountId,
+        plexId,
+        adminCloudId,
+        ownerCloudId,
+        reqUser?.id,
+        localUser?.id,
+        reqUser?.plexId,
+    ].filter(Boolean);
+
+    return {
+        accountId: accountId || (isAdmin ? '1' : null),
+        accountIds: [...new Set(accountIds.map((v) => String(v)))],
+        plexId: plexId || adminCloudId || null,
+        username,
+        email,
+        aliases: [...new Set(aliases.map((v) => String(v).trim()).filter(Boolean))],
+        isAdmin,
+    };
 };
 
 const getPlexConnectionUri = async (config) => {
@@ -13769,35 +13880,43 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
         const uri = await getPlexConnectionUri(config);
         if (!uri) return res.json({ available: false, enabled: true, session: null });
 
-        const accountId = await resolveLocalPlexAccountId(config, uri, req.user).catch(() => null);
-        const { sessionsData, stale } = await getPlexStatusSessionsSwr(uri, config);
-        const list = plexSessionAsArray(sessionsData?.MediaContainer?.Metadata);
+        const identity = await buildPlexNowPlayingIdentity(config, uri, req.user, localUser);
 
-        const username = req.user?.username || localUser?.username || '';
-        const email = req.user?.email || localUser?.email || '';
-        const plexId = req.user?.plexId || localUser?.plexId || null;
-        const aliases = [username, email, localUser?.username, localUser?.email]
-            .filter(Boolean);
-        if (accountId) {
-            try {
-                const { map: accountMap } = await fetchPlexServerAccounts(uri, config);
-                const account = accountMap?.[String(accountId)];
-                if (account?.name) aliases.push(account.name);
-                if (account?.email) aliases.push(account.email);
-            } catch {
-                // identity still works from username / plex ids
-            }
+        let { sessionsData, stale } = await getPlexStatusSessionsSwr(uri, config);
+        let list = plexSessionAsArray(sessionsData?.MediaContainer?.Metadata);
+        let mineMeta = pickOwnPlexNowPlayingSession(list, identity);
+
+        // Never trust a warm empty/miss for Android / Web — force one live refresh.
+        if (!mineMeta) {
+            ({ sessionsData, stale } = await getPlexStatusSessionsSwr(uri, config, { force: true }));
+            list = plexSessionAsArray(sessionsData?.MediaContainer?.Metadata);
+            mineMeta = pickOwnPlexNowPlayingSession(list, identity);
         }
-
-        const mineMeta = pickOwnPlexNowPlayingSession(list, {
-            accountId,
-            accountIds: [accountId, localUser?.plexAccountId, plexId].filter(Boolean),
-            plexId,
-            username,
-            email,
-            aliases,
-        });
-        if (!mineMeta) return res.json({ available: true, enabled: true, session: null, stale: !!stale });
+        if (!mineMeta) {
+            if (identity.isAdmin && list.length) {
+                const sample = list.slice(0, 5).map((meta) => {
+                    const user = Array.isArray(meta.User) ? meta.User[0] : meta.User;
+                    const player = Array.isArray(meta.Player) ? meta.Player[0] : meta.Player;
+                    return {
+                        type: meta.type,
+                        accountID: meta.accountID,
+                        userId: user?.id,
+                        userTitle: user?.title,
+                        product: player?.product,
+                        state: player?.state,
+                    };
+                });
+                log(`[now-playing] no match for admin; sessions=${JSON.stringify(sample)} identity=${JSON.stringify({
+                    accountId: identity.accountId,
+                    accountIds: identity.accountIds,
+                    plexId: identity.plexId,
+                    username: identity.username,
+                    email: identity.email,
+                    aliases: identity.aliases,
+                })}`);
+            }
+            return res.json({ available: true, enabled: true, session: null, stale: !!stale });
+        }
 
         let mapped = mapPlexSessionToNowPlaying(mineMeta);
         if (mapped && !mapped.tmdbId) {
