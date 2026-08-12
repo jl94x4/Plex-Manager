@@ -61,7 +61,7 @@ import {
 } from './lib/media-automation/index.js';
 import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook, startTpdbCacheDailyRefresh } from './lib/poster-sets/index.js';
 import { createOverlaysRouter } from './lib/overlays/index.js';
-import { startOverlaysScheduler, runOverlaysScheduledJob } from './lib/overlays/scheduler.js';
+import { startOverlaysScheduler, startOverlaysBundleScheduler, runOverlaysScheduledJob } from './lib/overlays/scheduler.js';
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource } from './lib/achievements/index.js';
@@ -11429,25 +11429,39 @@ app.post('/api/tasks/run/:taskId', requireAdmin, async (req, res) => {
                         }
                         await runOverlaysScheduledJob({
                             loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
-                            resolvePlex: async () => {
-                                const config = await loadFile(CONFIG_PATH, {});
-                                if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex') {
-                                    throw new Error('Overlays currently supports Plex Media Player settings only.');
-                                }
-                                const base_url = resolveConfiguredPlexServerUrl(config);
-                                const token = normalizePlexToken(config.plexToken);
-                                if (!base_url || !token || token === SECRET_MASK) {
-                                    throw new Error('Configure Plex server URL and token under Settings → Media Player first.');
-                                }
-                                return {
-                                    base_url: base_url.endsWith('/') ? base_url.slice(0, -1) : base_url,
-                                    token,
-                                };
-                            },
+                            resolvePlex: resolveOverlaysPlex,
                             markTaskStart,
                             markTaskEnd,
                             systemJob: systemJobs.overlaysNewSeason,
-                        });
+                        }, 'core');
+                        break;
+                    }
+                    case 'overlaysRecentlyAdded': {
+                        const cfg = await loadFile(CONFIG_PATH, {});
+                        if (!cfg.overlaysEnabled) {
+                            throw new Error('Overlays is disabled. Enable it in Settings → Features first.');
+                        }
+                        await runOverlaysScheduledJob({
+                            loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+                            resolvePlex: resolveOverlaysPlex,
+                            markTaskStart,
+                            markTaskEnd,
+                            systemJob: systemJobs.overlaysRecentlyAdded,
+                        }, 'recently');
+                        break;
+                    }
+                    case 'overlaysKometaStyle': {
+                        const cfg = await loadFile(CONFIG_PATH, {});
+                        if (!cfg.overlaysEnabled) {
+                            throw new Error('Overlays is disabled. Enable it in Settings → Features first.');
+                        }
+                        await runOverlaysScheduledJob({
+                            loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+                            resolvePlex: resolveOverlaysPlex,
+                            markTaskStart,
+                            markTaskEnd,
+                            systemJob: systemJobs.overlaysKometaStyle,
+                        }, 'kometa');
                         break;
                     }
                     default:
@@ -16609,7 +16623,27 @@ const systemJobs = {
     overlaysNewSeason: {
         id: 'overlaysNewSeason',
         name: 'Overlays: New Season',
-        description: 'Scans TV libraries and applies / removes New Season poster banners (Overlays feature).',
+        description: 'Live / New Season / New Episode / Top 10 (core banners). Does not run Recently Added or Kometa media badges.',
+        lastRun: null,
+        nextRun: null,
+        running: false,
+        lastDurationMs: null,
+        lastError: null,
+    },
+    overlaysRecentlyAdded: {
+        id: 'overlaysRecentlyAdded',
+        name: 'Overlays: Recently Added',
+        description: 'Stamps Recently Added banners only (separate from New Season / Kometa media).',
+        lastRun: null,
+        nextRun: null,
+        running: false,
+        lastDurationMs: null,
+        lastError: null,
+    },
+    overlaysKometaStyle: {
+        id: 'overlaysKometaStyle',
+        name: 'Overlays: Media / Kometa',
+        description: 'Resolution (4K/HDR/Atmos), status, ratings, and network badges only.',
         lastRun: null,
         nextRun: null,
         running: false,
@@ -26002,7 +26036,7 @@ app.listen(PORT, BIND_HOST, async () => {
         log(`[poster-sets] Watcher startup failed: ${error.message}`);
     }
     try {
-        startOverlaysScheduler({
+        const overlaysSchedDeps = {
             loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
             resolvePlex: resolveOverlaysPlex,
             isFeatureEnabled: async () => {
@@ -26011,9 +26045,20 @@ app.listen(PORT, BIND_HOST, async () => {
             },
             markTaskStart,
             markTaskEnd,
+        };
+        startOverlaysScheduler({
+            ...overlaysSchedDeps,
             systemJob: systemJobs.overlaysNewSeason,
         });
-        log('[overlays] New Season scheduler started');
+        startOverlaysBundleScheduler('recently', {
+            ...overlaysSchedDeps,
+            systemJob: systemJobs.overlaysRecentlyAdded,
+        });
+        startOverlaysBundleScheduler('kometa', {
+            ...overlaysSchedDeps,
+            systemJob: systemJobs.overlaysKometaStyle,
+        });
+        log('[overlays] Core / Recently Added / Kometa schedulers started');
     } catch (error) {
         log(`[overlays] Scheduler startup failed: ${error.message}`);
     }

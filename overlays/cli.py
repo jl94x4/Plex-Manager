@@ -53,6 +53,10 @@ def main() -> int:
             "scan",
             "run",
             "preview",
+            "run-recently",
+            "preview-recently",
+            "run-kometa",
+            "preview-kometa",
             "cleanup",
             "reconcile",
             "reset-one",
@@ -125,12 +129,36 @@ def main() -> int:
             write_event("result", **promote_preview_to_live(config, progress=progress))
             return 0
 
-        if args.command in {"run", "preview", "cleanup"}:
-            preview_override = True if args.command == "preview" else None
+        if args.command in {
+            "run",
+            "preview",
+            "cleanup",
+            "run-recently",
+            "preview-recently",
+            "run-kometa",
+            "preview-kometa",
+        }:
+            preview_override = True if args.command.startswith("preview") else None
             if args.command == "cleanup":
                 # cleanup uses same runner; removals happen when not eligible
                 preview_override = False if config.get("previewMode") is not True else True
-            write_event("result", **run_overlays(config, progress=progress, preview_override=preview_override))
+            bundle = None
+            if "recently" in args.command:
+                bundle = "recently"
+            elif "kometa" in args.command:
+                bundle = "kometa"
+            elif args.command in {"run", "preview", "cleanup"}:
+                # Main Preview/Run stays on the fast core path unless caller sets runBundle.
+                bundle = str(config.get("runBundle") or config.get("run_bundle") or "core")
+            write_event(
+                "result",
+                **run_overlays(
+                    config,
+                    progress=progress,
+                    preview_override=preview_override,
+                    bundle=bundle,
+                ),
+            )
             return 0
 
         write_event("error", message=f"Unknown command: {args.command}")

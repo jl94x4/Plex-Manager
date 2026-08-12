@@ -33,7 +33,7 @@ import { overlaysApi, DEFAULT_OVERLAY_PLACEMENT, type OverlaysConfig, type Overl
 import { PlacementEditor } from './PlacementEditor';
 
 type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'settings' | 'import' | 'activity';
-type ActionId = 'refresh' | 'stop' | 'preview' | 'promote' | 'resetAll' | 'run' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample';
+type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'promote' | 'resetAll' | 'run' | 'runRecently' | 'runKometa' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample';
 
 type SampleMeta = {
     exists: boolean;
@@ -105,6 +105,8 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     episodeOverlayPresetId: 'new-episode',
     placement: DEFAULT_OVERLAY_PLACEMENT,
     scheduleHours: 24,
+    recentlyAddedScheduleHours: 24,
+    kometaScheduleHours: 24,
     skipIfKometaOverlayLabel: true,
 };
 
@@ -565,7 +567,7 @@ export const OverlaysDashboard: React.FC = () => {
                             type="button"
                             className={buttonClass}
                             disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('preview', () => overlaysApi.preview())}
+                            onClick={() => startBackgroundJob('preview', () => overlaysApi.preview({ bundle: 'core' }))}
                         >
                             {t('overlays.actions.preview')}
                         </button>
@@ -592,10 +594,34 @@ export const OverlaysDashboard: React.FC = () => {
                             type="button"
                             className={primaryButtonClass}
                             disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('run', () => overlaysApi.run({ preview: false }))}
+                            onClick={() => startBackgroundJob('run', () => overlaysApi.run({ preview: false, bundle: 'core' }))}
                         >
-                            {busy === 'run' || jobRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                            {busy === 'run' || (jobRunning && (status?.command === 'run' || status?.command === 'preview'))
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <Play className="h-4 w-4" />}
                             {t('overlays.actions.runNow')}
+                        </button>
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={busy !== null || jobRunning || !workerReady}
+                            onClick={() => startBackgroundJob('runRecently', () => overlaysApi.run({ preview: false, bundle: 'recently' }))}
+                        >
+                            {busy === 'runRecently' || String(status?.command || '').includes('recently')
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <Play className="h-4 w-4" />}
+                            {t('overlays.actions.runRecently')}
+                        </button>
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={busy !== null || jobRunning || !workerReady}
+                            onClick={() => startBackgroundJob('runKometa', () => overlaysApi.run({ preview: false, bundle: 'kometa' }))}
+                        >
+                            {busy === 'runKometa' || String(status?.command || '').includes('kometa')
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <Play className="h-4 w-4" />}
+                            {t('overlays.actions.runKometa')}
                         </button>
                     </>
                 )}
@@ -971,7 +997,7 @@ export const OverlaysDashboard: React.FC = () => {
                             type="button"
                             className={buttonClass}
                             disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('preview', () => overlaysApi.preview())}
+                            onClick={() => startBackgroundJob('preview', () => overlaysApi.preview({ bundle: 'core' }))}
                         >
                             {t('overlays.actions.preview')}
                         </button>
@@ -1433,6 +1459,40 @@ export const OverlaysDashboard: React.FC = () => {
                                     scheduleHours: Number(e.target.value) || 0,
                                 }))}
                             />
+                            <span className="mt-1 block text-[11px] text-muted">
+                                {t('overlays.settings.coreScheduleHint')}
+                            </span>
+                        </label>
+                        <label className="block">
+                            <span className={fieldLabelClass}>{t('overlays.fields.recentlyAddedScheduleHours')}</span>
+                            <input
+                                type="number"
+                                min={0}
+                                max={168}
+                                className={fieldInputClass}
+                                value={configDraft.recentlyAddedScheduleHours ?? 24}
+                                onChange={(e) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    recentlyAddedScheduleHours: Number(e.target.value) || 0,
+                                }))}
+                            />
+                        </label>
+                        <label className="block">
+                            <span className={fieldLabelClass}>{t('overlays.fields.kometaScheduleHours')}</span>
+                            <input
+                                type="number"
+                                min={0}
+                                max={168}
+                                className={fieldInputClass}
+                                value={configDraft.kometaScheduleHours ?? 24}
+                                onChange={(e) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    kometaScheduleHours: Number(e.target.value) || 0,
+                                }))}
+                            />
+                            <span className="mt-1 block text-[11px] text-muted">
+                                {t('overlays.settings.kometaScheduleHint')}
+                            </span>
                         </label>
                     </div>
 

@@ -1924,15 +1924,101 @@ def run_new_episode_overlays(
     return out
 
 
-def run_overlays(config: dict, progress: ProgressFn | None = None, preview_override: bool | None = None) -> dict:
+def _normalize_run_bundle(value) -> str:
+    raw = str(value or "core").strip().lower().replace("_", "-")
+    if raw in {"all", "full"}:
+        return "all"
+    if raw in {"recently", "recent", "recently-added", "recentlyadded"}:
+        return "recently"
+    if raw in {"kometa", "kometa-style", "media", "media-info"}:
+        return "kometa"
+    return "core"
+
+
+def _run_kometa_bundle(plex, config: dict, paths: dict, preview_mode: bool, progress: ProgressFn | None) -> dict:
+    from modes_kometa import run_all_kometa_style, ensure_placement_preview_badges
+    try:
+        ensure_placement_preview_badges(paths["assets"], paths=paths)
+    except Exception:
+        pass
+    summary = run_all_kometa_style(plex, config, paths, preview_mode, progress)
+    out = {
+        "ok": True,
+        "runBundle": "kometa",
+        "previewMode": preview_mode,
+        "finishedAt": datetime.now().isoformat(),
+        "errors": list(summary.get("kometaStyleErrors") or []),
+    }
+    out.update(summary)
+    _progress(progress, "Done (kometa) — media / status / ratings / network pass finished")
+    return out
+
+
+def _run_recently_bundle(plex, config: dict, paths: dict, preview_mode: bool, progress: ProgressFn | None) -> dict:
+    from modes_extra import run_recently_added_overlays
+    from tmdb_dates import create_resolver_from_config
+
+    # Respect Live / New Season reservations without re-running those modes.
+    live_log = _load_log(paths.get("liveLog") or (paths["root"] / "live_log.json"))
+    season_log = _load_log(paths["log"])
+    reserved = {str(k) for k in live_log.keys()} | {str(k) for k in season_log.keys()}
+    resolver = create_resolver_from_config(config, paths=paths, progress=progress)
+    recent_summary = run_recently_added_overlays(
+        plex, config, paths, preview_mode, progress, reserved_keys=reserved
+    )
+    resolver.save()
+    out = {
+        "ok": True,
+        "runBundle": "recently",
+        "previewMode": preview_mode,
+        "finishedAt": datetime.now().isoformat(),
+        "errors": list(recent_summary.get("recentlyAddedErrors") or recent_summary.get("errors") or []),
+    }
+    out.update(recent_summary)
+    out.update(resolver.summary())
+    _progress(
+        progress,
+        f"Done (recently) — +{recent_summary.get('recentlyAddedAdded', recent_summary.get('recentlyAdded', 0))}/"
+        f"-{recent_summary.get('recentlyAddedRemoved', recent_summary.get('recentlyRemoved', 0))}",
+    )
+    return out
+
+
+def run_overlays(
+    config: dict,
+    progress: ProgressFn | None = None,
+    preview_override: bool | None = None,
+    bundle: str | None = None,
+) -> dict:
+    """Run overlay bundles separately so heavy passes do not block New Season.
+
+    bundle:
+      - core     — Live, New Season, New Episode, Top 10 (default Preview/Run + scheduler)
+      - recently — Recently Added only
+      - kometa   — Media / status / ratings / network only
+      - all      — everything (legacy combined pass)
+    """
     paths = _resolve_paths(config)
-    preview_mode = _as_bool(preview_override if preview_override is not None else config.get("previewMode", config.get("preview_mode")), False)
+    preview_mode = _as_bool(
+        preview_override if preview_override is not None else config.get("previewMode", config.get("preview_mode")),
+        False,
+    )
+    run_bundle = _normalize_run_bundle(
+        bundle if bundle is not None else config.get("runBundle", config.get("run_bundle", "core"))
+    )
+    plex = _connect(config)
+    _progress(progress, f"Overlays bundle: {run_bundle}")
+
+    if run_bundle == "kometa":
+        return _run_kometa_bundle(plex, config, paths, preview_mode, progress)
+    if run_bundle == "recently":
+        return _run_recently_bundle(plex, config, paths, preview_mode, progress)
+
     days = int(config.get("newSeasonDays") or config.get("new_season_days") or 21)
     cutoff = datetime.now() - timedelta(days=max(1, days))
     skip_kometa = _as_bool(config.get("skipIfKometaOverlayLabel", config.get("skip_if_kometa_overlay_label")), True)
     new_season_on = _as_bool(config.get("newSeasonEnabled", config.get("new_season_enabled")), True)
 
-    plex = _connect(config)
     log = _load_log(paths["log"])
 
     from tmdb_dates import create_resolver_from_config
@@ -1946,8 +2032,10 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
 
     resolver = create_resolver_from_config(config, paths=paths, progress=progress)
 
-    # Kometa-style corner/side badges first (media/status/ratings/network), then bottom banners.
-    kometa_summary = run_all_kometa_style(plex, config, paths, preview_mode, progress)
+    kometa_summary: dict = {}
+    if run_bundle == "all":
+        # Kometa-style corner/side badges first when doing a full combined pass.
+        kometa_summary = run_all_kometa_style(plex, config, paths, preview_mode, progress)
 
     live_summary = run_live_overlays(plex, config, paths, preview_mode, progress, resolver=resolver)
     reserved: set[str] = set(live_summary.get("liveKeys") or [])
@@ -2076,13 +2164,16 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
 
     _save_log(paths["log"], log)
 
-    reserved_for_recent = set(reserved) | set(should_have) | set(log.keys())
-    recent_summary = run_recently_added_overlays(
-        plex, config, paths, preview_mode, progress, reserved_keys=reserved_for_recent
-    )
+    recent_summary: dict = {}
+    if run_bundle == "all":
+        reserved_for_recent = set(reserved) | set(should_have) | set(log.keys())
+        recent_summary = run_recently_added_overlays(
+            plex, config, paths, preview_mode, progress, reserved_keys=reserved_for_recent
+        )
 
     summary = {
         "ok": True,
+        "runBundle": run_bundle,
         "previewMode": preview_mode,
         "newSeasonEnabled": new_season_on,
         "added": added,
@@ -2100,17 +2191,19 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
         "finishedAt": datetime.now().isoformat(),
     }
     summary.update(live_summary)
-    summary.update(recent_summary)
-    summary.update(kometa_summary)
-    if kometa_summary.get("kometaStyleErrors"):
-        summary["errors"] = [*(summary.get("errors") or []), *kometa_summary["kometaStyleErrors"]]
+    if recent_summary:
+        summary.update(recent_summary)
+    if kometa_summary:
+        summary.update(kometa_summary)
+        if kometa_summary.get("kometaStyleErrors"):
+            summary["errors"] = [*(summary.get("errors") or []), *kometa_summary["kometaStyleErrors"]]
 
     episode_summary = run_new_episode_overlays(
         plex, config, paths, preview_mode, progress, resolver=resolver
     )
     summary.update(episode_summary)
     if episode_summary.get("episodeErrors"):
-        summary["errors"] = [*errors, *episode_summary["episodeErrors"]]
+        summary["errors"] = [*(summary.get("errors") or []), *episode_summary["episodeErrors"]]
 
     top10_summary = run_top10_overlays(plex, config, paths, preview_mode, progress)
     summary.update(top10_summary)
@@ -2130,10 +2223,11 @@ def run_overlays(config: dict, progress: ProgressFn | None = None, preview_overr
     else:
         _progress(
             progress,
-            f"Done — seasons +{added}/−{removed}; episodes +{episode_summary.get('episodesAdded', 0)}/"
-            f"−{episode_summary.get('episodesRemoved', 0)}",
+            f"Done — seasons +{added}/-{removed}; episodes +{episode_summary.get('episodesAdded', 0)}/"
+            f"-{episode_summary.get('episodesRemoved', 0)}",
         )
     return summary
+
 
 
 def reconcile(config: dict, progress: ProgressFn | None = None) -> dict:

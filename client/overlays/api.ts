@@ -160,9 +160,13 @@ export type OverlaysConfig = {
     episodeOverlayPresetId?: string;
     placement?: OverlaysPlacement;
     scheduleHours?: number;
+    recentlyAddedScheduleHours?: number;
+    kometaScheduleHours?: number;
     skipIfKometaOverlayLabel?: boolean;
     plexSource?: string;
     lastRunAt?: string | null;
+    recentlyAddedLastRunAt?: string | null;
+    kometaLastRunAt?: string | null;
     lastRunSummary?: Record<string, unknown> | null;
 };
 
@@ -207,8 +211,10 @@ export const overlaysApi = {
     sections: () => apiFetch(`${ROOT}/sections`),
     scan: () => apiFetch(`${ROOT}/scan`, json({})),
     reconcile: () => apiFetch(`${ROOT}/reconcile`, json({})),
-    run: (options?: { preview?: boolean }) => apiFetch(`${ROOT}/run`, json(options || {})),
-    preview: () => apiFetch(`${ROOT}/preview`, json({})),
+    run: (options?: { preview?: boolean; bundle?: 'core' | 'recently' | 'kometa' | 'all' }) =>
+        apiFetch(`${ROOT}/run`, json(options || {})),
+    preview: (options?: { bundle?: 'core' | 'recently' | 'kometa' | 'all' }) =>
+        apiFetch(`${ROOT}/preview`, json(options || {})),
     promote: () => apiFetch(`${ROOT}/promote`, json({})),
     stop: () => apiFetch(`${ROOT}/stop`, json({})),
     importLog: (log: Record<string, unknown>, mode: 'merge' | 'replace' = 'merge') => (

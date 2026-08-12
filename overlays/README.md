@@ -39,6 +39,15 @@ Images are cached at runtime under `config/overlays/kometa-images/` (not vendore
 - Layout is stored in `config/overlays/config.json` under `placement` and honoured by Preview, Run, and visual samples
 - Changing placement does not auto-restamp live Plex art — run Preview or Run again
 
+## Runs (separate jobs)
+
+Preview / Run now only runs the **core** bundle (Live, New Season, New Episode, Top 10).
+
+- **Run Recently Added** — Recently Added banners only (system job `Overlays: Recently Added`)
+- **Run Media / Kometa** — resolution / status / ratings / network only (system job `Overlays: Media / Kometa`)
+
+Each has its own schedule hours in Settings (0 = off). They share one worker lock so two overlay runs never stamp posters at the same time.
+
 ## Setup
 
 ```bash
