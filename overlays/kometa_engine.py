@@ -453,15 +453,18 @@ def _apply_custom_collection_winners(
     *,
     progress: ProgressFn | None = None,
     errors: list[str] | None = None,
-) -> None:
+) -> dict[str, set[str]]:
     """Inject custom_collection winners from live Plex membership.
 
     An item may belong to multiple configured collections — all matching badges
     are stacked (previously first-rule-wins hid later collections from the tracked list).
+
+    Returns rule_id -> set of member ratingKeys discovered in Plex.
     """
     rules = _custom_collection_rules(config)
+    rule_members: dict[str, set[str]] = {}
     if not rules:
-        return
+        return rule_members
     # ratingKey -> ordered list of (rule, image_path)
     member_badges: dict[str, list[tuple[dict, Path]]] = {}
     rule_members: dict[str, set[str]] = {}
@@ -497,8 +500,6 @@ def _apply_custom_collection_winners(
     queued_by_rule: dict[str, int] = {rule["id"]: 0 for rule in rules}
     dropped = 0
     for rk, badge_rows in member_badges.items():
-        # Library scope: item must fit at least one matching rule's library.
-        primary_rule, primary_path = badge_rows[0]
         expected_libs = [(r, p) for r, p in badge_rows]
         row = should.get(rk)
         item = row.get("item") if row else None
@@ -516,6 +517,15 @@ def _apply_custom_collection_winners(
             _progress(progress, f"Collection badge skip {rk}: episode art is not stamped")
             dropped += 1
             continue
+        if item_type == "season":
+            show_rk = _collection_member_target_key(item)
+            if show_rk and show_rk != rk:
+                show_item = _fetch_plex_item(plex, show_rk)
+                if show_item is not None:
+                    rk = show_rk
+                    item = show_item
+                    item_type = str(getattr(item, "type", "") or "").lower()
+                    row = should.get(rk)
         actual_lib = _item_library_title(item)
         actual_id = _item_library_section_id(item)
         compatible_rows: list[tuple[dict, Path]] = []
@@ -576,6 +586,8 @@ def _apply_custom_collection_winners(
                 "winners": {},
             }
             should[rk] = row
+        else:
+            row["item"] = item
         row["winners"]["custom_collection"] = winner
 
     for rule in rules:
@@ -588,8 +600,14 @@ def _apply_custom_collection_winners(
                 f"Collection badge '{rule.get('name') or rid}': queued {queued}/{total} "
                 f"for stamping (see skip lines above for the rest)",
             )
+        elif total:
+            _progress(
+                progress,
+                f"Collection badge '{rule.get('name') or rid}': queued {queued}/{total} for stamping",
+            )
     if dropped:
         _progress(progress, f"Custom collection: {dropped} member(s) could not be queued")
+    return rule_members
 
 
 # ---------------------------------------------------------------------------
@@ -1173,9 +1191,10 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             if row["winners"]:
                 should[key] = row
 
+    cc_rule_members: dict[str, set[str]] = {}
     if "custom_collection" in families:
         _progress(progress, "Resolving custom collection badge membership…")
-        _apply_custom_collection_winners(
+        cc_rule_members = _apply_custom_collection_winners(
             plex,
             config,
             paths,
@@ -1192,11 +1211,13 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
     _progress(progress, f"Kometa eligible: {len(should)} of {scanned} scanned")
 
     # Stamp
+    cc_stamped_ok: set[str] = set()
     for key, row in sorted(should.items(), key=lambda kv: kv[0]):
         item = row["item"]
         winners: dict[str, Winner] = row["winners"]
         existing = log.get(key)
         sig = _signature(winners, config)
+        has_collection_badge = "custom_collection" in winners
         try:
             wanted_labels = _winner_label_names(winners)
             current_thumb = _item_poster_thumb(item)
@@ -1204,6 +1225,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             # Signature alone is not enough: New Season / manual / TPDB poster replaces wipe
             # the badge while leaving the log Live with the same winners → silent skip.
             # Plex thumb URLs bump whenever art changes, so mismatch forces a restamp.
+            # Custom collection badges always restamp — skip was leaving members without badges.
             art_unchanged = bool(tracked_thumb) and tracked_thumb == current_thumb
             if (
                 existing
@@ -1212,6 +1234,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 and not bool(existing.get("needsRestamp"))
                 and existing.get("signature") == sig
                 and art_unchanged
+                and not has_collection_badge
             ):
                 # Already stamped — still backfill / refresh Plex Labels when missing or drifted.
                 prev_labels = existing.get("overlayLabels") if isinstance(existing.get("overlayLabels"), list) else None
@@ -1224,7 +1247,12 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                         errors.append(f"kometa labels {getattr(item, 'title', key)}: {exc}")
                 skipped += 1
                 continue
-            if (
+            if has_collection_badge and not preview_mode:
+                _progress(
+                    progress,
+                    f"Collection badge stamp: {getattr(item, 'title', key)}",
+                )
+            elif (
                 existing
                 and not preview_mode
                 and not bool(existing.get("preview_only"))
@@ -1321,14 +1349,30 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             merged.pop("legacyModes", None)
             log[key] = merged
             added += 1
+            if has_collection_badge and not preview_mode:
+                cc_stamped_ok.add(key)
             for family in winners:
                 family_counts[family] = family_counts.get(family, 0) + 1
         except Exception as exc:
             errors.append(f"kometa {getattr(item, 'title', key)}: {exc}")
             _progress(progress, f"Kometa stamp failed for {getattr(item, 'title', key)}: {exc}")
-            if existing and isinstance(existing, dict) and bool(existing.get("preview_only")) and not preview_mode:
-                # Keep preview flag but mark for another attempt on the next live run.
-                log[key] = {**existing, "needsRestamp": True}
+            # Keep the title visible in the tracked list so missing badges are obvious.
+            fail_entry = {
+                **(existing if isinstance(existing, dict) else {}),
+                "title": getattr(item, "title", key),
+                "library": row.get("library") or (existing or {}).get("library") or "",
+                "itemType": row.get("itemType") or (existing or {}).get("itemType") or "",
+                "timestamp": datetime.now().isoformat(),
+                "needsRestamp": True,
+                "signature": sig,
+                "families": {family: winner.as_log() for family, winner in winners.items()},
+            }
+            if not preview_mode:
+                # Stay Live-looking in UI but flagged for another attempt.
+                fail_entry["preview_only"] = False
+            elif existing and isinstance(existing, dict) and bool(existing.get("preview_only")):
+                fail_entry["preview_only"] = True
+            log[key] = fail_entry
 
     # Prune entries no longer eligible
     for key in list(log.keys()):
@@ -1346,6 +1390,30 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             removed += 1
         except Exception as exc:
             errors.append(f"kometa remove {key}: {exc}")
+
+    if cc_rule_members and not preview_mode:
+        rules_by_id = {r["id"]: r for r in _custom_collection_rules(config)}
+        for rid, members in cc_rule_members.items():
+            missing = sorted(members - cc_stamped_ok)
+            if not missing:
+                _progress(
+                    progress,
+                    f"Collection badge '{(rules_by_id.get(rid) or {}).get('name') or rid}': "
+                    f"all {len(members)} member(s) stamped",
+                )
+                continue
+            names = []
+            for mk in missing[:12]:
+                row = should.get(mk) or {}
+                title = getattr(row.get("item"), "title", None) or (log.get(mk) or {}).get("title") or mk
+                names.append(str(title))
+            extra = f" (+{len(missing) - len(names)} more)" if len(missing) > len(names) else ""
+            msg = (
+                f"Collection badge '{(rules_by_id.get(rid) or {}).get('name') or rid}': "
+                f"{len(missing)}/{len(members)} member(s) NOT stamped this run — {', '.join(names)}{extra}"
+            )
+            errors.append(msg)
+            _progress(progress, msg)
 
     if tmdb is not None:
         tmdb.save()
