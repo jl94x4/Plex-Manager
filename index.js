@@ -3779,6 +3779,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyNewEpisodeWebPush,
             notifyWebPush,
             showDiscoverNowPlaying,
+            uiLocale,
         } = req.body || {};
         const users = await loadFile(USERS_PATH, []);
         const localUser = findLocalUserForSession(users, req.user);
@@ -3794,6 +3795,13 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             if (oldPref !== !!optOutNewsletter) {
                 await appendAuditLog(optOutNewsletter ? 'newsletter_opt_out' : 'newsletter_opt_in', req.user, req.user);
             }
+        }
+        if (uiLocale !== undefined) {
+            const normalizedLocale = String(uiLocale || '').trim().toLowerCase();
+            if (!['en', 'fr', 'de', 'es'].includes(normalizedLocale)) {
+                return res.status(400).json({ error: 'Unsupported locale' });
+            }
+            users[userIndex].uiLocale = normalizedLocale;
         }
         const boolPrefs = {
             notifyRequestAvailableEmail,

@@ -1,12 +1,15 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { apiFetch } from '../../shared/api';
 import { en } from './en';
 import { fr } from './fr';
 import { de } from './de';
 import { es } from './es';
 import {
-    DISCOVER_UI_LOCALE_KEY,
+    detectDiscoverBrowserLocale,
+    isDiscoverLocale,
     normalizeDiscoverLocale,
-    readDiscoverUiLocale,
+    readStoredDiscoverUiLocale,
+    setDiscoverUiLocale,
     type DiscoverLocale,
     type DiscoverTranslate,
     type DiscoverTranslateVars,
@@ -159,20 +162,47 @@ type DiscoverI18nContextValue = {
 
 const DiscoverI18nContext = createContext<DiscoverI18nContextValue | null>(null);
 
-export const DiscoverI18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const DiscoverI18nProvider: React.FC<{
+    children: React.ReactNode;
+    accountLocale?: unknown;
+    accountId?: unknown;
+}> = ({ children, accountLocale, accountId }) => {
+    const accountKey = String(accountId || '');
+    const previousAccountKey = useRef(accountKey);
+    const explicitLocale = useRef<DiscoverLocale | null>(null);
     const [locale, setLocaleState] = useState<DiscoverLocale>(() => (
-        typeof window !== 'undefined' ? readDiscoverUiLocale() : 'en'
+        isDiscoverLocale(accountLocale)
+            ? accountLocale
+            : (readStoredDiscoverUiLocale() || detectDiscoverBrowserLocale())
     ));
 
     const setLocale = useCallback((next: DiscoverLocale) => {
         const normalized = normalizeDiscoverLocale(next);
+        explicitLocale.current = normalized;
         setLocaleState(normalized);
-        try {
-            localStorage.setItem(DISCOVER_UI_LOCALE_KEY, normalized);
-        } catch {
-            /* ignore */
-        }
+        setDiscoverUiLocale(normalized);
+        void apiFetch('/api/users/preferences', {
+            method: 'POST',
+            body: JSON.stringify({ uiLocale: normalized }),
+        }).catch(() => {
+            // Local state remains authoritative when account persistence is unavailable.
+        });
     }, []);
+
+    React.useEffect(() => {
+        if (previousAccountKey.current !== accountKey) {
+            previousAccountKey.current = accountKey;
+            explicitLocale.current = null;
+        }
+        if (!isDiscoverLocale(accountLocale)) return;
+        if (explicitLocale.current) return;
+        setLocaleState(accountLocale);
+        setDiscoverUiLocale(accountLocale);
+    }, [accountId, accountKey, accountLocale]);
+
+    React.useEffect(() => {
+        setDiscoverUiLocale(locale);
+    }, [locale]);
 
     const t = useMemo(() => createDiscoverTranslate(locale), [locale]);
 
