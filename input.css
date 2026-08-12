@@ -217,6 +217,9 @@
    */
   .ios-mobile-bottom-nav {
     padding-bottom: 0;
+    /* First paint: sit on the large viewport, not above Safari's bottom chrome. */
+    top: auto;
+    bottom: calc(100svh - 100lvh);
   }
 
   @media (display-mode: standalone), (display-mode: fullscreen) {

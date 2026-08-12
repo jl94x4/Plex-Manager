@@ -12059,7 +12059,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         <div
                             ref={firefoxNavBarRef}
                             className={`md:hidden fixed inset-x-0 bottom-0 w-full max-w-full nav-shell border-t z-[310] overflow-visible ${bottomSafeClass}`}
-                            style={{ bottom: 0 }}
+                            style={iosMobileNav
+                                ? { top: 'auto', bottom: 'calc(100svh - 100lvh)' }
+                                : { bottom: 0 }}
                         >
                             {navInner}
                             <div

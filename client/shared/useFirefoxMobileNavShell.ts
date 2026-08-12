@@ -65,7 +65,7 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
         if (!enabled || typeof window === 'undefined') return;
 
         let raf = 0;
-        let lastTop = Number.NaN;
+        let lastTop: number | string = Number.NaN;
         const ios = isIosMobileClient();
         const largeViewportHeight = ios ? readLargeViewportHeight() : 0;
 
@@ -87,37 +87,32 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
 
             const vv = window.visualViewport;
             const barH = Math.max(bar.offsetHeight || 0, 56);
-            // Prefer the largest known layout height — iOS Safari often keeps
-            // innerHeight short after the URL bar collapses.
+            const landscape = window.innerWidth > window.innerHeight;
+            const screenFloor = ios
+                ? (landscape
+                    ? Math.min(window.screen?.width || 0, window.screen?.height || 0)
+                    : Math.max(window.screen?.width || 0, window.screen?.height || 0))
+                : 0;
             const layoutBottom = Math.max(
                 window.innerHeight || 0,
                 document.documentElement?.clientHeight || 0,
                 vv ? Math.ceil(vv.height + vv.offsetTop) : 0,
                 largeViewportHeight,
+                screenFloor,
             );
+            const visualBottom = vv ? (vv.offsetTop + vv.height) : layoutBottom;
+            const isZoomed = vv ? Math.abs(vv.scale - 1) > 0.01 : false;
+            const coveredByToolbar = layoutBottom - visualBottom;
+
             let dockBottom = layoutBottom;
-
-            if (vv) {
-                const visualBottom = vv.offsetTop + vv.height;
-                const coveredByToolbar = layoutBottom - visualBottom;
-                const isZoomedOrPanned = vv.offsetTop > 1 || Math.abs(vv.scale - 1) > 0.01;
-
-                if (isZoomedOrPanned) {
-                    dockBottom = visualBottom;
-                } else if (!ios && coveredByToolbar > 24) {
-                    // Firefox: toolbar is visible over the page — keep the bar above it.
-                    dockBottom = visualBottom;
-                } else {
-                    // iOS (and Firefox with chrome collapsed): pin to the large
-                    // viewport so first paint matches the post-scroll bottom.
-                    dockBottom = Math.max(layoutBottom, visualBottom);
-                }
+            if (isZoomed) {
+                dockBottom = visualBottom;
+            } else if (!ios && coveredByToolbar > 24) {
+                // Firefox: toolbar is visible over the page — keep the bar above it.
+                dockBottom = visualBottom;
+            } else {
+                dockBottom = Math.max(layoutBottom, visualBottom);
             }
-
-            const top = Math.round(dockBottom - barH);
-
-            if (top === lastTop) return;
-            lastTop = top;
 
             bar.style.position = 'fixed';
             bar.style.left = '0px';
@@ -125,10 +120,26 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             bar.style.width = '';
             bar.style.maxWidth = '';
             bar.style.margin = '0';
+            bar.style.transform = 'translateZ(0)';
+
+            if (ios && !isZoomed) {
+                // iOS `position:fixed` is visual-viewport-relative. `bottom:0` therefore
+                // sits above Safari's chrome on first load. Shift down by the gap to
+                // the large/screen viewport so the bar starts on the device bottom.
+                const gap = Math.round(visualBottom - dockBottom);
+                const key = `b:${gap}`;
+                if (key === lastTop) return;
+                lastTop = key;
+                bar.style.top = 'auto';
+                bar.style.bottom = `${gap}px`;
+                return;
+            }
+
+            const top = Math.round(dockBottom - barH);
+            if (top === lastTop) return;
+            lastTop = top;
             bar.style.bottom = 'auto';
             bar.style.top = `${top}px`;
-            // Own compositor layer — reduces paint gaps during toolbar animation.
-            bar.style.transform = 'translateZ(0)';
         };
 
         const schedule = () => {
