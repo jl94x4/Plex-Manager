@@ -31,8 +31,10 @@ import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { overlaysApi, DEFAULT_OVERLAY_PLACEMENT, type OverlaysConfig, type OverlaysPlacement } from './api';
 import { PlacementEditor } from './PlacementEditor';
+import { OverlayJobCard } from './OverlayJobCard';
 
-type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'settings' | 'import' | 'activity';
+type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'advanced' | 'activity';
+type JobCardId = 'banners' | 'recently' | 'kometa';
 type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'promote' | 'resetAll' | 'run' | 'runRecently' | 'runKometa' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample';
 
 type SampleMeta = {
@@ -137,6 +139,11 @@ export const OverlaysDashboard: React.FC = () => {
     const [sampleCandidates, setSampleCandidates] = useState<Array<{ ratingKey: string; title: string }>>([]);
     const [gallery, setGallery] = useState<Array<{ name: string; kind: string; url: string; mtime: number }>>([]);
     const [collapsedBinges, setCollapsedBinges] = useState<Record<string, boolean>>({});
+    const [jobCardExpanded, setJobCardExpanded] = useState<Record<JobCardId, boolean>>({
+        banners: false,
+        recently: false,
+        kometa: false,
+    });
     const sampleLoadedRef = React.useRef(false);
     const wasRunningRef = React.useRef(false);
 
@@ -220,7 +227,7 @@ export const OverlaysDashboard: React.FC = () => {
     }, [toast, t]);
 
     useEffect(() => {
-        if (tab !== 'settings') return;
+        if (tab !== 'advanced') return;
         if (sections.length > 0) return;
         void loadSections();
     }, [tab, sections.length, loadSections]);
@@ -232,16 +239,31 @@ export const OverlaysDashboard: React.FC = () => {
     const episodeCount = episodes.length || status?.episodeLogCount || 0;
     const trackedTotal = showCount + episodeCount;
     const jobRunning = !!status?.running;
+    const runningCommand = String(status?.command || '');
+    const coreJobActive = jobRunning && (runningCommand === 'run' || runningCommand === 'preview');
+    const recentlyJobActive = jobRunning && (runningCommand === 'run-recently' || runningCommand === 'preview-recently');
+    const kometaJobActive = jobRunning && (runningCommand === 'run-kometa' || runningCommand === 'preview-kometa');
+    const bannersEnabled = configDraft.newSeasonEnabled !== false
+        || configDraft.newEpisodeEnabled !== false
+        || configDraft.liveScheduleEnabled === true
+        || configDraft.top10Enabled === true;
+    const kometaEnabled = configDraft.mediaInfoEnabled === true
+        || configDraft.statusOverlayEnabled === true
+        || configDraft.ratingsOverlayEnabled === true
+        || configDraft.networkOverlayEnabled === true;
 
     const tabs = useMemo(() => ([
         { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
         { id: 'shows' as const, label: t('overlays.tabs.shows', { count: showCount, episodes: episodeCount }), icon: List },
         { id: 'gallery' as const, label: t('overlays.tabs.gallery'), icon: Layers },
         { id: 'placement' as const, label: t('overlays.tabs.placement'), icon: Move },
-        { id: 'settings' as const, label: t('overlays.tabs.settings'), icon: Settings2 },
-        { id: 'import' as const, label: t('overlays.tabs.import'), icon: Upload },
+        { id: 'advanced' as const, label: t('overlays.tabs.advanced'), icon: Settings2 },
         { id: 'activity' as const, label: t('overlays.tabs.activity'), icon: Activity },
     ]), [showCount, episodeCount, t]);
+
+    const toggleJobCard = useCallback((id: JobCardId) => {
+        setJobCardExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+    }, []);
 
     const seasonPresetOptions = useMemo(
         () => (status?.presets || [])
@@ -434,7 +456,7 @@ export const OverlaysDashboard: React.FC = () => {
     }, [tab, loadGallery]);
 
     useEffect(() => {
-        if (tab !== 'settings') return;
+        if (tab !== 'advanced') return;
         const q = sampleQuery.trim();
         const timer = window.setTimeout(() => {
             void overlaysApi.sampleCandidates(q).then((res) => {
@@ -445,7 +467,7 @@ export const OverlaysDashboard: React.FC = () => {
     }, [tab, sampleQuery]);
 
     useEffect(() => {
-        if (tab !== 'settings' && tab !== 'placement') return;
+        if (tab !== 'advanced' && tab !== 'placement') return;
         if (sampleLoadedRef.current) return;
         sampleLoadedRef.current = true;
         let cancelled = false;
@@ -555,96 +577,26 @@ export const OverlaysDashboard: React.FC = () => {
                         >
                             <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> {t('overlays.actions.refresh')}
                         </button>
-                        <button
-                            type="button"
-                            className={buttonClass}
-                            disabled={busy === 'stop' || !jobRunning}
-                            onClick={() => void runAction('stop', () => overlaysApi.stop())}
-                        >
-                            <Square className="h-4 w-4" /> {t('overlays.actions.stop')}
-                        </button>
-                        <button
-                            type="button"
-                            className={buttonClass}
-                            disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('preview', () => overlaysApi.preview({ bundle: 'core' }))}
-                        >
-                            {t('overlays.actions.preview')}
-                        </button>
-                        <button
-                            type="button"
-                            className={buttonClass}
-                            disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('previewRecently', () => overlaysApi.preview({ bundle: 'recently' }))}
-                        >
-                            {busy === 'previewRecently' || status?.command === 'preview-recently'
-                                ? <Loader2 className="h-4 w-4 animate-spin" />
-                                : null}
-                            {t('overlays.actions.previewRecently')}
-                        </button>
-                        <button
-                            type="button"
-                            className={buttonClass}
-                            disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('previewKometa', () => overlaysApi.preview({ bundle: 'kometa' }))}
-                        >
-                            {busy === 'previewKometa' || status?.command === 'preview-kometa'
-                                ? <Loader2 className="h-4 w-4 animate-spin" />
-                                : null}
-                            {t('overlays.actions.previewKometa')}
-                        </button>
-                        <button
-                            type="button"
-                            className={`${buttonClass} border-emerald-500/40 text-emerald-100`}
-                            disabled={!canPromote}
-                            onClick={promotePreview}
-                        >
-                            {busy === 'promote' || (jobRunning && status?.command === 'promote')
-                                ? <Loader2 className="h-4 w-4 animate-spin" />
-                                : <CheckCircle2 className="h-4 w-4" />}
-                            {t('overlays.actions.promote')}
-                        </button>
-                        <button
-                            type="button"
-                            className={`${buttonClass} border-amber-500/40 text-amber-100`}
-                            disabled={!canResetAll}
-                            onClick={resetAll}
-                        >
-                            <RotateCcw className="h-4 w-4" /> {t('overlays.actions.resetAll')}
-                        </button>
-                        <button
-                            type="button"
-                            className={primaryButtonClass}
-                            disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('run', () => overlaysApi.run({ preview: false, bundle: 'core' }))}
-                        >
-                            {busy === 'run' || (jobRunning && (status?.command === 'run' || status?.command === 'preview'))
-                                ? <Loader2 className="h-4 w-4 animate-spin" />
-                                : <Play className="h-4 w-4" />}
-                            {t('overlays.actions.runNow')}
-                        </button>
-                        <button
-                            type="button"
-                            className={buttonClass}
-                            disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('runRecently', () => overlaysApi.run({ preview: false, bundle: 'recently' }))}
-                        >
-                            {busy === 'runRecently' || status?.command === 'run-recently'
-                                ? <Loader2 className="h-4 w-4 animate-spin" />
-                                : <Play className="h-4 w-4" />}
-                            {t('overlays.actions.runRecently')}
-                        </button>
-                        <button
-                            type="button"
-                            className={buttonClass}
-                            disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('runKometa', () => overlaysApi.run({ preview: false, bundle: 'kometa' }))}
-                        >
-                            {busy === 'runKometa' || status?.command === 'run-kometa'
-                                ? <Loader2 className="h-4 w-4 animate-spin" />
-                                : <Play className="h-4 w-4" />}
-                            {t('overlays.actions.runKometa')}
-                        </button>
+                        {jobRunning ? (
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy === 'stop'}
+                                onClick={() => void runAction('stop', () => overlaysApi.stop())}
+                            >
+                                <Square className="h-4 w-4" /> {t('overlays.actions.stop')}
+                            </button>
+                        ) : null}
+                        {canPromote ? (
+                            <button
+                                type="button"
+                                className={`${buttonClass} border-emerald-500/40 text-emerald-100`}
+                                onClick={promotePreview}
+                            >
+                                <CheckCircle2 className="h-4 w-4" />
+                                {t('overlays.actions.promote')}
+                            </button>
+                        ) : null}
                     </>
                 )}
             />
@@ -751,49 +703,563 @@ export const OverlaysDashboard: React.FC = () => {
                         />
                     </div>
 
-                    <DashboardPanel title={t('overlays.quick.title')} subtitle={t('overlays.quick.subtitle')}>
-                        <div className="flex flex-wrap items-end gap-3">
-                            <label className="min-w-[160px] flex-1">
-                                <span className={fieldLabelClass}>{t('overlays.fields.newSeasonWindowDays')}</span>
-                                <input
-                                    type="number"
-                                    min={1}
-                                    max={365}
-                                    className={fieldInputClass}
-                                    value={configDraft.newSeasonDays ?? 21}
-                                    onChange={(e) => setConfigDraft((prev) => ({
-                                        ...prev,
-                                        newSeasonDays: Math.max(1, Math.min(365, Number(e.target.value) || 21)),
-                                    }))}
-                                />
-                            </label>
-                            <label className="min-w-[160px] flex-1">
-                                <span className={fieldLabelClass}>{t('overlays.fields.scheduleHoursShort')}</span>
+                    <div className="space-y-3">
+                        <OverlayJobCard
+                            title={t('overlays.jobs.banners.title')}
+                            hint={t('overlays.jobs.banners.hint')}
+                            statusLabel={coreJobActive
+                                ? t('overlays.jobs.status.running')
+                                : !bannersEnabled
+                                    ? t('overlays.jobs.status.off')
+                                    : status?.lastRunAt
+                                        ? t('overlays.jobs.status.lastRun', { when: new Date(status.lastRunAt).toLocaleString() })
+                                        : t('overlays.jobs.status.idle')}
+                            statusTone={coreJobActive ? 'running' : !bannersEnabled ? 'off' : 'idle'}
+                            enabledSummary={t('overlays.jobs.banners.enabledSummary', {
+                                season: configDraft.newSeasonEnabled !== false ? t('overlays.jobs.on') : t('overlays.jobs.off'),
+                                episode: configDraft.newEpisodeEnabled !== false ? t('overlays.jobs.on') : t('overlays.jobs.off'),
+                                live: configDraft.liveScheduleEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
+                                top10: configDraft.top10Enabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
+                            })}
+                            previewLabel={t('overlays.actions.preview')}
+                            runLabel={t('overlays.actions.runNow')}
+                            expandLabel={t('overlays.jobs.expand')}
+                            collapseLabel={t('overlays.jobs.collapse')}
+                            expanded={jobCardExpanded.banners}
+                            onToggleExpand={() => toggleJobCard('banners')}
+                            onPreview={() => startBackgroundJob('preview', () => overlaysApi.preview({ bundle: 'core' }))}
+                            onRun={() => startBackgroundJob('run', () => overlaysApi.run({ preview: false, bundle: 'core' }))}
+                            previewBusy={busy === 'preview' || (coreJobActive && runningCommand === 'preview')}
+                            runBusy={busy === 'run' || (coreJobActive && runningCommand === 'run')}
+                            actionsDisabled={busy !== null || jobRunning || !workerReady}
+                        >
+                            <SettingsToggleRow
+                                title={t('overlays.settings.newSeasonEnabled')}
+                                description={t('overlays.settings.newSeasonEnabledHint')}
+                                checked={configDraft.newSeasonEnabled !== false}
+                                onChange={(newSeasonEnabled) => setConfigDraft((prev) => ({ ...prev, newSeasonEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.newSeasonWatchNowStyle')}
+                                description={t('overlays.settings.newSeasonWatchNowStyleHint')}
+                                checked={configDraft.newSeasonWatchNowStyle === true}
+                                onChange={(newSeasonWatchNowStyle) => setConfigDraft((prev) => ({ ...prev, newSeasonWatchNowStyle }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.newEpisodeEnabled')}
+                                description={t('overlays.settings.newEpisodeEnabledHint')}
+                                checked={configDraft.newEpisodeEnabled !== false}
+                                onChange={(newEpisodeEnabled) => setConfigDraft((prev) => ({ ...prev, newEpisodeEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.newEpisodeWatchNowStyle')}
+                                description={t('overlays.settings.newEpisodeWatchNowStyleHint')}
+                                checked={configDraft.newEpisodeWatchNowStyle === true}
+                                onChange={(newEpisodeWatchNowStyle) => setConfigDraft((prev) => ({ ...prev, newEpisodeWatchNowStyle }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.skipNewEpisodeOnBinge')}
+                                description={t('overlays.settings.skipNewEpisodeOnBingeHint')}
+                                checked={configDraft.skipNewEpisodeOnBinge !== false}
+                                onChange={(skipNewEpisodeOnBinge) => setConfigDraft((prev) => ({ ...prev, skipNewEpisodeOnBinge }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.liveScheduleEnabled')}
+                                description={t('overlays.settings.liveScheduleEnabledHint')}
+                                checked={configDraft.liveScheduleEnabled === true}
+                                onChange={(liveScheduleEnabled) => setConfigDraft((prev) => ({ ...prev, liveScheduleEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.top10Enabled')}
+                                description={t('overlays.settings.top10EnabledHint')}
+                                checked={configDraft.top10Enabled === true}
+                                onChange={(top10Enabled) => setConfigDraft((prev) => ({ ...prev, top10Enabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.tmdbAirDateFallback')}
+                                description={t('overlays.settings.tmdbAirDateFallbackHint')}
+                                checked={configDraft.tmdbAirDateFallback !== false}
+                                onChange={(tmdbAirDateFallback) => setConfigDraft((prev) => ({ ...prev, tmdbAirDateFallback }))}
+                            />
+                            <div className="grid gap-3 md:grid-cols-2">
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.fields.newSeasonWindowDays')}</span>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={365}
+                                        className={fieldInputClass}
+                                        value={configDraft.newSeasonDays ?? 21}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            newSeasonDays: Math.max(1, Math.min(365, Number(e.target.value) || 21)),
+                                        }))}
+                                    />
+                                    <span className="mt-1 block text-[11px] text-muted">{t('overlays.settings.windowHint')}</span>
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.fields.newEpisodeWindowDays')}</span>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={30}
+                                        className={fieldInputClass}
+                                        value={configDraft.newEpisodeDays ?? 6}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            newEpisodeDays: Math.max(1, Math.min(30, Number(e.target.value) || 6)),
+                                        }))}
+                                    />
+                                    <span className="mt-1 block text-[11px] text-muted">{t('overlays.settings.newEpisodeWindowHint')}</span>
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.fields.liveScheduleDays')}</span>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={14}
+                                        className={fieldInputClass}
+                                        value={configDraft.liveScheduleDays ?? 1}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            liveScheduleDays: Math.max(0, Math.min(14, Number(e.target.value) || 0)),
+                                        }))}
+                                    />
+                                    <span className="mt-1 block text-[11px] text-muted">{t('overlays.settings.liveScheduleDaysHint')}</span>
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.fields.top10Count')}</span>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={50}
+                                        className={fieldInputClass}
+                                        value={configDraft.top10Count ?? 10}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            top10Count: Math.max(1, Math.min(50, Number(e.target.value) || 10)),
+                                        }))}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.fields.scheduleHours')}</span>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={168}
+                                        className={fieldInputClass}
+                                        value={configDraft.scheduleHours ?? 24}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            scheduleHours: Number(e.target.value) || 0,
+                                        }))}
+                                    />
+                                    <span className="mt-1 block text-[11px] text-muted">{t('overlays.settings.coreScheduleHint')}</span>
+                                </label>
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2">
+                                <div>
+                                    <span className={fieldLabelClass}>{t('overlays.settings.overlayPreset')}</span>
+                                    <CustomSelect
+                                        className="mt-1.5"
+                                        value={configDraft.overlayPresetId || 'new-season'}
+                                        onChange={(value) => setConfigDraft((prev) => ({ ...prev, overlayPresetId: value }))}
+                                        options={seasonPresetOptions.length ? seasonPresetOptions : [{ value: 'new-season', label: 'new-season' }]}
+                                    />
+                                    <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-plex">
+                                        <input
+                                            type="file"
+                                            accept="image/png"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                e.target.value = '';
+                                                if (!file) return;
+                                                void runAction('saveSettings', async () => {
+                                                    const up = await overlaysApi.uploadPreset('season', file);
+                                                    const id = up?.preset?.id;
+                                                    if (id) setConfigDraft((prev) => ({ ...prev, overlayPresetId: id }));
+                                                    await refresh();
+                                                });
+                                            }}
+                                        />
+                                        {t('overlays.settings.uploadSeasonPreset')}
+                                    </label>
+                                </div>
+                                <div>
+                                    <span className={fieldLabelClass}>{t('overlays.settings.episodeOverlayPreset')}</span>
+                                    <CustomSelect
+                                        className="mt-1.5"
+                                        value={configDraft.episodeOverlayPresetId || 'new-episode'}
+                                        onChange={(value) => setConfigDraft((prev) => ({ ...prev, episodeOverlayPresetId: value }))}
+                                        options={episodePresetOptions.length ? episodePresetOptions : [{ value: 'new-episode', label: 'new-episode' }]}
+                                    />
+                                    <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-plex">
+                                        <input
+                                            type="file"
+                                            accept="image/png"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                e.target.value = '';
+                                                if (!file) return;
+                                                void runAction('saveSettings', async () => {
+                                                    const up = await overlaysApi.uploadPreset('episode', file);
+                                                    const id = up?.preset?.id;
+                                                    if (id) setConfigDraft((prev) => ({ ...prev, episodeOverlayPresetId: id }));
+                                                    await refresh();
+                                                });
+                                            }}
+                                        />
+                                        {t('overlays.settings.uploadEpisodePreset')}
+                                    </label>
+                                </div>
+                            </div>
+                            <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
+                                <Save className="h-4 w-4" /> {t('overlays.actions.save')}
+                            </button>
+                        </OverlayJobCard>
+
+                        <OverlayJobCard
+                            title={t('overlays.jobs.recently.title')}
+                            hint={t('overlays.jobs.recently.hint')}
+                            statusLabel={recentlyJobActive
+                                ? t('overlays.jobs.status.running')
+                                : configDraft.recentlyAddedEnabled !== true
+                                    ? t('overlays.jobs.status.off')
+                                    : t('overlays.jobs.status.idle')}
+                            statusTone={recentlyJobActive ? 'running' : configDraft.recentlyAddedEnabled !== true ? 'off' : 'idle'}
+                            enabledSummary={configDraft.recentlyAddedEnabled === true
+                                ? t('overlays.jobs.recently.enabledOn', { days: configDraft.recentlyAddedDays ?? 7 })
+                                : t('overlays.jobs.recently.enabledOff')}
+                            previewLabel={t('overlays.actions.previewRecently')}
+                            runLabel={t('overlays.actions.runRecently')}
+                            expandLabel={t('overlays.jobs.expand')}
+                            collapseLabel={t('overlays.jobs.collapse')}
+                            expanded={jobCardExpanded.recently}
+                            onToggleExpand={() => toggleJobCard('recently')}
+                            onPreview={() => startBackgroundJob('previewRecently', () => overlaysApi.preview({ bundle: 'recently' }))}
+                            onRun={() => startBackgroundJob('runRecently', () => overlaysApi.run({ preview: false, bundle: 'recently' }))}
+                            previewBusy={busy === 'previewRecently' || (recentlyJobActive && runningCommand === 'preview-recently')}
+                            runBusy={busy === 'runRecently' || (recentlyJobActive && runningCommand === 'run-recently')}
+                            actionsDisabled={busy !== null || jobRunning || !workerReady}
+                        >
+                            <SettingsToggleRow
+                                title={t('overlays.settings.recentlyAddedEnabled')}
+                                description={t('overlays.settings.recentlyAddedEnabledHint')}
+                                checked={configDraft.recentlyAddedEnabled === true}
+                                onChange={(recentlyAddedEnabled) => setConfigDraft((prev) => ({ ...prev, recentlyAddedEnabled }))}
+                            />
+                            <div className="grid gap-3 md:grid-cols-2">
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.fields.recentlyAddedDays')}</span>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={90}
+                                        className={fieldInputClass}
+                                        value={configDraft.recentlyAddedDays ?? 7}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            recentlyAddedDays: Math.max(1, Math.min(90, Number(e.target.value) || 7)),
+                                        }))}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.fields.recentlyAddedScheduleHours')}</span>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={168}
+                                        className={fieldInputClass}
+                                        value={configDraft.recentlyAddedScheduleHours ?? 24}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            recentlyAddedScheduleHours: Number(e.target.value) || 0,
+                                        }))}
+                                    />
+                                </label>
+                            </div>
+                            <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
+                                <Save className="h-4 w-4" /> {t('overlays.actions.save')}
+                            </button>
+                        </OverlayJobCard>
+
+                        <OverlayJobCard
+                            title={t('overlays.jobs.kometa.title')}
+                            hint={t('overlays.jobs.kometa.hint')}
+                            statusLabel={kometaJobActive
+                                ? t('overlays.jobs.status.running')
+                                : !kometaEnabled
+                                    ? t('overlays.jobs.status.off')
+                                    : t('overlays.jobs.status.idle')}
+                            statusTone={kometaJobActive ? 'running' : !kometaEnabled ? 'off' : 'idle'}
+                            enabledSummary={t('overlays.jobs.kometa.enabledSummary', {
+                                media: configDraft.mediaInfoEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
+                                status: configDraft.statusOverlayEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
+                                ratings: configDraft.ratingsOverlayEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
+                                network: configDraft.networkOverlayEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
+                            })}
+                            previewLabel={t('overlays.actions.previewKometa')}
+                            runLabel={t('overlays.actions.runKometa')}
+                            expandLabel={t('overlays.jobs.expand')}
+                            collapseLabel={t('overlays.jobs.collapse')}
+                            expanded={jobCardExpanded.kometa}
+                            onToggleExpand={() => toggleJobCard('kometa')}
+                            onPreview={() => startBackgroundJob('previewKometa', () => overlaysApi.preview({ bundle: 'kometa' }))}
+                            onRun={() => startBackgroundJob('runKometa', () => overlaysApi.run({ preview: false, bundle: 'kometa' }))}
+                            previewBusy={busy === 'previewKometa' || (kometaJobActive && runningCommand === 'preview-kometa')}
+                            runBusy={busy === 'runKometa' || (kometaJobActive && runningCommand === 'run-kometa')}
+                            actionsDisabled={busy !== null || jobRunning || !workerReady}
+                        >
+                            <SettingsToggleRow
+                                title={t('overlays.settings.mediaInfoEnabled')}
+                                description={t('overlays.settings.mediaInfoEnabledHint')}
+                                checked={configDraft.mediaInfoEnabled === true}
+                                onChange={(mediaInfoEnabled) => setConfigDraft((prev) => ({ ...prev, mediaInfoEnabled }))}
+                            />
+                            {configDraft.mediaInfoEnabled === true && (
+                                <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.mediaInfoParts')}</span>
+                                    <p className="text-[11px] text-muted">{t('overlays.settings.mediaInfoPartsHint')}</p>
+                                    <div className="flex flex-wrap gap-3">
+                                        {([
+                                            ['res4k', '4K'],
+                                            ['res1080p', '1080p'],
+                                            ['res720p', '720p'],
+                                            ['resOther', t('overlays.settings.mediaPartOther')],
+                                            ['hdr', 'HDR'],
+                                            ['dolbyVision', 'Dolby Vision'],
+                                            ['atmos', 'Atmos'],
+                                        ] as const).map(([key, label]) => {
+                                            const parts = { ...DEFAULT_MEDIA_INFO_PARTS, ...(configDraft.mediaInfoParts || {}) };
+                                            return (
+                                                <StyledCheckbox
+                                                    key={key}
+                                                    checked={!!parts[key]}
+                                                    label={label}
+                                                    onChange={(next) => setConfigDraft((prev) => ({
+                                                        ...prev,
+                                                        mediaInfoParts: {
+                                                            ...DEFAULT_MEDIA_INFO_PARTS,
+                                                            ...(prev.mediaInfoParts || {}),
+                                                            [key]: next,
+                                                        },
+                                                    }))}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="flex flex-wrap gap-3">
+                                        <StyledCheckbox
+                                            checked={configDraft.mediaInfoIncludeShows !== false}
+                                            label={t('overlays.settings.includeShows')}
+                                            onChange={(mediaInfoIncludeShows) => setConfigDraft((prev) => ({ ...prev, mediaInfoIncludeShows }))}
+                                        />
+                                        <StyledCheckbox
+                                            checked={configDraft.mediaInfoIncludeMovies !== false}
+                                            label={t('overlays.settings.includeMovies')}
+                                            onChange={(mediaInfoIncludeMovies) => setConfigDraft((prev) => ({ ...prev, mediaInfoIncludeMovies }))}
+                                        />
+                                    </div>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                                value={keysToText(configDraft.mediaInfoAllowKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    mediaInfoAllowKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                                value={keysToText(configDraft.mediaInfoDenyKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    mediaInfoDenyKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.statusOverlayEnabled')}
+                                description={t('overlays.settings.statusOverlayEnabledHint')}
+                                checked={configDraft.statusOverlayEnabled === true}
+                                onChange={(statusOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, statusOverlayEnabled }))}
+                            />
+                            {configDraft.statusOverlayEnabled === true && (
+                                <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                                    <label className="block max-w-xs">
+                                        <span className={fieldLabelClass}>{t('overlays.fields.statusAiringDays')}</span>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={90}
+                                            className={fieldInputClass}
+                                            value={configDraft.statusAiringDays ?? 14}
+                                            onChange={(e) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                statusAiringDays: Math.max(1, Math.min(90, Number(e.target.value) || 14)),
+                                            }))}
+                                        />
+                                    </label>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                                value={keysToText(configDraft.statusAllowKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    statusAllowKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                                value={keysToText(configDraft.statusDenyKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    statusDenyKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.ratingsOverlayEnabled')}
+                                description={t('overlays.settings.ratingsOverlayEnabledHint')}
+                                checked={configDraft.ratingsOverlayEnabled === true}
+                                onChange={(ratingsOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, ratingsOverlayEnabled }))}
+                            />
+                            {configDraft.ratingsOverlayEnabled === true && (
+                                <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                                    <div className="flex flex-wrap gap-3">
+                                        <StyledCheckbox
+                                            checked={configDraft.ratingsIncludeShows !== false}
+                                            label={t('overlays.settings.includeShows')}
+                                            onChange={(ratingsIncludeShows) => setConfigDraft((prev) => ({ ...prev, ratingsIncludeShows }))}
+                                        />
+                                        <StyledCheckbox
+                                            checked={configDraft.ratingsIncludeMovies !== false}
+                                            label={t('overlays.settings.includeMovies')}
+                                            onChange={(ratingsIncludeMovies) => setConfigDraft((prev) => ({ ...prev, ratingsIncludeMovies }))}
+                                        />
+                                    </div>
+                                    <label className="block max-w-xs">
+                                        <span className={fieldLabelClass}>{t('overlays.fields.ratingsMinimum')}</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={10}
+                                            step={0.1}
+                                            className={fieldInputClass}
+                                            value={configDraft.ratingsMinimum ?? 0}
+                                            onChange={(e) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                ratingsMinimum: Math.max(0, Math.min(10, Number(e.target.value) || 0)),
+                                            }))}
+                                        />
+                                    </label>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                                value={keysToText(configDraft.ratingsAllowKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    ratingsAllowKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                                value={keysToText(configDraft.ratingsDenyKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    ratingsDenyKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.networkOverlayEnabled')}
+                                description={t('overlays.settings.networkOverlayEnabledHint')}
+                                checked={configDraft.networkOverlayEnabled === true}
+                                onChange={(networkOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, networkOverlayEnabled }))}
+                            />
+                            {configDraft.networkOverlayEnabled === true && (
+                                <div className="mb-3 grid gap-3 rounded-lg border border-border/50 bg-background/30 p-3 md:grid-cols-2">
+                                    <label className="block">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                        <textarea
+                                            className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                            placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                            value={keysToText(configDraft.networkAllowKeys)}
+                                            onChange={(e) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                networkAllowKeys: textToKeys(e.target.value),
+                                            }))}
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                        <textarea
+                                            className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                            placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                            value={keysToText(configDraft.networkDenyKeys)}
+                                            onChange={(e) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                networkDenyKeys: textToKeys(e.target.value),
+                                            }))}
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                            <label className="block max-w-xs">
+                                <span className={fieldLabelClass}>{t('overlays.fields.kometaScheduleHours')}</span>
                                 <input
                                     type="number"
                                     min={0}
                                     max={168}
                                     className={fieldInputClass}
-                                    value={configDraft.scheduleHours ?? 24}
+                                    value={configDraft.kometaScheduleHours ?? 24}
                                     onChange={(e) => setConfigDraft((prev) => ({
                                         ...prev,
-                                        scheduleHours: Math.max(0, Math.min(168, Number(e.target.value) || 0)),
+                                        kometaScheduleHours: Number(e.target.value) || 0,
                                     }))}
                                 />
+                                <span className="mt-1 block text-[11px] text-muted">{t('overlays.settings.kometaScheduleHint')}</span>
                             </label>
-                            <button
-                                type="button"
-                                className={primaryButtonClass}
-                                disabled={busy !== null}
-                                onClick={() => void saveSettings()}
-                            >
+                            <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
                                 <Save className="h-4 w-4" /> {t('overlays.actions.save')}
                             </button>
-                        </div>
-                        <p className="mt-3 text-xs text-muted">
-                            {t('overlays.quick.daysHint')}
-                        </p>
-                        <div className="mt-4 flex flex-wrap gap-2">
+                        </OverlayJobCard>
+                    </div>
+
+                    <DashboardPanel title={t('overlays.quick.title')} subtitle={t('overlays.quick.subtitle')}>
+                        <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
                                 className={buttonClass}
@@ -808,7 +1274,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 disabled={busy !== null || jobRunning || !workerReady}
                                 onClick={() => startBackgroundJob('reconcile', async () => {
                                     await overlaysApi.reconcile();
-                                    setTab('import');
+                                    setTab('advanced');
                                 })}
                             >
                                 {t('overlays.actions.reconcileDryRun')}
@@ -1093,719 +1559,262 @@ export const OverlaysDashboard: React.FC = () => {
                 />
             )}
 
-            {tab === 'settings' && (
-                <DashboardPanel title={t('overlays.settings.title')} subtitle={t('overlays.settings.subtitle')}>
-                    <SettingsToggleRow
-                        title={t('overlays.settings.moduleEnabled')}
-                        checked={configDraft.enabled !== false}
-                        onChange={(enabled) => setConfigDraft((prev) => ({ ...prev, enabled }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.defaultPreviewMode')}
-                        checked={configDraft.previewMode === true}
-                        onChange={(previewMode) => setConfigDraft((prev) => ({ ...prev, previewMode }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.skipKometa')}
-                        checked={configDraft.skipIfKometaOverlayLabel !== false}
-                        onChange={(skipIfKometaOverlayLabel) => setConfigDraft((prev) => ({ ...prev, skipIfKometaOverlayLabel }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.newSeasonEnabled')}
-                        description={t('overlays.settings.newSeasonEnabledHint')}
-                        checked={configDraft.newSeasonEnabled !== false}
-                        onChange={(newSeasonEnabled) => setConfigDraft((prev) => ({ ...prev, newSeasonEnabled }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.newSeasonWatchNowStyle')}
-                        description={t('overlays.settings.newSeasonWatchNowStyleHint')}
-                        checked={configDraft.newSeasonWatchNowStyle === true}
-                        onChange={(newSeasonWatchNowStyle) => setConfigDraft((prev) => ({ ...prev, newSeasonWatchNowStyle }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.newEpisodeEnabled')}
-                        description={t('overlays.settings.newEpisodeEnabledHint')}
-                        checked={configDraft.newEpisodeEnabled !== false}
-                        onChange={(newEpisodeEnabled) => setConfigDraft((prev) => ({ ...prev, newEpisodeEnabled }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.newEpisodeWatchNowStyle')}
-                        description={t('overlays.settings.newEpisodeWatchNowStyleHint')}
-                        checked={configDraft.newEpisodeWatchNowStyle === true}
-                        onChange={(newEpisodeWatchNowStyle) => setConfigDraft((prev) => ({ ...prev, newEpisodeWatchNowStyle }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.skipNewEpisodeOnBinge')}
-                        description={t('overlays.settings.skipNewEpisodeOnBingeHint')}
-                        checked={configDraft.skipNewEpisodeOnBinge !== false}
-                        onChange={(skipNewEpisodeOnBinge) => setConfigDraft((prev) => ({ ...prev, skipNewEpisodeOnBinge }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.recentlyAddedEnabled')}
-                        description={t('overlays.settings.recentlyAddedEnabledHint')}
-                        checked={configDraft.recentlyAddedEnabled === true}
-                        onChange={(recentlyAddedEnabled) => setConfigDraft((prev) => ({ ...prev, recentlyAddedEnabled }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.liveScheduleEnabled')}
-                        description={t('overlays.settings.liveScheduleEnabledHint')}
-                        checked={configDraft.liveScheduleEnabled === true}
-                        onChange={(liveScheduleEnabled) => setConfigDraft((prev) => ({ ...prev, liveScheduleEnabled }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.top10Enabled')}
-                        description={t('overlays.settings.top10EnabledHint')}
-                        checked={configDraft.top10Enabled === true}
-                        onChange={(top10Enabled) => setConfigDraft((prev) => ({ ...prev, top10Enabled }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.tmdbAirDateFallback')}
-                        description={t('overlays.settings.tmdbAirDateFallbackHint')}
-                        checked={configDraft.tmdbAirDateFallback !== false}
-                        onChange={(tmdbAirDateFallback) => setConfigDraft((prev) => ({ ...prev, tmdbAirDateFallback }))}
-                    />
-                    <SettingsToggleRow
-                        title={t('overlays.settings.mediaInfoEnabled')}
-                        description={t('overlays.settings.mediaInfoEnabledHint')}
-                        checked={configDraft.mediaInfoEnabled === true}
-                        onChange={(mediaInfoEnabled) => setConfigDraft((prev) => ({ ...prev, mediaInfoEnabled }))}
-                    />
-                    {configDraft.mediaInfoEnabled === true && (
-                        <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
-                            <span className={fieldLabelClass}>{t('overlays.settings.mediaInfoParts')}</span>
-                            <p className="text-[11px] text-muted">{t('overlays.settings.mediaInfoPartsHint')}</p>
-                            <div className="flex flex-wrap gap-3">
-                                {([
-                                    ['res4k', '4K'],
-                                    ['res1080p', '1080p'],
-                                    ['res720p', '720p'],
-                                    ['resOther', t('overlays.settings.mediaPartOther')],
-                                    ['hdr', 'HDR'],
-                                    ['dolbyVision', 'Dolby Vision'],
-                                    ['atmos', 'Atmos'],
-                                ] as const).map(([key, label]) => {
-                                    const parts = { ...DEFAULT_MEDIA_INFO_PARTS, ...(configDraft.mediaInfoParts || {}) };
-                                    return (
-                                        <StyledCheckbox
-                                            key={key}
-                                            checked={!!parts[key]}
-                                            label={label}
-                                            onChange={(next) => setConfigDraft((prev) => ({
-                                                ...prev,
-                                                mediaInfoParts: {
-                                                    ...DEFAULT_MEDIA_INFO_PARTS,
-                                                    ...(prev.mediaInfoParts || {}),
-                                                    [key]: next,
-                                                },
-                                            }))}
-                                        />
-                                    );
-                                })}
-                            </div>
-                            <div className="flex flex-wrap gap-3">
-                                <StyledCheckbox
-                                    checked={configDraft.mediaInfoIncludeShows !== false}
-                                    label={t('overlays.settings.includeShows')}
-                                    onChange={(mediaInfoIncludeShows) => setConfigDraft((prev) => ({ ...prev, mediaInfoIncludeShows }))}
-                                />
-                                <StyledCheckbox
-                                    checked={configDraft.mediaInfoIncludeMovies !== false}
-                                    label={t('overlays.settings.includeMovies')}
-                                    onChange={(mediaInfoIncludeMovies) => setConfigDraft((prev) => ({ ...prev, mediaInfoIncludeMovies }))}
-                                />
-                            </div>
-                            <div className="grid gap-3 md:grid-cols-2">
-                                <label className="block">
-                                    <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
-                                    <textarea
-                                        className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                        placeholder={t('overlays.settings.allowKeysPlaceholder')}
-                                        value={keysToText(configDraft.mediaInfoAllowKeys)}
-                                        onChange={(e) => setConfigDraft((prev) => ({
-                                            ...prev,
-                                            mediaInfoAllowKeys: textToKeys(e.target.value),
-                                        }))}
-                                    />
-                                </label>
-                                <label className="block">
-                                    <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
-                                    <textarea
-                                        className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                        placeholder={t('overlays.settings.denyKeysPlaceholder')}
-                                        value={keysToText(configDraft.mediaInfoDenyKeys)}
-                                        onChange={(e) => setConfigDraft((prev) => ({
-                                            ...prev,
-                                            mediaInfoDenyKeys: textToKeys(e.target.value),
-                                        }))}
-                                    />
-                                </label>
-                            </div>
-                        </div>
-                    )}
-                    <SettingsToggleRow
-                        title={t('overlays.settings.statusOverlayEnabled')}
-                        description={t('overlays.settings.statusOverlayEnabledHint')}
-                        checked={configDraft.statusOverlayEnabled === true}
-                        onChange={(statusOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, statusOverlayEnabled }))}
-                    />
-                    {configDraft.statusOverlayEnabled === true && (
-                        <div className="mb-3 grid gap-3 rounded-lg border border-border/50 bg-background/30 p-3 md:grid-cols-2">
-                            <label className="block">
-                                <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
-                                <textarea
-                                    className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                    placeholder={t('overlays.settings.allowKeysPlaceholder')}
-                                    value={keysToText(configDraft.statusAllowKeys)}
-                                    onChange={(e) => setConfigDraft((prev) => ({
-                                        ...prev,
-                                        statusAllowKeys: textToKeys(e.target.value),
-                                    }))}
-                                />
-                            </label>
-                            <label className="block">
-                                <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
-                                <textarea
-                                    className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                    placeholder={t('overlays.settings.denyKeysPlaceholder')}
-                                    value={keysToText(configDraft.statusDenyKeys)}
-                                    onChange={(e) => setConfigDraft((prev) => ({
-                                        ...prev,
-                                        statusDenyKeys: textToKeys(e.target.value),
-                                    }))}
-                                />
-                            </label>
-                        </div>
-                    )}
-                    <SettingsToggleRow
-                        title={t('overlays.settings.ratingsOverlayEnabled')}
-                        description={t('overlays.settings.ratingsOverlayEnabledHint')}
-                        checked={configDraft.ratingsOverlayEnabled === true}
-                        onChange={(ratingsOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, ratingsOverlayEnabled }))}
-                    />
-                    {configDraft.ratingsOverlayEnabled === true && (
-                        <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
-                            <div className="flex flex-wrap gap-3">
-                                <StyledCheckbox
-                                    checked={configDraft.ratingsIncludeShows !== false}
-                                    label={t('overlays.settings.includeShows')}
-                                    onChange={(ratingsIncludeShows) => setConfigDraft((prev) => ({ ...prev, ratingsIncludeShows }))}
-                                />
-                                <StyledCheckbox
-                                    checked={configDraft.ratingsIncludeMovies !== false}
-                                    label={t('overlays.settings.includeMovies')}
-                                    onChange={(ratingsIncludeMovies) => setConfigDraft((prev) => ({ ...prev, ratingsIncludeMovies }))}
-                                />
-                            </div>
-                            <div className="grid gap-3 md:grid-cols-2">
-                                <label className="block">
-                                    <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
-                                    <textarea
-                                        className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                        placeholder={t('overlays.settings.allowKeysPlaceholder')}
-                                        value={keysToText(configDraft.ratingsAllowKeys)}
-                                        onChange={(e) => setConfigDraft((prev) => ({
-                                            ...prev,
-                                            ratingsAllowKeys: textToKeys(e.target.value),
-                                        }))}
-                                    />
-                                </label>
-                                <label className="block">
-                                    <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
-                                    <textarea
-                                        className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                        placeholder={t('overlays.settings.denyKeysPlaceholder')}
-                                        value={keysToText(configDraft.ratingsDenyKeys)}
-                                        onChange={(e) => setConfigDraft((prev) => ({
-                                            ...prev,
-                                            ratingsDenyKeys: textToKeys(e.target.value),
-                                        }))}
-                                    />
-                                </label>
-                            </div>
-                        </div>
-                    )}
-                    <SettingsToggleRow
-                        title={t('overlays.settings.networkOverlayEnabled')}
-                        description={t('overlays.settings.networkOverlayEnabledHint')}
-                        checked={configDraft.networkOverlayEnabled === true}
-                        onChange={(networkOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, networkOverlayEnabled }))}
-                    />
-                    {configDraft.networkOverlayEnabled === true && (
-                        <div className="mb-3 grid gap-3 rounded-lg border border-border/50 bg-background/30 p-3 md:grid-cols-2">
-                            <label className="block">
-                                <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
-                                <textarea
-                                    className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                    placeholder={t('overlays.settings.allowKeysPlaceholder')}
-                                    value={keysToText(configDraft.networkAllowKeys)}
-                                    onChange={(e) => setConfigDraft((prev) => ({
-                                        ...prev,
-                                        networkAllowKeys: textToKeys(e.target.value),
-                                    }))}
-                                />
-                            </label>
-                            <label className="block">
-                                <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
-                                <textarea
-                                    className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                    placeholder={t('overlays.settings.denyKeysPlaceholder')}
-                                    value={keysToText(configDraft.networkDenyKeys)}
-                                    onChange={(e) => setConfigDraft((prev) => ({
-                                        ...prev,
-                                        networkDenyKeys: textToKeys(e.target.value),
-                                    }))}
-                                />
-                            </label>
-                        </div>
-                    )}
+            {tab === 'advanced' && (
+                <div className="space-y-4">
+                    <DashboardPanel title={t('overlays.settings.title')} subtitle={t('overlays.settings.subtitle')}>
+                        <SettingsToggleRow
+                            title={t('overlays.settings.moduleEnabled')}
+                            checked={configDraft.enabled !== false}
+                            onChange={(enabled) => setConfigDraft((prev) => ({ ...prev, enabled }))}
+                        />
+                        <SettingsToggleRow
+                            title={t('overlays.settings.defaultPreviewMode')}
+                            checked={configDraft.previewMode === true}
+                            onChange={(previewMode) => setConfigDraft((prev) => ({ ...prev, previewMode }))}
+                        />
+                        <SettingsToggleRow
+                            title={t('overlays.settings.skipKometa')}
+                            checked={configDraft.skipIfKometaOverlayLabel !== false}
+                            onChange={(skipIfKometaOverlayLabel) => setConfigDraft((prev) => ({ ...prev, skipIfKometaOverlayLabel }))}
+                        />
 
-                    <div className="grid gap-4 border-b border-border/40 py-4 md:grid-cols-2">
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.newSeasonWindowDays')}</span>
-                            <input
-                                type="number"
-                                min={1}
-                                max={365}
-                                className={fieldInputClass}
-                                value={configDraft.newSeasonDays ?? 21}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    newSeasonDays: Math.max(1, Math.min(365, Number(e.target.value) || 21)),
-                                }))}
-                            />
-                            <span className="mt-1 block text-[11px] text-muted">
-                                {t('overlays.settings.windowHint')}
-                            </span>
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.newEpisodeWindowDays')}</span>
-                            <input
-                                type="number"
-                                min={1}
-                                max={30}
-                                className={fieldInputClass}
-                                value={configDraft.newEpisodeDays ?? 6}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    newEpisodeDays: Math.max(1, Math.min(30, Number(e.target.value) || 6)),
-                                }))}
-                            />
-                            <span className="mt-1 block text-[11px] text-muted">
-                                {t('overlays.settings.newEpisodeWindowHint')}
-                            </span>
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.recentlyAddedDays')}</span>
-                            <input
-                                type="number"
-                                min={1}
-                                max={90}
-                                className={fieldInputClass}
-                                value={configDraft.recentlyAddedDays ?? 7}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    recentlyAddedDays: Math.max(1, Math.min(90, Number(e.target.value) || 7)),
-                                }))}
-                            />
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.liveScheduleDays')}</span>
-                            <input
-                                type="number"
-                                min={0}
-                                max={14}
-                                className={fieldInputClass}
-                                value={configDraft.liveScheduleDays ?? 1}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    liveScheduleDays: Math.max(0, Math.min(14, Number(e.target.value) || 0)),
-                                }))}
-                            />
-                            <span className="mt-1 block text-[11px] text-muted">
-                                {t('overlays.settings.liveScheduleDaysHint')}
-                            </span>
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.top10Count')}</span>
-                            <input
-                                type="number"
-                                min={1}
-                                max={50}
-                                className={fieldInputClass}
-                                value={configDraft.top10Count ?? 10}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    top10Count: Math.max(1, Math.min(50, Number(e.target.value) || 10)),
-                                }))}
-                            />
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.statusAiringDays')}</span>
-                            <input
-                                type="number"
-                                min={1}
-                                max={90}
-                                className={fieldInputClass}
-                                value={configDraft.statusAiringDays ?? 14}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    statusAiringDays: Math.max(1, Math.min(90, Number(e.target.value) || 14)),
-                                }))}
-                            />
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.ratingsMinimum')}</span>
-                            <input
-                                type="number"
-                                min={0}
-                                max={10}
-                                step={0.1}
-                                className={fieldInputClass}
-                                value={configDraft.ratingsMinimum ?? 0}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    ratingsMinimum: Math.max(0, Math.min(10, Number(e.target.value) || 0)),
-                                }))}
-                            />
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.scheduleHours')}</span>
-                            <input
-                                type="number"
-                                min={0}
-                                max={168}
-                                className={fieldInputClass}
-                                value={configDraft.scheduleHours ?? 24}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    scheduleHours: Number(e.target.value) || 0,
-                                }))}
-                            />
-                            <span className="mt-1 block text-[11px] text-muted">
-                                {t('overlays.settings.coreScheduleHint')}
-                            </span>
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.recentlyAddedScheduleHours')}</span>
-                            <input
-                                type="number"
-                                min={0}
-                                max={168}
-                                className={fieldInputClass}
-                                value={configDraft.recentlyAddedScheduleHours ?? 24}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    recentlyAddedScheduleHours: Number(e.target.value) || 0,
-                                }))}
-                            />
-                        </label>
-                        <label className="block">
-                            <span className={fieldLabelClass}>{t('overlays.fields.kometaScheduleHours')}</span>
-                            <input
-                                type="number"
-                                min={0}
-                                max={168}
-                                className={fieldInputClass}
-                                value={configDraft.kometaScheduleHours ?? 24}
-                                onChange={(e) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    kometaScheduleHours: Number(e.target.value) || 0,
-                                }))}
-                            />
-                            <span className="mt-1 block text-[11px] text-muted">
-                                {t('overlays.settings.kometaScheduleHint')}
-                            </span>
-                        </label>
-                    </div>
-
-                    <div className="border-b border-border/40 py-4 space-y-4">
-                        <div>
-                            <span className={fieldLabelClass}>{t('overlays.settings.overlayPreset')}</span>
-                            <CustomSelect
-                                className="mt-1.5 max-w-md"
-                                value={configDraft.overlayPresetId || 'new-season'}
-                                onChange={(value) => setConfigDraft((prev) => ({ ...prev, overlayPresetId: value }))}
-                                options={seasonPresetOptions.length ? seasonPresetOptions : [{ value: 'new-season', label: 'new-season' }]}
-                            />
-                            <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-plex">
-                                <input
-                                    type="file"
-                                    accept="image/png"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        e.target.value = '';
-                                        if (!file) return;
-                                        void runAction('saveSettings', async () => {
-                                            const up = await overlaysApi.uploadPreset('season', file);
-                                            const id = up?.preset?.id;
-                                            if (id) setConfigDraft((prev) => ({ ...prev, overlayPresetId: id }));
-                                            await refresh();
-                                        });
-                                    }}
-                                />
-                                {t('overlays.settings.uploadSeasonPreset')}
-                            </label>
-                        </div>
-                        <div>
-                            <span className={fieldLabelClass}>{t('overlays.settings.episodeOverlayPreset')}</span>
-                            <CustomSelect
-                                className="mt-1.5 max-w-md"
-                                value={configDraft.episodeOverlayPresetId || 'new-episode'}
-                                onChange={(value) => setConfigDraft((prev) => ({ ...prev, episodeOverlayPresetId: value }))}
-                                options={episodePresetOptions.length ? episodePresetOptions : [{ value: 'new-episode', label: 'new-episode' }]}
-                            />
-                            <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-plex">
-                                <input
-                                    type="file"
-                                    accept="image/png"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        e.target.value = '';
-                                        if (!file) return;
-                                        void runAction('saveSettings', async () => {
-                                            const up = await overlaysApi.uploadPreset('episode', file);
-                                            const id = up?.preset?.id;
-                                            if (id) setConfigDraft((prev) => ({ ...prev, episodeOverlayPresetId: id }));
-                                            await refresh();
-                                        });
-                                    }}
-                                />
-                                {t('overlays.settings.uploadEpisodePreset')}
-                            </label>
-                        </div>
-                    </div>
-
-                    <div className="border-b border-border/40 py-4">
-                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                                <span className={fieldLabelClass}>{t('overlays.settings.visualSample')}</span>
-                                <p className="mt-1 max-w-2xl text-[11px] text-muted">
-                                    {t('overlays.settings.visualSampleHint')}
-                                </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null || jobRunning}
-                                    onClick={() => {
-                                        setSampleShowKey('');
-                                        void regenerateSamples({ showRatingKey: '' });
-                                    }}
-                                >
-                                    {t('overlays.actions.randomSample')}
-                                </button>
-                                <button
-                                    type="button"
-                                    className={buttonClass}
-                                    disabled={busy !== null || jobRunning}
-                                    onClick={() => void regenerateSamples()}
-                                >
-                                    {busy === 'sample' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                                    {t('overlays.actions.refreshSample')}
-                                </button>
-                            </div>
-                        </div>
-                        <div className="mb-3 grid gap-3 md:grid-cols-2">
-                            <label className="block">
-                                <span className={fieldLabelClass}>{t('overlays.settings.sampleSearch')}</span>
-                                <input
-                                    className={fieldInputClass}
-                                    value={sampleQuery}
-                                    onChange={(e) => setSampleQuery(e.target.value)}
-                                    placeholder={t('overlays.settings.sampleSearchPlaceholder')}
-                                />
-                            </label>
-                            <label className="block">
-                                <span className={fieldLabelClass}>{t('overlays.settings.sampleShow')}</span>
-                                <CustomSelect
-                                    className="mt-1.5"
-                                    value={sampleShowKey || ''}
-                                    onChange={(value) => setSampleShowKey(value)}
-                                    options={[
-                                        { value: '', label: t('overlays.settings.sampleRandom') },
-                                        ...sampleCandidates.map((s) => ({ value: s.ratingKey, label: s.title })),
-                                    ]}
-                                />
-                            </label>
-                        </div>
-                        {sampleError ? (
-                            <p className="mb-3 text-xs text-red-400">{sampleError}</p>
-                        ) : null}
-                        {sampleMeta?.exists ? (
-                            <div className="flex flex-wrap items-end gap-6">
-                                <figure className="space-y-2">
-                                    <figcaption className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                                        {t('overlays.settings.visualSampleShow')}
-                                    </figcaption>
-                                    <img
-                                        src={overlaysApi.sampleImageUrl('show', sampleBust)}
-                                        alt={sampleMeta.showTitle || 'New Season sample'}
-                                        className="h-[180px] w-[120px] rounded-md border border-border object-cover bg-background/60"
-                                    />
-                                    <figcaption className="max-w-[120px] truncate text-xs text-text" title={sampleMeta.showTitle || ''}>
-                                        {sampleMeta.showTitle || '—'}
-                                    </figcaption>
-                                </figure>
-                                <figure className="space-y-2">
-                                    <figcaption className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                                        {t('overlays.settings.visualSampleEpisode')}
-                                    </figcaption>
-                                    <img
-                                        src={overlaysApi.sampleImageUrl('episode', sampleBust)}
-                                        alt={sampleMeta.episodeTitle || 'New Episode sample'}
-                                        className="h-[135px] w-[240px] rounded-md border border-border object-cover bg-background/60"
-                                    />
-                                    <figcaption
-                                        className="max-w-[240px] truncate text-xs text-text"
-                                        title={[sampleMeta.showTitleForEp, sampleMeta.episodeTitle].filter(Boolean).join(' — ')}
+                        <div className="border-b border-border/40 py-4">
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                    <span className={fieldLabelClass}>{t('overlays.settings.visualSample')}</span>
+                                    <p className="mt-1 max-w-2xl text-[11px] text-muted">
+                                        {t('overlays.settings.visualSampleHint')}
+                                    </p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null || jobRunning}
+                                        onClick={() => {
+                                            setSampleShowKey('');
+                                            void regenerateSamples({ showRatingKey: '' });
+                                        }}
                                     >
-                                        {[sampleMeta.showTitleForEp, sampleMeta.episodeTitle].filter(Boolean).join(' — ') || '—'}
-                                    </figcaption>
-                                </figure>
+                                        {t('overlays.actions.randomSample')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null || jobRunning}
+                                        onClick={() => void regenerateSamples()}
+                                    >
+                                        {busy === 'sample' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                        {t('overlays.actions.refreshSample')}
+                                    </button>
+                                </div>
                             </div>
-                        ) : (
-                            <p className="text-sm text-muted">
-                                {busy === 'sample' ? t('overlays.actionStarted', { action: actionLabel('sample') }) : t('overlays.settings.visualSampleEmpty')}
-                            </p>
-                        )}
-                    </div>
+                            <div className="mb-3 grid gap-3 md:grid-cols-2">
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.sampleSearch')}</span>
+                                    <input
+                                        className={fieldInputClass}
+                                        value={sampleQuery}
+                                        onChange={(e) => setSampleQuery(e.target.value)}
+                                        placeholder={t('overlays.settings.sampleSearchPlaceholder')}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.sampleShow')}</span>
+                                    <CustomSelect
+                                        className="mt-1.5"
+                                        value={sampleShowKey || ''}
+                                        onChange={(value) => setSampleShowKey(value)}
+                                        options={[
+                                            { value: '', label: t('overlays.settings.sampleRandom') },
+                                            ...sampleCandidates.map((s) => ({ value: s.ratingKey, label: s.title })),
+                                        ]}
+                                    />
+                                </label>
+                            </div>
+                            {sampleError ? (
+                                <p className="mb-3 text-xs text-red-400">{sampleError}</p>
+                            ) : null}
+                            {sampleMeta?.exists ? (
+                                <div className="flex flex-wrap items-end gap-6">
+                                    <figure className="space-y-2">
+                                        <figcaption className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+                                            {t('overlays.settings.visualSampleShow')}
+                                        </figcaption>
+                                        <img
+                                            src={overlaysApi.sampleImageUrl('show', sampleBust)}
+                                            alt={sampleMeta.showTitle || 'New Season sample'}
+                                            className="h-[180px] w-[120px] rounded-md border border-border object-cover bg-background/60"
+                                        />
+                                        <figcaption className="max-w-[120px] truncate text-xs text-text" title={sampleMeta.showTitle || ''}>
+                                            {sampleMeta.showTitle || '—'}
+                                        </figcaption>
+                                    </figure>
+                                    <figure className="space-y-2">
+                                        <figcaption className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+                                            {t('overlays.settings.visualSampleEpisode')}
+                                        </figcaption>
+                                        <img
+                                            src={overlaysApi.sampleImageUrl('episode', sampleBust)}
+                                            alt={sampleMeta.episodeTitle || 'New Episode sample'}
+                                            className="h-[135px] w-[240px] rounded-md border border-border object-cover bg-background/60"
+                                        />
+                                        <figcaption
+                                            className="max-w-[240px] truncate text-xs text-text"
+                                            title={[sampleMeta.showTitleForEp, sampleMeta.episodeTitle].filter(Boolean).join(' — ')}
+                                        >
+                                            {[sampleMeta.showTitleForEp, sampleMeta.episodeTitle].filter(Boolean).join(' — ') || '—'}
+                                        </figcaption>
+                                    </figure>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted">
+                                    {busy === 'sample' ? t('overlays.actionStarted', { action: actionLabel('sample') }) : t('overlays.settings.visualSampleEmpty')}
+                                </p>
+                            )}
+                        </div>
 
-                    <div className="py-4">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                            <span className={fieldLabelClass}>{t('overlays.settings.libraries')}</span>
-                            <button type="button" className="text-xs font-semibold text-plex underline" onClick={() => void loadSections()}>
-                                {t('overlays.actions.loadSections')}
+                        <div className="py-4">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                                <span className={fieldLabelClass}>{t('overlays.settings.libraries')}</span>
+                                <button type="button" className="text-xs font-semibold text-plex underline" onClick={() => void loadSections()}>
+                                    {t('overlays.actions.loadSections')}
+                                </button>
+                            </div>
+                            <p className="mb-2 text-[11px] text-muted">{t('overlays.settings.librariesHint')}</p>
+                            {sections.length === 0 ? (
+                                <p className="text-xs text-muted">{t('overlays.settings.loadSectionsHint')}</p>
+                            ) : (
+                                <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border bg-background/40 p-3">
+                                    {sections.map((section) => {
+                                        const id = section.id || section.key;
+                                        const selected = configDraft.librarySectionIds || [];
+                                        const allSelected = selected.length === 0;
+                                        const checked = allSelected || selected.includes(id);
+                                        const typeLabel = section.type === 'movie'
+                                            ? t('overlays.settings.libTypeMovie')
+                                            : t('overlays.settings.libTypeShow');
+                                        return (
+                                            <StyledCheckbox
+                                                key={id}
+                                                checked={checked}
+                                                label={`${section.title} · ${typeLabel} (${id})`}
+                                                onChange={(next) => {
+                                                    setConfigDraft((prev) => {
+                                                        const allIds = sections.map((s) => s.id || s.key);
+                                                        const currentSelected = prev.librarySectionIds || [];
+                                                        const currentlyAll = currentSelected.length === 0;
+                                                        let nextIds: string[];
+                                                        if (currentlyAll) {
+                                                            nextIds = next
+                                                                ? [...allIds]
+                                                                : allIds.filter((value) => value !== id);
+                                                        } else {
+                                                            const current = new Set(currentSelected);
+                                                            if (next) current.add(id);
+                                                            else current.delete(id);
+                                                            nextIds = [...current];
+                                                        }
+                                                        if (
+                                                            nextIds.length === allIds.length
+                                                            && allIds.every((value) => nextIds.includes(value))
+                                                        ) {
+                                                            return { ...prev, librarySectionIds: [] };
+                                                        }
+                                                        return { ...prev, librarySectionIds: nextIds };
+                                                    });
+                                                }}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 border-t border-border/40 pt-4">
+                            <button
+                                type="button"
+                                className={primaryButtonClass}
+                                disabled={busy !== null}
+                                onClick={() => void saveSettings()}
+                            >
+                                <Save className="h-4 w-4" /> {t('overlays.actions.saveSettings')}
+                            </button>
+                            <button
+                                type="button"
+                                className={`${buttonClass} border-amber-500/40 text-amber-100`}
+                                disabled={!canResetAll}
+                                onClick={resetAll}
+                            >
+                                <RotateCcw className="h-4 w-4" /> {t('overlays.actions.resetAll')}
                             </button>
                         </div>
-                        <p className="mb-2 text-[11px] text-muted">{t('overlays.settings.librariesHint')}</p>
-                        {sections.length === 0 ? (
-                            <p className="text-xs text-muted">{t('overlays.settings.loadSectionsHint')}</p>
-                        ) : (
-                            <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border bg-background/40 p-3">
-                                {sections.map((section) => {
-                                    const id = section.id || section.key;
-                                    const selected = configDraft.librarySectionIds || [];
-                                    const allSelected = selected.length === 0;
-                                    const checked = allSelected || selected.includes(id);
-                                    const typeLabel = section.type === 'movie'
-                                        ? t('overlays.settings.libTypeMovie')
-                                        : t('overlays.settings.libTypeShow');
-                                    return (
-                                        <StyledCheckbox
-                                            key={id}
-                                            checked={checked}
-                                            label={`${section.title} · ${typeLabel} (${id})`}
-                                            onChange={(next) => {
-                                                setConfigDraft((prev) => {
-                                                    const allIds = sections.map((s) => s.id || s.key);
-                                                    const currentSelected = prev.librarySectionIds || [];
-                                                    const currentlyAll = currentSelected.length === 0;
-                                                    let nextIds: string[];
-                                                    if (currentlyAll) {
-                                                        nextIds = next
-                                                            ? [...allIds]
-                                                            : allIds.filter((value) => value !== id);
-                                                    } else {
-                                                        const current = new Set(currentSelected);
-                                                        if (next) current.add(id);
-                                                        else current.delete(id);
-                                                        nextIds = [...current];
-                                                    }
-                                                    // Persist empty array when every section is selected (= all).
-                                                    if (
-                                                        nextIds.length === allIds.length
-                                                        && allIds.every((value) => nextIds.includes(value))
-                                                    ) {
-                                                        return { ...prev, librarySectionIds: [] };
-                                                    }
-                                                    return { ...prev, librarySectionIds: nextIds };
-                                                });
-                                            }}
-                                        />
-                                    );
+                    </DashboardPanel>
+
+                    <DashboardPanel title={t('overlays.import.title')} subtitle={t('overlays.import.subtitle')}>
+                        <p className="text-sm text-muted">
+                            {t('overlays.import.bodyBeforeLog')} <code>overlaid_log.json</code> {t('overlays.import.bodyAfterLog')}
+                        </p>
+                        <textarea
+                            className="mt-3 min-h-[220px] w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex"
+                            placeholder='{"12345":{"title":"Example Show","timestamp":"2025-01-15T14:30:00","preview_only":false}}'
+                            value={importText}
+                            onChange={(e) => setImportText(e.target.value)}
+                        />
+                        <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <CustomSelect
+                                className="w-40"
+                                compact
+                                value={importMode}
+                                onChange={(value) => setImportMode(value === 'replace' ? 'replace' : 'merge')}
+                                options={importModeOptions}
+                            />
+                            <button
+                                type="button"
+                                className={primaryButtonClass}
+                                disabled={busy !== null || !importText.trim()}
+                                onClick={() => void runAction('importLog', async () => {
+                                    const parsed = JSON.parse(importText);
+                                    await overlaysApi.importLog(parsed, importMode);
                                 })}
+                            >
+                                <Upload className="h-4 w-4" /> {t('overlays.actions.importLog')}
+                            </button>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy !== null || jobRunning || !workerReady}
+                                onClick={() => startBackgroundJob('reconcile', () => overlaysApi.reconcile())}
+                            >
+                                {t('overlays.actions.reconcileDryRun')}
+                            </button>
+                        </div>
+                        {reconcile && (
+                            <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
+                                <p className="font-semibold">{t('overlays.reconcile.title')}</p>
+                                <p className="mt-1 text-muted">
+                                    {t('overlays.reconcile.summary', {
+                                        add: reconcile.wouldAddCount ?? 0,
+                                        convert: reconcile.wouldConvertCount ?? 0,
+                                        remove: reconcile.wouldRemoveCount ?? 0,
+                                    })}
+                                </p>
                             </div>
                         )}
-                    </div>
-
-                    <button
-                        type="button"
-                        className={primaryButtonClass}
-                        disabled={busy !== null}
-                        onClick={() => void saveSettings()}
-                    >
-                        <Save className="h-4 w-4" /> {t('overlays.actions.saveSettings')}
-                    </button>
-                </DashboardPanel>
-            )}
-
-            {tab === 'import' && (
-                <DashboardPanel title={t('overlays.import.title')} subtitle={t('overlays.import.subtitle')}>
-                    <p className="text-sm text-muted">
-                        {t('overlays.import.bodyBeforeLog')} <code>overlaid_log.json</code> {t('overlays.import.bodyAfterLog')}
-                    </p>
-                    <textarea
-                        className="mt-3 min-h-[220px] w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex"
-                        placeholder='{"12345":{"title":"Example Show","timestamp":"2025-01-15T14:30:00","preview_only":false}}'
-                        value={importText}
-                        onChange={(e) => setImportText(e.target.value)}
-                    />
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <CustomSelect
-                            className="w-40"
-                            compact
-                            value={importMode}
-                            onChange={(value) => setImportMode(value === 'replace' ? 'replace' : 'merge')}
-                            options={importModeOptions}
-                        />
-                        <button
-                            type="button"
-                            className={primaryButtonClass}
-                            disabled={busy !== null || !importText.trim()}
-                            onClick={() => void runAction('importLog', async () => {
-                                const parsed = JSON.parse(importText);
-                                await overlaysApi.importLog(parsed, importMode);
-                            })}
-                        >
-                            <Upload className="h-4 w-4" /> {t('overlays.actions.importLog')}
-                        </button>
-                        <button
-                            type="button"
-                            className={buttonClass}
-                            disabled={busy !== null || jobRunning || !workerReady}
-                            onClick={() => startBackgroundJob('reconcile', () => overlaysApi.reconcile())}
-                        >
-                            {t('overlays.actions.reconcileDryRun')}
-                        </button>
-                    </div>
-                    {reconcile && (
-                        <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
-                            <p className="font-semibold">{t('overlays.reconcile.title')}</p>
-                            <p className="mt-1 text-muted">
-                                {t('overlays.reconcile.summary', {
-                                    add: reconcile.wouldAddCount ?? 0,
-                                    convert: reconcile.wouldConvertCount ?? 0,
-                                    remove: reconcile.wouldRemoveCount ?? 0,
-                                })}
-                            </p>
-                        </div>
-                    )}
-                    {!reconcile && summary?.command === 'reconcile' && (
-                        <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
-                            <p className="font-semibold">{t('overlays.reconcile.title')}</p>
-                            <p className="mt-1 text-muted">
-                                {t('overlays.reconcile.summary', {
-                                    add: summary.wouldAddCount ?? 0,
-                                    convert: summary.wouldConvertCount ?? 0,
-                                    remove: summary.wouldRemoveCount ?? 0,
-                                })}
-                            </p>
-                        </div>
-                    )}
-                </DashboardPanel>
+                        {!reconcile && summary?.command === 'reconcile' && (
+                            <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
+                                <p className="font-semibold">{t('overlays.reconcile.title')}</p>
+                                <p className="mt-1 text-muted">
+                                    {t('overlays.reconcile.summary', {
+                                        add: summary.wouldAddCount ?? 0,
+                                        convert: summary.wouldConvertCount ?? 0,
+                                        remove: summary.wouldRemoveCount ?? 0,
+                                    })}
+                                </p>
+                            </div>
+                        )}
+                    </DashboardPanel>
+                </div>
             )}
 
             {tab === 'activity' && (

@@ -2,6 +2,16 @@
 
 Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on **season posters + episode thumbs**, presets/uploads, preview gallery, and binge grouping.
 
+## UI layout
+
+Overview shows **three job cards** that match the worker bundles:
+
+1. **Banners (core)** — Live / New Season / New Episode / Top 10 (Preview + Run core)
+2. **Recently Added** — separate Preview / Run
+3. **Media / Kometa** — resolution / status / ratings / network (separate Preview / Run)
+
+Expand each card for that job’s toggles, windows, filters, and schedule. Hero actions are **Refresh**, **Stop** (while running), and **Promote** (when preview rows exist). **Advanced** holds module defaults, libraries, visual sample, import log, and Reset all.
+
 ## Layout
 
 - `cli.py` / `core.py` — Python worker (Pillow + plexapi)
@@ -9,7 +19,7 @@ Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on *
 - `assets/presets/new-episode.png`, `new-episode-compact.png`
 - Extra styles: `corner-ribbon.png`, `corner-ribbon-episode.png`, `returning-soon.png`, `season-chip.png` (dynamic `S{n}`)
 - Runtime data: `config/overlays/` (`config.json`, logs, `preview/`, `preview/samples/`, `presets/custom/`, `backups/`)
-- Settings **Visual sample** composites banners onto chosen/random Plex art (no live mutations)
+- Advanced **Visual sample** composites banners onto chosen/random Plex art (no live mutations)
 - **Promote preview → live** stamps tracked `preview_only` rows to Plex without a full library rescan
 
 ## Stamp rules (Phase 3)
@@ -19,14 +29,14 @@ Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on *
 - **Episode thumbs:** New Episode (default 6-day window)
 - `skipNewEpisodeOnBinge` (default on): if 3+ episodes of the same season share an air date, skip episode + season New Episode stamps
 
-## Badge modes (each has a Settings toggle)
+## Badge modes (each has a per-job toggle on Overview cards)
 
 - **New Season / New Episode** — existing air-date windows; optional **Watch Now** split style toggles
 - **Live | {weekday}** — latest episode aired within Live window; highest-priority bottom badge
 - **Recently Added** — Plex `addedAt` within window; skipped if Live or New Season already claimed the show
 - **TOP 10** — top-rated shows (audience/rating); corner badge, can stack with bottom badges
 - **TMDB air-date fallback** — when Plex lacks `originallyAvailableAt`, resolve dates via TMDB (portal API key) for recently-added undated episodes; applies to New Episode / New Season / Live
-- **Media info (4K/HDR/Atmos)** — official Kometa `resolution/*.png` + Atmos audio logos (downloaded from [Kometa](https://github.com/Kometa-Team/Kometa) `defaults/overlays/images/`). Settings: badge-part toggles, include movies/shows, allow/deny ratingKeys
+- **Media info (4K/HDR/Atmos)** — official Kometa `resolution/*.png` + Atmos audio logos (downloaded from [Kometa](https://github.com/Kometa-Team/Kometa) `defaults/overlays/images/`). Filters: badge-part toggles, include movies/shows, allow/deny ratingKeys
 - **Show status** — AIRING / RETURNING / ENDED / CANCELED (Kometa text style; no stock PNGs); TV only; allow/deny keys
 - **Ratings** — score + Kometa `rating/TMDb.png` (etc.); movies and/or shows; allow/deny keys
 - **Network** — Kometa `network/color/{Name}.png` matched from Plex network/studio; TV only; allow/deny keys
@@ -43,14 +53,15 @@ Credit: overlay PNGs from [Kometa-Team/Kometa](https://github.com/Kometa-Team/Ko
 
 ## Runs (separate jobs)
 
-Preview / Run now only runs the **core** bundle (Live, New Season, New Episode, Top 10).
+Each Overview job card runs one bundle:
 
-- **Preview Recently Added** / **Run Recently Added** — Recently Added banners only
-- **Preview Media / Kometa** / **Run Media / Kometa** — resolution / status / ratings / network only
+- **Banners** — Live, New Season, New Episode, Top 10
+- **Recently Added** — Recently Added banners only
+- **Media / Kometa** — resolution / status / ratings / network only
 
 Preview writes composites under `config/overlays/preview/` (no Plex upload). Promote preview → live stamps tracked preview rows.
 
-Each bundle has its own schedule hours in Settings (0 = off). They share one worker lock so two overlay runs never stamp posters at the same time.
+Each bundle has its own schedule hours on the matching card (0 = off). They share one worker lock so two overlay runs never stamp posters at the same time.
 
 ## Setup
 
@@ -61,8 +72,8 @@ pip install -r overlays/requirements.txt
 
 1. Settings → Overlays → enable
 2. Confirm Media Player Plex URL/token
-3. Open **Overlays** → Import your existing `overlaid_log.json` if migrating
-4. Preview, then Run now
+3. Open **Overlays** → Advanced → Import your existing `overlaid_log.json` if migrating
+4. Use each Overview card’s Preview, then Run
 
 ## Notes
 
