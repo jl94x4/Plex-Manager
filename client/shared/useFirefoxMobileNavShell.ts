@@ -45,12 +45,29 @@ export const isStandaloneDisplayMode = () => {
  * Chrome / Chromium Android PWA must not use this path — plain CSS `bottom:0`
  * is correct there.
  */
+const readLargeViewportHeight = () => {
+    if (typeof document === 'undefined') return 0;
+    try {
+        const probe = document.createElement('div');
+        probe.setAttribute('aria-hidden', 'true');
+        probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:100lvh;pointer-events:none;visibility:hidden';
+        document.body.appendChild(probe);
+        const height = probe.offsetHeight || 0;
+        probe.remove();
+        return height;
+    } catch {
+        return 0;
+    }
+};
+
 export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return;
 
         let raf = 0;
         let lastTop = Number.NaN;
+        const ios = isIosMobileClient();
+        const largeViewportHeight = ios ? readLargeViewportHeight() : 0;
 
         const clearInline = (bar: HTMLElement) => {
             bar.style.position = '';
@@ -76,6 +93,7 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
                 window.innerHeight || 0,
                 document.documentElement?.clientHeight || 0,
                 vv ? Math.ceil(vv.height + vv.offsetTop) : 0,
+                largeViewportHeight,
             );
             let dockBottom = layoutBottom;
 
@@ -86,12 +104,12 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
 
                 if (isZoomedOrPanned) {
                     dockBottom = visualBottom;
-                } else if (coveredByToolbar > 24) {
-                    // Toolbar is visible over the page: keep the bar above it.
+                } else if (!ios && coveredByToolbar > 24) {
+                    // Firefox: toolbar is visible over the page — keep the bar above it.
                     dockBottom = visualBottom;
                 } else {
-                    // Toolbar collapsed / PWA: pin to the full layout bottom so
-                    // the home-indicator / gesture area is covered (bleed paints below).
+                    // iOS (and Firefox with chrome collapsed): pin to the large
+                    // viewport so first paint matches the post-scroll bottom.
                     dockBottom = Math.max(layoutBottom, visualBottom);
                 }
             }
@@ -121,12 +139,19 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             });
         };
 
+        const forceSync = () => {
+            if (barRef.current && ro) ro.observe(barRef.current);
+            lastTop = Number.NaN;
+            schedule();
+        };
+
         lastTop = Number.NaN;
         sync();
         schedule();
 
         window.addEventListener('resize', schedule);
         window.addEventListener('orientationchange', schedule);
+        window.addEventListener('pageshow', forceSync);
         window.addEventListener('scroll', schedule, { passive: true });
         // Mobile portal scrolls inside #main-scroll-container (not the window).
         const mainScroll = document.getElementById('main-scroll-container');
@@ -142,10 +167,17 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             : null;
         if (barRef.current) ro?.observe(barRef.current);
 
+        // iOS often reports a short visualViewport on the first frame; resync
+        // after chrome/layout settle so we don't wait for a user scroll.
+        const retryAt = ios ? [0, 50, 100, 250, 500, 1000] : [0, 100];
+        const retryTimers = retryAt.map((ms) => window.setTimeout(forceSync, ms));
+
         return () => {
             if (raf) window.cancelAnimationFrame(raf);
+            retryTimers.forEach((id) => window.clearTimeout(id));
             window.removeEventListener('resize', schedule);
             window.removeEventListener('orientationchange', schedule);
+            window.removeEventListener('pageshow', forceSync);
             window.removeEventListener('scroll', schedule);
             mainScroll?.removeEventListener('scroll', schedule);
             window.visualViewport?.removeEventListener('resize', schedule);
