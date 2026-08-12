@@ -728,6 +728,10 @@ def _unlock_poster(item) -> None:
         pass
 
 
+# Plex hard-rejects POST /posters above 10MB ("Content-Length exceeds the maximum allowed limit of 10MB").
+PLEX_POSTER_MAX_BYTES = int(9.5 * 1024 * 1024)
+
+
 def _is_retryable_poster_upload_error(exc: BaseException) -> bool:
     text = str(exc or "").lower()
     return any(
@@ -743,26 +747,56 @@ def _is_retryable_poster_upload_error(exc: BaseException) -> bool:
             "timed out",
             "connection reset",
             "connection aborted",
+            "10mb",
+            "content-length",
+            "exceeds the maximum",
         )
     )
 
 
-def _rewrite_poster_for_plex(src: Path, dest: Path) -> Path:
-    """Re-encode/resize a poster so Plex is more likely to accept the upload."""
-    img = Image.open(src).convert("RGBA")
-    max_w, max_h = 2000, 3000
-    if img.width > max_w or img.height > max_h:
-        img.thumbnail((max_w, max_h), Image.LANCZOS)
-    # Flatten onto black — some Plex builds choke on large transparent PNGs.
-    if img.mode == "RGBA":
-        flat = Image.new("RGB", img.size, (0, 0, 0))
-        flat.paste(img, mask=img.split()[3])
-        img = flat
-    else:
-        img = img.convert("RGB")
+def _is_oversized_poster_error(exc: BaseException) -> bool:
+    text = str(exc or "").lower()
+    return any(
+        token in text
+        for token in ("10mb", "content-length", "exceeds the maximum")
+    )
+
+
+def _flatten_poster_rgb(img: Image.Image) -> Image.Image:
+    rgba = img.convert("RGBA")
+    flat = Image.new("RGB", rgba.size, (0, 0, 0))
+    flat.paste(rgba, mask=rgba.split()[3])
+    return flat
+
+
+def _compress_poster_for_plex(src: Path, dest: Path, *, max_bytes: int = PLEX_POSTER_MAX_BYTES) -> Path:
+    """Re-encode/resize until the file is under Plex's ~10MB upload cap."""
+    img = _flatten_poster_rgb(Image.open(src))
     dest.parent.mkdir(parents=True, exist_ok=True)
-    img.save(dest, format="JPEG", quality=92, optimize=True)
-    return dest
+
+    # Start large and walk down until under the cap.
+    plans: list[tuple[int, int, int]] = [
+        (2000, 3000, 92),
+        (1600, 2400, 88),
+        (1400, 2100, 85),
+        (1200, 1800, 82),
+        (1000, 1500, 80),
+        (1000, 1500, 72),
+        (800, 1200, 70),
+    ]
+    last_size = 0
+    for max_w, max_h, quality in plans:
+        frame = img.copy()
+        if frame.width > max_w or frame.height > max_h:
+            frame.thumbnail((max_w, max_h), Image.LANCZOS)
+        frame.save(dest, format="JPEG", quality=quality, optimize=True)
+        last_size = dest.stat().st_size
+        if last_size <= max_bytes:
+            return dest
+    raise RuntimeError(
+        f"Could not compress poster under Plex 10MB limit "
+        f"(still {last_size} bytes after re-encode)"
+    )
 
 
 def _upload_poster_resilient(
@@ -771,59 +805,80 @@ def _upload_poster_resilient(
     *,
     progress: ProgressFn | None = None,
     title: str | None = None,
-    retries: int = 4,
+    retries: int = 3,
 ) -> None:
-    """Upload a poster with unlock + retries.
+    """Upload a poster with unlock + size cap + retries.
 
-    Plex periodically returns HTTP 500 on /library/metadata/.../posters for locked
-    or finicky items (exactly the 'missing collection badge' titles).
+    Plex returns HTTP 500 when POST /posters exceeds 10MB
+    (see PMS log: "Content-Length exceeds the maximum allowed limit of 10MB").
     """
     path = Path(filepath)
     label = title or getattr(item, "title", None) or str(getattr(item, "ratingKey", "") or path.name)
-    _unlock_poster(item)
+    upload_path = path
+    compressed: Path | None = None
 
-    last_exc: BaseException | None = None
-    for attempt in range(max(1, int(retries))):
+    try:
         try:
-            item.uploadPoster(filepath=str(path))
-            return
-        except Exception as exc:
-            last_exc = exc
-            if not _is_retryable_poster_upload_error(exc):
-                raise
+            size = path.stat().st_size
+        except Exception:
+            size = 0
+
+        if size > PLEX_POSTER_MAX_BYTES:
+            compressed = path.with_name(f"{path.stem}_plex.jpg")
+            _compress_poster_for_plex(path, compressed)
+            upload_path = compressed
             _progress(
                 progress,
-                f"Plex poster upload failed for {label} "
-                f"(attempt {attempt + 1}/{retries}): {exc}",
+                f"Compressed poster for {label}: {size} → {compressed.stat().st_size} bytes "
+                f"(Plex 10MB upload limit)",
             )
-            _unlock_poster(item)
+
+        _unlock_poster(item)
+        last_exc: BaseException | None = None
+        for attempt in range(max(1, int(retries))):
             try:
-                if hasattr(item, "reload") and callable(item.reload):
-                    item.reload()
+                item.uploadPoster(filepath=str(upload_path))
+                return
+            except Exception as exc:
+                last_exc = exc
+                if not _is_retryable_poster_upload_error(exc):
+                    raise
+                _progress(
+                    progress,
+                    f"Plex poster upload failed for {label} "
+                    f"(attempt {attempt + 1}/{retries}): {exc}",
+                )
+                # Oversized / rejected payload → compress instead of retrying the same file.
+                if compressed is None:
+                    try:
+                        compressed = path.with_name(f"{path.stem}_plex.jpg")
+                        _compress_poster_for_plex(path, compressed)
+                        upload_path = compressed
+                        _progress(
+                            progress,
+                            f"Retrying {label} with compressed JPEG "
+                            f"({compressed.stat().st_size} bytes)",
+                        )
+                    except Exception as compress_exc:
+                        _progress(progress, f"Poster compress failed for {label}: {compress_exc}")
+                _unlock_poster(item)
+                try:
+                    if hasattr(item, "reload") and callable(item.reload):
+                        item.reload()
+                except Exception:
+                    pass
+                time.sleep(min(3.0, 0.5 * (attempt + 1)))
+
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError(f"Plex poster upload failed for {label}")
+    finally:
+        if compressed is not None:
+            try:
+                if compressed.exists():
+                    compressed.unlink()
             except Exception:
                 pass
-            time.sleep(min(4.0, 0.6 * (attempt + 1)))
-
-    # Final fallback: re-encode as JPEG (Plex is pickier about some PNG payloads).
-    fallback = path.with_name(f"{path.stem}_plex.jpg")
-    try:
-        _rewrite_poster_for_plex(path, fallback)
-        _unlock_poster(item)
-        item.uploadPoster(filepath=str(fallback))
-        _progress(progress, f"Uploaded JPEG fallback poster for {label}")
-        return
-    except Exception as exc:
-        last_exc = exc
-    finally:
-        try:
-            if fallback.exists():
-                fallback.unlink()
-        except Exception:
-            pass
-
-    if last_exc is not None:
-        raise last_exc
-    raise RuntimeError(f"Plex poster upload failed for {label}")
 
 
 def _latest_season(show):
