@@ -249,6 +249,10 @@ export const OverlaysDashboard: React.FC = () => {
     const [tab, setTab] = useState<TabId>(() => parseOverlaysTab());
     const [status, setStatus] = useState<any>(null);
     const [configDraft, setConfigDraft] = useState<OverlaysConfig>(DEFAULT_CONFIG);
+    const configDraftRef = React.useRef(configDraft);
+    useEffect(() => {
+        configDraftRef.current = configDraft;
+    }, [configDraft]);
     const [shows, setShows] = useState<any[]>([]);
     const [episodes, setEpisodes] = useState<any[]>([]);
     const [kometaItems, setKometaItems] = useState<any[]>([]);
@@ -604,8 +608,8 @@ export const OverlaysDashboard: React.FC = () => {
             setRenameDraft('');
             return;
         }
-        const prevRules = Array.isArray(configDraft.customCollectionOverlays)
-            ? configDraft.customCollectionOverlays
+        const prevRules = Array.isArray(configDraftRef.current.customCollectionOverlays)
+            ? configDraftRef.current.customCollectionOverlays
             : [];
         if (!prevRules.some((r) => r.id === ruleId)) {
             setRenamingRuleId(null);
@@ -626,7 +630,7 @@ export const OverlaysDashboard: React.FC = () => {
         } catch (e: any) {
             toast(e?.message || t('overlays.jobs.collections.renameFailed'), 'error');
         }
-    }, [configDraft.customCollectionOverlays, refresh, t, toast]);
+    }, [refresh, t, toast]);
 
     const startRenameRule = useCallback((ruleId: string, currentName: string) => {
         if (!ruleId) return;
@@ -826,10 +830,22 @@ export const OverlaysDashboard: React.FC = () => {
                 librarySectionId: sectionMeta?.sectionId || '',
                 image: imageId,
             };
-            setConfigDraft((prev) => ({
-                ...prev,
+            const prev = configDraftRef.current;
+            const customCollectionOverlays = [
+                ...(Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : []),
+                rule,
+            ];
+            // Persist immediately — Add previously only patched local draft, so Preview/Run
+            // (and any syncConfig refresh) dropped rules that were never saved to disk.
+            const saved = await overlaysApi.saveConfig({
                 customCollectionOverlaysEnabled: true,
-                customCollectionOverlays: [...(Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : []), rule],
+                customCollectionOverlays,
+            });
+            setConfigDraft((draft) => ({
+                ...draft,
+                ...(saved?.config || {}),
+                customCollectionOverlaysEnabled: true,
+                customCollectionOverlays: saved?.config?.customCollectionOverlays || customCollectionOverlays,
             }));
             resetNewCollectionForm();
             await refresh();
@@ -850,17 +866,36 @@ export const OverlaysDashboard: React.FC = () => {
         resetNewCollectionForm,
     ]);
 
-    const removeCollectionOverlayRule = useCallback((id: string) => {
-        setConfigDraft((prev) => {
-            const next = (Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : [])
-                .filter((r) => r.id !== id);
-            return {
-                ...prev,
+    const removeCollectionOverlayRule = useCallback(async (id: string) => {
+        const prev = configDraftRef.current;
+        const next = (Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : [])
+            .filter((r) => r.id !== id);
+        const customCollectionOverlaysEnabled = next.length > 0
+            ? prev.customCollectionOverlaysEnabled !== false
+            : false;
+        setConfigDraft((draft) => ({
+            ...draft,
+            customCollectionOverlays: next,
+            customCollectionOverlaysEnabled,
+        }));
+        try {
+            const saved = await overlaysApi.saveConfig({
                 customCollectionOverlays: next,
-                customCollectionOverlaysEnabled: next.length > 0 ? prev.customCollectionOverlaysEnabled : false,
-            };
-        });
-    }, []);
+                customCollectionOverlaysEnabled,
+            });
+            if (saved?.config) {
+                setConfigDraft((draft) => ({
+                    ...draft,
+                    customCollectionOverlays: saved.config.customCollectionOverlays || next,
+                    customCollectionOverlaysEnabled: saved.config.customCollectionOverlaysEnabled === true,
+                }));
+            }
+            toast(t('overlays.jobs.collections.ruleRemoved'));
+        } catch (e: any) {
+            toast(e?.message || t('overlays.jobs.collections.ruleRemoveFailed'), 'error');
+            await refresh({ syncConfig: true }).catch(() => {});
+        }
+    }, [refresh, t, toast]);
 
     const bingeGroups = useMemo(() => {
         const map = new Map<string, any[]>();
@@ -933,12 +968,13 @@ export const OverlaysDashboard: React.FC = () => {
     };
 
     const saveSettings = () => runAction('saveSettings', async () => {
+        const draft = configDraftRef.current;
         const prevSeason = status?.config?.overlayPresetId || 'new-season';
         const prevEpisode = status?.config?.episodeOverlayPresetId || 'new-episode';
-        await overlaysApi.saveConfig(configDraft);
+        await overlaysApi.saveConfig(draft);
         if (
-            (configDraft.overlayPresetId || 'new-season') !== prevSeason
-            || (configDraft.episodeOverlayPresetId || 'new-episode') !== prevEpisode
+            (draft.overlayPresetId || 'new-season') !== prevSeason
+            || (draft.episodeOverlayPresetId || 'new-episode') !== prevEpisode
         ) {
             await regenerateSamples({ quiet: true });
         }
@@ -2390,7 +2426,7 @@ export const OverlaysDashboard: React.FC = () => {
                                             <button
                                                 type="button"
                                                 className={buttonClass}
-                                                onClick={() => removeCollectionOverlayRule(rule.id)}
+                                                onClick={() => void removeCollectionOverlayRule(rule.id)}
                                             >
                                                 {t('overlays.jobs.collections.removeRule')}
                                             </button>
