@@ -36,6 +36,7 @@ export const DEFAULT_NAV_ORDER = [
     'achievements',
     'maintenance',
     'about',
+    'preferences',
     'settings',
     'logout',
 ] as const;
@@ -63,6 +64,7 @@ export const NAV_ITEM_LABELS: Record<string, string> = {
     status: 'Status',
     maintenance: 'Cleaner',
     about: 'About',
+    preferences: 'Preferences',
     settings: 'Settings',
     logs: 'Logs',
     logout: 'Logout',
@@ -110,6 +112,8 @@ const LEGACY_DEFAULT_NAV_ORDERS = [
     // Achievements landed early in the first opt-in default and crowded the mobile bar.
     ['home', 'discover', 'request', 'analytics', 'achievements', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
     ['home', 'discover', 'request', 'analytics', 'achievements', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
+    // Pre-Preferences page stock order.
+    ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'mediastack', 'requests', 'status', 'achievements', 'maintenance', 'about', 'settings', 'logout'],
 ];
 
 const sameOrder = (a: string[], b: string[]) => (

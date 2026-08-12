@@ -4416,7 +4416,7 @@ const DEFAULT_DASHBOARD_LAYOUT = {
     sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'],
     mainGridOrder: [
         'adminBadge', 'quickActions', 'achievements', 'accessStatus', 'announcement', 'referral',
-        'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'analytics'
+        'support', 'libraryStats', 'collexions', 'analytics'
     ],
     recentlyAddedOrder: ['recentMovies', 'recentShows', 'recentMusic'],
     hiddenSections: [],
@@ -4430,7 +4430,7 @@ const DEFAULT_DASHBOARD_LAYOUT = {
 const DASHBOARD_SECTIONS = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'];
 const DASHBOARD_MAIN_GRID_WIDGETS = [
     'adminBadge', 'accessStatus', 'tempAccessSetup', 'quickActions', 'achievements', 'announcement',
-    'referral', 'newsletterPrefs', 'support', 'libraryStats', 'collexions', 'analytics'
+    'referral', 'support', 'libraryStats', 'collexions', 'analytics'
 ];
 const DASHBOARD_RECENTLY_ADDED_WIDGETS = ['recentMovies', 'recentShows', 'recentMusic'];
 const DASHBOARD_WIDGETS = [...DASHBOARD_MAIN_GRID_WIDGETS, ...DASHBOARD_RECENTLY_ADDED_WIDGETS];
@@ -6486,8 +6486,14 @@ const resolveLocalPlexAccountId = async (config, uri, sessionUser) => {
     const portalUser = findLocalUserForSession(users, sessionUser);
     const adminCloudId = String(config?.adminPlexId || '').trim();
     const sessionPlexId = String(sessionUser?.plexId || '').trim();
+    const portalIds = [portalUser?.plexId, portalUser?.id, sessionUser?.id]
+        .filter(Boolean)
+        .map((id) => String(id).trim());
     const isOwner = !!sessionUser?.isAdmin
-        || !!(adminCloudId && sessionPlexId && sessionPlexId === adminCloudId);
+        || isServerOwnerUser(sessionUser, config)
+        || isServerOwnerUser(portalUser, config)
+        || !!(adminCloudId && sessionPlexId && sessionPlexId === adminCloudId)
+        || !!(adminCloudId && portalIds.includes(adminCloudId));
 
     const { list: accounts } = await fetchPlexServerAccounts(uri, config);
 
@@ -6496,7 +6502,11 @@ const resolveLocalPlexAccountId = async (config, uri, sessionUser) => {
         const home = accounts.find((a) => String(a.id) === '1')
             || accounts.find((a) => norm(a.name) === norm(sessionUser?.username))
             || accounts[0];
-        if (home) return String(home.id);
+        if (home) {
+            const homeId = String(home.id);
+            // Guard: never return a plex.tv cloud id as the local PMS accountID.
+            if (!(adminCloudId && homeId === adminCloudId)) return homeId;
+        }
         return '1';
     }
 
@@ -6532,16 +6542,34 @@ const resolveLocalPlexAccountId = async (config, uri, sessionUser) => {
 const buildPlexNowPlayingIdentity = async (config, uri, reqUser, localUser = null) => {
     // Match the *effective* portal user (impersonation target), never the real admin actor.
     const impersonating = isImpersonatingSession(reqUser);
+    const configuredAdminId = String(config?.adminPlexId || '').trim();
+    const idHits = [reqUser?.plexId, reqUser?.id, localUser?.plexId, localUser?.id]
+        .filter(Boolean)
+        .map((id) => String(id));
     let isAdmin = false;
+    let adminCloudId = null;
     if (!impersonating) {
-        isAdmin = await resolveCurrentAdmin(reqUser, config).catch(() => false)
-            || !!reqUser?.isAdmin;
+        const resolvedAdmin = await resolveCurrentAdmin(reqUser, config).catch(() => false);
+        const ownerByLocal = isServerOwnerUser(reqUser, config) || isServerOwnerUser(localUser, config);
+        const matchesConfigured = !!(configuredAdminId && idHits.includes(configuredAdminId));
+        isAdmin = !!resolvedAdmin
+            || !!reqUser?.isAdmin
+            || ownerByLocal
+            || matchesConfigured;
+        if (!isAdmin && idHits.length) {
+            // Fallback: token owner id when adminPlexId is unset / JWT shape missed resolveCurrentAdmin.
+            const tokenOwnerId = await getAdminId(config).catch(() => null);
+            if (tokenOwnerId && idHits.includes(String(tokenOwnerId))) {
+                isAdmin = true;
+                adminCloudId = String(tokenOwnerId);
+            }
+        } else if (isAdmin) {
+            adminCloudId = configuredAdminId
+                || await getAdminId(config).catch(() => null);
+        }
     }
-    const adminCloudId = isAdmin
-        ? (String(config?.adminPlexId || '').trim() || await getAdminId(config).catch(() => null))
-        : null;
 
-    const accountId = await resolveLocalPlexAccountId(config, uri, {
+    let accountId = await resolveLocalPlexAccountId(config, uri, {
         ...reqUser,
         isAdmin,
         plexId: reqUser?.plexId || localUser?.plexId || adminCloudId,
@@ -6582,6 +6610,17 @@ const buildPlexNowPlayingIdentity = async (config, uri, reqUser, localUser = nul
         }
     }
 
+    const cloudIds = new Set(
+        [adminCloudId, ownerCloudId, plexId]
+            .filter(Boolean)
+            .map((id) => String(id))
+            .filter((id) => id !== '1'),
+    );
+    // Owners always match local PMS account "1"; never use a cloud plex.tv id as the sole accountId.
+    if (isAdmin && (!accountId || cloudIds.has(String(accountId)))) {
+        accountId = '1';
+    }
+
     const accountIds = [
         accountId,
         isAdmin ? '1' : null,
@@ -6597,7 +6636,7 @@ const buildPlexNowPlayingIdentity = async (config, uri, reqUser, localUser = nul
     return {
         accountId: accountId || (isAdmin ? '1' : null),
         accountIds: [...new Set(accountIds.map((v) => String(v)))],
-        plexId: plexId || adminCloudId || null,
+        plexId: plexId || adminCloudId || ownerCloudId || null,
         username,
         email,
         aliases: [...new Set(aliases.map((v) => String(v).trim()).filter(Boolean))],

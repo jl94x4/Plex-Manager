@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon } from 'lucide-react';
+import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 
 import { SettingsDashboard } from './settings/SettingsDashboard';
@@ -8,7 +8,6 @@ import { LibraryMaintenancePanel } from './maintenance/LibraryMaintenancePanel';
 import { appConfirm } from './shared/confirm';
 import { apiFetch } from './shared/api';
 import { InAppNotificationsBell } from './shared/InAppNotificationsBell';
-import { subscribeWebPush, unsubscribeWebPush, webPushSupported } from './shared/webPushSubscribe';
 import { getPublicOrigin, logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath } from './shared/basePath';
 import { formatDate, getDaysUntilExpiry, getAccessProgressPct, addMonths, addYears, formatTime, formatEventName, formatDateTime, hexToRgb, formatSizeCeil, formatStreamingHour } from './shared/format';
 import { CustomSelect, ConfirmModal, StyledCheckbox, ScrollReveal } from './shared/ui';
@@ -7429,101 +7428,12 @@ export const UserDashboard: React.FC<{
     const [wrapUpAchievementsSeed, setWrapUpAchievementsSeed] = useState(() => Date.now());
 
     const user = sessionInfo.account;
-    const { session: nowPlaying } = useNowPlaying(user?.showDiscoverNowPlaying !== false);
+    // Prefer site default when account is missing/partial (admins often have no full users.json row).
+    const nowPlayingEnabled = !user || user.showDiscoverNowPlaying !== false;
+    const { session: nowPlaying } = useNowPlaying(nowPlayingEnabled);
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
-    const [optOutNewsletter, setOptOutNewsletter] = useState(user?.optOutNewsletter || false);
-    const [notifyRequestAvailableEmail, setNotifyRequestAvailableEmail] = useState(user?.notifyRequestAvailableEmail !== false);
-    const [notifyRequestAvailableInApp, setNotifyRequestAvailableInApp] = useState(user?.notifyRequestAvailableInApp !== false);
-    const [notifyRequestAvailableWebPush, setNotifyRequestAvailableWebPush] = useState(user?.notifyRequestAvailableWebPush !== false);
-    const [notifyRequestAvailableDiscord, setNotifyRequestAvailableDiscord] = useState(user?.notifyRequestAvailableDiscord !== false);
-    const [notifyRequestApproved, setNotifyRequestApproved] = useState(
-        user?.notifyRequestApprovedEmail !== false
-        && user?.notifyRequestApprovedInApp !== false
-        && user?.notifyRequestApprovedWebPush !== false,
-    );
-    const [notifyRequestDeclined, setNotifyRequestDeclined] = useState(
-        user?.notifyRequestDeclinedEmail !== false
-        && user?.notifyRequestDeclinedInApp !== false
-        && user?.notifyRequestDeclinedWebPush !== false,
-    );
-    const [notifySeasonAvailable, setNotifySeasonAvailable] = useState(
-        user?.notifySeasonAvailableEmail !== false
-        && user?.notifySeasonAvailableInApp !== false
-        && user?.notifySeasonAvailableWebPush !== false,
-    );
-    const [notifyNewEpisode, setNotifyNewEpisode] = useState(
-        user?.notifyNewEpisodeEmail === true
-        || user?.notifyNewEpisodeInApp === true
-        || user?.notifyNewEpisodeWebPush === true,
-    );
-    const [notifyWebPush, setNotifyWebPush] = useState(user?.notifyWebPush !== false);
-    const [browserPushReady, setBrowserPushReady] = useState(false);
-    const browserPushSupportedFlag = webPushSupported();
-
-    useEffect(() => {
-        setNotifyRequestAvailableEmail(user?.notifyRequestAvailableEmail !== false);
-        setNotifyRequestAvailableInApp(user?.notifyRequestAvailableInApp !== false);
-        setNotifyRequestAvailableWebPush(user?.notifyRequestAvailableWebPush !== false);
-        setNotifyRequestAvailableDiscord(user?.notifyRequestAvailableDiscord !== false);
-        setNotifyRequestApproved(
-            user?.notifyRequestApprovedEmail !== false
-            && user?.notifyRequestApprovedInApp !== false
-            && user?.notifyRequestApprovedWebPush !== false,
-        );
-        setNotifyRequestDeclined(
-            user?.notifyRequestDeclinedEmail !== false
-            && user?.notifyRequestDeclinedInApp !== false
-            && user?.notifyRequestDeclinedWebPush !== false,
-        );
-        setNotifySeasonAvailable(
-            user?.notifySeasonAvailableEmail !== false
-            && user?.notifySeasonAvailableInApp !== false
-            && user?.notifySeasonAvailableWebPush !== false,
-        );
-        setNotifyNewEpisode(
-            user?.notifyNewEpisodeEmail === true
-            || user?.notifyNewEpisodeInApp === true
-            || user?.notifyNewEpisodeWebPush === true,
-        );
-        setNotifyWebPush(user?.notifyWebPush !== false);
-        setOptOutNewsletter(!!user?.optOutNewsletter);
-    }, [
-        user?.notifyRequestAvailableEmail,
-        user?.notifyRequestAvailableInApp,
-        user?.notifyRequestAvailableWebPush,
-        user?.notifyRequestAvailableDiscord,
-        user?.notifyRequestApprovedEmail,
-        user?.notifyRequestApprovedInApp,
-        user?.notifyRequestApprovedWebPush,
-        user?.notifyRequestDeclinedEmail,
-        user?.notifyRequestDeclinedInApp,
-        user?.notifyRequestDeclinedWebPush,
-        user?.notifySeasonAvailableEmail,
-        user?.notifySeasonAvailableInApp,
-        user?.notifySeasonAvailableWebPush,
-        user?.notifyNewEpisodeEmail,
-        user?.notifyNewEpisodeInApp,
-        user?.notifyNewEpisodeWebPush,
-        user?.notifyWebPush,
-        user?.optOutNewsletter,
-    ]);
-
-    useEffect(() => {
-        let cancelled = false;
-        (async () => {
-            if (!browserPushSupportedFlag) return;
-            try {
-                const reg = await navigator.serviceWorker.getRegistration(portalUrl('/'));
-                const sub = await reg?.pushManager.getSubscription();
-                if (!cancelled) setBrowserPushReady(!!sub);
-            } catch {
-                if (!cancelled) setBrowserPushReady(false);
-            }
-        })();
-        return () => { cancelled = true; };
-    }, [browserPushSupportedFlag]);
 
     useEffect(() => {
         setDashboardLayoutDraft(normalizeSectionLayout(publicConfig?.dashboardLayout));
@@ -7612,187 +7522,6 @@ export const UserDashboard: React.FC<{
             heatmapData: data?.heatmapData || null,
         };
     };
-    const handleToggleNewsletter = async () => {
-        setIsLoading(true);
-        try {
-            const newValue = !optOutNewsletter;
-            await apiFetch('/api/users/preferences', {
-                method: 'POST',
-                body: JSON.stringify({ optOutNewsletter: newValue })
-            });
-            setOptOutNewsletter(newValue);
-            setToast({ id: 3, message: 'Newsletter preferences updated!', type: 'success' });
-            refreshSession();
-        } catch (e: any) {
-            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleToggleRequestAvailableEmail = async () => {
-        setIsLoading(true);
-        try {
-            const newValue = !notifyRequestAvailableEmail;
-            await apiFetch('/api/users/preferences', {
-                method: 'POST',
-                body: JSON.stringify({ notifyRequestAvailableEmail: newValue }),
-            });
-            setNotifyRequestAvailableEmail(newValue);
-            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
-            refreshSession();
-        } catch (e: any) {
-            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleToggleRequestAvailableInApp = async () => {
-        setIsLoading(true);
-        try {
-            const newValue = !notifyRequestAvailableInApp;
-            await apiFetch('/api/users/preferences', {
-                method: 'POST',
-                body: JSON.stringify({ notifyRequestAvailableInApp: newValue }),
-            });
-            setNotifyRequestAvailableInApp(newValue);
-            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
-            refreshSession();
-        } catch (e: any) {
-            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleToggleRequestAvailableWebPush = async () => {
-        setIsLoading(true);
-        try {
-            const newValue = !notifyRequestAvailableWebPush;
-            await apiFetch('/api/users/preferences', {
-                method: 'POST',
-                body: JSON.stringify({ notifyRequestAvailableWebPush: newValue }),
-            });
-            setNotifyRequestAvailableWebPush(newValue);
-            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
-            refreshSession();
-        } catch (e: any) {
-            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleToggleRequestAvailableDiscord = async () => {
-        setIsLoading(true);
-        try {
-            const newValue = !notifyRequestAvailableDiscord;
-            await apiFetch('/api/users/preferences', {
-                method: 'POST',
-                body: JSON.stringify({ notifyRequestAvailableDiscord: newValue }),
-            });
-            setNotifyRequestAvailableDiscord(newValue);
-            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
-            refreshSession();
-        } catch (e: any) {
-            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const toggleLifecycleEventPrefs = async (
-        enabled: boolean,
-        keys: string[],
-        setLocal: (v: boolean) => void,
-    ) => {
-        setIsLoading(true);
-        try {
-            const body: Record<string, boolean> = {};
-            for (const key of keys) body[key] = enabled;
-            await apiFetch('/api/users/preferences', {
-                method: 'POST',
-                body: JSON.stringify(body),
-            });
-            setLocal(enabled);
-            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
-            refreshSession();
-        } catch (e: any) {
-            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleToggleRequestApproved = () => toggleLifecycleEventPrefs(
-        !notifyRequestApproved,
-        ['notifyRequestApprovedEmail', 'notifyRequestApprovedInApp', 'notifyRequestApprovedWebPush'],
-        setNotifyRequestApproved,
-    );
-
-    const handleToggleRequestDeclined = () => toggleLifecycleEventPrefs(
-        !notifyRequestDeclined,
-        ['notifyRequestDeclinedEmail', 'notifyRequestDeclinedInApp', 'notifyRequestDeclinedWebPush'],
-        setNotifyRequestDeclined,
-    );
-
-    const handleToggleSeasonAvailable = () => toggleLifecycleEventPrefs(
-        !notifySeasonAvailable,
-        ['notifySeasonAvailableEmail', 'notifySeasonAvailableInApp', 'notifySeasonAvailableWebPush'],
-        setNotifySeasonAvailable,
-    );
-
-    const handleToggleNewEpisode = () => toggleLifecycleEventPrefs(
-        !notifyNewEpisode,
-        ['notifyNewEpisodeEmail', 'notifyNewEpisodeInApp', 'notifyNewEpisodeWebPush'],
-        setNotifyNewEpisode,
-    );
-
-    const handleToggleWebPush = async () => {
-        setIsLoading(true);
-        try {
-            const newValue = !notifyWebPush;
-            await apiFetch('/api/users/preferences', {
-                method: 'POST',
-                body: JSON.stringify({ notifyWebPush: newValue }),
-            });
-            setNotifyWebPush(newValue);
-            setToast({ id: 3, message: 'Notification preferences updated!', type: 'success' });
-            refreshSession();
-        } catch (e: any) {
-            setToast({ id: 3, message: e.message || 'Failed to update preferences', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleEnableBrowserPush = async () => {
-        setIsLoading(true);
-        try {
-            await subscribeWebPush();
-            setBrowserPushReady(true);
-            setToast({ id: 3, message: 'Browser push enabled on this device.', type: 'success' });
-        } catch (e: any) {
-            setToast({ id: 3, message: e.message || 'Failed to enable browser push', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleDisableBrowserPush = async () => {
-        setIsLoading(true);
-        try {
-            await unsubscribeWebPush();
-            setBrowserPushReady(false);
-            setToast({ id: 3, message: 'Browser push disabled on this device.', type: 'success' });
-        } catch (e: any) {
-            setToast({ id: 3, message: e.message || 'Failed to disable browser push', type: 'error' });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     const handleRequestInvite = async (): Promise<boolean> => {
         setIsLoading(true);
         try {
@@ -8273,18 +8002,6 @@ export const UserDashboard: React.FC<{
         isExpiringSoon,
         daysLeft,
         progressPct,
-        optOutNewsletter,
-        notifyRequestAvailableEmail,
-        notifyRequestAvailableInApp,
-        notifyRequestAvailableWebPush,
-        notifyRequestAvailableDiscord,
-        notifyRequestApproved,
-        notifyRequestDeclined,
-        notifySeasonAvailable,
-        notifyNewEpisode,
-        notifyWebPush,
-        browserPushReady,
-        browserPushSupported: browserPushSupportedFlag,
         serverStats,
         serverDataLoading,
         analytics,
@@ -8297,18 +8014,6 @@ export const UserDashboard: React.FC<{
         dashboardData,
         bazarrWidgets,
         handleRelink,
-        handleToggleNewsletter,
-        handleToggleRequestAvailableEmail,
-        handleToggleRequestAvailableInApp,
-        handleToggleRequestAvailableWebPush,
-        handleToggleRequestAvailableDiscord,
-        handleToggleRequestApproved,
-        handleToggleRequestDeclined,
-        handleToggleSeasonAvailable,
-        handleToggleNewEpisode,
-        handleToggleWebPush,
-        handleEnableBrowserPush,
-        handleDisableBrowserPush,
         onViewAdmin,
         onViewSettings,
         onViewLogs,
@@ -8321,10 +8026,7 @@ export const UserDashboard: React.FC<{
         DiscoverPosterCard,
         RebuildLibraryCacheButton,
     }), [
-        t, sessionInfo, publicConfig, user, isRevoked, isExpiringSoon, daysLeft, progressPct, optOutNewsletter,
-        notifyRequestAvailableEmail, notifyRequestAvailableInApp, notifyRequestAvailableWebPush, notifyRequestAvailableDiscord,
-        notifyRequestApproved, notifyRequestDeclined, notifySeasonAvailable, notifyNewEpisode,
-        notifyWebPush, browserPushReady, browserPushSupportedFlag,
+        t, sessionInfo, publicConfig, user, isRevoked, isExpiringSoon, daysLeft, progressPct,
         serverStats, serverDataLoading, analytics, analyticsLoading, analyticsDays, analyticsDaysOpen,
         showQualityBadges, dashboardData, bazarrWidgets, onViewAdmin, onViewSettings, onViewLogs, onViewCollexions, onViewScanner, onViewMediaAutomation, onViewRequests, onPendingRequestsChange,
     ]);
@@ -11791,6 +11493,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'requests': { label: 'Requests', icon: ClipboardList, route: 'requests', adminOnly: true },
         'request': { label: 'Discover & Request', icon: Sparkles, route: 'discovery', adminOnly: false },
         'about': { label: 'About', icon: Info, route: 'about', adminOnly: false },
+        'preferences': { label: 'Preferences', icon: SlidersHorizontal, route: 'preferences', adminOnly: false },
         'settings': { label: 'Settings', icon: Settings, route: 'settings', adminOnly: true },
         'logout': { label: 'Logout', icon: LogOut, route: '', adminOnly: false, onClick: onLogout }
     };

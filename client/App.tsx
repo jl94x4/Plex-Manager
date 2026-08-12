@@ -30,6 +30,7 @@ const MediaAutomationDashboard = lazy(() => import('./media-automation/MediaAuto
 const PosterSetsDashboard = lazy(() => import('./poster-sets/PosterSetsDashboard').then(m => ({ default: m.PosterSetsDashboard })));
 const OverlaysDashboard = lazy(() => import('./overlays/OverlaysDashboard').then(m => ({ default: m.OverlaysDashboard })));
 const AchievementsDashboard = lazy(() => import('./achievements/AchievementsDashboard').then(m => ({ default: m.AchievementsDashboard })));
+const PreferencesPage = lazy(() => import('./preferences/PreferencesPage').then(m => ({ default: m.PreferencesPage })));
 import {
     updateFavicon,
     Login,
@@ -132,7 +133,7 @@ export const MainApp: React.FC = () => {
         closeConfirm();
     };
 
-    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading'>('loading');
+    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'requests' | 'discovery' | 'about' | 'preferences' | 'invite' | 'loading'>('loading');
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
@@ -309,7 +310,7 @@ export const MainApp: React.FC = () => {
         setShowWhatsNew(false);
     }, [publicConfig?.appVersion]);
 
-    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'requests' | 'discovery' | 'about' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
+    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'requests' | 'discovery' | 'about' | 'preferences' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
         if (route === 'logs') {
             setCurrentRoute('settings');
             window.history.pushState({}, '', portalUrl('/settings#logs'));
@@ -343,6 +344,7 @@ export const MainApp: React.FC = () => {
                 path = custom.startsWith('/discovery') ? custom : '/discovery';
             }
             if (route === 'about') path = '/about';
+            if (route === 'preferences') path = '/preferences';
             if (options?.hash) path += options.hash;
             window.history.pushState({}, '', portalUrl(path));
             if (route === 'discovery') {
@@ -431,6 +433,7 @@ export const MainApp: React.FC = () => {
             else if (path.startsWith('/requests') && data.session.isAdmin) setCurrentRoute('requests');
             else if (path.startsWith('/discovery')) setCurrentRoute('discovery');
             else if (path.startsWith('/about')) setCurrentRoute('about');
+            else if (path.startsWith('/preferences')) setCurrentRoute('preferences');
             else if (path.startsWith('/analytics')) setCurrentRoute('analytics');
             else if (path.startsWith('/achievements') && data.navFeatures?.achievements) setCurrentRoute('achievements');
             else if (path.startsWith('/achievements')) {
@@ -584,6 +587,13 @@ export const MainApp: React.FC = () => {
             return <AchievementsDashboard sessionInfo={sessionInfo} />;
         }
         if (currentRoute === 'about') return <AboutDashboard appVersion={publicConfig?.appVersion} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType} />;
+        if (currentRoute === 'preferences') {
+            return (
+                <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
+                    <PreferencesPage sessionInfo={sessionInfo} refreshSession={checkSession} />
+                </Suspense>
+            );
+        }
         if (currentRoute === 'admin' || currentRoute === 'users') return <AdminDashboard onLogout={handleLogout} onViewUserPortal={() => setRoute('user')} onViewStatus={() => setRoute('status')} onViewDashboard={() => setRoute('dashboard')} onViewAsUser={handleViewAsUser} />;
         return <UserDashboard sessionInfo={sessionInfo} publicConfig={publicConfig} onLogout={handleLogout} refreshSession={checkSession} onViewAdmin={() => setRoute('users')} onViewStatus={() => setRoute('status')} onViewDashboard={() => setRoute('dashboard')} onViewSettings={() => setRoute('settings')} onViewLogs={() => setRoute('logs')} onViewCollexions={() => setRoute('collexions')} onViewScanner={() => setRoute('scanner')} onViewMediaAutomation={() => setRoute('media-automation')} onViewRequests={(reviewId) => setRoute('requests', reviewId ? { reviewId } : undefined)} onPendingRequestsChange={refreshPendingRequestCount} onNavigate={setRoute as any} />;
     };
@@ -615,7 +625,7 @@ export const MainApp: React.FC = () => {
                     onDismiss={dismissWhatsNew}
                 />
             )}
-            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || ['home', 'discover', 'request', 'analytics', 'achievements', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'logs', 'settings', 'logout']} navHiddenKeys={sessionInfo?.navHiddenKeys} memberNavOrder={sessionInfo?.memberNavOrder} memberNavHiddenKeys={sessionInfo?.memberNavHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} />}
+            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || ['home', 'discover', 'request', 'analytics', 'achievements', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'preferences', 'logs', 'settings', 'logout']} navHiddenKeys={sessionInfo?.navHiddenKeys} memberNavOrder={sessionInfo?.memberNavOrder} memberNavHiddenKeys={sessionInfo?.memberNavHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} />}
             <div id="main-scroll-container" className={`relative z-10 flex-1 min-w-0 min-h-0 flex flex-col items-center page-x pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-8 overflow-x-hidden overflow-y-auto overscroll-y-contain custom-scrollbar ${isPublicView ? '!pb-8' : ''}`}>
                 {isImpersonating && (
                     <div className="w-full max-w-[100%] pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-0 md:sticky md:top-0 md:z-30">

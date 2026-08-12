@@ -7,7 +7,6 @@ export type MainGridWidgetId =
     | 'quickActions'
     | 'announcement'
     | 'referral'
-    | 'newsletterPrefs'
     | 'support'
     | 'libraryStats'
     | 'collexions'
@@ -50,7 +49,6 @@ export const MAIN_GRID_WIDGET_META: Record<MainGridWidgetId, { label: string; co
     tempAccessSetup: { label: 'Temp access setup spinner', column: 'left', userOnly: true },
     announcement: { label: 'Announcement banner', column: 'left' },
     referral: { label: 'Invite Friends / referral', column: 'left', userOnly: true },
-    newsletterPrefs: { label: 'Newsletter preferences', column: 'left', userOnly: true },
     support: { label: 'Need Help / contact', column: 'left', userOnly: true },
     libraryStats: { label: 'Server Library Size', column: 'right' },
     collexions: { label: 'ColleXions', column: 'right', adminOnly: true },
@@ -74,7 +72,6 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
         'accessStatus',
         'announcement',
         'referral',
-        'newsletterPrefs',
         'support',
         'libraryStats',
         'collexions',
