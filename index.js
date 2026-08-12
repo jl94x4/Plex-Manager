@@ -1347,6 +1347,7 @@ import {
     sessionBelongsToPlexUser,
     sessionBelongsToJellyfinUser,
     pickOwnPlexNowPlayingSession,
+    expandPlexIdVariants,
     asArray as plexSessionAsArray,
 } from './lib/streams/nowPlaying.js';
 const PLEX_API = 'https://plex.tv/api';
@@ -2363,9 +2364,13 @@ const resolveCurrentAdmin = async (sessionUser, config = null) => {
         }
         return false;
     }
-    if (!sessionUser?.plexId) return false;
+    if (!sessionUser?.plexId && !sessionUser?.id) return false;
     const adminId = await getAdminId(loadedConfig);
-    return !!(adminId && String(sessionUser.plexId) === String(adminId));
+    if (!adminId) return false;
+    const hits = [sessionUser.plexId, sessionUser.id]
+        .filter(Boolean)
+        .map((id) => String(id));
+    return hits.includes(String(adminId));
 };
 
 const isPlexConfigured = (config = {}) => !!(config && config.plexToken && config.serverIdentifier);
@@ -6640,11 +6645,15 @@ const buildPlexNowPlayingIdentity = async (config, uri, reqUser, localUser = nul
         reqUser?.id,
         localUser?.id,
         reqUser?.plexId,
+        localUser?.plexId,
     ].filter(Boolean);
+
+    // Include dashed/undashed UUID variants so session thumbs / User.id match JWT uuid.
+    const expandedAccountIds = [...new Set(accountIds.flatMap((id) => expandPlexIdVariants(id)))];
 
     return {
         accountId: accountId || (isAdmin ? '1' : null),
-        accountIds: [...new Set(accountIds.map((v) => String(v)))],
+        accountIds: expandedAccountIds,
         plexId: plexId || adminCloudId || ownerCloudId || null,
         username,
         email,
