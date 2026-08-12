@@ -149,8 +149,7 @@ RUN python3 -m venv /opt/poster-sets-venv \
 
 # Overlays headless worker (New Season banners) — shares poster-sets venv for Python deps.
 COPY overlays/requirements.txt /app/overlays/requirements.txt
-COPY overlays/cli.py /app/overlays/cli.py
-COPY overlays/core.py /app/overlays/core.py
+COPY overlays/*.py /app/overlays/
 COPY overlays/assets /app/overlays/assets
 RUN /opt/poster-sets-venv/bin/pip install --no-cache-dir -r /app/overlays/requirements.txt \
     && chown -R node:node /app/overlays
