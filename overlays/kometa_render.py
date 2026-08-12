@@ -2,7 +2,7 @@
 
 Renders each winning family at Kometa's default coordinates on a 1000x1500
 poster (normalized so any poster size works), with Kometa's backdrop specs
-(back_color #00000099, 305x105 boxes, radius 30 where Kometa specifies it).
+(back_color #00000099, 305x105 boxes, back_radius 30).
 The Placement tab can still override any slot via config.placement.<slot>.
 """
 
@@ -18,6 +18,7 @@ from kometa_detect import Winner
 # Kometa default back box (resolution/audio/status/streaming/network/video_format)
 BACK_W, BACK_H = 305, 105
 BACK_COLOR = (0, 0, 0, 153)  # #00000099
+BACK_RADIUS = 30  # Kometa default back_radius
 
 # Normalized slots on the 1000x1500 Kometa canvas.
 # resolution 15/15 top-left · audio_codec top-center 15 · status 15/330 top-left
@@ -167,9 +168,11 @@ def slot_placement(config: dict | None, slot: str) -> dict:
     return out
 
 
-def _backdrop(width: int = BACK_W, height: int = BACK_H, radius: int = 0) -> Image.Image:
+def _backdrop(width: int = BACK_W, height: int = BACK_H, radius: int = BACK_RADIUS) -> Image.Image:
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
+    # Cap radius so small plates (e.g. 105x105) still look rounded, not circular.
+    radius = max(0, min(int(radius), width // 2, height // 2))
     if radius > 0:
         draw.rounded_rectangle([0, 0, width - 1, height - 1], radius=radius, fill=BACK_COLOR)
     else:
@@ -181,7 +184,7 @@ def _image_on_backdrop(
     rel: str,
     *,
     paths: dict | None,
-    radius: int = 0,
+    radius: int = BACK_RADIUS,
     pad: int = 12,
     width: int = BACK_W,
     height: int = BACK_H,
@@ -205,7 +208,7 @@ def _text_on_backdrop(
     *,
     paths: dict | None,
     font_size: int = 50,
-    radius: int = 0,
+    radius: int = BACK_RADIUS,
     width: int = BACK_W,
     height: int = BACK_H,
     addon_rel: str | None = None,
@@ -303,7 +306,7 @@ def render_winner(winner: Winner, *, config: dict | None, paths: dict | None) ->
         return _text_on_backdrop(winner.text or winner.name, paths=paths, font_size=size, width=width)
 
     if family in {"versions", "mediastinger"}:
-        badge = _image_on_backdrop(winner.image_rel or "", paths=paths, width=105, height=105, radius=30, pad=8)
+        badge = _image_on_backdrop(winner.image_rel or "", paths=paths, width=105, height=105, pad=8)
         if badge is not None:
             return badge
         return _text_on_backdrop(winner.name, paths=paths, width=105, height=105)
@@ -375,7 +378,7 @@ def _render_rating_column(slots: list[dict], *, paths: dict | None) -> Image.Ima
     """Kometa ratings.yml style: up to three 160x160 badges (logo over score)."""
     from kometa_images import ensure_font, load_image
 
-    box, gap, radius = 160, 45, 30
+    box, gap, radius = 160, 45, BACK_RADIUS
     badges: list[Image.Image] = []
     for slot in slots[:3]:
         image_name = str(slot.get("image") or "").strip()

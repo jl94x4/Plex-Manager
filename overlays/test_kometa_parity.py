@@ -60,8 +60,12 @@ from PIL import Image
 
 plate = _backdrop()
 assert plate.size == (305, 105)
+# Kometa back_radius 30 — corner pixels must be transparent (rounded), center opaque
+assert plate.getpixel((0, 0))[3] == 0, "backdrop corner should be rounded/transparent"
+assert plate.getpixel((152, 52))[3] > 0, "backdrop center should be filled"
 txt = _text_on_backdrop("REMUX", paths=None)
 assert txt.size == (305, 105)
+assert txt.getpixel((0, 0))[3] == 0, "text backdrop corner should be rounded"
 
 poster = Image.new("RGB", (1000, 1500), (20, 20, 30))
 winners = {
