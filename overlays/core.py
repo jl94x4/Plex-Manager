@@ -604,11 +604,48 @@ def _apply_show_overlay(
 def _download_poster(plex: PlexServer, thumb_path: str) -> Image.Image | None:
     if not thumb_path:
         return None
-    url = f"{plex._baseurl}{thumb_path}?X-Plex-Token={plex._token}"
-    response = requests.get(url, timeout=60)
-    if response.status_code != 200:
+    try:
+        token = getattr(plex, "_token", None) or ""
+        base = str(getattr(plex, "_baseurl", "") or "").rstrip("/")
+        raw = str(thumb_path).strip()
+        if raw.startswith("http://") or raw.startswith("https://"):
+            url = raw
+            if token and "X-Plex-Token=" not in url:
+                url = f"{url}{'&' if '?' in url else '?'}X-Plex-Token={token}"
+        else:
+            if not raw.startswith("/"):
+                raw = f"/{raw}"
+            url = f"{base}{raw}"
+            if token:
+                url = f"{url}{'&' if '?' in url else '?'}X-Plex-Token={token}"
+        response = requests.get(url, timeout=60)
+        if response.status_code != 200 or not response.content:
+            return None
+        img = Image.open(io.BytesIO(response.content))
+        img.load()
+        return img.convert("RGBA")
+    except Exception:
         return None
-    return Image.open(io.BytesIO(response.content))
+
+
+def _item_poster_image(plex: PlexServer, item) -> Image.Image | None:
+    """Download show/episode art, trying thumb then provider posters."""
+    if item is None or plex is None:
+        return None
+    thumb = getattr(item, "thumb", None) or ""
+    img = _download_poster(plex, thumb)
+    if img is not None:
+        return img
+    try:
+        posters = list(item.posters() or [])
+    except Exception:
+        posters = []
+    for poster in posters[:5]:
+        key = getattr(poster, "key", None) or getattr(poster, "thumb", None) or ""
+        img = _download_poster(plex, str(key))
+        if img is not None:
+            return img
+    return None
 
 
 def _reset_poster(item) -> bool:
@@ -734,7 +771,7 @@ def _bundle_section_ids(config: dict, bundle: str | None) -> list[str] | None:
     """
     Resolve library scope for a run bundle.
     None means all libraries of the requested type(s).
-    Each bundle has its own list — empty/unset = all (independent of other runs).
+    Order: per-run list → Advanced librarySectionIds → all.
     """
     name = str(bundle or "").strip().lower()
     if name in {"core", "banners"}:
@@ -742,18 +779,24 @@ def _bundle_section_ids(config: dict, bundle: str | None) -> list[str] | None:
             config,
             "coreLibrarySectionIds",
             "core_library_section_ids",
+            "librarySectionIds",
+            "library_section_ids",
         )
     if name in {"recently", "recently_added", "recently-added"}:
         return _read_section_id_list(
             config,
             "recentlyAddedLibrarySectionIds",
             "recently_added_library_section_ids",
+            "librarySectionIds",
+            "library_section_ids",
         )
     if name in {"kometa", "media"}:
         return _read_section_id_list(
             config,
             "kometaLibrarySectionIds",
             "kometa_library_section_ids",
+            "librarySectionIds",
+            "library_section_ids",
         )
     return _read_section_id_list(config, "librarySectionIds", "library_section_ids")
 
@@ -787,8 +830,6 @@ def _iter_sections(
 
 def _iter_tv_sections(plex: PlexServer, config: dict, *, bundle: str = "core"):
     """TV libraries for a run bundle. Empty per-run scope falls back to Advanced, then all."""
-    # Pass [] when unset so _section_filter does not re-apply librarySectionIds alone
-    # after _bundle_section_ids already considered that fallback.
     ids = _bundle_section_ids(config, bundle)
     yield from _iter_sections(plex, config, types=("show",), section_ids=ids if ids is not None else [])
 
@@ -2711,16 +2752,30 @@ def _pick_sample_items(plex: PlexServer, config: dict, progress: ProgressFn | No
     show_candidates: list = []
     episode_candidates: list = []
 
-    for section in _iter_tv_sections(plex, config):
+    sections = list(_iter_tv_sections(plex, config, bundle="core"))
+    if not sections:
+        # Last resort for visual samples: any TV library, ignoring filters.
+        sections = list(_iter_sections(plex, config, types=("show",), section_ids=[]))
+        if sections:
+            _progress(progress, "Sample pick: no libraries in scope — using all TV libraries")
+
+    for section in sections:
         if len(show_candidates) < 40:
             batch: list = []
-            try:
-                batch = list(section.search(libtype="show", maxresults=40) or [])
-            except Exception:
-                batch = []
-            if not batch:
+            for pull in (
+                lambda: list(section.recentlyAdded(maxresults=40) or []),
+                lambda: list(section.search(libtype="show", maxresults=40) or []),
+                lambda: list(section.all(container_start=0, container_size=40) or []),
+            ):
+                if batch:
+                    break
                 try:
-                    batch = list(section.all(container_start=0, container_size=40) or [])
+                    batch = [
+                        item for item in (pull() or [])
+                        if str(getattr(item, "type", "") or getattr(item, "TYPE", "") or "").lower()
+                        in {"", "show"}
+                        or hasattr(item, "seasons")
+                    ]
                 except TypeError:
                     try:
                         batch = list(section.all()[:40])
@@ -2731,17 +2786,31 @@ def _pick_sample_items(plex: PlexServer, config: dict, progress: ProgressFn | No
                     _progress(progress, f"{section.title}: show sample pull failed ({exc})")
                     batch = []
             for item in batch:
-                if getattr(item, "thumb", None):
-                    show_candidates.append(item)
-                    if len(show_candidates) >= 40:
-                        break
+                show_candidates.append(item)
+                if len(show_candidates) >= 40:
+                    break
 
         if len(episode_candidates) < 40:
             batch = []
-            try:
-                batch = list(section.search(libtype="episode", maxresults=40) or [])
-            except Exception:
-                batch = []
+            for pull in (
+                lambda: list(section.recentlyAdded(maxresults=40, libtype="episode") or []),
+                lambda: list(section.search(libtype="episode", maxresults=40) or []),
+            ):
+                if batch:
+                    break
+                try:
+                    batch = list(pull() or [])
+                except TypeError:
+                    try:
+                        batch = list(section.recentlyAdded(maxresults=40) or [])
+                        batch = [
+                            item for item in batch
+                            if str(getattr(item, "type", "") or "").lower() == "episode"
+                        ]
+                    except Exception:
+                        batch = []
+                except Exception:
+                    batch = []
             if not batch:
                 try:
                     key = str(getattr(section, "key", "") or "").rstrip("/").split("/")[-1]
@@ -2756,13 +2825,17 @@ def _pick_sample_items(plex: PlexServer, config: dict, progress: ProgressFn | No
                     _progress(progress, f"{section.title}: episode sample pull failed ({exc})")
                     batch = []
             for item in batch:
-                if getattr(item, "thumb", None):
-                    episode_candidates.append(item)
-                    if len(episode_candidates) >= 40:
-                        break
+                episode_candidates.append(item)
+                if len(episode_candidates) >= 40:
+                    break
 
         if len(show_candidates) >= 40 and len(episode_candidates) >= 40:
             break
+
+    if not show_candidates:
+        _progress(progress, "Sample pick: no shows found in scoped TV libraries")
+    if not episode_candidates:
+        _progress(progress, "Sample pick: no episodes found in scoped TV libraries")
 
     random.shuffle(show_candidates)
     random.shuffle(episode_candidates)
@@ -2888,7 +2961,7 @@ def generate_overlay_samples(
     show_img = None
     if show is not None and plex is not None:
         show_title = getattr(show, "title", None) or show_title
-        show_img = _download_poster(plex, getattr(show, "thumb", None) or "")
+        show_img = _item_poster_image(plex, show)
         if show_img is not None:
             show_source = "plex"
 
@@ -2912,7 +2985,7 @@ def generate_overlay_samples(
             episode_show_title = getattr(parent, "title", None) or ""
         except Exception:
             episode_show_title = getattr(episode, "grandparentTitle", None) or ""
-        episode_img = _download_poster(plex, getattr(episode, "thumb", None) or "")
+        episode_img = _item_poster_image(plex, episode)
         if episode_img is not None:
             episode_source = "plex"
 

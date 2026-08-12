@@ -45,6 +45,8 @@ type SampleMeta = {
     generatedAt?: string | null;
     presetId?: string | null;
     showRatingKey?: string | null;
+    showSource?: string | null;
+    episodeSource?: string | null;
 };
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
@@ -347,7 +349,18 @@ export const OverlaysDashboard: React.FC = () => {
                 nextIds = [...current];
             }
             if (nextIds.length === allIds.length && allIds.every((value) => nextIds.includes(value))) {
-                return { ...prev, [field]: [] };
+                nextIds = [];
+            }
+            // Advanced libraries are the shared default — keep per-run scopes in sync
+            // so Overview cards and workers all honour the same selection.
+            if (field === 'librarySectionIds') {
+                return {
+                    ...prev,
+                    librarySectionIds: nextIds,
+                    coreLibrarySectionIds: nextIds,
+                    recentlyAddedLibrarySectionIds: nextIds,
+                    kometaLibrarySectionIds: nextIds,
+                };
             }
             return { ...prev, [field]: nextIds };
         });
@@ -583,8 +596,8 @@ export const OverlaysDashboard: React.FC = () => {
     };
 
     const applySampleResult = (payload: {
-        show?: { title?: string; ratingKey?: string };
-        episode?: { title?: string; showTitle?: string };
+        show?: { title?: string; ratingKey?: string; source?: string };
+        episode?: { title?: string; showTitle?: string; source?: string };
         generatedAt?: string;
         presetId?: string;
         meta?: Record<string, unknown>;
@@ -598,6 +611,8 @@ export const OverlaysDashboard: React.FC = () => {
             generatedAt: payload.generatedAt || (meta.generatedAt as string) || null,
             presetId: payload.presetId || (meta.presetId as string) || null,
             showRatingKey: payload.show?.ratingKey || (meta.showRatingKey as string) || null,
+            showSource: payload.show?.source || (meta.showSource as string) || null,
+            episodeSource: payload.episode?.source || (meta.episodeSource as string) || null,
         });
         setSampleBust(Date.now());
         setSampleError(null);
@@ -664,6 +679,8 @@ export const OverlaysDashboard: React.FC = () => {
                         generatedAt: meta.generatedAt,
                         presetId: meta.presetId,
                         showRatingKey: meta.showRatingKey,
+                        showSource: meta.showSource,
+                        episodeSource: meta.episodeSource,
                     });
                     if (meta.showRatingKey) setSampleShowKey(String(meta.showRatingKey));
                     setSampleBust(Date.now());
@@ -2234,6 +2251,10 @@ export const OverlaysDashboard: React.FC = () => {
                             </div>
                             {sampleError ? (
                                 <p className="mb-3 text-xs text-red-400">{sampleError}</p>
+                            ) : null}
+                            {sampleMeta?.exists
+                                && (sampleMeta.showSource === 'placeholder' || sampleMeta.episodeSource === 'placeholder') ? (
+                                <p className="mb-3 text-xs text-amber-200/90">{t('overlays.settings.visualSamplePlaceholderNote')}</p>
                             ) : null}
                             {sampleMeta?.exists ? (
                                 <div className="flex flex-wrap items-end gap-6">
