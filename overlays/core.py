@@ -9,6 +9,7 @@ import os
 import random
 import re
 import sys
+import time
 import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -717,6 +718,112 @@ def _reset_poster(item) -> bool:
         return True
     except Exception:
         return False
+
+
+def _unlock_poster(item) -> None:
+    """Plex often 500s on /posters when the thumb is locked."""
+    try:
+        item.edit(**{"thumb.locked": 0})
+    except Exception:
+        pass
+
+
+def _is_retryable_poster_upload_error(exc: BaseException) -> bool:
+    text = str(exc or "").lower()
+    return any(
+        token in text
+        for token in (
+            "500",
+            "502",
+            "503",
+            "504",
+            "internal_server_error",
+            "internal server error",
+            "timeout",
+            "timed out",
+            "connection reset",
+            "connection aborted",
+        )
+    )
+
+
+def _rewrite_poster_for_plex(src: Path, dest: Path) -> Path:
+    """Re-encode/resize a poster so Plex is more likely to accept the upload."""
+    img = Image.open(src).convert("RGBA")
+    max_w, max_h = 2000, 3000
+    if img.width > max_w or img.height > max_h:
+        img.thumbnail((max_w, max_h), Image.LANCZOS)
+    # Flatten onto black — some Plex builds choke on large transparent PNGs.
+    if img.mode == "RGBA":
+        flat = Image.new("RGB", img.size, (0, 0, 0))
+        flat.paste(img, mask=img.split()[3])
+        img = flat
+    else:
+        img = img.convert("RGB")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    img.save(dest, format="JPEG", quality=92, optimize=True)
+    return dest
+
+
+def _upload_poster_resilient(
+    item,
+    filepath: str | Path,
+    *,
+    progress: ProgressFn | None = None,
+    title: str | None = None,
+    retries: int = 4,
+) -> None:
+    """Upload a poster with unlock + retries.
+
+    Plex periodically returns HTTP 500 on /library/metadata/.../posters for locked
+    or finicky items (exactly the 'missing collection badge' titles).
+    """
+    path = Path(filepath)
+    label = title or getattr(item, "title", None) or str(getattr(item, "ratingKey", "") or path.name)
+    _unlock_poster(item)
+
+    last_exc: BaseException | None = None
+    for attempt in range(max(1, int(retries))):
+        try:
+            item.uploadPoster(filepath=str(path))
+            return
+        except Exception as exc:
+            last_exc = exc
+            if not _is_retryable_poster_upload_error(exc):
+                raise
+            _progress(
+                progress,
+                f"Plex poster upload failed for {label} "
+                f"(attempt {attempt + 1}/{retries}): {exc}",
+            )
+            _unlock_poster(item)
+            try:
+                if hasattr(item, "reload") and callable(item.reload):
+                    item.reload()
+            except Exception:
+                pass
+            time.sleep(min(4.0, 0.6 * (attempt + 1)))
+
+    # Final fallback: re-encode as JPEG (Plex is pickier about some PNG payloads).
+    fallback = path.with_name(f"{path.stem}_plex.jpg")
+    try:
+        _rewrite_poster_for_plex(path, fallback)
+        _unlock_poster(item)
+        item.uploadPoster(filepath=str(fallback))
+        _progress(progress, f"Uploaded JPEG fallback poster for {label}")
+        return
+    except Exception as exc:
+        last_exc = exc
+    finally:
+        try:
+            if fallback.exists():
+                fallback.unlink()
+        except Exception:
+            pass
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"Plex poster upload failed for {label}")
 
 
 def _latest_season(show):

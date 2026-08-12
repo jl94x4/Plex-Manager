@@ -914,7 +914,7 @@ def _sync_plex_labels(item, wanted: list[str], previous: list[str] | None = None
 
 def _restore_item(plex, paths: dict, key: str, entry: dict, progress: ProgressFn | None) -> bool:
     """Kometa restore priority: disk backup, else fresh provider poster."""
-    from core import _reset_poster
+    from core import _reset_poster, _upload_poster_resilient
 
     try:
         item = plex.fetchItem(f"/library/metadata/{key}")
@@ -925,7 +925,12 @@ def _restore_item(plex, paths: dict, key: str, entry: dict, progress: ProgressFn
     ok = False
     if backup.exists():
         try:
-            item.uploadPoster(filepath=str(backup))
+            _upload_poster_resilient(
+                item,
+                backup,
+                progress=progress,
+                title=str(entry.get("title") or key),
+            )
             ok = True
             _progress(progress, f"Restored original poster: {entry.get('title') or key}")
         except Exception as exc:
@@ -1328,7 +1333,14 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 temp = Path(paths["preview"]) / f"temp_{safe}.png"
                 save_with_marker(result, temp)
                 try:
-                    item.uploadPoster(filepath=str(temp))
+                    from core import _upload_poster_resilient
+
+                    _upload_poster_resilient(
+                        item,
+                        temp,
+                        progress=progress,
+                        title=str(getattr(item, "title", key) or key),
+                    )
                 finally:
                     if temp.exists():
                         temp.unlink()
