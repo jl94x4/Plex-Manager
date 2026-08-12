@@ -50,6 +50,16 @@ const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px
 const fieldInputClass = 'mt-1.5 w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
+const DEFAULT_MEDIA_INFO_PARTS = {
+    res4k: true,
+    res1080p: true,
+    res720p: true,
+    resOther: false,
+    hdr: true,
+    dolbyVision: true,
+    atmos: true,
+};
+
 const DEFAULT_CONFIG: OverlaysConfig = {
     enabled: true,
     previewMode: false,
@@ -68,11 +78,28 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     top10Count: 10,
     tmdbAirDateFallback: true,
     mediaInfoEnabled: false,
+    mediaInfoParts: { ...DEFAULT_MEDIA_INFO_PARTS },
+    mediaInfoIncludeMovies: true,
+    mediaInfoIncludeShows: true,
+    mediaInfoLibrarySectionIds: [],
+    mediaInfoAllowKeys: [],
+    mediaInfoDenyKeys: [],
     statusOverlayEnabled: false,
     statusAiringDays: 14,
+    statusLibrarySectionIds: [],
+    statusAllowKeys: [],
+    statusDenyKeys: [],
     ratingsOverlayEnabled: false,
     ratingsMinimum: 0,
+    ratingsIncludeMovies: true,
+    ratingsIncludeShows: true,
+    ratingsLibrarySectionIds: [],
+    ratingsAllowKeys: [],
+    ratingsDenyKeys: [],
     networkOverlayEnabled: false,
+    networkLibrarySectionIds: [],
+    networkAllowKeys: [],
+    networkDenyKeys: [],
     librarySectionIds: [],
     overlayPresetId: 'new-season',
     episodeOverlayPresetId: 'new-episode',
@@ -81,6 +108,12 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     skipIfKometaOverlayLabel: true,
 };
 
+const keysToText = (keys?: string[]) => (keys || []).join('\n');
+const textToKeys = (value: string) => value
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
 export const OverlaysDashboard: React.FC = () => {
     const { t } = useDiscoverI18n();
     const [tab, setTab] = useState<TabId>('overview');
@@ -88,7 +121,7 @@ export const OverlaysDashboard: React.FC = () => {
     const [configDraft, setConfigDraft] = useState<OverlaysConfig>(DEFAULT_CONFIG);
     const [shows, setShows] = useState<any[]>([]);
     const [episodes, setEpisodes] = useState<any[]>([]);
-    const [sections, setSections] = useState<Array<{ id: string; key: string; title: string }>>([]);
+    const [sections, setSections] = useState<Array<{ id: string; key: string; title: string; type?: string }>>([]);
     const [reconcile, setReconcile] = useState<any>(null);
     const [importText, setImportText] = useState('');
     const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
@@ -1089,24 +1122,194 @@ export const OverlaysDashboard: React.FC = () => {
                         checked={configDraft.mediaInfoEnabled === true}
                         onChange={(mediaInfoEnabled) => setConfigDraft((prev) => ({ ...prev, mediaInfoEnabled }))}
                     />
+                    {configDraft.mediaInfoEnabled === true && (
+                        <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                            <span className={fieldLabelClass}>{t('overlays.settings.mediaInfoParts')}</span>
+                            <p className="text-[11px] text-muted">{t('overlays.settings.mediaInfoPartsHint')}</p>
+                            <div className="flex flex-wrap gap-3">
+                                {([
+                                    ['res4k', '4K'],
+                                    ['res1080p', '1080p'],
+                                    ['res720p', '720p'],
+                                    ['resOther', t('overlays.settings.mediaPartOther')],
+                                    ['hdr', 'HDR'],
+                                    ['dolbyVision', 'Dolby Vision'],
+                                    ['atmos', 'Atmos'],
+                                ] as const).map(([key, label]) => {
+                                    const parts = { ...DEFAULT_MEDIA_INFO_PARTS, ...(configDraft.mediaInfoParts || {}) };
+                                    return (
+                                        <StyledCheckbox
+                                            key={key}
+                                            checked={!!parts[key]}
+                                            label={label}
+                                            onChange={(next) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                mediaInfoParts: {
+                                                    ...DEFAULT_MEDIA_INFO_PARTS,
+                                                    ...(prev.mediaInfoParts || {}),
+                                                    [key]: next,
+                                                },
+                                            }))}
+                                        />
+                                    );
+                                })}
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                                <StyledCheckbox
+                                    checked={configDraft.mediaInfoIncludeShows !== false}
+                                    label={t('overlays.settings.includeShows')}
+                                    onChange={(mediaInfoIncludeShows) => setConfigDraft((prev) => ({ ...prev, mediaInfoIncludeShows }))}
+                                />
+                                <StyledCheckbox
+                                    checked={configDraft.mediaInfoIncludeMovies !== false}
+                                    label={t('overlays.settings.includeMovies')}
+                                    onChange={(mediaInfoIncludeMovies) => setConfigDraft((prev) => ({ ...prev, mediaInfoIncludeMovies }))}
+                                />
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2">
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                    <textarea
+                                        className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                        placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                        value={keysToText(configDraft.mediaInfoAllowKeys)}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            mediaInfoAllowKeys: textToKeys(e.target.value),
+                                        }))}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                    <textarea
+                                        className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                        placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                        value={keysToText(configDraft.mediaInfoDenyKeys)}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            mediaInfoDenyKeys: textToKeys(e.target.value),
+                                        }))}
+                                    />
+                                </label>
+                            </div>
+                        </div>
+                    )}
                     <SettingsToggleRow
                         title={t('overlays.settings.statusOverlayEnabled')}
                         description={t('overlays.settings.statusOverlayEnabledHint')}
                         checked={configDraft.statusOverlayEnabled === true}
                         onChange={(statusOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, statusOverlayEnabled }))}
                     />
+                    {configDraft.statusOverlayEnabled === true && (
+                        <div className="mb-3 grid gap-3 rounded-lg border border-border/50 bg-background/30 p-3 md:grid-cols-2">
+                            <label className="block">
+                                <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                <textarea
+                                    className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                    placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                    value={keysToText(configDraft.statusAllowKeys)}
+                                    onChange={(e) => setConfigDraft((prev) => ({
+                                        ...prev,
+                                        statusAllowKeys: textToKeys(e.target.value),
+                                    }))}
+                                />
+                            </label>
+                            <label className="block">
+                                <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                <textarea
+                                    className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                    placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                    value={keysToText(configDraft.statusDenyKeys)}
+                                    onChange={(e) => setConfigDraft((prev) => ({
+                                        ...prev,
+                                        statusDenyKeys: textToKeys(e.target.value),
+                                    }))}
+                                />
+                            </label>
+                        </div>
+                    )}
                     <SettingsToggleRow
                         title={t('overlays.settings.ratingsOverlayEnabled')}
                         description={t('overlays.settings.ratingsOverlayEnabledHint')}
                         checked={configDraft.ratingsOverlayEnabled === true}
                         onChange={(ratingsOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, ratingsOverlayEnabled }))}
                     />
+                    {configDraft.ratingsOverlayEnabled === true && (
+                        <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                            <div className="flex flex-wrap gap-3">
+                                <StyledCheckbox
+                                    checked={configDraft.ratingsIncludeShows !== false}
+                                    label={t('overlays.settings.includeShows')}
+                                    onChange={(ratingsIncludeShows) => setConfigDraft((prev) => ({ ...prev, ratingsIncludeShows }))}
+                                />
+                                <StyledCheckbox
+                                    checked={configDraft.ratingsIncludeMovies !== false}
+                                    label={t('overlays.settings.includeMovies')}
+                                    onChange={(ratingsIncludeMovies) => setConfigDraft((prev) => ({ ...prev, ratingsIncludeMovies }))}
+                                />
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-2">
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                    <textarea
+                                        className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                        placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                        value={keysToText(configDraft.ratingsAllowKeys)}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            ratingsAllowKeys: textToKeys(e.target.value),
+                                        }))}
+                                    />
+                                </label>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                    <textarea
+                                        className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                        placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                        value={keysToText(configDraft.ratingsDenyKeys)}
+                                        onChange={(e) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            ratingsDenyKeys: textToKeys(e.target.value),
+                                        }))}
+                                    />
+                                </label>
+                            </div>
+                        </div>
+                    )}
                     <SettingsToggleRow
                         title={t('overlays.settings.networkOverlayEnabled')}
                         description={t('overlays.settings.networkOverlayEnabledHint')}
                         checked={configDraft.networkOverlayEnabled === true}
                         onChange={(networkOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, networkOverlayEnabled }))}
                     />
+                    {configDraft.networkOverlayEnabled === true && (
+                        <div className="mb-3 grid gap-3 rounded-lg border border-border/50 bg-background/30 p-3 md:grid-cols-2">
+                            <label className="block">
+                                <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                <textarea
+                                    className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                    placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                    value={keysToText(configDraft.networkAllowKeys)}
+                                    onChange={(e) => setConfigDraft((prev) => ({
+                                        ...prev,
+                                        networkAllowKeys: textToKeys(e.target.value),
+                                    }))}
+                                />
+                            </label>
+                            <label className="block">
+                                <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                <textarea
+                                    className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                    placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                    value={keysToText(configDraft.networkDenyKeys)}
+                                    onChange={(e) => setConfigDraft((prev) => ({
+                                        ...prev,
+                                        networkDenyKeys: textToKeys(e.target.value),
+                                    }))}
+                                />
+                            </label>
+                        </div>
+                    )}
 
                     <div className="grid gap-4 border-b border-border/40 py-4 md:grid-cols-2">
                         <label className="block">
@@ -1390,11 +1593,12 @@ export const OverlaysDashboard: React.FC = () => {
 
                     <div className="py-4">
                         <div className="mb-2 flex items-center justify-between gap-2">
-                            <span className={fieldLabelClass}>{t('overlays.settings.tvLibraries')}</span>
+                            <span className={fieldLabelClass}>{t('overlays.settings.libraries')}</span>
                             <button type="button" className="text-xs font-semibold text-plex underline" onClick={() => void loadSections()}>
                                 {t('overlays.actions.loadSections')}
                             </button>
                         </div>
+                        <p className="mb-2 text-[11px] text-muted">{t('overlays.settings.librariesHint')}</p>
                         {sections.length === 0 ? (
                             <p className="text-xs text-muted">{t('overlays.settings.loadSectionsHint')}</p>
                         ) : (
@@ -1404,11 +1608,14 @@ export const OverlaysDashboard: React.FC = () => {
                                     const selected = configDraft.librarySectionIds || [];
                                     const allSelected = selected.length === 0;
                                     const checked = allSelected || selected.includes(id);
+                                    const typeLabel = section.type === 'movie'
+                                        ? t('overlays.settings.libTypeMovie')
+                                        : t('overlays.settings.libTypeShow');
                                     return (
                                         <StyledCheckbox
                                             key={id}
                                             checked={checked}
-                                            label={`${section.title} (${id})`}
+                                            label={`${section.title} · ${typeLabel} (${id})`}
                                             onChange={(next) => {
                                                 setConfigDraft((prev) => {
                                                     const allIds = sections.map((s) => s.id || s.key);

@@ -264,9 +264,8 @@ def render_network_badge(label: str, *, paths: dict | None = None) -> Image.Imag
     return render_pill([str(label or "NETWORK")[:24]], paths=paths)
 
 
-def _inspect_media(show) -> dict[str, Any]:
-    """Best-effort resolution / HDR / DV / Atmos from a show's episodes."""
-    info = {
+def _empty_media_info() -> dict[str, Any]:
+    return {
         "resolution": None,
         "hdr": False,
         "dolbyVision": False,
@@ -276,82 +275,9 @@ def _inspect_media(show) -> dict[str, Any]:
         "label": None,
         "lines": [],
     }
-    try:
-        episodes = list(show.episodes() or [])
-    except Exception:
-        return info
-    # Prefer newer episodes (often better encodes); keep this shallow for large libraries.
-    for ep in reversed(episodes[-8:]):
-        try:
-            medias = list(getattr(ep, "media", None) or [])
-        except Exception:
-            continue
-        for media in medias:
-            width = getattr(media, "width", None) or 0
-            try:
-                width = int(width)
-            except (TypeError, ValueError):
-                width = 0
-            vres = str(getattr(media, "videoResolution", None) or "").lower()
-            res = None
-            if width >= 3800 or "4k" in vres or vres == "2160":
-                res = "4K"
-            elif width >= 1800 or "1080" in vres:
-                res = "1080P"
-            elif width >= 1200 or "720" in vres:
-                res = "720P"
-            elif width > 0 or vres:
-                res = (vres or "SD").upper()
-            hdr = False
-            dv = False
-            hlg = False
-            atmos = False
-            truehd_atmos = False
-            try:
-                parts = list(getattr(media, "parts", None) or [])
-            except Exception:
-                parts = []
-            for part in parts:
-                try:
-                    streams = list(getattr(part, "streams", None) or [])
-                except Exception:
-                    streams = []
-                for stream in streams:
-                    stype = getattr(stream, "streamType", None) or getattr(stream, "type", None)
-                    title = str(getattr(stream, "title", "") or "")
-                    display = str(getattr(stream, "displayTitle", "") or "")
-                    codec = str(getattr(stream, "codec", "") or "")
-                    blob = f"{title} {display} {codec}".lower()
-                    if stype in (1, "1", "video") or "video" in str(stype).lower():
-                        if any(x in blob for x in ("dolby vision", "dovi", "dvhe", "dvh1")):
-                            dv = True
-                        if str(getattr(stream, "DOVIPresent", "") or "").lower() in {"1", "true"}:
-                            dv = True
-                        if "hlg" in blob or str(getattr(stream, "colorTrc", "") or "").lower() in {"arib-std-b67"}:
-                            hlg = True
-                        if any(x in blob for x in ("hdr", "pq")) or str(getattr(stream, "colorTrc", "") or "").lower() in {"smpte2084"}:
-                            hdr = True
-                    if stype in (2, "2", "audio") or "audio" in str(stype).lower():
-                        if "atmos" in blob:
-                            atmos = True
-                            if "truehd" in blob:
-                                truehd_atmos = True
-            if res and (
-                info["resolution"] is None
-                or (res == "4K")
-                or (res == "1080P" and info["resolution"] not in {"4K"})
-            ):
-                info["resolution"] = res
-            info["hdr"] = info["hdr"] or hdr
-            info["dolbyVision"] = info["dolbyVision"] or dv
-            info["hlg"] = info["hlg"] or hlg
-            info["atmos"] = info["atmos"] or atmos
-            info["truehdAtmos"] = info["truehdAtmos"] or truehd_atmos
-            if info["resolution"] == "4K" and (info["hdr"] or info["dolbyVision"]) and info["atmos"]:
-                break
-        if info["resolution"] == "4K" and (info["hdr"] or info["dolbyVision"]) and info["atmos"]:
-            break
 
+
+def _finalize_media_lines(info: dict[str, Any]) -> dict[str, Any]:
     lines = []
     if info["resolution"]:
         line = info["resolution"]
@@ -371,6 +297,233 @@ def _inspect_media(show) -> dict[str, Any]:
     info["label"] = " · ".join(lines) if lines else None
     info["lines"] = lines
     return info
+
+
+def _scan_media_objects(medias, info: dict[str, Any]) -> dict[str, Any]:
+    for media in medias:
+        width = getattr(media, "width", None) or 0
+        try:
+            width = int(width)
+        except (TypeError, ValueError):
+            width = 0
+        vres = str(getattr(media, "videoResolution", None) or "").lower()
+        res = None
+        if width >= 3800 or "4k" in vres or vres == "2160":
+            res = "4K"
+        elif width >= 1800 or "1080" in vres:
+            res = "1080P"
+        elif width >= 1200 or "720" in vres:
+            res = "720P"
+        elif width > 0 or vres:
+            res = (vres or "SD").upper()
+        hdr = False
+        dv = False
+        hlg = False
+        atmos = False
+        truehd_atmos = False
+        try:
+            parts = list(getattr(media, "parts", None) or [])
+        except Exception:
+            parts = []
+        for part in parts:
+            try:
+                streams = list(getattr(part, "streams", None) or [])
+            except Exception:
+                streams = []
+            for stream in streams:
+                stype = getattr(stream, "streamType", None) or getattr(stream, "type", None)
+                title = str(getattr(stream, "title", "") or "")
+                display = str(getattr(stream, "displayTitle", "") or "")
+                codec = str(getattr(stream, "codec", "") or "")
+                blob = f"{title} {display} {codec}".lower()
+                if stype in (1, "1", "video") or "video" in str(stype).lower():
+                    if any(x in blob for x in ("dolby vision", "dovi", "dvhe", "dvh1")):
+                        dv = True
+                    if str(getattr(stream, "DOVIPresent", "") or "").lower() in {"1", "true"}:
+                        dv = True
+                    if "hlg" in blob or str(getattr(stream, "colorTrc", "") or "").lower() in {"arib-std-b67"}:
+                        hlg = True
+                    if any(x in blob for x in ("hdr", "pq")) or str(getattr(stream, "colorTrc", "") or "").lower() in {"smpte2084"}:
+                        hdr = True
+                if stype in (2, "2", "audio") or "audio" in str(stype).lower():
+                    if "atmos" in blob:
+                        atmos = True
+                        if "truehd" in blob:
+                            truehd_atmos = True
+        if res and (
+            info["resolution"] is None
+            or (res == "4K")
+            or (res == "1080P" and info["resolution"] not in {"4K"})
+        ):
+            info["resolution"] = res
+        info["hdr"] = info["hdr"] or hdr
+        info["dolbyVision"] = info["dolbyVision"] or dv
+        info["hlg"] = info["hlg"] or hlg
+        info["atmos"] = info["atmos"] or atmos
+        info["truehdAtmos"] = info["truehdAtmos"] or truehd_atmos
+        if info["resolution"] == "4K" and (info["hdr"] or info["dolbyVision"]) and info["atmos"]:
+            break
+    return info
+
+
+def _inspect_media(item) -> dict[str, Any]:
+    """Best-effort resolution / HDR / DV / Atmos from a show (recent eps) or movie."""
+    info = _empty_media_info()
+    stype = str(getattr(item, "type", "") or "").lower()
+    medias: list = []
+    if stype == "movie" or (hasattr(item, "media") and not hasattr(item, "episodes")):
+        try:
+            medias = list(getattr(item, "media", None) or [])
+        except Exception:
+            medias = []
+        _scan_media_objects(medias, info)
+        return _finalize_media_lines(info)
+
+    try:
+        episodes = list(item.episodes() or [])
+    except Exception:
+        return info
+    # Prefer newer episodes (often better encodes); keep this shallow for large libraries.
+    for ep in reversed(episodes[-8:]):
+        try:
+            ep_medias = list(getattr(ep, "media", None) or [])
+        except Exception:
+            continue
+        _scan_media_objects(ep_medias, info)
+        if info["resolution"] == "4K" and (info["hdr"] or info["dolbyVision"]) and info["atmos"]:
+            break
+    return _finalize_media_lines(info)
+
+
+def _media_parts_config(config: dict | None) -> dict[str, bool]:
+    defaults = {
+        "res4k": True,
+        "res1080p": True,
+        "res720p": True,
+        "resOther": False,
+        "hdr": True,
+        "dolbyVision": True,
+        "atmos": True,
+    }
+    raw = {}
+    if isinstance(config, dict):
+        raw = config.get("mediaInfoParts") or config.get("media_info_parts") or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    out = dict(defaults)
+    for key in defaults:
+        snake = "".join(f"_{c.lower()}" if c.isupper() else c for c in key).lstrip("_")
+        if raw.get(key) is not None:
+            out[key] = _as_bool(raw.get(key), defaults[key])
+        elif raw.get(snake) is not None:
+            out[key] = _as_bool(raw.get(snake), defaults[key])
+    return out
+
+
+def _filter_media_by_parts(info: dict[str, Any], parts: dict[str, bool]) -> dict[str, Any] | None:
+    """Strip disabled badge parts; return None if nothing remains to stamp."""
+    filtered = dict(info)
+    res = str(filtered.get("resolution") or "").upper()
+    if res in {"4K", "2160", "2160P"}:
+        if not parts.get("res4k", True):
+            filtered["resolution"] = None
+    elif res in {"1080P", "1080"}:
+        if not parts.get("res1080p", True):
+            filtered["resolution"] = None
+    elif res in {"720P", "720"}:
+        if not parts.get("res720p", True):
+            filtered["resolution"] = None
+    elif res:
+        if not parts.get("resOther", False):
+            filtered["resolution"] = None
+
+    if not parts.get("dolbyVision", True):
+        filtered["dolbyVision"] = False
+    if not parts.get("hdr", True):
+        filtered["hdr"] = False
+        filtered["hlg"] = False
+    if not parts.get("atmos", True):
+        filtered["atmos"] = False
+        filtered["truehdAtmos"] = False
+
+    # If resolution was stripped but HDR/DV alone remain, keep HDR-only badges
+    filtered = _finalize_media_lines(filtered)
+    if not (filtered.get("lines") or []):
+        return None
+    return filtered
+
+
+def _media_signature(info: dict[str, Any], parts: dict[str, bool] | None = None) -> str:
+    parts = parts or {}
+    return "|".join(
+        [
+            str(info.get("resolution") or ""),
+            "dv" if info.get("dolbyVision") else (
+                "hlg" if info.get("hlg") else ("hdr" if info.get("hdr") else "")
+            ),
+            "atmos" if info.get("atmos") else "",
+            "truehd" if info.get("truehdAtmos") else "",
+            f"p4k={1 if parts.get('res4k', True) else 0}",
+            f"p1080={1 if parts.get('res1080p', True) else 0}",
+            f"p720={1 if parts.get('res720p', True) else 0}",
+            f"poth={1 if parts.get('resOther', False) else 0}",
+            f"phdr={1 if parts.get('hdr', True) else 0}",
+            f"pdv={1 if parts.get('dolbyVision', True) else 0}",
+            f"patm={1 if parts.get('atmos', True) else 0}",
+        ]
+    )
+
+
+def _mode_allow_deny(config: dict, mode: str) -> tuple[list, list]:
+    maps = {
+        "media": ("mediaInfoAllowKeys", "media_info_allow_keys", "mediaInfoDenyKeys", "media_info_deny_keys"),
+        "status": ("statusAllowKeys", "status_allow_keys", "statusDenyKeys", "status_deny_keys"),
+        "ratings": ("ratingsAllowKeys", "ratings_allow_keys", "ratingsDenyKeys", "ratings_deny_keys"),
+        "network": ("networkAllowKeys", "network_allow_keys", "networkDenyKeys", "network_deny_keys"),
+    }
+    ac, as_, dc, ds = maps.get(mode, (None, None, None, None))
+    if not ac:
+        return [], []
+    allow = config.get(ac) if config.get(ac) is not None else config.get(as_)
+    deny = config.get(dc) if config.get(dc) is not None else config.get(ds)
+    return (
+        [str(x).strip() for x in (allow or []) if str(x).strip()],
+        [str(x).strip() for x in (deny or []) if str(x).strip()],
+    )
+
+
+def _sections_for_kometa_mode(plex, config: dict, mode: str):
+    from core import _iter_sections, _mode_section_ids
+
+    override = _mode_section_ids(config, mode)
+    cfg = dict(config or {})
+    if override is not None:
+        cfg["librarySectionIds"] = override
+
+    if mode == "media":
+        include_movies = _as_bool(cfg.get("mediaInfoIncludeMovies", cfg.get("media_info_include_movies")), True)
+        include_shows = _as_bool(cfg.get("mediaInfoIncludeShows", cfg.get("media_info_include_shows")), True)
+        types: list[str] = []
+        if include_shows:
+            types.append("show")
+        if include_movies:
+            types.append("movie")
+        if not types:
+            return []
+        return list(_iter_sections(plex, cfg, types=tuple(types)))
+    if mode == "ratings":
+        include_movies = _as_bool(cfg.get("ratingsIncludeMovies", cfg.get("ratings_include_movies")), True)
+        include_shows = _as_bool(cfg.get("ratingsIncludeShows", cfg.get("ratings_include_shows")), True)
+        types = []
+        if include_shows:
+            types.append("show")
+        if include_movies:
+            types.append("movie")
+        if not types:
+            return []
+        return list(_iter_sections(plex, cfg, types=tuple(types)))
+    # status + network: shows only
+    return list(_iter_sections(plex, cfg, types=("show",)))
 
 
 def _show_status_label(show, *, airing_days: int = 14) -> str | None:
@@ -476,7 +629,6 @@ def _run_generic_mode(
     default_enabled: bool = False,
 ) -> dict:
     from modes_extra import _prune_mode_when_disabled, _restore_show_mode, _clear_mode_backup
-    from core import _iter_tv_sections
 
     log_path = paths[log_key]
     enabled = _as_bool(config.get(enabled_key, config.get(enabled_snake)), default_enabled)
@@ -499,7 +651,7 @@ def _run_generic_mode(
     place_key = {"media": "media", "status": "status", "ratings": "ratings", "network": "network"}.get(mode, mode)
     placement = placement_for(config, place_key)
 
-    sections = list(_iter_tv_sections(plex, config))
+    sections = _sections_for_kometa_mode(plex, config, mode)
     should = discover_fn(plex, config, sections, progress, skip_kometa=skip_kometa)
 
     added = removed = 0
@@ -583,38 +735,40 @@ def _run_generic_mode(
 
 
 def discover_media(plex, config, sections, progress=None, skip_kometa=True):
-    from core import _has_kometa_overlay_label
+    from core import _has_kometa_overlay_label, _title_allowed
+
+    parts = _media_parts_config(config)
+    allow, deny = _mode_allow_deny(config, "media")
     should = {}
     for section in sections:
         try:
-            for show in section.all():
-                key = str(getattr(show, "ratingKey", "") or "")
+            for item in section.all():
+                key = str(getattr(item, "ratingKey", "") or "")
                 if not key:
                     continue
-                if skip_kometa and _has_kometa_overlay_label(show):
+                if not _title_allowed(key, allow, deny):
                     continue
-                info = _inspect_media(show)
-                lines = info.get("lines") or []
+                if skip_kometa and _has_kometa_overlay_label(item):
+                    continue
+                info = _inspect_media(item)
+                filtered = _filter_media_by_parts(info, parts)
+                if not filtered:
+                    continue
+                lines = filtered.get("lines") or []
                 if not lines:
                     continue
                 should[key] = {
-                    "show": show,
+                    "show": item,
                     "library": section.title,
+                    "itemType": str(getattr(section, "type", "") or getattr(item, "type", "") or ""),
                     "lines": lines,
-                    "resolution": info.get("resolution"),
-                    "hdr": bool(info.get("hdr")),
-                    "dolbyVision": bool(info.get("dolbyVision")),
-                    "hlg": bool(info.get("hlg")),
-                    "atmos": bool(info.get("atmos")),
-                    "truehdAtmos": bool(info.get("truehdAtmos")),
-                    "signature": "|".join(
-                        [
-                            str(info.get("resolution") or ""),
-                            "dv" if info.get("dolbyVision") else ("hlg" if info.get("hlg") else ("hdr" if info.get("hdr") else "")),
-                            "atmos" if info.get("atmos") else "",
-                            "truehd" if info.get("truehdAtmos") else "",
-                        ]
-                    ),
+                    "resolution": filtered.get("resolution"),
+                    "hdr": bool(filtered.get("hdr")),
+                    "dolbyVision": bool(filtered.get("dolbyVision")),
+                    "hlg": bool(filtered.get("hlg")),
+                    "atmos": bool(filtered.get("atmos")),
+                    "truehdAtmos": bool(filtered.get("truehdAtmos")),
+                    "signature": _media_signature(filtered, parts),
                 }
         except Exception as exc:
             _progress(progress, f"Media scan failed for {getattr(section, 'title', '?')}: {exc}")
@@ -623,14 +777,20 @@ def discover_media(plex, config, sections, progress=None, skip_kometa=True):
 
 
 def discover_status(plex, config, sections, progress=None, skip_kometa=True):
-    from core import _has_kometa_overlay_label
+    from core import _has_kometa_overlay_label, _title_allowed
+
     airing_days = int(config.get("statusAiringDays") or config.get("status_airing_days") or 14)
+    allow, deny = _mode_allow_deny(config, "status")
     should = {}
     for section in sections:
+        if str(getattr(section, "type", "") or "").lower() != "show":
+            continue
         try:
             for show in section.all():
                 key = str(getattr(show, "ratingKey", "") or "")
                 if not key:
+                    continue
+                if not _title_allowed(key, allow, deny):
                     continue
                 if skip_kometa and _has_kometa_overlay_label(show):
                     continue
@@ -650,23 +810,28 @@ def discover_status(plex, config, sections, progress=None, skip_kometa=True):
 
 
 def discover_ratings(plex, config, sections, progress=None, skip_kometa=True):
-    from core import _has_kometa_overlay_label
+    from core import _has_kometa_overlay_label, _title_allowed
+
     minimum = float(config.get("ratingsMinimum") or config.get("ratings_minimum") or 0)
+    allow, deny = _mode_allow_deny(config, "ratings")
     should = {}
     for section in sections:
         try:
-            for show in section.all():
-                key = str(getattr(show, "ratingKey", "") or "")
+            for item in section.all():
+                key = str(getattr(item, "ratingKey", "") or "")
                 if not key:
                     continue
-                if skip_kometa and _has_kometa_overlay_label(show):
+                if not _title_allowed(key, allow, deny):
                     continue
-                score = _rating_value(show)
+                if skip_kometa and _has_kometa_overlay_label(item):
+                    continue
+                score = _rating_value(item)
                 if score is None or score < minimum:
                     continue
                 should[key] = {
-                    "show": show,
+                    "show": item,
                     "library": section.title,
+                    "itemType": str(getattr(section, "type", "") or ""),
                     "score": score,
                     "signature": f"{score:.2f}",
                 }
@@ -677,13 +842,19 @@ def discover_ratings(plex, config, sections, progress=None, skip_kometa=True):
 
 
 def discover_network(plex, config, sections, progress=None, skip_kometa=True):
-    from core import _has_kometa_overlay_label
+    from core import _has_kometa_overlay_label, _title_allowed
+
+    allow, deny = _mode_allow_deny(config, "network")
     should = {}
     for section in sections:
+        if str(getattr(section, "type", "") or "").lower() != "show":
+            continue
         try:
             for show in section.all():
                 key = str(getattr(show, "ratingKey", "") or "")
                 if not key:
+                    continue
+                if not _title_allowed(key, allow, deny):
                     continue
                 if skip_kometa and _has_kometa_overlay_label(show):
                     continue

@@ -26,12 +26,12 @@ Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on *
 - **Recently Added** — Plex `addedAt` within window; skipped if Live or New Season already claimed the show
 - **TOP 10** — top-rated shows (audience/rating); corner badge, can stack with bottom badges
 - **TMDB air-date fallback** — when Plex lacks `originallyAvailableAt`, resolve dates via TMDB (portal API key) for recently-added undated episodes; applies to New Episode / New Season / Live
-- **Media info (4K/HDR/Atmos)** — official Kometa `resolution/*.png` + Atmos audio logos (downloaded from [Kometa](https://github.com/Kometa-Team/Kometa) `defaults/overlays/images/`)
-- **Show status** — AIRING / RETURNING / ENDED / CANCELED (Kometa text style; no stock PNGs)
-- **Ratings** — score + Kometa `rating/TMDb.png` (etc.)
-- **Network** — Kometa `network/color/{Name}.png` matched from Plex network/studio
+- **Media info (4K/HDR/Atmos)** — official Kometa `resolution/*.png` + Atmos audio logos (downloaded from [Kometa](https://github.com/Kometa-Team/Kometa) `defaults/overlays/images/`). Settings: badge-part toggles, include movies/shows, allow/deny ratingKeys
+- **Show status** — AIRING / RETURNING / ENDED / CANCELED (Kometa text style; no stock PNGs); TV only; allow/deny keys
+- **Ratings** — score + Kometa `rating/TMDb.png` (etc.); movies and/or shows; allow/deny keys
+- **Network** — Kometa `network/color/{Name}.png` matched from Plex network/studio; TV only; allow/deny keys
 
-Images are cached at runtime under `config/overlays/kometa-images/` (not vendored in git). Placement tab edits New Season/Episode targets **and** these Kometa-style slots (defaults match Kometa offsets on a 1000×1500 poster).
+Images are cached at runtime under `config/overlays/kometa-images/` (not vendored in git). Library picker includes movie + TV sections (TV-only modes ignore movies). Placement tab edits New Season/Episode targets **and** these Kometa-style slots (defaults match Kometa offsets on a 1000×1500 poster).
 
 ## Placement
 

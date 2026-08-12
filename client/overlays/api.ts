@@ -105,6 +105,16 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
     },
 };
 
+export type MediaInfoParts = {
+    res4k?: boolean;
+    res1080p?: boolean;
+    res720p?: boolean;
+    resOther?: boolean;
+    hdr?: boolean;
+    dolbyVision?: boolean;
+    atmos?: boolean;
+};
+
 export type OverlaysConfig = {
     enabled?: boolean;
     previewMode?: boolean;
@@ -123,11 +133,28 @@ export type OverlaysConfig = {
     top10Count?: number;
     tmdbAirDateFallback?: boolean;
     mediaInfoEnabled?: boolean;
+    mediaInfoParts?: MediaInfoParts;
+    mediaInfoIncludeMovies?: boolean;
+    mediaInfoIncludeShows?: boolean;
+    mediaInfoLibrarySectionIds?: string[];
+    mediaInfoAllowKeys?: string[];
+    mediaInfoDenyKeys?: string[];
     statusOverlayEnabled?: boolean;
     statusAiringDays?: number;
+    statusLibrarySectionIds?: string[];
+    statusAllowKeys?: string[];
+    statusDenyKeys?: string[];
     ratingsOverlayEnabled?: boolean;
     ratingsMinimum?: number;
+    ratingsIncludeMovies?: boolean;
+    ratingsIncludeShows?: boolean;
+    ratingsLibrarySectionIds?: string[];
+    ratingsAllowKeys?: string[];
+    ratingsDenyKeys?: string[];
     networkOverlayEnabled?: boolean;
+    networkLibrarySectionIds?: string[];
+    networkAllowKeys?: string[];
+    networkDenyKeys?: string[];
     librarySectionIds?: string[];
     overlayPresetId?: string;
     episodeOverlayPresetId?: string;

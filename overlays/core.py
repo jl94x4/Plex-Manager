@@ -707,8 +707,10 @@ def should_have_overlay(
         return False, meta
 
 
-def _section_filter(config: dict) -> set[str] | None:
-    raw = config.get("librarySectionIds") or config.get("library_section_ids") or []
+def _section_filter(config: dict, override_ids: list | None = None) -> set[str] | None:
+    raw = override_ids if override_ids is not None else (
+        config.get("librarySectionIds") or config.get("library_section_ids") or []
+    )
     if not isinstance(raw, list) or not raw:
         return None
     return {str(x).strip() for x in raw if str(x).strip()}
@@ -721,15 +723,64 @@ def _section_ids(section) -> set[str]:
     return {section_id, section_key, *titles}
 
 
-def _iter_tv_sections(plex: PlexServer, config: dict):
-    wanted = _section_filter(config)
+def _iter_sections(
+    plex: PlexServer,
+    config: dict,
+    *,
+    types: tuple[str, ...] = ("show",),
+    section_ids: list | None = None,
+):
+    """Yield library sections matching type(s) and optional section id filter."""
+    wanted = _section_filter(config, override_ids=section_ids)
+    allowed = {str(t).lower() for t in types}
     for section in plex.library.sections():
-        if section.type != "show":
+        stype = str(getattr(section, "type", "") or "").lower()
+        if stype not in allowed:
             continue
         ids = _section_ids(section)
         if wanted is not None and not (wanted & ids):
             continue
         yield section
+
+
+def _iter_tv_sections(plex: PlexServer, config: dict):
+    yield from _iter_sections(plex, config, types=("show",))
+
+
+def _iter_movie_sections(plex: PlexServer, config: dict):
+    yield from _iter_sections(plex, config, types=("movie",))
+
+
+def _title_allowed(rating_key: str, allow: list | None, deny: list | None) -> bool:
+    key = str(rating_key or "").strip()
+    if not key:
+        return False
+    deny_set = {str(x).strip() for x in (deny or []) if str(x).strip()}
+    if key in deny_set:
+        return False
+    allow_list = [str(x).strip() for x in (allow or []) if str(x).strip()]
+    if not allow_list:
+        return True
+    return key in set(allow_list)
+
+
+def _mode_section_ids(config: dict, mode: str) -> list | None:
+    """Per-mode library override; None means use global librarySectionIds."""
+    key_map = {
+        "media": ("mediaInfoLibrarySectionIds", "media_info_library_section_ids"),
+        "status": ("statusLibrarySectionIds", "status_library_section_ids"),
+        "ratings": ("ratingsLibrarySectionIds", "ratings_library_section_ids"),
+        "network": ("networkLibrarySectionIds", "network_library_section_ids"),
+    }
+    camel, snake = key_map.get(mode, (None, None))
+    if not camel:
+        return None
+    raw = config.get(camel) if isinstance(config, dict) else None
+    if raw is None:
+        raw = config.get(snake) if isinstance(config, dict) else None
+    if isinstance(raw, list) and raw:
+        return [str(x).strip() for x in raw if str(x).strip()]
+    return None
 
 
 def _iter_shows(plex: PlexServer, config: dict):
@@ -2452,16 +2503,18 @@ def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
 
 
 def list_tv_sections(config: dict) -> dict:
+    """List show + movie libraries for Overlays Settings (TV modes ignore movies)."""
     plex = _connect(config)
     sections = []
     for section in plex.library.sections():
-        if section.type != "show":
+        stype = str(getattr(section, "type", "") or "").lower()
+        if stype not in {"show", "movie"}:
             continue
         sections.append({
             "key": str(section.key),
             "id": str(section.key).rstrip("/").split("/")[-1],
             "title": section.title,
-            "type": section.type,
+            "type": stype,
         })
     return {"ok": True, "sections": sections}
 
