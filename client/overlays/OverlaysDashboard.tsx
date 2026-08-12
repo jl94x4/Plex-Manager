@@ -8,6 +8,7 @@ import {
     List,
     Loader2,
     Move,
+    Pencil,
     RefreshCw,
     RotateCcw,
     Save,
@@ -265,6 +266,8 @@ export const OverlaysDashboard: React.FC = () => {
     const [gallery, setGallery] = useState<Array<{ name: string; kind: string; url: string; mtime: number }>>([]);
     const [collapsedBinges, setCollapsedBinges] = useState<Record<string, boolean>>({});
     const [collapsedKometaSections, setCollapsedKometaSections] = useState<Record<string, boolean>>({});
+    const [renamingRuleId, setRenamingRuleId] = useState<string | null>(null);
+    const [renameDraft, setRenameDraft] = useState('');
     const [jobCardExpanded, setJobCardExpanded] = useState<Record<JobCardId, boolean>>({
         banners: false,
         recently: false,
@@ -523,6 +526,7 @@ export const OverlaysDashboard: React.FC = () => {
             title: string;
             library: string;
             kind: 'collection' | 'other';
+            ruleId: string;
             rows: any[];
         };
         const byId = new Map<string, Section>();
@@ -531,6 +535,7 @@ export const OverlaysDashboard: React.FC = () => {
             title: '',
             library: '',
             kind: 'other',
+            ruleId: '',
             rows: [],
         };
         for (const row of kometaItems) {
@@ -541,24 +546,44 @@ export const OverlaysDashboard: React.FC = () => {
             }
             const ruleId = String(fam.extra?.ruleId || fam.name || '').trim();
             const rule = collectionRules.find((r) => r.id === ruleId);
+            // Prefer the user-editable rule name so renames show on the list immediately.
             const title = String(
-                fam.extra?.collectionTitle
-                || rule?.collectionTitle
+                rule?.name
                 || fam.text
-                || rule?.name
+                || fam.extra?.collectionTitle
+                || rule?.collectionTitle
                 || ruleId
                 || 'Collection',
             ).trim() || 'Collection';
             const library = String(
                 fam.extra?.library || rule?.library || row.library || '',
             ).trim();
-            const id = `collection:${ruleId || title}:${library}`;
+            const id = ruleId ? `collection:${ruleId}` : `collection:${title}:${library}`;
             let section = byId.get(id);
             if (!section) {
-                section = { id, title, library, kind: 'collection', rows: [] };
+                section = { id, title, library, kind: 'collection', ruleId, rows: [] };
                 byId.set(id, section);
             }
             section.rows.push(row);
+        }
+        // Always show configured rules as their own collapsible section (even with 0 stamps).
+        for (const rule of collectionRules) {
+            if (!rule?.id) continue;
+            const id = `collection:${rule.id}`;
+            const existing = byId.get(id);
+            if (existing) {
+                if (rule.name) existing.title = rule.name;
+                if (rule.library) existing.library = rule.library;
+                continue;
+            }
+            byId.set(id, {
+                id,
+                title: String(rule.name || rule.collectionTitle || rule.id).trim() || rule.id,
+                library: String(rule.library || '').trim(),
+                kind: 'collection',
+                ruleId: rule.id,
+                rows: [],
+            });
         }
         const next = [...byId.values()].sort((a, b) => {
             const la = `${a.library} ${a.title}`.toLowerCase();
@@ -568,6 +593,43 @@ export const OverlaysDashboard: React.FC = () => {
         if (other.rows.length) next.push(other);
         return next;
     }, [kometaItems, collectionRules]);
+
+    const renameCollectionRule = useCallback(async (ruleId: string, nextName: string) => {
+        const name = String(nextName || '').trim();
+        if (!ruleId || !name) {
+            setRenamingRuleId(null);
+            setRenameDraft('');
+            return;
+        }
+        const prevRules = Array.isArray(configDraft.customCollectionOverlays)
+            ? configDraft.customCollectionOverlays
+            : [];
+        if (!prevRules.some((r) => r.id === ruleId)) {
+            setRenamingRuleId(null);
+            setRenameDraft('');
+            toast(t('overlays.jobs.collections.renameMissing'), 'error');
+            return;
+        }
+        const customCollectionOverlays = prevRules.map((r) => (
+            r.id === ruleId ? { ...r, name } : r
+        ));
+        setConfigDraft((prev) => ({ ...prev, customCollectionOverlays }));
+        setRenamingRuleId(null);
+        setRenameDraft('');
+        try {
+            await overlaysApi.saveConfig({ customCollectionOverlays });
+            await refresh({ syncConfig: true });
+            toast(t('overlays.jobs.collections.renameSaved'));
+        } catch (e: any) {
+            toast(e?.message || t('overlays.jobs.collections.renameFailed'), 'error');
+        }
+    }, [configDraft.customCollectionOverlays, refresh, t, toast]);
+
+    const startRenameRule = useCallback((ruleId: string, currentName: string) => {
+        if (!ruleId) return;
+        setRenamingRuleId(ruleId);
+        setRenameDraft(currentName || '');
+    }, []);
 
     const tabs = useMemo(() => ([
         { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
@@ -2244,9 +2306,39 @@ export const OverlaysDashboard: React.FC = () => {
                                             key={rule.id}
                                             className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/30 px-3 py-2"
                                         >
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-semibold text-text truncate">{rule.name}</p>
-                                                <p className="text-[11px] text-muted truncate">
+                                            <div className="min-w-0 flex-1">
+                                                {renamingRuleId === rule.id ? (
+                                                    <input
+                                                        className={fieldInputClass}
+                                                        value={renameDraft}
+                                                        autoFocus
+                                                        onChange={(e) => setRenameDraft(e.target.value)}
+                                                        onBlur={() => void renameCollectionRule(rule.id, renameDraft)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                void renameCollectionRule(rule.id, renameDraft);
+                                                            }
+                                                            if (e.key === 'Escape') {
+                                                                setRenamingRuleId(null);
+                                                                setRenameDraft('');
+                                                            }
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        className="group flex max-w-full items-center gap-1.5 text-left"
+                                                        onClick={() => startRenameRule(rule.id, rule.name)}
+                                                        title={t('overlays.jobs.collections.rename')}
+                                                    >
+                                                        <p className="truncate text-sm font-semibold text-text group-hover:text-plex">
+                                                            {rule.name}
+                                                        </p>
+                                                        <Pencil className="h-3 w-3 shrink-0 text-muted opacity-60 group-hover:opacity-100" />
+                                                    </button>
+                                                )}
+                                                <p className="mt-0.5 text-[11px] text-muted truncate">
                                                     {rule.collectionTitle || rule.collectionRatingKey}
                                                     {rule.library ? ` · ${rule.library}` : ''}
                                                     {' · '}
@@ -2263,6 +2355,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         </div>
                                     ))
                                 )}
+                                <p className="text-[11px] text-muted">{t('overlays.jobs.collections.unlimitedHint')}</p>
                             </div>
 
                             <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
@@ -2760,7 +2853,7 @@ export const OverlaysDashboard: React.FC = () => {
                         </button>
                     )}
                 >
-                    {kometaItems.length === 0 ? (
+                    {kometaItems.length === 0 && collectionRules.length === 0 ? (
                         <p className="text-sm text-muted">{t('overlays.kometa.empty')}</p>
                     ) : (
                         <div className="space-y-3">
@@ -2772,32 +2865,81 @@ export const OverlaysDashboard: React.FC = () => {
                                         className="overflow-hidden rounded-xl border border-white/10 bg-black/25"
                                     >
                                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2.5">
-                                            <button
-                                                type="button"
-                                                className="min-w-0 flex-1 text-left"
-                                                onClick={() => setCollapsedKometaSections((prev) => ({
-                                                    ...prev,
-                                                    [section.id]: !collapsed,
-                                                }))}
-                                                aria-expanded={!collapsed}
-                                            >
-                                                <p className="text-sm font-semibold text-text">
-                                                    <span className="mr-1.5 inline-block w-3 text-muted">
-                                                        {collapsed ? '▸' : '▾'}
-                                                    </span>
-                                                    {sectionHeading(section)}
-                                                </p>
-                                            </button>
+                                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    className="shrink-0 text-muted"
+                                                    onClick={() => setCollapsedKometaSections((prev) => ({
+                                                        ...prev,
+                                                        [section.id]: !collapsed,
+                                                    }))}
+                                                    aria-expanded={!collapsed}
+                                                    aria-label={collapsed
+                                                        ? t('overlays.kometa.expandSection')
+                                                        : t('overlays.kometa.collapseSection')}
+                                                >
+                                                    <span className="inline-block w-3">{collapsed ? '▸' : '▾'}</span>
+                                                </button>
+                                                {section.kind === 'collection' && section.ruleId && renamingRuleId === section.ruleId ? (
+                                                    <input
+                                                        className={`${fieldInputClass} mt-0 max-w-md py-1.5`}
+                                                        value={renameDraft}
+                                                        autoFocus
+                                                        onChange={(e) => setRenameDraft(e.target.value)}
+                                                        onBlur={() => void renameCollectionRule(section.ruleId, renameDraft)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                void renameCollectionRule(section.ruleId, renameDraft);
+                                                            }
+                                                            if (e.key === 'Escape') {
+                                                                setRenamingRuleId(null);
+                                                                setRenameDraft('');
+                                                            }
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        className="group min-w-0 flex-1 text-left"
+                                                        onClick={() => {
+                                                            if (section.kind === 'collection' && section.ruleId) {
+                                                                startRenameRule(section.ruleId, section.title);
+                                                                return;
+                                                            }
+                                                            setCollapsedKometaSections((prev) => ({
+                                                                ...prev,
+                                                                [section.id]: !collapsed,
+                                                            }));
+                                                        }}
+                                                        title={section.kind === 'collection' && section.ruleId
+                                                            ? t('overlays.jobs.collections.rename')
+                                                            : undefined}
+                                                    >
+                                                        <p className="truncate text-sm font-semibold text-text group-hover:text-plex">
+                                                            {sectionHeading(section)}
+                                                            {section.kind === 'collection' && section.ruleId ? (
+                                                                <Pencil className="ml-1.5 inline h-3 w-3 text-muted opacity-60 group-hover:opacity-100" />
+                                                            ) : null}
+                                                        </p>
+                                                    </button>
+                                                )}
+                                            </div>
                                             <button
                                                 type="button"
                                                 className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
-                                                disabled={busy !== null || jobRunning || !workerReady}
+                                                disabled={busy !== null || jobRunning || !workerReady || section.rows.length === 0}
                                                 onClick={() => revertKometaSection(section)}
                                             >
                                                 {t('overlays.kometa.revertSection')}
                                             </button>
                                         </div>
                                         {!collapsed && (
+                                            section.rows.length === 0 ? (
+                                                <p className="px-3 py-3 text-sm text-muted">
+                                                    {t('overlays.kometa.sectionEmpty')}
+                                                </p>
+                                            ) : (
                                             <>
                                                 <div className="space-y-2 p-3 md:hidden">
                                                     {section.rows.map((row) => (
@@ -2878,6 +3020,7 @@ export const OverlaysDashboard: React.FC = () => {
                                                     </table>
                                                 </div>
                                             </>
+                                            )
                                         )}
                                     </div>
                                 );
