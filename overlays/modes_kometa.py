@@ -740,9 +740,14 @@ def discover_media(plex, config, sections, progress=None, skip_kometa=True):
     parts = _media_parts_config(config)
     allow, deny = _mode_allow_deny(config, "media")
     should = {}
+    scanned = 0
     for section in sections:
+        _progress(progress, f"Media scan: {getattr(section, 'title', '?')}…")
         try:
             for item in section.all():
+                scanned += 1
+                if scanned % 50 == 0:
+                    _progress(progress, f"Media scan: checked {scanned} titles, eligible {len(should)}…")
                 key = str(getattr(item, "ratingKey", "") or "")
                 if not key:
                     continue
@@ -772,7 +777,7 @@ def discover_media(plex, config, sections, progress=None, skip_kometa=True):
                 }
         except Exception as exc:
             _progress(progress, f"Media scan failed for {getattr(section, 'title', '?')}: {exc}")
-    _progress(progress, f"Media info eligible: {len(should)}")
+    _progress(progress, f"Media info eligible: {len(should)} (scanned {scanned})")
     return should
 
 
@@ -782,11 +787,16 @@ def discover_status(plex, config, sections, progress=None, skip_kometa=True):
     airing_days = int(config.get("statusAiringDays") or config.get("status_airing_days") or 14)
     allow, deny = _mode_allow_deny(config, "status")
     should = {}
+    scanned = 0
     for section in sections:
         if str(getattr(section, "type", "") or "").lower() != "show":
             continue
+        _progress(progress, f"Status scan: {getattr(section, 'title', '?')}…")
         try:
             for show in section.all():
+                scanned += 1
+                if scanned % 75 == 0:
+                    _progress(progress, f"Status scan: checked {scanned} shows…")
                 key = str(getattr(show, "ratingKey", "") or "")
                 if not key:
                     continue
@@ -815,9 +825,14 @@ def discover_ratings(plex, config, sections, progress=None, skip_kometa=True):
     minimum = float(config.get("ratingsMinimum") or config.get("ratings_minimum") or 0)
     allow, deny = _mode_allow_deny(config, "ratings")
     should = {}
+    scanned = 0
     for section in sections:
+        _progress(progress, f"Ratings scan: {getattr(section, 'title', '?')}…")
         try:
             for item in section.all():
+                scanned += 1
+                if scanned % 100 == 0:
+                    _progress(progress, f"Ratings scan: checked {scanned} titles…")
                 key = str(getattr(item, "ratingKey", "") or "")
                 if not key:
                     continue
@@ -846,11 +861,16 @@ def discover_network(plex, config, sections, progress=None, skip_kometa=True):
 
     allow, deny = _mode_allow_deny(config, "network")
     should = {}
+    scanned = 0
     for section in sections:
         if str(getattr(section, "type", "") or "").lower() != "show":
             continue
+        _progress(progress, f"Network scan: {getattr(section, 'title', '?')}…")
         try:
             for show in section.all():
+                scanned += 1
+                if scanned % 75 == 0:
+                    _progress(progress, f"Network scan: checked {scanned} shows…")
                 key = str(getattr(show, "ratingKey", "") or "")
                 if not key:
                     continue
@@ -943,21 +963,19 @@ def run_network_overlays(plex, config, paths, preview_mode, progress=None):
 
 
 def ensure_placement_preview_badges(assets_dir: Path, paths: dict | None = None) -> None:
-    """Write sample badges for the Placement editor using official Kometa images when available."""
+    """Write sample badges for the Placement editor (create missing only; no network spam)."""
     assets_dir = Path(assets_dir)
     assets_dir.mkdir(parents=True, exist_ok=True)
-    cache_paths = paths
-    if cache_paths is None:
-        cache_paths = {"root": assets_dir.parent.parent if assets_dir.name == "presets" else assets_dir.parent}
-        # Prefer config/overlays/kometa-images when assets live under overlays/assets/presets
-        try:
-            from kometa_images import default_cache_dir, prefetch_common
-            cache_dir = default_cache_dir(cache_paths)
-            cache_paths = {**cache_paths, "kometaImages": cache_dir}
-            prefetch_common(paths=cache_paths)
-        except Exception:
-            pass
+    names = (
+        "placement-media.png",
+        "placement-status.png",
+        "placement-ratings.png",
+        "placement-network.png",
+    )
+    if all((assets_dir / name).exists() for name in names):
+        return
 
+    cache_paths = paths or {"root": assets_dir.parent.parent if assets_dir.name == "presets" else assets_dir.parent}
     samples = {
         "placement-media.png": render_media_badge(
             {"resolution": "4K", "hdr": True, "atmos": True, "lines": ["4K HDR", "ATMOS"]},
@@ -971,14 +989,12 @@ def ensure_placement_preview_badges(assets_dir: Path, paths: dict | None = None)
         if img is None:
             continue
         path = assets_dir / name
-        # Refresh when missing or still an old generated pill (force update once via mtime/size heuristic)
+        if path.exists():
+            continue
         try:
-            if path.exists() and path.stat().st_size > 500:
-                # Always refresh so Placement editor picks up real Kometa art after upgrade
-                pass
+            img.save(path)
         except Exception:
             pass
-        img.save(path)
 
 
 def run_all_kometa_style(plex, config, paths, preview_mode, progress=None) -> dict:
@@ -991,12 +1007,17 @@ def run_all_kometa_style(plex, config, paths, preview_mode, progress=None) -> di
     ):
         paths.setdefault(key, paths["root"] / filename)
 
-    try:
-        from kometa_images import prefetch_common
-        _progress(progress, "Caching Kometa overlay images…")
-        prefetch_common(paths=paths)
-    except Exception as exc:
-        _progress(progress, f"Kometa image cache: {exc}")
+    any_enabled = any(
+        [
+            _as_bool(config.get("mediaInfoEnabled", config.get("media_info_enabled")), False),
+            _as_bool(config.get("statusOverlayEnabled", config.get("status_overlay_enabled")), False),
+            _as_bool(config.get("ratingsOverlayEnabled", config.get("ratings_overlay_enabled")), False),
+            _as_bool(config.get("networkOverlayEnabled", config.get("network_overlay_enabled")), False),
+        ]
+    )
+    # Images download lazily on first use — avoid blocking the run on GitHub prefetch.
+    if any_enabled:
+        _progress(progress, "Kometa-style modes: scanning (images load on demand)…")
 
     summary = {}
     summary.update(run_media_overlays(plex, config, paths, preview_mode, progress))

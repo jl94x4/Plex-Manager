@@ -44,7 +44,7 @@ def default_cache_dir(paths: dict | None = None) -> Path:
     return Path(__file__).resolve().parent / "assets" / "kometa-images"
 
 
-def _http_get(url: str, timeout: float = 45.0) -> bytes:
+def _http_get(url: str, timeout: float = 10.0) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()
@@ -68,6 +68,7 @@ def fetch_image(
     cache_dir: Path | None = None,
     paths: dict | None = None,
     force: bool = False,
+    timeout: float = 10.0,
 ) -> Path | None:
     """Download a relative overlay image (e.g. resolution/4khdr.png) into the cache."""
     from urllib.parse import quote
@@ -83,7 +84,7 @@ def fetch_image(
     encoded = "/".join(quote(seg, safe="._-") for seg in rel.split("/"))
     url = f"{KOMETA_RAW_BASE}/{encoded}"
     try:
-        data = _http_get(url)
+        data = _http_get(url, timeout=timeout)
     except Exception:
         return dest if dest.exists() and dest.stat().st_size > 0 else None
     if not data:
@@ -149,7 +150,7 @@ def ensure_font(
 def _list_github_dir(api_rel: str) -> list[dict]:
     url = f"{KOMETA_API_BASE}/{api_rel.lstrip('/')}?ref=master"
     try:
-        raw = _http_get(url)
+        raw = _http_get(url, timeout=12.0)
         data = json.loads(raw.decode("utf-8"))
         return data if isinstance(data, list) else []
     except Exception:
@@ -363,8 +364,12 @@ def prefetch_common(
     cache_dir: Path | None = None,
     paths: dict | None = None,
     include_networks: Iterable[str] | None = None,
+    progress=None,
 ) -> list[str]:
-    """Warm cache with common resolution/audio/rating assets (+ optional networks)."""
+    """Warm cache with common resolution/audio/rating assets (+ optional networks).
+
+    Fail-fast: short timeouts, skip missing remotes, never block a full library run.
+    """
     rels = [
         "resolution/4k.png",
         "resolution/4khdr.png",
@@ -390,10 +395,17 @@ def prefetch_common(
         key = resolve_network_key(name, cache_dir=cache_dir, paths=paths) or name
         rels.append(f"network/color/{key}.png")
     ok = []
-    for rel in rels:
-        if fetch_image(rel, cache_dir=cache_dir, paths=paths):
+    for i, rel in enumerate(rels, start=1):
+        if progress and i == 1:
+            progress(f"Kometa image cache: fetching {len(rels)} common assets…")
+        if fetch_image(rel, cache_dir=cache_dir, paths=paths, timeout=8.0):
             ok.append(rel)
-    ensure_font(cache_dir=cache_dir, paths=paths, size=42)
+    try:
+        ensure_font(cache_dir=cache_dir, paths=paths, size=42)
+    except Exception:
+        pass
+    if progress:
+        progress(f"Kometa image cache: {len(ok)}/{len(rels)} ready")
     return ok
 
 
