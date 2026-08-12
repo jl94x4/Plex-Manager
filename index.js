@@ -1209,6 +1209,7 @@ import {
     fetchRadarrMovieReleaseDates,
     fetchLidarrAlbumsForArtist,
 } from './lib/arr-service.js';
+import { leanRadarrMovieList, leanSonarrSeriesList } from './lib/portal-request/leanArrCatalog.js';
 import { getSonarrTrashCatalog, getSonarrTrashCustomFormat } from './lib/trash-guides-catalog.js';
 import { createRequestAppService, getRequestAppGate, mapSeerrClientError } from './lib/request-app-service.js';
 import {
@@ -15174,7 +15175,51 @@ const hydratePersonalTopWatchedItems = async (uri, config, serverIdentifier, ite
     return results;
 };
 
-const fetchPlexAccountHistory = async (uri, config, accountID, { maxItems = 250000, afterUnixSec = 0 } = {}) => {
+/** Drop fat Plex history fields so analytics/achievements don't retain multi-GB Metadata graphs. */
+const slimPlexHistoryItem = (item) => {
+    if (!item || typeof item !== 'object') return null;
+    const slim = {
+        type: item.type,
+        ratingKey: item.ratingKey,
+        key: item.key,
+        title: item.title,
+        thumb: item.thumb,
+        viewedAt: item.viewedAt,
+        accountID: item.accountID,
+        deviceID: item.deviceID,
+        client: item.client,
+        librarySectionID: item.librarySectionID,
+        librarySectionTitle: item.librarySectionTitle,
+        parentKey: item.parentKey,
+        parentTitle: item.parentTitle,
+        parentThumb: item.parentThumb,
+        parentRatingKey: item.parentRatingKey,
+        grandparentKey: item.grandparentKey,
+        grandparentTitle: item.grandparentTitle,
+        grandparentThumb: item.grandparentThumb,
+        grandparentRatingKey: item.grandparentRatingKey,
+        duration: item.duration,
+        viewOffset: item.viewOffset,
+        watchedStatus: item.watchedStatus,
+        percentComplete: item.percentComplete,
+    };
+    if (Array.isArray(item.Guid) && item.Guid.length) {
+        slim.Guid = item.Guid.map((g) => (g && g.id ? { id: g.id } : null)).filter(Boolean);
+    }
+    if (Array.isArray(item.Genre) && item.Genre.length) {
+        slim.Genre = item.Genre.map((g) => (g && g.tag ? { tag: g.tag } : null)).filter(Boolean);
+    }
+    if (item.Player && item.Player.product) {
+        slim.Player = { product: item.Player.product };
+    }
+    return slim;
+};
+
+const slimPlexHistoryPage = (pageItems = []) => (
+    (Array.isArray(pageItems) ? pageItems : []).map(slimPlexHistoryItem).filter(Boolean)
+);
+
+const fetchPlexAccountHistory = async (uri, config, accountID, { maxItems = 75000, afterUnixSec = 0 } = {}) => {
     const pageSize = 5000;
     let historyItems = [];
     let start = 0;
@@ -15196,7 +15241,8 @@ const fetchPlexAccountHistory = async (uri, config, accountID, { maxItems = 2500
                 done = true;
                 break;
             }
-            historyItems.push(item);
+            const slim = slimPlexHistoryItem(item);
+            if (slim) historyItems.push(slim);
             if (historyItems.length >= maxItems) {
                 done = true;
                 break;
@@ -15216,7 +15262,7 @@ const fetchPlexAccountHistory = async (uri, config, accountID, { maxItems = 2500
 };
 
 /** Full-server Plex history (no account filter) — used by achievements portal-wide backfill. */
-const fetchAllPlexHistory = async (uri, config, { maxItems = 150000 } = {}) => {
+const fetchAllPlexHistory = async (uri, config, { maxItems = 75000 } = {}) => {
     const pageSize = 5000;
     let historyItems = [];
     let start = 0;
@@ -15231,7 +15277,7 @@ const fetchAllPlexHistory = async (uri, config, { maxItems = 150000 } = {}) => {
         const pageItems = Array.isArray(pageContainer?.Metadata) ? pageContainer.Metadata : [];
         if (pageItems.length === 0) break;
 
-        historyItems = historyItems.concat(pageItems);
+        historyItems = historyItems.concat(slimPlexHistoryPage(pageItems));
         start += pageItems.length;
 
         const totalSize = Number(pageContainer.totalSize || 0);
@@ -16123,7 +16169,7 @@ app.get('/api/plex/analytics/user/:id', requireAdmin, async (req, res) => {
         const users = await loadFile(USERS_PATH, []);
         const { list: plexAccounts } = await fetchPlexServerAccounts(uri, config);
         const accountID = resolveAnalyticsPlexAccountId(req.params.id, users, plexAccounts);
-        const limit = req.query.days === 'all' ? 999999 : 5000;
+        const limit = req.query.days === 'all' ? 25000 : 5000;
 
         const historyRes = await fetch(`${uri}/status/sessions/history/all?accountID=${accountID}&X-Plex-Token=${config.plexToken}&sort=viewedAt:desc&limit=${limit}`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
         const sectionsRes = await fetch(`${uri}/library/sections?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
@@ -18920,7 +18966,7 @@ async function calculateAnalyticsStats() {
         log('Starting background calculation of Plex Analytics Stats...');
 
         const pageSize = 5000;
-        const maxHistoryItems = 250000;
+        const maxHistoryItems = 75000;
         let historyItems = [];
         let start = 0;
 
@@ -18934,7 +18980,7 @@ async function calculateAnalyticsStats() {
             const pageItems = pageContainer && Array.isArray(pageContainer.Metadata) ? pageContainer.Metadata : [];
             if (pageItems.length === 0) break;
 
-            historyItems = historyItems.concat(pageItems);
+            historyItems = historyItems.concat(slimPlexHistoryPage(pageItems));
             start += pageItems.length;
 
             const totalSize = Number(pageContainer.totalSize || 0);
@@ -21668,7 +21714,7 @@ const normalizePlexRatingKey = (input) => {
 
 const fetchMaintenanceWatchStats = async (config, uri) => {
     const pageSize = 5000;
-    const maxHistoryItems = 250000;
+    const maxHistoryItems = 100000;
     let start = 0;
     const map = new Map();
 
@@ -22039,7 +22085,11 @@ const getArrCatalog = async (config, { force = false } = {}) => {
     const radarr = [];
     const sonarr = [];
 
-    catalogResults.forEach(({ instance, items }) => {
+    catalogResults.forEach(({ instance, items: rawItems }) => {
+        // Lean before cache — full /api/v3/movie|series payloads balloon RSS on large libraries.
+        const items = instance.type === 'radarr'
+            ? leanRadarrMovieList(rawItems)
+            : leanSonarrSeriesList(rawItems);
         instancesById[instance.id] = {
             id: instance.id,
             type: instance.type,

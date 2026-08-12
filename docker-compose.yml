@@ -17,6 +17,8 @@ services:
       CONFIG_DIR: /app/config
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
+      # Cap V8 heap so analytics/history spikes fail soft instead of eating the host.
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=2048}
       MEDIA_AUTOMATION_CONFIG_DIR: ${MEDIA_AUTOMATION_CONFIG_DIR:-/app/config/media-automation}
       MEDIA_AUTOMATION_WORK_DIR: ${MEDIA_AUTOMATION_WORK_DIR:-/app/config/media-automation/work}
       PLEX_PREFER_REMOTE_CONNECTION: "true"
@@ -25,6 +27,8 @@ services:
       # NVIDIA NVENC with NVIDIA Container Toolkit (also uncomment runtime below):
       # NVIDIA_VISIBLE_DEVICES: all
       # NVIDIA_DRIVER_CAPABILITIES: video,compute,utility
+    # Optional hard ceiling for the whole container (Node + Collexions + overlay/poster workers):
+    # mem_limit: 3g
     privileged: false
     volumes:
       - ./config:/app/config

@@ -3196,8 +3196,16 @@ def proxy_image():
 
         mimetype = upstream.headers.get('Content-Type', 'image/jpeg')
         data = upstream.content
+        data_len = len(data) if data else 0
 
-        if len(IMAGE_CACHE) > 400:
+        # Bound binary poster cache — wipe-all at 400 could still hold hundreds of MB.
+        IMAGE_CACHE_MAX_ENTRIES = 120
+        IMAGE_CACHE_MAX_BYTES = 48 * 1024 * 1024
+        total_bytes = sum(len(v.get('data') or b'') for v in IMAGE_CACHE.values() if isinstance(v, dict))
+        if (
+            len(IMAGE_CACHE) >= IMAGE_CACHE_MAX_ENTRIES
+            or (total_bytes + data_len) > IMAGE_CACHE_MAX_BYTES
+        ):
             IMAGE_CACHE = {}
 
         IMAGE_CACHE[cache_key] = {'data': data, 'mimetype': mimetype}
