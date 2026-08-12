@@ -241,7 +241,7 @@ export const OverlaysDashboard: React.FC = () => {
         setToasts((prev) => pushToast(prev, message, type));
     }, []);
 
-    const refresh = useCallback(async () => {
+    const refresh = useCallback(async (opts: { syncConfig?: boolean } = {}) => {
         const [nextStatus, showsRes, episodesRes, kometaRes] = await Promise.all([
             overlaysApi.status(),
             overlaysApi.shows().catch(() => ({ shows: [] })),
@@ -252,12 +252,15 @@ export const OverlaysDashboard: React.FC = () => {
         setShows(Array.isArray(showsRes?.shows) ? showsRes.shows : []);
         setEpisodes(Array.isArray(episodesRes?.episodes) ? episodesRes.episodes : []);
         setKometaItems(Array.isArray(kometaRes?.items) ? kometaRes.items : []);
-        if (nextStatus?.config) setConfigDraft({ ...DEFAULT_CONFIG, ...nextStatus.config });
+        // Never clobber unsaved Overview toggles during status polls / background jobs.
+        if (opts.syncConfig && nextStatus?.config) {
+            setConfigDraft({ ...DEFAULT_CONFIG, ...nextStatus.config });
+        }
         return nextStatus;
     }, []);
 
     useEffect(() => {
-        void refresh().catch((error) => toast(error.message || t('overlays.loadFailed'), 'error'));
+        void refresh({ syncConfig: true }).catch((error) => toast(error.message || t('overlays.loadFailed'), 'error'));
     }, [refresh, toast, t]);
 
     useEffect(() => {
@@ -508,12 +511,19 @@ export const OverlaysDashboard: React.FC = () => {
 
     const actionLabel = (id: ActionId) => t(`overlays.actionLabels.${id}`);
 
-    const runAction = async (id: ActionId, fn: () => Promise<unknown>, { startedToast = false } = {}) => {
+    const runAction = async (
+        id: ActionId,
+        fn: () => Promise<unknown>,
+        { startedToast = false, skipRefresh = false }: { startedToast?: boolean; skipRefresh?: boolean } = {},
+    ) => {
         setBusy(id);
         const label = actionLabel(id);
         try {
             await fn();
-            await refresh();
+            if (!skipRefresh) {
+                // Only re-apply server config after an explicit save (or caller syncs itself).
+                await refresh({ syncConfig: id === 'saveSettings' });
+            }
             toast(startedToast ? t('overlays.actionStarted', { action: label }) : t('overlays.actionComplete', { action: label }));
         } catch (error) {
             toast(error instanceof Error ? error.message : t('overlays.actionFailed', { action: label }), 'error');
@@ -786,7 +796,7 @@ export const OverlaysDashboard: React.FC = () => {
                             type="button"
                             className={buttonClass}
                             disabled={busy !== null}
-                            onClick={() => void runAction('refresh', refresh)}
+                            onClick={() => void runAction('refresh', () => refresh({ syncConfig: true }), { skipRefresh: true })}
                         >
                             <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> {t('overlays.actions.refresh')}
                         </button>
