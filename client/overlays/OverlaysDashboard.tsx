@@ -35,6 +35,22 @@ type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'advanced' | 'acti
 type JobCardId = 'banners' | 'recently' | 'kometa';
 type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'promote' | 'resetAll' | 'resetShows' | 'resetEpisodes' | 'run' | 'runRecently' | 'runKometa' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample' | 'revertKometa';
 
+const OVERLAY_TABS: TabId[] = ['overview', 'shows', 'gallery', 'placement', 'advanced', 'activity'];
+
+const parseOverlaysTab = (hash = typeof window !== 'undefined' ? window.location.hash : ''): TabId => {
+    const raw = String(hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim().toLowerCase();
+    return OVERLAY_TABS.includes(raw as TabId) ? (raw as TabId) : 'overview';
+};
+
+const overlaysTabHash = (tab: TabId) => (tab === 'overview' ? '' : `#${tab}`);
+
+const writeOverlaysTabHash = (tab: TabId) => {
+    if (typeof window === 'undefined') return;
+    const desired = overlaysTabHash(tab);
+    if ((window.location.hash || '') === desired) return;
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${desired}`);
+};
+
 type SampleMeta = {
     exists: boolean;
     showTitle?: string | null;
@@ -210,7 +226,7 @@ const GalleryPreviewImage: React.FC<{
 
 export const OverlaysDashboard: React.FC = () => {
     const { t } = useDiscoverI18n();
-    const [tab, setTab] = useState<TabId>('overview');
+    const [tab, setTab] = useState<TabId>(() => parseOverlaysTab());
     const [status, setStatus] = useState<any>(null);
     const [configDraft, setConfigDraft] = useState<OverlaysConfig>(DEFAULT_CONFIG);
     const [shows, setShows] = useState<any[]>([]);
@@ -328,6 +344,16 @@ export const OverlaysDashboard: React.FC = () => {
         if (sections.length > 0) return;
         void loadSections();
     }, [tab, sections.length, loadSections]);
+
+    useEffect(() => {
+        writeOverlaysTabHash(tab);
+    }, [tab]);
+
+    useEffect(() => {
+        const onHashChange = () => setTab(parseOverlaysTab());
+        window.addEventListener('hashchange', onHashChange);
+        return () => window.removeEventListener('hashchange', onHashChange);
+    }, []);
 
     const updateLibrarySectionIds = useCallback((
         field: 'coreLibrarySectionIds' | 'recentlyAddedLibrarySectionIds' | 'kometaLibrarySectionIds' | 'librarySectionIds',
