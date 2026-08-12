@@ -11311,6 +11311,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [profileAchievements, setProfileAchievements] = useState<any>(null);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
+    const [installBannerDismissed, setInstallBannerDismissed] = useState(false);
     const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplayMode());
     useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav });
     const mobileThemeRef = useRef<HTMLDivElement>(null);
@@ -11318,6 +11319,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const isFirefoxMobile = typeof navigator !== 'undefined'
         && /Firefox/i.test(navigator.userAgent)
         && /Mobile|Android|iPhone|iPad/i.test(navigator.userAgent);
+    const isAndroidChrome = typeof navigator !== 'undefined'
+        && /Android/i.test(navigator.userAgent)
+        && /Chrome|CriOS|EdgA|SamsungBrowser/i.test(navigator.userAgent)
+        && !/Firefox/i.test(navigator.userAgent);
     const [installDiag, setInstallDiag] = useState<string[] | null>(null);
 
     useEffect(() => {
@@ -11422,7 +11427,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         }
                     }
                     if (!notes.length) {
-                        notes.push('Manifest and icons look OK. Chrome Android: menu ⋮ → Install app / Install and create shortcut → Install. Firefox: menu ⋮ → Install. If you still only see Create shortcut, clear site data for this origin and open the portal over HTTPS once more.');
+                        if (isAndroidChrome && !installPrompt) {
+                            notes.push('Chrome has not marked this visit installable yet. Stay on the portal over HTTPS for ~30 seconds, tap once, reload, then try again. Or use More → Install App after Chrome fires the install prompt.');
+                        }
+                        notes.push('Manifest and icons look OK. Chrome Android: use the in-app Install button (top bar / More menu), or browser menu ⋮ → Install app. Firefox: menu ⋮ → Install. If you only see Create shortcut / Add to Home screen, open the portal over HTTPS, reload once, and clear site data if it still will not Install.');
                     }
                 }
             } catch {
@@ -11431,7 +11439,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             if (!cancelled) setInstallDiag(notes);
         })();
         return () => { cancelled = true; };
-    }, [installHelpOpen]);
+    }, [installHelpOpen, installPrompt, isAndroidChrome]);
 
     const handleInstallApp = async () => {
         if (isInstalledApp) return;
@@ -11443,6 +11451,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         }
         const promptEvent = installPrompt;
         setInstallPrompt(null);
+        setInstallBannerDismissed(true);
         try {
             await promptEvent.prompt();
             const choice = await promptEvent.userChoice;
@@ -11695,8 +11704,19 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         </button>
                     )}
                     {!isInstalledApp && (
-                        <button type="button" onClick={(e) => { e.preventDefault(); handleInstallApp(); }} className="text-muted hover:text-text transition-colors" title="Install app" aria-label="Install app">
-                            <MonitorSmartphone className="w-4 h-4" />
+                        <button
+                            type="button"
+                            onClick={(e) => { e.preventDefault(); handleInstallApp(); }}
+                            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                                installPrompt
+                                    ? 'border-plex/50 bg-plex/15 text-plex'
+                                    : 'border-border text-muted hover:border-plex/40 hover:text-text'
+                            }`}
+                            title="Install app"
+                            aria-label="Install app"
+                        >
+                            <MonitorSmartphone className="w-3.5 h-3.5 shrink-0" />
+                            Install
                         </button>
                     )}
                     <button onClick={(e) => { e.preventDefault(); onLogout(); }} className="text-muted hover:text-red-500 transition-colors">
@@ -11904,6 +11924,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     <span className="text-text font-semibold">Install</span>.
                                     Use your public <span className="text-text font-semibold">HTTPS</span> URL — not a plain http://IP address.
                                 </>
+                            ) : isAndroidChrome ? (
+                                <>
+                                    Open <span className="text-text font-semibold">More → Install App</span> in the portal, or Chrome’s menu <span className="text-text font-semibold">(⋮) → Install app</span>.
+                                    You must use <span className="text-text font-semibold">HTTPS</span> (not http://IP). If Install is missing, stay on this page ~30s, tap once, reload, then try again.
+                                </>
                             ) : (
                                 <>
                                     Use your browser menu and choose <span className="text-text font-semibold">Install app</span> or <span className="text-text font-semibold">Add to Home Screen</span>.
@@ -11952,14 +11977,47 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 </div>
             )}
 
+            {/* Mobile install nudge — beforeinstallprompt suppresses Chrome’s mini-infobar, so surface Install here. */}
+            {!isInstalledApp && installPrompt && !installBannerDismissed && (
+                <div className="md:hidden fixed left-3 right-3 z-[90] rounded-2xl border border-plex/40 bg-card/95 shadow-2xl backdrop-blur-md px-3 py-2.5 flex items-center gap-2"
+                    style={{ bottom: 'calc(4.25rem + env(safe-area-inset-bottom, 0px))' }}
+                >
+                    <div className="w-9 h-9 rounded-xl bg-plex/15 border border-plex/30 flex items-center justify-center text-plex shrink-0">
+                        <MonitorSmartphone className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-text truncate">Install {serverName}</p>
+                        <p className="text-[11px] text-muted">Add the portal to your home screen</p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => void handleInstallApp()}
+                        className="shrink-0 rounded-xl bg-plex px-3 py-2 text-xs font-bold text-background"
+                    >
+                        Install
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setInstallBannerDismissed(true)}
+                        className="shrink-0 p-1.5 rounded-lg text-muted hover:text-text"
+                        aria-label="Dismiss install banner"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+            )}
+
             {/* Mobile Bottom Nav
                 Chrome / PWA Chromium: plain fixed bottom:0 (do not change).
                 Firefox mobile: portal + visualViewport dock.
                 iOS: portal + CSS bottom:0; safe-area only in standalone (see .ios-mobile-bottom-nav). */}
             {(() => {
                 const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                const showMore = normalizedNavOrder.length > maxPrimary;
-                const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
+                // Keep More reachable for Install even when every nav item fits the bar.
+                const showMore = normalizedNavOrder.length > maxPrimary || !isInstalledApp;
+                const primary = normalizedNavOrder.length > maxPrimary
+                    ? normalizedNavOrder.slice(0, maxPrimary)
+                    : normalizedNavOrder;
                 const navButtons = (
                     <>
                         {primary.map((key) => {
@@ -12034,11 +12092,34 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 <h3 className="font-bold text-text">More Menu</h3>
                                 <button className="text-muted hover:text-text p-1 bg-white/5 rounded-full" onClick={() => setMobileMoreOpen(false)}><X className="w-5 h-5" /></button>
                             </div>
+                            {!isInstalledApp && (
+                                <div className="px-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setMobileMoreOpen(false);
+                                            void handleInstallApp();
+                                        }}
+                                        className={`w-full inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold transition-colors ${
+                                            installPrompt
+                                                ? 'border-plex/40 bg-plex text-background hover:bg-plex-hover'
+                                                : 'border-border bg-white/5 text-text hover:bg-white/10'
+                                        }`}
+                                    >
+                                        <MonitorSmartphone className="w-4 h-4" />
+                                        {installPrompt ? 'Install App' : 'How to Install App'}
+                                    </button>
+                                </div>
+                            )}
+                            {(() => {
+                                const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
+                                const secondary = normalizedNavOrder.length > maxPrimary ? normalizedNavOrder.slice(maxPrimary) : [];
+                                if (secondary.length === 0) {
+                                    return <div className="pb-2" />;
+                                }
+                                return (
                             <div className="p-5 grid grid-cols-4 gap-4">
-                                {(() => {
-                                    const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                                    const secondary = normalizedNavOrder.length > maxPrimary ? normalizedNavOrder.slice(maxPrimary) : [];
-                                    return secondary.map(key => {
+                                {secondary.map(key => {
                                         const item = navItemsConfig[key];
                                         if (!item) return null;
                                         const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
@@ -12063,9 +12144,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                                 <span className={`text-[10px] text-center w-full truncate px-1 ${isCurrent ? 'text-plex font-bold' : 'text-muted'}`}>{labelOverride}</span>
                                             </button>
                                         );
-                                    });
-                                })()}
+                                    })}
                             </div>
+                                );
+                            })()}
                             <div className="pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]"></div>
                         </div>
                     </div>
