@@ -344,7 +344,7 @@ def run_live_overlays(
             "liveRemoved": removed,
             "liveTotal": total,
             "liveErrors": errors,
-            "liveKeys": set(),
+            "liveKeys": [],
         }
 
     from core import _iter_tv_sections
@@ -436,7 +436,7 @@ def run_live_overlays(
         "liveTotal": len(log),
         "liveEligible": len(should),
         "liveErrors": errors,
-        "liveKeys": set(should.keys()),
+        "liveKeys": list(should.keys()),
     }
 
 
@@ -502,7 +502,7 @@ def run_recently_added_overlays(
             "recentlyRemoved": removed,
             "recentlyTotal": total,
             "recentlyErrors": errors,
-            "recentlyKeys": set(),
+            "recentlyKeys": [],
         }
 
     from core import _iter_tv_sections
@@ -595,7 +595,7 @@ def run_recently_added_overlays(
         "recentlyTotal": len(log),
         "recentlyEligible": len(should),
         "recentlyErrors": errors,
-        "recentlyKeys": set(should.keys()),
+        "recentlyKeys": list(should.keys()),
     }
 
 

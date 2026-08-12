@@ -29,7 +29,14 @@ from core import (
 
 
 def write_event(event_type: str, **payload) -> None:
-    sys.stdout.write(json.dumps({"type": event_type, **payload}, ensure_ascii=False) + "\n")
+    def _default(value):
+        if isinstance(value, (set, frozenset)):
+            return list(value)
+        if isinstance(value, Path):
+            return str(value)
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+    sys.stdout.write(json.dumps({"type": event_type, **payload}, ensure_ascii=False, default=_default) + "\n")
     sys.stdout.flush()
 
 
