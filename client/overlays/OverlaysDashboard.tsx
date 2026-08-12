@@ -171,9 +171,9 @@ export const OverlaysDashboard: React.FC = () => {
     const [gallery, setGallery] = useState<Array<{ name: string; kind: string; url: string; mtime: number }>>([]);
     const [collapsedBinges, setCollapsedBinges] = useState<Record<string, boolean>>({});
     const [jobCardExpanded, setJobCardExpanded] = useState<Record<JobCardId, boolean>>({
-        banners: false,
-        recently: false,
-        kometa: false,
+        banners: true,
+        recently: true,
+        kometa: true,
     });
     const sampleLoadedRef = React.useRef(false);
     const wasRunningRef = React.useRef(false);
@@ -1085,6 +1085,11 @@ export const OverlaysDashboard: React.FC = () => {
                             runBusy={busy === 'runKometa' || (kometaJobActive && runningCommand === 'run-kometa')}
                             actionsDisabled={busy !== null || jobRunning || !workerReady}
                         >
+                            <p className="mb-3 text-[11px] text-muted">{t('overlays.jobs.kometa.settingsHint')}</p>
+
+                            <div className="mb-4 border-b border-border/40 pb-2">
+                                <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.media')}</span>
+                            </div>
                             <SettingsToggleRow
                                 title={t('overlays.settings.mediaInfoEnabled')}
                                 description={t('overlays.settings.mediaInfoEnabledHint')}
@@ -1164,6 +1169,45 @@ export const OverlaysDashboard: React.FC = () => {
                                 </div>
                             )}
                             <SettingsToggleRow
+                                title={t('overlays.settings.editionOverlayEnabled')}
+                                description={t('overlays.settings.editionOverlayEnabledHint')}
+                                checked={configDraft.editionOverlayEnabled === true}
+                                onChange={(editionOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, editionOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.audioCodecEnabled')}
+                                description={t('overlays.settings.audioCodecEnabledHint')}
+                                checked={configDraft.audioCodecEnabled === true}
+                                onChange={(audioCodecEnabled) => setConfigDraft((prev) => ({ ...prev, audioCodecEnabled }))}
+                            />
+                            {configDraft.audioCodecEnabled === true && (
+                                <label className="mb-3 block max-w-xs">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.audioCodecStyle')}</span>
+                                    <CustomSelect
+                                        className="mt-1.5"
+                                        value={configDraft.audioCodecStyle || 'compact'}
+                                        onChange={(audioCodecStyle) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            audioCodecStyle: audioCodecStyle as 'compact' | 'standard',
+                                        }))}
+                                        options={[
+                                            { value: 'compact', label: t('overlays.settings.audioCodecStyleCompact') },
+                                            { value: 'standard', label: t('overlays.settings.audioCodecStyleStandard') },
+                                        ]}
+                                    />
+                                </label>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.videoFormatEnabled')}
+                                description={t('overlays.settings.videoFormatEnabledHint')}
+                                checked={configDraft.videoFormatEnabled === true}
+                                onChange={(videoFormatEnabled) => setConfigDraft((prev) => ({ ...prev, videoFormatEnabled }))}
+                            />
+
+                            <div className="mb-4 mt-4 border-b border-border/40 pb-2">
+                                <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.showMeta')}</span>
+                            </div>
+                            <SettingsToggleRow
                                 title={t('overlays.settings.statusOverlayEnabled')}
                                 description={t('overlays.settings.statusOverlayEnabledHint')}
                                 checked={configDraft.statusOverlayEnabled === true}
@@ -1214,6 +1258,105 @@ export const OverlaysDashboard: React.FC = () => {
                                 </div>
                             )}
                             <SettingsToggleRow
+                                title={t('overlays.settings.networkOverlayEnabled')}
+                                description={t('overlays.settings.networkOverlayEnabledHint')}
+                                checked={configDraft.networkOverlayEnabled === true}
+                                onChange={(networkOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, networkOverlayEnabled }))}
+                            />
+                            {configDraft.networkOverlayEnabled === true && (
+                                <div className="mb-3 grid gap-3 rounded-lg border border-border/50 bg-background/30 p-3 md:grid-cols-2">
+                                    <label className="block">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                        <textarea
+                                            className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                            placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                            value={keysToText(configDraft.networkAllowKeys)}
+                                            onChange={(e) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                networkAllowKeys: textToKeys(e.target.value),
+                                            }))}
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                        <textarea
+                                            className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                            placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                            value={keysToText(configDraft.networkDenyKeys)}
+                                            onChange={(e) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                networkDenyKeys: textToKeys(e.target.value),
+                                            }))}
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.streamingOverlayEnabled')}
+                                description={t('overlays.settings.streamingOverlayEnabledHint')}
+                                checked={configDraft.streamingOverlayEnabled === true}
+                                onChange={(streamingOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, streamingOverlayEnabled }))}
+                            />
+                            {configDraft.streamingOverlayEnabled === true && (
+                                <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                                    <label className="block max-w-xs">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.streamingRegion')}</span>
+                                        <input
+                                            type="text"
+                                            maxLength={2}
+                                            className={fieldInputClass}
+                                            value={configDraft.streamingRegion || 'US'}
+                                            onChange={(e) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                streamingRegion: e.target.value.toUpperCase().slice(0, 2),
+                                            }))}
+                                        />
+                                    </label>
+                                    <div className="flex flex-wrap gap-3">
+                                        <StyledCheckbox
+                                            checked={configDraft.streamingIncludeShows !== false}
+                                            label={t('overlays.settings.includeShows')}
+                                            onChange={(streamingIncludeShows) => setConfigDraft((prev) => ({ ...prev, streamingIncludeShows }))}
+                                        />
+                                        <StyledCheckbox
+                                            checked={configDraft.streamingIncludeMovies !== false}
+                                            label={t('overlays.settings.includeMovies')}
+                                            onChange={(streamingIncludeMovies) => setConfigDraft((prev) => ({ ...prev, streamingIncludeMovies }))}
+                                        />
+                                    </div>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                                value={keysToText(configDraft.streamingAllowKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    streamingAllowKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                                value={keysToText(configDraft.streamingDenyKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    streamingDenyKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mb-4 mt-4 border-b border-border/40 pb-2">
+                                <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.ratings')}</span>
+                            </div>
+                            <SettingsToggleRow
                                 title={t('overlays.settings.ratingsOverlayEnabled')}
                                 description={t('overlays.settings.ratingsOverlayEnabledHint')}
                                 checked={configDraft.ratingsOverlayEnabled === true}
@@ -1233,6 +1376,22 @@ export const OverlaysDashboard: React.FC = () => {
                                             onChange={(ratingsIncludeMovies) => setConfigDraft((prev) => ({ ...prev, ratingsIncludeMovies }))}
                                         />
                                     </div>
+                                    <label className="block max-w-xs">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.ratingsSource')}</span>
+                                        <CustomSelect
+                                            className="mt-1.5"
+                                            value={configDraft.ratingsSource || 'tmdb'}
+                                            onChange={(ratingsSource) => setConfigDraft((prev) => ({ ...prev, ratingsSource }))}
+                                            options={[
+                                                { value: 'tmdb', label: 'TMDB' },
+                                                { value: 'audience', label: t('overlays.settings.ratingsSourceAudience') },
+                                                { value: 'critic', label: t('overlays.settings.ratingsSourceCritic') },
+                                                { value: 'user', label: t('overlays.settings.ratingsSourceUser') },
+                                                { value: 'imdb', label: 'IMDb' },
+                                                { value: 'rt', label: 'Rotten Tomatoes' },
+                                            ]}
+                                        />
+                                    </label>
                                     <label className="block max-w-xs">
                                         <span className={fieldLabelClass}>{t('overlays.fields.ratingsMinimum')}</span>
                                         <input
@@ -1277,167 +1436,6 @@ export const OverlaysDashboard: React.FC = () => {
                                 </div>
                             )}
                             <SettingsToggleRow
-                                title={t('overlays.settings.networkOverlayEnabled')}
-                                description={t('overlays.settings.networkOverlayEnabledHint')}
-                                checked={configDraft.networkOverlayEnabled === true}
-                                onChange={(networkOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, networkOverlayEnabled }))}
-                            />
-                            {configDraft.networkOverlayEnabled === true && (
-                                <div className="mb-3 grid gap-3 rounded-lg border border-border/50 bg-background/30 p-3 md:grid-cols-2">
-                                    <label className="block">
-                                        <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
-                                        <textarea
-                                            className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                            placeholder={t('overlays.settings.allowKeysPlaceholder')}
-                                            value={keysToText(configDraft.networkAllowKeys)}
-                                            onChange={(e) => setConfigDraft((prev) => ({
-                                                ...prev,
-                                                networkAllowKeys: textToKeys(e.target.value),
-                                            }))}
-                                        />
-                                    </label>
-                                    <label className="block">
-                                        <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
-                                        <textarea
-                                            className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
-                                            placeholder={t('overlays.settings.denyKeysPlaceholder')}
-                                            value={keysToText(configDraft.networkDenyKeys)}
-                                            onChange={(e) => setConfigDraft((prev) => ({
-                                                ...prev,
-                                                networkDenyKeys: textToKeys(e.target.value),
-                                            }))}
-                                        />
-                                    </label>
-                                </div>
-                            )}
-                            <SettingsToggleRow
-                                title={t('overlays.settings.editionOverlayEnabled')}
-                                description={t('overlays.settings.editionOverlayEnabledHint')}
-                                checked={configDraft.editionOverlayEnabled === true}
-                                onChange={(editionOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, editionOverlayEnabled }))}
-                            />
-                            <SettingsToggleRow
-                                title={t('overlays.settings.audioCodecEnabled')}
-                                description={t('overlays.settings.audioCodecEnabledHint')}
-                                checked={configDraft.audioCodecEnabled === true}
-                                onChange={(audioCodecEnabled) => setConfigDraft((prev) => ({ ...prev, audioCodecEnabled }))}
-                            />
-                            {configDraft.audioCodecEnabled === true && (
-                                <label className="mb-3 block max-w-xs">
-                                    <span className={fieldLabelClass}>{t('overlays.settings.audioCodecStyle')}</span>
-                                    <CustomSelect
-                                        value={configDraft.audioCodecStyle || 'compact'}
-                                        onChange={(audioCodecStyle) => setConfigDraft((prev) => ({
-                                            ...prev,
-                                            audioCodecStyle: audioCodecStyle as 'compact' | 'standard',
-                                        }))}
-                                        options={[
-                                            { value: 'compact', label: t('overlays.settings.audioCodecStyleCompact') },
-                                            { value: 'standard', label: t('overlays.settings.audioCodecStyleStandard') },
-                                        ]}
-                                    />
-                                </label>
-                            )}
-                            <SettingsToggleRow
-                                title={t('overlays.settings.videoFormatEnabled')}
-                                description={t('overlays.settings.videoFormatEnabledHint')}
-                                checked={configDraft.videoFormatEnabled === true}
-                                onChange={(videoFormatEnabled) => setConfigDraft((prev) => ({ ...prev, videoFormatEnabled }))}
-                            />
-                            <SettingsToggleRow
-                                title={t('overlays.settings.streamingOverlayEnabled')}
-                                description={t('overlays.settings.streamingOverlayEnabledHint')}
-                                checked={configDraft.streamingOverlayEnabled === true}
-                                onChange={(streamingOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, streamingOverlayEnabled }))}
-                            />
-                            {configDraft.streamingOverlayEnabled === true && (
-                                <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
-                                    <label className="block max-w-xs">
-                                        <span className={fieldLabelClass}>{t('overlays.settings.streamingRegion')}</span>
-                                        <input
-                                            type="text"
-                                            maxLength={2}
-                                            className={fieldInputClass}
-                                            value={configDraft.streamingRegion || 'US'}
-                                            onChange={(e) => setConfigDraft((prev) => ({
-                                                ...prev,
-                                                streamingRegion: e.target.value.toUpperCase().slice(0, 2),
-                                            }))}
-                                        />
-                                    </label>
-                                    <div className="flex flex-wrap gap-3">
-                                        <StyledCheckbox
-                                            checked={configDraft.streamingIncludeShows !== false}
-                                            label={t('overlays.settings.includeShows')}
-                                            onChange={(streamingIncludeShows) => setConfigDraft((prev) => ({ ...prev, streamingIncludeShows }))}
-                                        />
-                                        <StyledCheckbox
-                                            checked={configDraft.streamingIncludeMovies !== false}
-                                            label={t('overlays.settings.includeMovies')}
-                                            onChange={(streamingIncludeMovies) => setConfigDraft((prev) => ({ ...prev, streamingIncludeMovies }))}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                            <SettingsToggleRow
-                                title={t('overlays.settings.aspectOverlayEnabled')}
-                                description={t('overlays.settings.aspectOverlayEnabledHint')}
-                                checked={configDraft.aspectOverlayEnabled === true}
-                                onChange={(aspectOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, aspectOverlayEnabled }))}
-                            />
-                            <SettingsToggleRow
-                                title={t('overlays.settings.versionsOverlayEnabled')}
-                                description={t('overlays.settings.versionsOverlayEnabledHint')}
-                                checked={configDraft.versionsOverlayEnabled === true}
-                                onChange={(versionsOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, versionsOverlayEnabled }))}
-                            />
-                            <SettingsToggleRow
-                                title={t('overlays.settings.languageCountEnabled')}
-                                description={t('overlays.settings.languageCountEnabledHint')}
-                                checked={configDraft.languageCountEnabled === true}
-                                onChange={(languageCountEnabled) => setConfigDraft((prev) => ({ ...prev, languageCountEnabled }))}
-                            />
-                            <SettingsToggleRow
-                                title={t('overlays.settings.languagesOverlayEnabled')}
-                                description={t('overlays.settings.languagesOverlayEnabledHint')}
-                                checked={configDraft.languagesOverlayEnabled === true}
-                                onChange={(languagesOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, languagesOverlayEnabled }))}
-                            />
-                            {configDraft.languagesOverlayEnabled === true && (
-                                <label className="mb-3 block max-w-xs">
-                                    <span className={fieldLabelClass}>{t('overlays.settings.kometaFlagStyle')}</span>
-                                    <CustomSelect
-                                        value={configDraft.kometaFlagStyle || 'round'}
-                                        onChange={(kometaFlagStyle) => setConfigDraft((prev) => ({
-                                            ...prev,
-                                            kometaFlagStyle: kometaFlagStyle as 'round' | 'square',
-                                        }))}
-                                        options={[
-                                            { value: 'round', label: t('overlays.settings.flagStyleRound') },
-                                            { value: 'square', label: t('overlays.settings.flagStyleSquare') },
-                                        ]}
-                                    />
-                                </label>
-                            )}
-                            <SettingsToggleRow
-                                title={t('overlays.settings.runtimesOverlayEnabled')}
-                                description={t('overlays.settings.runtimesOverlayEnabledHint')}
-                                checked={configDraft.runtimesOverlayEnabled === true}
-                                onChange={(runtimesOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, runtimesOverlayEnabled }))}
-                            />
-                            <SettingsToggleRow
-                                title={t('overlays.settings.directPlayOverlayEnabled')}
-                                description={t('overlays.settings.directPlayOverlayEnabledHint')}
-                                checked={configDraft.directPlayOverlayEnabled === true}
-                                onChange={(directPlayOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, directPlayOverlayEnabled }))}
-                            />
-                            <SettingsToggleRow
-                                title={t('overlays.settings.episodeInfoOverlayEnabled')}
-                                description={t('overlays.settings.episodeInfoOverlayEnabledHint')}
-                                checked={configDraft.episodeInfoOverlayEnabled === true}
-                                onChange={(episodeInfoOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, episodeInfoOverlayEnabled }))}
-                            />
-                            <SettingsToggleRow
                                 title={t('overlays.settings.contentRatingEnabled')}
                                 description={t('overlays.settings.contentRatingEnabledHint')}
                                 checked={configDraft.contentRatingEnabled === true}
@@ -1447,6 +1445,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 <label className="mb-3 block max-w-xs">
                                     <span className={fieldLabelClass}>{t('overlays.settings.contentRatingScheme')}</span>
                                     <CustomSelect
+                                        className="mt-1.5"
                                         value={configDraft.contentRatingScheme || 'us'}
                                         onChange={(contentRatingScheme) => setConfigDraft((prev) => ({
                                             ...prev,
@@ -1474,6 +1473,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     <label className="block max-w-xs">
                                         <span className={fieldLabelClass}>{t('overlays.settings.ribbonStyle')}</span>
                                         <CustomSelect
+                                            className="mt-1.5"
                                             value={configDraft.ribbonStyle || 'yellow'}
                                             onChange={(ribbonStyle) => setConfigDraft((prev) => ({
                                                 ...prev,
@@ -1499,15 +1499,128 @@ export const OverlaysDashboard: React.FC = () => {
                                             onChange={(ribbonIncludeMovies) => setConfigDraft((prev) => ({ ...prev, ribbonIncludeMovies }))}
                                         />
                                     </div>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.allowKeysPlaceholder')}
+                                                value={keysToText(configDraft.ribbonAllowKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    ribbonAllowKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
+                                            <textarea
+                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                placeholder={t('overlays.settings.denyKeysPlaceholder')}
+                                                value={keysToText(configDraft.ribbonDenyKeys)}
+                                                onChange={(e) => setConfigDraft((prev) => ({
+                                                    ...prev,
+                                                    ribbonDenyKeys: textToKeys(e.target.value),
+                                                }))}
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
                             )}
+
+                            <div className="mb-4 mt-4 border-b border-border/40 pb-2">
+                                <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.misc')}</span>
+                            </div>
+                            <SettingsToggleRow
+                                title={t('overlays.settings.aspectOverlayEnabled')}
+                                description={t('overlays.settings.aspectOverlayEnabledHint')}
+                                checked={configDraft.aspectOverlayEnabled === true}
+                                onChange={(aspectOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, aspectOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.versionsOverlayEnabled')}
+                                description={t('overlays.settings.versionsOverlayEnabledHint')}
+                                checked={configDraft.versionsOverlayEnabled === true}
+                                onChange={(versionsOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, versionsOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.languageCountEnabled')}
+                                description={t('overlays.settings.languageCountEnabledHint')}
+                                checked={configDraft.languageCountEnabled === true}
+                                onChange={(languageCountEnabled) => setConfigDraft((prev) => ({ ...prev, languageCountEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.languagesOverlayEnabled')}
+                                description={t('overlays.settings.languagesOverlayEnabledHint')}
+                                checked={configDraft.languagesOverlayEnabled === true}
+                                onChange={(languagesOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, languagesOverlayEnabled }))}
+                            />
+                            {configDraft.languagesOverlayEnabled === true && (
+                                <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                                    <label className="block max-w-xs">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.kometaFlagStyle')}</span>
+                                        <CustomSelect
+                                            className="mt-1.5"
+                                            value={configDraft.kometaFlagStyle || 'round'}
+                                            onChange={(kometaFlagStyle) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                kometaFlagStyle: kometaFlagStyle as 'round' | 'square',
+                                            }))}
+                                            options={[
+                                                { value: 'round', label: t('overlays.settings.flagStyleRound') },
+                                                { value: 'square', label: t('overlays.settings.flagStyleSquare') },
+                                            ]}
+                                        />
+                                    </label>
+                                    <label className="block">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.languagesAllowCodes')}</span>
+                                        <textarea
+                                            className={`${fieldInputClass} min-h-[56px] font-mono text-xs`}
+                                            placeholder={t('overlays.settings.languagesAllowCodesPlaceholder')}
+                                            value={keysToText(configDraft.languagesAllowCodes)}
+                                            onChange={(e) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                languagesAllowCodes: textToKeys(e.target.value),
+                                            }))}
+                                        />
+                                    </label>
+                                </div>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.runtimesOverlayEnabled')}
+                                description={t('overlays.settings.runtimesOverlayEnabledHint')}
+                                checked={configDraft.runtimesOverlayEnabled === true}
+                                onChange={(runtimesOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, runtimesOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.directPlayOverlayEnabled')}
+                                description={t('overlays.settings.directPlayOverlayEnabledHint')}
+                                checked={configDraft.directPlayOverlayEnabled === true}
+                                onChange={(directPlayOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, directPlayOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.episodeInfoOverlayEnabled')}
+                                description={t('overlays.settings.episodeInfoOverlayEnabledHint')}
+                                checked={configDraft.episodeInfoOverlayEnabled === true}
+                                onChange={(episodeInfoOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, episodeInfoOverlayEnabled }))}
+                            />
                             <SettingsToggleRow
                                 title={t('overlays.settings.mediastingerOverlayEnabled')}
                                 description={t('overlays.settings.mediastingerOverlayEnabledHint')}
                                 checked={configDraft.mediastingerOverlayEnabled === true}
                                 onChange={(mediastingerOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, mediastingerOverlayEnabled }))}
                             />
-                            <label className="block max-w-xs">
+
+                            <div className="mb-4 mt-4 border-b border-border/40 pb-2">
+                                <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.run')}</span>
+                            </div>
+                            <SettingsToggleRow
+                                title={t('overlays.settings.kometaAddOverlayLabel')}
+                                description={t('overlays.settings.kometaAddOverlayLabelHint')}
+                                checked={configDraft.kometaAddOverlayLabel === true}
+                                onChange={(kometaAddOverlayLabel) => setConfigDraft((prev) => ({ ...prev, kometaAddOverlayLabel }))}
+                            />
+                            <label className="mb-3 block max-w-xs">
                                 <span className={fieldLabelClass}>{t('overlays.fields.kometaScheduleHours')}</span>
                                 <input
                                     type="number"
@@ -1533,6 +1646,7 @@ export const OverlaysDashboard: React.FC = () => {
                             >
                                 <RotateCcw className="h-4 w-4" /> {t('overlays.actions.revertAllKometa')}
                             </button>
+
                         </OverlayJobCard>
                     </div>
 
