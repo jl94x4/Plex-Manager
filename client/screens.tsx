@@ -11280,6 +11280,7 @@ interface NavigationProps {
 }
 
 export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom' }) => {
+    const { t } = useDiscoverI18n();
     const serverIcon = customLogoUrl ? resolvePortalAssetUrl(customLogoUrl) : (adminThumb ? (adminThumb.startsWith('http') ? adminThumb : portalUrl(`/api/plex/image?path=${encodeURIComponent(adminThumb)}&width=256&height=256`)) : logoUrl());
     const providerName = String(mediaServerType || 'plex').toLowerCase() === 'jellyfin'
         ? 'Jellyfin'
@@ -11482,28 +11483,28 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     }, [mobileThemeOpen]);
 
     const navItemsConfig: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; href?: string; onClick?: (e: any) => void }> = {
-        'home': { label: 'Home', icon: Home, route: 'user', adminOnly: false },
-        'users': { label: 'Users', icon: Users, route: 'users', adminOnly: true },
-        'discover': { label: 'Dashboard', icon: Film, route: 'dashboard', adminOnly: false },
-        'status': { label: 'Status', icon: Activity, route: 'status', adminOnly: false },
-        'logs': { label: 'Logs', icon: FileText, route: 'logs', adminOnly: true },
-        'analytics': { label: 'Analytics', icon: BarChart3, route: 'analytics', adminOnly: false },
-        'achievements': { label: 'Achievements', icon: Trophy, route: 'achievements', adminOnly: false },
-        'downloads': { label: 'Downloads', icon: DownloadCloud, route: 'downloads', adminOnly: false },
-        'mediastack': { label: 'Calendar', icon: Calendar, route: 'mediastack', adminOnly: false },
-        'maintenance': { label: 'Cleaner', icon: Shield, route: 'maintenance', adminOnly: true },
-        'upgrader': { label: 'Upgrader', icon: ArrowUpCircle, route: 'upgrader', adminOnly: true },
-        'collexions': { label: 'ColleXions', icon: Layers, route: 'collexions', adminOnly: true },
-        'scanner': { label: 'Scanner', icon: Radar, route: 'scanner', adminOnly: true },
-        'media-automation': { label: 'Media Automation', icon: Cpu, route: 'media-automation', adminOnly: true },
-        'poster-sets': { label: 'Poster Sets', icon: ImageIcon, route: 'poster-sets', adminOnly: true },
-        'overlays': { label: 'Overlays', icon: Layers, route: 'overlays', adminOnly: true },
-        'requests': { label: 'Requests', icon: ClipboardList, route: 'requests', adminOnly: true },
-        'request': { label: 'Discover & Request', icon: Sparkles, route: 'discovery', adminOnly: false },
-        'about': { label: 'About', icon: Info, route: 'about', adminOnly: false },
-        'preferences': { label: 'Preferences', icon: SlidersHorizontal, route: 'preferences', adminOnly: false },
-        'settings': { label: 'Settings', icon: Settings, route: 'settings', adminOnly: true },
-        'logout': { label: 'Logout', icon: LogOut, route: '', adminOnly: false, onClick: onLogout }
+        'home': { label: t('navigation.home'), icon: Home, route: 'user', adminOnly: false },
+        'users': { label: t('navigation.users'), icon: Users, route: 'users', adminOnly: true },
+        'discover': { label: t('navigation.dashboard'), icon: Film, route: 'dashboard', adminOnly: false },
+        'status': { label: t('navigation.status'), icon: Activity, route: 'status', adminOnly: false },
+        'logs': { label: t('navigation.logs'), icon: FileText, route: 'logs', adminOnly: true },
+        'analytics': { label: t('navigation.analytics'), icon: BarChart3, route: 'analytics', adminOnly: false },
+        'achievements': { label: t('navigation.achievements'), icon: Trophy, route: 'achievements', adminOnly: false },
+        'downloads': { label: t('navigation.downloads'), icon: DownloadCloud, route: 'downloads', adminOnly: false },
+        'mediastack': { label: t('navigation.calendar'), icon: Calendar, route: 'mediastack', adminOnly: false },
+        'maintenance': { label: t('navigation.cleaner'), icon: Shield, route: 'maintenance', adminOnly: true },
+        'upgrader': { label: t('navigation.upgrader'), icon: ArrowUpCircle, route: 'upgrader', adminOnly: true },
+        'collexions': { label: t('navigation.collexions'), icon: Layers, route: 'collexions', adminOnly: true },
+        'scanner': { label: t('navigation.scanner'), icon: Radar, route: 'scanner', adminOnly: true },
+        'media-automation': { label: t('navigation.mediaAutomation'), icon: Cpu, route: 'media-automation', adminOnly: true },
+        'poster-sets': { label: t('navigation.posterSets'), icon: ImageIcon, route: 'poster-sets', adminOnly: true },
+        'overlays': { label: t('navigation.overlays'), icon: Layers, route: 'overlays', adminOnly: true },
+        'requests': { label: t('navigation.requests'), icon: ClipboardList, route: 'requests', adminOnly: true },
+        'request': { label: t('navigation.discoverRequest'), icon: Sparkles, route: 'discovery', adminOnly: false },
+        'about': { label: t('navigation.about'), icon: Info, route: 'about', adminOnly: false },
+        'preferences': { label: t('navigation.preferences'), icon: SlidersHorizontal, route: 'preferences', adminOnly: false },
+        'settings': { label: t('navigation.settings'), icon: Settings, route: 'settings', adminOnly: true },
+        'logout': { label: t('navigation.logout'), icon: LogOut, route: '', adminOnly: false, onClick: onLogout }
     };
     const normalizedNavOrder = useMemo(() => {
         const order = isAdmin
@@ -11735,7 +11736,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         if (!item) return null;
                         if (key === 'logs') return null;
                         const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                        const labelOverride = key === 'mediastack' ? 'Calendar' : item.label;
+                        const labelOverride = key === 'mediastack' ? t('navigation.calendar') : item.label;
                         return renderNavAction(key, { ...item, label: labelOverride }, { isCurrent, badgeCount: getNavBadgeCount(key) });
                     })}
                 </div>
@@ -11878,7 +11879,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200 hover:bg-red-500/20 hover:border-red-400/50 transition-colors"
                             >
                                 <LogOut className="w-4 h-4" />
-                                Logout
+                                {t('navigation.logout')}
                             </button>
                         </div>
                         </div>
@@ -12021,7 +12022,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                             const item = navItemsConfig[key];
                             if (!item) return null;
                             const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                            const labelOverride = key === 'mediastack' ? t('navigation.calendar') : key === 'request' ? t('navigation.request') : item.label;
                             return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
                         })}
                         {showMore && (
@@ -12035,7 +12036,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 <span className="relative shrink-0">
                                     <MoreHorizontal className="w-5 h-5" />
                                 </span>
-                                <span>More</span>
+                                <span>{t('navigation.more')}</span>
                             </button>
                         )}
                     </>
@@ -12086,7 +12087,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     <div className="md:hidden fixed inset-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setMobileMoreOpen(false)}>
                         <div className="bg-card border-t border-border rounded-t-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-between p-4 border-b border-white/5">
-                                <h3 className="font-bold text-text">More Menu</h3>
+                                <h3 className="font-bold text-text">{t('navigation.moreMenu')}</h3>
                                 <button className="text-muted hover:text-text p-1 bg-white/5 rounded-full" onClick={() => setMobileMoreOpen(false)}><X className="w-5 h-5" /></button>
                             </div>
                             {!isInstalledApp && (
@@ -12120,7 +12121,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                         const item = navItemsConfig[key];
                                         if (!item) return null;
                                         const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                        const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                        const labelOverride = key === 'mediastack' ? t('navigation.calendar') : key === 'request' ? t('navigation.request') : item.label;
                                         const handleActivate = () => {
                                             setMobileMoreOpen(false);
                                             if (item.href) window.open(item.href, '_blank');

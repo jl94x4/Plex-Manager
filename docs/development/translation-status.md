@@ -19,6 +19,7 @@ This table describes broad UI i18n wiring and known remaining work. It does not 
 
 | Area | State |
 | --- | --- |
+| Primary portal navigation | i18n-enabled |
 | Discover / Request member UI | i18n-enabled |
 | Home / Wrap-Up | i18n-enabled |
 | In-app notification chrome | i18n-enabled |
@@ -44,11 +45,9 @@ These batches are planning guidance only. Recalculate collision risk from recent
 
 | Batch | Approximate scope | Recommended namespace | Size | Architecture risk |
 | --- | --- | --- | --- | --- |
-| Settings > Overlays | Settings wrapper chrome for the Overlays feature | `settings.overlays.*` | Small | Low |
-| Settings > Poster Sets | Settings wrapper chrome for Poster Sets | `settings.posterSets.*` | Small | Low |
-| Settings > Scanner | Settings panel chrome for Scanner | `settings.scanner.*` | Small / Medium | Low / Medium |
-| Settings > ColleXions | Settings panel chrome for ColleXions | `settings.collexions.*` | Small / Medium | Low / Medium |
-| Settings > Library Upgrader | Settings panel chrome for Library Upgrader | `settings.upgrader.*` | Medium | Low / Medium |
+| Settings navigation / tabs | Settings navigation, tab labels, and navigation-order settings chrome | `settings.navigation.*` | Medium | Medium |
+| Major primary pages / recurring actions | High-traffic page headings, buttons, empty states, and repeated action chrome | Use existing feature namespaces where available | Medium | Medium |
+| Feature-specific settings wrappers and secondary modules | Smaller settings wrappers such as Overlays, Poster Sets, Scanner, ColleXions, and Library Upgrader | `settings.overlays.*`, `settings.posterSets.*`, `settings.scanner.*`, `settings.collexions.*`, `settings.upgrader.*` | Small / Medium | Low / Medium |
 
 ## Larger Future Areas
 
@@ -71,7 +70,6 @@ Future candidates include:
 These areas should be re-audited and may need maintainer confirmation before localization:
 
 - Settings search/index metadata
-- main navigation labels
 - setup wizard flows where localization may require broader structural decisions
 
 Treat these as candidates for review, not permanent blockers.
