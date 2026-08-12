@@ -717,6 +717,47 @@ def _section_filter(config: dict, override_ids: list | None = None) -> set[str] 
     return {str(x).strip() for x in raw if str(x).strip()}
 
 
+def _read_section_id_list(config: dict, *keys: str) -> list[str] | None:
+    """Return the first non-empty id list among keys, or None (= unset / all)."""
+    if not isinstance(config, dict):
+        return None
+    for key in keys:
+        raw = config.get(key)
+        if isinstance(raw, list) and raw:
+            out = [str(x).strip() for x in raw if str(x).strip()]
+            if out:
+                return out
+    return None
+
+
+def _bundle_section_ids(config: dict, bundle: str | None) -> list[str] | None:
+    """
+    Resolve library scope for a run bundle.
+    None means all libraries of the requested type(s).
+    Each bundle has its own list — empty/unset = all (independent of other runs).
+    """
+    name = str(bundle or "").strip().lower()
+    if name in {"core", "banners"}:
+        return _read_section_id_list(
+            config,
+            "coreLibrarySectionIds",
+            "core_library_section_ids",
+        )
+    if name in {"recently", "recently_added", "recently-added"}:
+        return _read_section_id_list(
+            config,
+            "recentlyAddedLibrarySectionIds",
+            "recently_added_library_section_ids",
+        )
+    if name in {"kometa", "media"}:
+        return _read_section_id_list(
+            config,
+            "kometaLibrarySectionIds",
+            "kometa_library_section_ids",
+        )
+    return _read_section_id_list(config, "librarySectionIds", "library_section_ids")
+
+
 def _section_ids(section) -> set[str]:
     section_id = str(getattr(section, "key", "") or "").rstrip("/").split("/")[-1]
     section_key = str(getattr(section, "key", "") or "")
@@ -744,12 +785,17 @@ def _iter_sections(
         yield section
 
 
-def _iter_tv_sections(plex: PlexServer, config: dict):
-    yield from _iter_sections(plex, config, types=("show",))
+def _iter_tv_sections(plex: PlexServer, config: dict, *, bundle: str = "core"):
+    """TV libraries for a run bundle. Empty per-run scope falls back to Advanced, then all."""
+    # Pass [] when unset so _section_filter does not re-apply librarySectionIds alone
+    # after _bundle_section_ids already considered that fallback.
+    ids = _bundle_section_ids(config, bundle)
+    yield from _iter_sections(plex, config, types=("show",), section_ids=ids if ids is not None else [])
 
 
-def _iter_movie_sections(plex: PlexServer, config: dict):
-    yield from _iter_sections(plex, config, types=("movie",))
+def _iter_movie_sections(plex: PlexServer, config: dict, *, bundle: str = "kometa"):
+    ids = _bundle_section_ids(config, bundle)
+    yield from _iter_sections(plex, config, types=("movie",), section_ids=ids if ids is not None else [])
 
 
 def _title_allowed(rating_key: str, allow: list | None, deny: list | None) -> bool:
@@ -766,7 +812,7 @@ def _title_allowed(rating_key: str, allow: list | None, deny: list | None) -> bo
 
 
 def _mode_section_ids(config: dict, mode: str) -> list | None:
-    """Per-mode library override; None means use global librarySectionIds."""
+    """Per-family library override; falls back to kometa run scope (empty = all)."""
     key_map = {
         "media": ("mediaInfoLibrarySectionIds", "media_info_library_section_ids"),
         "status": ("statusLibrarySectionIds", "status_library_section_ids"),
@@ -776,18 +822,15 @@ def _mode_section_ids(config: dict, mode: str) -> list | None:
         "ribbon": ("ribbonLibrarySectionIds", "ribbon_library_section_ids"),
     }
     camel, snake = key_map.get(mode, (None, None))
-    if not camel:
-        return None
-    raw = config.get(camel) if isinstance(config, dict) else None
-    if raw is None:
-        raw = config.get(snake) if isinstance(config, dict) else None
-    if isinstance(raw, list) and raw:
-        return [str(x).strip() for x in raw if str(x).strip()]
-    return None
+    if camel:
+        family = _read_section_id_list(config, camel, snake)
+        if family is not None:
+            return family
+    return _bundle_section_ids(config, "kometa")
 
 
 def _iter_shows(plex: PlexServer, config: dict):
-    for section in _iter_tv_sections(plex, config):
+    for section in _iter_tv_sections(plex, config, bundle="core"):
         for show in section.all():
             yield section, show
 
@@ -923,7 +966,11 @@ def discover_eligible_shows(
     show_by_key: dict[str, Any] = {}
     window_days = max(1, (datetime.now() - cutoff).days)
 
-    for section in _iter_tv_sections(plex, config):
+    tv_sections = list(_iter_tv_sections(plex, config, bundle="core"))
+    if not tv_sections:
+        _progress(progress, "No TV libraries in Banners (core) scope (check the library selector on this card).")
+
+    for section in tv_sections:
         _progress(progress, f"Scanning {section.title} for recent season premieres…")
         episodes = []
         used_fast = False
@@ -1522,7 +1569,11 @@ def discover_new_episodes(
             "library": section_title,
         }
 
-    for section in _iter_tv_sections(plex, config):
+    tv_sections = list(_iter_tv_sections(plex, config, bundle="core"))
+    if not tv_sections:
+        _progress(progress, "No TV libraries in Banners (core) scope (check the library selector on this card).")
+
+    for section in tv_sections:
         _progress(progress, f"Scanning {section.title} for new episodes…")
         try:
             episodes = _search_recent_episodes(section, cutoff)

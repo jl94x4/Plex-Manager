@@ -218,12 +218,13 @@ export const PlacementEditor: React.FC<Props> = ({
                     )}
                     {!baseFailed && (
                         <div
-                            className="absolute cursor-move border border-plex/80 bg-plex/10"
+                            className="absolute cursor-move"
                             style={{
                                 left: box.left,
                                 top: box.top,
                                 width: box.width,
                                 height: box.keepH,
+                                // Clip matches worker bottomClip; keep transparent so PNG rounded corners show.
                                 overflow: 'hidden',
                             }}
                             onPointerDown={onPointerDownMove}
@@ -232,12 +233,13 @@ export const PlacementEditor: React.FC<Props> = ({
                             <img
                                 src={kindBannerUrl(kind, seasonPresetId, episodePresetId, sampleBust)}
                                 alt=""
-                                className="pointer-events-none max-w-none"
+                                draggable={false}
+                                className="pointer-events-none max-w-none select-none"
                                 style={{
                                     width: box.width,
                                     height: box.height,
                                     marginTop: -box.clip,
-                                    objectFit: 'contain',
+                                    objectFit: 'fill',
                                 }}
                                 onLoad={(e) => {
                                     const img = e.currentTarget;
@@ -246,19 +248,27 @@ export const PlacementEditor: React.FC<Props> = ({
                                     }
                                 }}
                             />
+                            {/* Selection outline only — never fill, or transparent PNG corners look square. */}
                             <div
-                                className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize bg-plex"
+                                className="pointer-events-none absolute inset-0"
+                                style={{
+                                    boxShadow: 'inset 0 0 0 2px rgba(229, 160, 13, 0.85)',
+                                }}
+                            />
+                            <div
+                                className="absolute bottom-0 right-0 z-10 h-3.5 w-3.5 cursor-se-resize rounded-sm border border-background/80 bg-plex shadow"
                                 onPointerDown={onPointerDownResize}
                                 title={t('overlays.placement.resize')}
                             />
-                            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-40">
-                                <Move className="h-5 w-5 text-white" />
+                            <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/35 p-1.5 opacity-70">
+                                <Move className="h-4 w-4 text-white" />
                             </div>
                         </div>
                     )}
                 </div>
 
                 <div className="space-y-3">
+                    <p className="text-[11px] text-muted">{t('overlays.placement.outlineHint')}</p>
                     <label className="block">
                         <span className={fieldLabelClass}>{t('overlays.placement.width')}</span>
                         <input
@@ -292,6 +302,37 @@ export const PlacementEditor: React.FC<Props> = ({
                             onChange={(e) => patchKind({ y: Math.max(0, Math.min(1, (Number(e.target.value) || 0) / 100)) })}
                         />
                     </label>
+                    <label className="block">
+                        <span className={fieldLabelClass}>{t('overlays.placement.maxHeight')}</span>
+                        <input
+                            type="number"
+                            min={5}
+                            max={100}
+                            className={fieldInputClass}
+                            value={Math.round((current.maxHeight ?? 0.22) * 100)}
+                            onChange={(e) => patchKind({
+                                maxHeight: Math.max(0.05, Math.min(1, (Number(e.target.value) || 22) / 100)),
+                            })}
+                        />
+                        <span className="mt-1 block text-[11px] text-muted">{t('overlays.placement.maxHeightHint')}</span>
+                    </label>
+                    {(kind === 'show' || kind === 'season' || kind === 'episode') && (
+                        <label className="block">
+                            <span className={fieldLabelClass}>{t('overlays.placement.bottomClip')}</span>
+                            <input
+                                type="number"
+                                min={0}
+                                max={20}
+                                step={1}
+                                className={fieldInputClass}
+                                value={Math.round((current.bottomClip ?? 0.1) * 100)}
+                                onChange={(e) => patchKind({
+                                    bottomClip: Math.max(0, Math.min(0.2, (Number(e.target.value) || 0) / 100)),
+                                })}
+                            />
+                            <span className="mt-1 block text-[11px] text-muted">{t('overlays.placement.bottomClipHint')}</span>
+                        </label>
+                    )}
                     <button type="button" className={buttonClass} disabled={busy} onClick={() => onResetKind(kind)}>
                         <RotateCcw className="h-4 w-4" />
                         {t('overlays.placement.resetKind')}

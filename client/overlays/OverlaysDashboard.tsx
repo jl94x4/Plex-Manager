@@ -132,6 +132,9 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     streamingIncludeShows: true,
     streamingAllowKeys: [],
     streamingDenyKeys: [],
+    coreLibrarySectionIds: [],
+    recentlyAddedLibrarySectionIds: [],
+    kometaLibrarySectionIds: [],
     librarySectionIds: [],
     overlayPresetId: 'new-season',
     episodeOverlayPresetId: 'new-episode',
@@ -260,10 +263,83 @@ export const OverlaysDashboard: React.FC = () => {
     }, [toast, t]);
 
     useEffect(() => {
-        if (tab !== 'advanced') return;
+        if (tab !== 'advanced' && tab !== 'overview') return;
         if (sections.length > 0) return;
         void loadSections();
     }, [tab, sections.length, loadSections]);
+
+    const updateLibrarySectionIds = useCallback((
+        field: 'coreLibrarySectionIds' | 'recentlyAddedLibrarySectionIds' | 'kometaLibrarySectionIds' | 'librarySectionIds',
+        sectionId: string,
+        nextChecked: boolean,
+        scopedSections: Array<{ id: string; key: string; title: string; type?: string }>,
+    ) => {
+        setConfigDraft((prev) => {
+            const allIds = scopedSections.map((s) => s.id || s.key).filter(Boolean);
+            const currentSelected = (prev[field] as string[] | undefined) || [];
+            const currentlyAll = currentSelected.length === 0;
+            let nextIds: string[];
+            if (currentlyAll) {
+                nextIds = nextChecked
+                    ? [...allIds]
+                    : allIds.filter((value) => value !== sectionId);
+            } else {
+                const current = new Set(currentSelected);
+                if (nextChecked) current.add(sectionId);
+                else current.delete(sectionId);
+                nextIds = [...current];
+            }
+            if (nextIds.length === allIds.length && allIds.every((value) => nextIds.includes(value))) {
+                return { ...prev, [field]: [] };
+            }
+            return { ...prev, [field]: nextIds };
+        });
+    }, []);
+
+    const renderLibraryPicker = (
+        field: 'coreLibrarySectionIds' | 'recentlyAddedLibrarySectionIds' | 'kometaLibrarySectionIds' | 'librarySectionIds',
+        hintKey: string,
+        typeFilter?: 'show' | 'movie' | 'all',
+    ) => {
+        const scoped = sections.filter((section) => {
+            if (!typeFilter || typeFilter === 'all') return true;
+            return String(section.type || '').toLowerCase() === typeFilter;
+        });
+        const selected = (configDraft[field] as string[] | undefined) || [];
+        const allSelected = selected.length === 0;
+        return (
+            <div className="py-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className={fieldLabelClass}>{t('overlays.settings.libraries')}</span>
+                    <button type="button" className="text-xs font-semibold text-plex underline" onClick={() => void loadSections()}>
+                        {t('overlays.actions.loadSections')}
+                    </button>
+                </div>
+                <p className="mb-2 text-[11px] text-muted">{t(hintKey)}</p>
+                {scoped.length === 0 ? (
+                    <p className="text-xs text-muted">{t('overlays.settings.loadSectionsHint')}</p>
+                ) : (
+                    <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border bg-background/40 p-3">
+                        {scoped.map((section) => {
+                            const id = section.id || section.key;
+                            const checked = allSelected || selected.includes(id);
+                            const typeLabel = section.type === 'movie'
+                                ? t('overlays.settings.libTypeMovie')
+                                : t('overlays.settings.libTypeShow');
+                            return (
+                                <StyledCheckbox
+                                    key={`${field}-${id}`}
+                                    checked={checked}
+                                    label={`${section.title} · ${typeLabel} (${id})`}
+                                    onChange={(next) => updateLibrarySectionIds(field, id, next, scoped)}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     const summary = status?.lastRunSummary || configDraft.lastRunSummary || null;
     const activity = status?.activity || [];
@@ -980,6 +1056,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     </label>
                                 </div>
                             </div>
+                            {renderLibraryPicker('coreLibrarySectionIds', 'overlays.settings.librariesHintCore', 'show')}
                             <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
                                 <Save className="h-4 w-4" /> {t('overlays.actions.save')}
                             </button>
@@ -1045,6 +1122,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     />
                                 </label>
                             </div>
+                            {renderLibraryPicker('recentlyAddedLibrarySectionIds', 'overlays.settings.librariesHintRecently', 'show')}
                             <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
                                 <Save className="h-4 w-4" /> {t('overlays.actions.save')}
                             </button>
@@ -1635,6 +1713,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 />
                                 <span className="mt-1 block text-[11px] text-muted">{t('overlays.settings.kometaScheduleHint')}</span>
                             </label>
+                            {renderLibraryPicker('kometaLibrarySectionIds', 'overlays.settings.librariesHintKometa', 'all')}
                             <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
                                 <Save className="h-4 w-4" /> {t('overlays.actions.save')}
                             </button>
@@ -1984,12 +2063,27 @@ export const OverlaysDashboard: React.FC = () => {
                                         </h3>
                                         <div className={row.grid}>
                                             {items.map((item) => (
-                                                <figure key={item.url} className="space-y-1">
-                                                    <img
-                                                        src={`${item.url}&t=${item.mtime}`}
-                                                        alt={item.name}
-                                                        className={`${row.aspect} w-full rounded-md border border-border object-cover bg-background/60`}
-                                                    />
+                                                <figure key={item.rel || item.url} className="space-y-1">
+                                                    <div className={`relative overflow-hidden rounded-md border border-border bg-background/60 ${row.aspect}`}>
+                                                        <img
+                                                            src={`${item.url}${item.url.includes('?') ? '&' : '?'}t=${item.mtime}`}
+                                                            alt={item.name}
+                                                            loading="lazy"
+                                                            className="h-full w-full object-cover"
+                                                            onError={(e) => {
+                                                                const el = e.currentTarget;
+                                                                el.style.display = 'none';
+                                                                const sibling = el.nextElementSibling;
+                                                                if (sibling instanceof HTMLElement) sibling.hidden = false;
+                                                            }}
+                                                        />
+                                                        <div
+                                                            hidden
+                                                            className="absolute inset-0 flex items-center justify-center p-3 text-center text-[11px] text-muted"
+                                                        >
+                                                            {t('overlays.gallery.loadFailed')}
+                                                        </div>
+                                                    </div>
                                                     <figcaption className="truncate text-[11px] text-muted" title={item.name}>
                                                         {item.name}
                                                     </figcaption>
@@ -2132,62 +2226,7 @@ export const OverlaysDashboard: React.FC = () => {
                             )}
                         </div>
 
-                        <div className="py-4">
-                            <div className="mb-2 flex items-center justify-between gap-2">
-                                <span className={fieldLabelClass}>{t('overlays.settings.libraries')}</span>
-                                <button type="button" className="text-xs font-semibold text-plex underline" onClick={() => void loadSections()}>
-                                    {t('overlays.actions.loadSections')}
-                                </button>
-                            </div>
-                            <p className="mb-2 text-[11px] text-muted">{t('overlays.settings.librariesHint')}</p>
-                            {sections.length === 0 ? (
-                                <p className="text-xs text-muted">{t('overlays.settings.loadSectionsHint')}</p>
-                            ) : (
-                                <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-border bg-background/40 p-3">
-                                    {sections.map((section) => {
-                                        const id = section.id || section.key;
-                                        const selected = configDraft.librarySectionIds || [];
-                                        const allSelected = selected.length === 0;
-                                        const checked = allSelected || selected.includes(id);
-                                        const typeLabel = section.type === 'movie'
-                                            ? t('overlays.settings.libTypeMovie')
-                                            : t('overlays.settings.libTypeShow');
-                                        return (
-                                            <StyledCheckbox
-                                                key={id}
-                                                checked={checked}
-                                                label={`${section.title} · ${typeLabel} (${id})`}
-                                                onChange={(next) => {
-                                                    setConfigDraft((prev) => {
-                                                        const allIds = sections.map((s) => s.id || s.key);
-                                                        const currentSelected = prev.librarySectionIds || [];
-                                                        const currentlyAll = currentSelected.length === 0;
-                                                        let nextIds: string[];
-                                                        if (currentlyAll) {
-                                                            nextIds = next
-                                                                ? [...allIds]
-                                                                : allIds.filter((value) => value !== id);
-                                                        } else {
-                                                            const current = new Set(currentSelected);
-                                                            if (next) current.add(id);
-                                                            else current.delete(id);
-                                                            nextIds = [...current];
-                                                        }
-                                                        if (
-                                                            nextIds.length === allIds.length
-                                                            && allIds.every((value) => nextIds.includes(value))
-                                                        ) {
-                                                            return { ...prev, librarySectionIds: [] };
-                                                        }
-                                                        return { ...prev, librarySectionIds: nextIds };
-                                                    });
-                                                }}
-                                            />
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
+                        {renderLibraryPicker('librarySectionIds', 'overlays.settings.librariesHintAdvanced', 'all')}
 
                         <div className="flex flex-wrap gap-2 border-t border-border/40 pt-4">
                             <button

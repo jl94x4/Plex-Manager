@@ -499,8 +499,8 @@ def _sections_for_kometa_mode(plex, config: dict, mode: str):
 
     override = _mode_section_ids(config, mode)
     cfg = dict(config or {})
-    if override is not None:
-        cfg["librarySectionIds"] = override
+    # Explicit scope: family → kometa run list → all ([]). Do not inherit Advanced.
+    cfg["librarySectionIds"] = list(override) if override is not None else []
 
     if mode == "media":
         include_movies = _as_bool(cfg.get("mediaInfoIncludeMovies", cfg.get("media_info_include_movies")), True)

@@ -351,7 +351,7 @@ def run_live_overlays(
 
     reserved = reserved_keys or set()
     log = _load_log(log_path)
-    sections = list(_iter_tv_sections(plex, config))
+    sections = list(_iter_tv_sections(plex, config, bundle="core"))
     candidates = discover_live_shows(plex, config, sections, progress, resolver=resolver)
     should = {k: v for k, v in candidates.items() if k not in reserved}
 
@@ -514,7 +514,9 @@ def run_recently_added_overlays(
         return {"recentlyAddedEnabled": True, "recentlyAdded": 0, "recentlyRemoved": 0, "recentlyTotal": 0, "recentlyErrors": ["missing recently-added.png"]}
 
     badge = Image.open(asset)
-    sections = list(_iter_tv_sections(plex, config))
+    sections = list(_iter_tv_sections(plex, config, bundle="recently"))
+    if not sections:
+        _progress(progress, "No TV libraries in Recently Added scope (check the library selector on this card).")
     candidates = discover_recently_added(plex, config, sections, progress)
     should = {k: v for k, v in candidates.items() if k not in reserved}
 
@@ -658,7 +660,7 @@ def run_top10_overlays(plex, config: dict, paths: dict, preview_mode: bool, prog
         return {"top10Enabled": True, "top10Added": 0, "top10Removed": 0, "top10Total": 0, "top10Errors": ["missing top-10.png"]}
 
     badge = Image.open(asset)
-    sections = list(_iter_tv_sections(plex, config))
+    sections = list(_iter_tv_sections(plex, config, bundle="core"))
     should = discover_top10(plex, config, sections, progress)
 
     added = removed = 0
