@@ -35,7 +35,6 @@ import { AuthPageBackground, themeClasses, SlideshowBackground } from './shared/
 import { activityStreamColumnCount, activityStreamGridClass, upgraderPosterGridClass, upgraderPosterGridStyle, type UpgraderGridSize } from './shared/portalLayout';
 import { DiscoverGridSizeSelect } from './discovery/DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './discovery/useDiscoverGridSize';
-import { DiscoverLocaleSelect } from './discovery/i18n/DiscoverLocaleSelect';
 import { useDiscoverI18n } from './discovery/i18n';
 import { DiscoverNowPlayingStrip } from './discovery/DiscoverNowPlayingStrip';
 import { useNowPlaying } from './shared/useNowPlaying';
@@ -11654,7 +11653,6 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         className="overflow-visible"
                         buttonClassName="relative w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted hover:border-plex/50 hover:text-text transition-all overflow-visible"
                     />
-                    <DiscoverLocaleSelect showLabel={false} className="w-[6.75rem]" />
                     <div className="relative" ref={mobileThemeRef}>
                         <button
                             onClick={() => setMobileThemeOpen(v => !v)}
@@ -11778,7 +11776,6 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 {appVersion}
                             </div>
                         )}
-                        <DiscoverLocaleSelect variant="text" />
                     </div>
                 </div>
             </div>
