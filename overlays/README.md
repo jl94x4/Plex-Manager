@@ -7,8 +7,10 @@ Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on *
 - `cli.py` / `core.py` — Python worker (Pillow + plexapi)
 - `assets/presets/new-season.png`, `new-season-compact.png`
 - `assets/presets/new-episode.png`, `new-episode-compact.png`
+- Extra styles: `corner-ribbon.png`, `corner-ribbon-episode.png`, `returning-soon.png`, `season-chip.png` (dynamic `S{n}`)
 - Runtime data: `config/overlays/` (`config.json`, logs, `preview/`, `preview/samples/`, `presets/custom/`, `backups/`)
 - Settings **Visual sample** composites banners onto chosen/random Plex art (no live mutations)
+- **Promote preview → live** stamps tracked `preview_only` rows to Plex without a full library rescan
 
 ## Stamp rules (Phase 3)
 

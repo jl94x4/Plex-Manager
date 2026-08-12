@@ -126,6 +126,7 @@ export const overlaysApi = {
     reconcile: () => apiFetch(`${ROOT}/reconcile`, json({})),
     run: (options?: { preview?: boolean }) => apiFetch(`${ROOT}/run`, json(options || {})),
     preview: () => apiFetch(`${ROOT}/preview`, json({})),
+    promote: () => apiFetch(`${ROOT}/promote`, json({})),
     stop: () => apiFetch(`${ROOT}/stop`, json({})),
     importLog: (log: Record<string, unknown>, mode: 'merge' | 'replace' = 'merge') => (
         apiFetch(`${ROOT}/import-log`, json({ mode, log }))

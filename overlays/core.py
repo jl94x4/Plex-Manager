@@ -362,6 +362,124 @@ def _placement_for(config: dict | None, kind: str) -> dict[str, Any]:
     return out
 
 
+# Corner ribbons are authored for the top-right; ignore bottom-banner placement.
+CORNER_RIBBON_PLACEMENT: dict[str, dict[str, Any]] = {
+    "show": {
+        "x": 1.0,
+        "y": 0.0,
+        "width": 0.55,
+        "anchorX": "right",
+        "anchorY": "top",
+        "bottomClip": 0.0,
+    },
+    "season": {
+        "x": 1.0,
+        "y": 0.0,
+        "width": 0.55,
+        "anchorX": "right",
+        "anchorY": "top",
+        "bottomClip": 0.0,
+    },
+    "episode": {
+        "x": 1.0,
+        "y": 0.0,
+        "width": 0.42,
+        "maxHeight": 0.42,
+        "anchorX": "right",
+        "anchorY": "top",
+        "bottomClip": 0.0,
+    },
+}
+
+
+def _is_corner_ribbon_preset(preset_id: str | None) -> bool:
+    return "corner-ribbon" in str(preset_id or "").lower()
+
+
+def _is_season_chip_preset(preset_id: str | None) -> bool:
+    pid = str(preset_id or "").lower().replace("_", "-")
+    return pid in {"season-chip", "seasonchip", "s-chip"} or pid.endswith("season-chip")
+
+
+def _effective_placement(config: dict | None, kind: str, preset_id: str | None = None) -> dict[str, Any]:
+    if _is_corner_ribbon_preset(preset_id):
+        return dict(CORNER_RIBBON_PLACEMENT.get(kind) or CORNER_RIBBON_PLACEMENT["show"])
+    if _is_season_chip_preset(preset_id) and kind == "show":
+        return {
+            "x": 0.5,
+            "y": 1.0,
+            "width": 0.34,
+            "anchorX": "center",
+            "anchorY": "bottom",
+            "bottomClip": 0.0,
+        }
+    return _placement_for(config, kind)
+
+
+def _find_font(size: int):
+    candidates = [
+        Path(r"C:\Windows\Fonts\arialbd.ttf"),
+        Path(r"C:\Windows\Fonts\segoeuib.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    ]
+    try:
+        from PIL import ImageFont
+    except Exception:
+        return None
+    for path in candidates:
+        if path.exists():
+            try:
+                return ImageFont.truetype(str(path), size)
+            except Exception:
+                continue
+    try:
+        from PIL import ImageFont
+        return ImageFont.load_default()
+    except Exception:
+        return None
+
+
+def _render_season_chip(season_index: int | None) -> Image.Image:
+    """Dynamic S{n} chip for the season-chip preset."""
+    from PIL import ImageDraw
+
+    label = f"S{int(season_index)}" if season_index is not None else "S#"
+    w, h = 420, 140
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    pad_x, pad_y = 24, 18
+    box = [pad_x, pad_y, w - pad_x, h - pad_y]
+    radius = (box[3] - box[1]) // 2
+    draw.rounded_rectangle(box, radius=radius, fill=(229, 9, 20, 255))
+    font = _find_font(max(36, int((box[3] - box[1]) * 0.62)))
+    if font is None:
+        return img
+    tb = draw.textbbox((0, 0), label, font=font)
+    tw, th = tb[2] - tb[0], tb[3] - tb[1]
+    cx = (box[0] + box[2]) / 2
+    cy = (box[1] + box[3]) / 2
+    draw.text((cx - tw / 2 - tb[0], cy - th / 2 - tb[1]), label, font=font, fill=(255, 255, 255, 255))
+    return img
+
+
+def _load_show_overlay_image(config: dict | None, paths: dict, season_index: int | None = None) -> Image.Image:
+    preset_id = str((config or {}).get("overlayPresetId") or (config or {}).get("overlay_preset_id") or "new-season")
+    if _is_season_chip_preset(preset_id):
+        return _render_season_chip(season_index)
+    path = paths["overlay"]
+    if not path.exists():
+        raise FileNotFoundError(f"Overlay asset not found: {path}")
+    return Image.open(path)
+
+
+def _load_episode_overlay_image(config: dict | None, paths: dict) -> Image.Image:
+    path = paths["episodeOverlay"]
+    if not path.exists():
+        raise FileNotFoundError(f"Episode overlay asset not found: {path}")
+    return Image.open(path)
+
+
 def _apply_with_placement(
     base_img: Image.Image,
     overlay_img: Image.Image,
@@ -388,7 +506,12 @@ def _apply_episode_overlay(
     config: dict | None = None,
 ) -> Image.Image:
     """Readable New Episode badge on landscape thumbs (sized for small Plex grids)."""
-    return _apply_with_placement(base_img, overlay_img, _placement_for(config, "episode"))
+    preset = str((config or {}).get("episodeOverlayPresetId") or (config or {}).get("episode_overlay_preset_id") or "new-episode")
+    return _apply_with_placement(
+        base_img,
+        overlay_img,
+        _effective_placement(config, "episode", preset),
+    )
 
 
 def _apply_season_episode_overlay(
@@ -397,7 +520,12 @@ def _apply_season_episode_overlay(
     config: dict | None = None,
 ) -> Image.Image:
     """New Episode banner on portrait season posters."""
-    return _apply_with_placement(base_img, overlay_img, _placement_for(config, "season"))
+    preset = str((config or {}).get("episodeOverlayPresetId") or (config or {}).get("episode_overlay_preset_id") or "new-episode")
+    return _apply_with_placement(
+        base_img,
+        overlay_img,
+        _effective_placement(config, "season", preset),
+    )
 
 
 def _apply_show_overlay(
@@ -406,7 +534,12 @@ def _apply_show_overlay(
     config: dict | None = None,
 ) -> Image.Image:
     """New Season banner on show posters."""
-    return _apply_with_placement(base_img, overlay_img, _placement_for(config, "show"))
+    preset = str((config or {}).get("overlayPresetId") or (config or {}).get("overlay_preset_id") or "new-season")
+    return _apply_with_placement(
+        base_img,
+        overlay_img,
+        _effective_placement(config, "show", preset),
+    )
 
 
 def _download_poster(plex: PlexServer, thumb_path: str) -> Image.Image | None:
@@ -754,14 +887,11 @@ def process_show_overlay(
     library: str | None = None,
 ) -> dict:
     """New Season — show poster only (Phase 3). Season art is handled by New Episode."""
-    overlay_path: Path = paths["overlay"]
-    if not overlay_path.exists():
-        raise FileNotFoundError(f"Overlay asset not found: {overlay_path}")
-
-    overlay_img = Image.open(overlay_path)
     latest = _latest_season(show)
     if not latest:
         raise ValueError(f"No seasons for {show.title}")
+
+    overlay_img = _load_show_overlay_image(config, paths, season_index=getattr(latest, "index", None))
 
     show_poster = _download_poster(plex, getattr(show, "thumb", None) or "")
     if show_poster is None:
@@ -917,9 +1047,7 @@ def process_season_new_episode_overlay(
     config: dict | None = None,
 ) -> dict:
     """Stamp latest season poster with New Episode banner when the show has eligible new eps."""
-    overlay_path: Path = paths["episodeOverlay"]
-    if not overlay_path.exists():
-        raise FileNotFoundError(f"Episode overlay asset not found: {overlay_path}")
+    overlay_img = _load_episode_overlay_image(config, paths)
     latest = _latest_season(show)
     if not latest:
         raise ValueError(f"No seasons for {getattr(show, 'title', '')}")
@@ -944,7 +1072,6 @@ def process_season_new_episode_overlay(
         if saved:
             _progress(progress, f"Backed up season poster (New Episode): {show.title} S{latest.index}")
 
-    overlay_img = Image.open(overlay_path)
     result = _apply_season_episode_overlay(season_poster.copy(), overlay_img, config)
     safe = _sanitize_filename(f"{show.title}_S{latest.index}_ne")
     now = datetime.now()
@@ -1216,11 +1343,7 @@ def process_episode_overlay(
     progress: ProgressFn | None = None,
     config: dict | None = None,
 ) -> dict:
-    overlay_path: Path = paths["episodeOverlay"]
-    if not overlay_path.exists():
-        raise FileNotFoundError(f"Episode overlay asset not found: {overlay_path}")
-
-    overlay_img = Image.open(overlay_path)
+    overlay_img = _load_episode_overlay_image(config, paths)
     thumb = _download_poster(plex, getattr(episode, "thumb", None) or "")
     if thumb is None:
         raise RuntimeError(f"Failed to download episode thumb for {meta.get('title') or episode}")
@@ -1733,6 +1856,120 @@ def list_status(config: dict) -> dict:
     }
 
 
+def promote_preview_to_live(config: dict, progress: ProgressFn | None = None) -> dict:
+    """
+    Stamp every preview_only tracked show/episode/season-NE to live Plex art.
+    Does not rescans libraries or prune ineligible items — tracked preview rows only.
+    """
+    paths = _resolve_paths(config)
+    plex = _connect(config)
+    show_log = _load_log(paths["log"])
+    episode_log = _load_log(paths["episodeLog"])
+
+    show_keys = [
+        key for key, entry in show_log.items()
+        if isinstance(entry, dict) and bool(entry.get("preview_only"))
+    ]
+    episode_keys = [
+        key for key, entry in episode_log.items()
+        if isinstance(entry, dict)
+        and bool(entry.get("preview_only"))
+        and not _is_season_episode_log_key(key)
+    ]
+    season_keys = [
+        key for key, entry in episode_log.items()
+        if isinstance(entry, dict)
+        and bool(entry.get("preview_only"))
+        and _is_season_episode_log_key(key)
+    ]
+
+    _progress(
+        progress,
+        f"Promoting preview → live — {len(show_keys)} show(s), "
+        f"{len(episode_keys)} episode(s), {len(season_keys)} season stamp(s)…",
+    )
+
+    shows_promoted = 0
+    episodes_promoted = 0
+    seasons_promoted = 0
+    errors: list[str] = []
+
+    for key in sorted(show_keys):
+        existing = show_log.get(key) or {}
+        try:
+            show = plex.fetchItem(f"/library/metadata/{key}")
+            library = str(existing.get("library") or "").strip() or None
+            entry = process_show_overlay(
+                plex, show, config, paths, False, progress, library=library
+            )
+            show_log[key] = {**existing, **entry, "preview_only": False}
+            shows_promoted += 1
+        except Exception as exc:
+            title = existing.get("title") or key
+            errors.append(f"show {title}: {exc}")
+            _progress(progress, f"Promote failed for show {title}: {exc}")
+
+    for key in sorted(episode_keys):
+        existing = episode_log.get(key) or {}
+        try:
+            episode = plex.fetchItem(f"/library/metadata/{key}")
+            meta = {
+                "title": existing.get("title"),
+                "showTitle": existing.get("showTitle") or "",
+                "showKey": existing.get("showKey") or "",
+                "seasonIndex": existing.get("seasonIndex"),
+                "episodeIndex": existing.get("episodeIndex"),
+                "airedAt": existing.get("airedAt"),
+                "library": existing.get("library") or "",
+                "presetId": existing.get("presetId")
+                or config.get("episodeOverlayPresetId")
+                or "new-episode",
+            }
+            entry = process_episode_overlay(
+                plex, episode, meta, paths, False, progress, config=config
+            )
+            episode_log[key] = {**existing, **entry, "preview_only": False}
+            episodes_promoted += 1
+        except Exception as exc:
+            label = f"{existing.get('showTitle') or ''} {existing.get('title') or key}".strip()
+            errors.append(f"episode {label}: {exc}")
+            _progress(progress, f"Promote failed for episode {label}: {exc}")
+
+    for key in sorted(season_keys):
+        existing = episode_log.get(key) or {}
+        show_key = key.split(":", 1)[-1]
+        try:
+            show = plex.fetchItem(f"/library/metadata/{show_key}")
+            entry = process_season_new_episode_overlay(
+                plex, show, paths, False, progress, config=config
+            )
+            episode_log[key] = {**existing, **entry, "preview_only": False}
+            seasons_promoted += 1
+        except Exception as exc:
+            title = existing.get("title") or show_key
+            errors.append(f"season {title}: {exc}")
+            _progress(progress, f"Promote failed for season stamp {title}: {exc}")
+
+    _save_log(paths["log"], show_log)
+    _save_log(paths["episodeLog"], episode_log)
+    _progress(
+        progress,
+        f"Promote complete — shows {shows_promoted}, episodes {episodes_promoted}, "
+        f"season stamps {seasons_promoted}, errors {len(errors)}",
+    )
+    return {
+        "ok": True,
+        "showsPromoted": shows_promoted,
+        "episodesPromoted": episodes_promoted,
+        "seasonsPromoted": seasons_promoted,
+        "showsCandidate": len(show_keys),
+        "episodesCandidate": len(episode_keys),
+        "seasonsCandidate": len(season_keys),
+        "errors": errors,
+        "finishedAt": datetime.now().isoformat(),
+    }
+
+
 def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None, kind: str | None = None) -> dict:
     paths = _resolve_paths(config)
     plex = _connect(config)
@@ -2031,13 +2268,12 @@ def generate_overlay_samples(
 
     show_overlay = paths["overlay"]
     episode_overlay = paths["episodeOverlay"]
-    if not show_overlay.exists():
+    if not _is_season_chip_preset(preset_id) and not show_overlay.exists():
         raise FileNotFoundError(f"New Season overlay asset not found: {show_overlay}")
     if not episode_overlay.exists():
         raise FileNotFoundError(f"New Episode overlay asset not found: {episode_overlay}")
 
-    show_banner = Image.open(show_overlay)
-    episode_banner = Image.open(episode_overlay)
+    episode_banner = _load_episode_overlay_image(config, paths)
 
     show = None
     episode = None
@@ -2047,6 +2283,7 @@ def generate_overlay_samples(
     show_source = "placeholder"
     episode_source = "placeholder"
     plex = None
+    sample_season_index = 2
 
     try:
         plex = _connect(config)
@@ -2099,6 +2336,14 @@ def generate_overlay_samples(
         show_img = _placeholder_poster("show")
         _progress(progress, "Using placeholder show poster")
 
+    if show is not None:
+        try:
+            latest = _latest_season(show)
+            if latest is not None and getattr(latest, "index", None) is not None:
+                sample_season_index = int(latest.index)
+        except Exception:
+            pass
+
     episode_img = None
     if episode is not None and plex is not None:
         episode_title = getattr(episode, "title", None) or episode_title
@@ -2115,6 +2360,7 @@ def generate_overlay_samples(
         episode_img = _placeholder_poster("episode")
         _progress(progress, "Using placeholder episode thumb")
 
+    show_banner = _load_show_overlay_image(config, paths, season_index=sample_season_index)
     show_out = _apply_show_overlay(show_img.copy(), show_banner, config)
     episode_out = _apply_episode_overlay(episode_img.copy(), episode_banner, config)
     season_out = _apply_season_episode_overlay(show_img.copy(), episode_banner, config)

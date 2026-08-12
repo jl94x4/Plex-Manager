@@ -12,6 +12,7 @@ from core import (
     generate_overlay_samples,
     list_status,
     list_tv_sections,
+    promote_preview_to_live,
     reconcile,
     reset_all,
     reset_one,
@@ -43,6 +44,7 @@ def main() -> int:
             "reconcile",
             "reset-one",
             "reset-all",
+            "promote",
             "sections",
             "sample",
             "sample-candidates",
@@ -104,6 +106,10 @@ def main() -> int:
 
         if args.command == "reset-all":
             write_event("result", **reset_all(config, progress=progress))
+            return 0
+
+        if args.command == "promote":
+            write_event("result", **promote_preview_to_live(config, progress=progress))
             return 0
 
         if args.command in {"run", "preview", "cleanup"}:

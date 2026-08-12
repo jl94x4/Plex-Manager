@@ -33,7 +33,7 @@ import { overlaysApi, DEFAULT_OVERLAY_PLACEMENT, type OverlaysConfig, type Overl
 import { PlacementEditor } from './PlacementEditor';
 
 type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'settings' | 'import' | 'activity';
-type ActionId = 'refresh' | 'stop' | 'preview' | 'resetAll' | 'run' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample';
+type ActionId = 'refresh' | 'stop' | 'preview' | 'promote' | 'resetAll' | 'run' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample';
 
 type SampleMeta = {
     exists: boolean;
@@ -435,6 +435,11 @@ export const OverlaysDashboard: React.FC = () => {
     }, [tab]);
 
     const canResetAll = trackedTotal > 0 && !jobRunning && busy !== 'resetAll';
+    const previewOnlyShows = status?.previewOnlyShows ?? shows.filter((row) => row.previewOnly).length;
+    const previewOnlyEpisodes = status?.previewOnlyEpisodes ?? episodes.filter((row) => row.previewOnly).length;
+    const previewOnlySeasons = status?.previewOnlySeasons ?? 0;
+    const previewOnlyTotal = previewOnlyShows + previewOnlyEpisodes + previewOnlySeasons;
+    const canPromote = previewOnlyTotal > 0 && !jobRunning && busy !== 'promote' && workerReady;
 
     const resetAll = () => {
         void (async () => {
@@ -449,6 +454,24 @@ export const OverlaysDashboard: React.FC = () => {
             );
             if (!ok) return;
             await runAction('resetAll', () => overlaysApi.resetAll());
+        })();
+    };
+
+    const promotePreview = () => {
+        void (async () => {
+            const ok = await askConfirm(
+                t('overlays.promoteConfirm', {
+                    shows: previewOnlyShows,
+                    episodes: previewOnlyEpisodes + previewOnlySeasons,
+                }),
+                {
+                    title: t('overlays.promoteTitle'),
+                    confirmLabel: t('overlays.actions.promote'),
+                    cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+                },
+            );
+            if (!ok) return;
+            startBackgroundJob('promote', () => overlaysApi.promote());
         })();
     };
 
@@ -488,6 +511,17 @@ export const OverlaysDashboard: React.FC = () => {
                             onClick={() => startBackgroundJob('preview', () => overlaysApi.preview())}
                         >
                             {t('overlays.actions.preview')}
+                        </button>
+                        <button
+                            type="button"
+                            className={`${buttonClass} border-emerald-500/40 text-emerald-100`}
+                            disabled={!canPromote}
+                            onClick={promotePreview}
+                        >
+                            {busy === 'promote' || (jobRunning && status?.command === 'promote')
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <CheckCircle2 className="h-4 w-4" />}
+                            {t('overlays.actions.promote')}
                         </button>
                         <button
                             type="button"
