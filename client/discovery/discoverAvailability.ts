@@ -234,7 +234,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
             };
         }
 
-        if (!approvalStillOpen && requestable.length === 0 && handledSeasons.length > 0) {
+        if (!approvalStillOpen && mainRequestable.length === 0 && mainHandled.length > 0) {
             if (returningSeries && hasAnyEpisodeAired(item)) {
                 return {
                     ...base,
@@ -246,7 +246,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
                     ),
                 };
             }
-            if ((availableSeasons.length > 0 || upToDateSeasons.length > 0) && canMarkTvAsAvailable(item)) {
+            if ((mainAvailable.length > 0 || mainUpToDate.length > 0) && canMarkTvAsAvailable(item)) {
                 return {
                     ...base,
                     kind: 'available',

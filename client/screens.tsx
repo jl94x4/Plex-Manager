@@ -11252,7 +11252,7 @@ export const MaintenanceDashboard: React.FC = () => {
 interface NavigationProps {
     currentRoute: string;
     onNavigate: (
-        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'requests' | 'discovery' | 'about',
+        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about',
         options?: { hash?: string; reviewId?: number; path?: string },
     ) => void;
     onLogout: () => void;
@@ -11499,6 +11499,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'media-automation': { label: t('navigation.mediaAutomation'), icon: Cpu, route: 'media-automation', adminOnly: true },
         'poster-sets': { label: t('navigation.posterSets'), icon: ImageIcon, route: 'poster-sets', adminOnly: true },
         'overlays': { label: t('navigation.overlays'), icon: Layers, route: 'overlays', adminOnly: true },
+        'editions': { label: t('navigation.editions'), icon: Film, route: 'editions', adminOnly: true },
         'requests': { label: t('navigation.requests'), icon: ClipboardList, route: 'requests', adminOnly: true },
         'request': { label: t('navigation.discoverRequest'), icon: Sparkles, route: 'discovery', adminOnly: false },
         'about': { label: t('navigation.about'), icon: Info, route: 'about', adminOnly: false },

@@ -50,6 +50,7 @@ export const en = {
         mediaAutomation: 'Media Automation',
         posterSets: 'Poster Sets',
         overlays: 'Overlays',
+        editions: 'Editions',
         requests: 'Requests',
         discoverRequest: 'Discover & Request',
         request: 'Request',

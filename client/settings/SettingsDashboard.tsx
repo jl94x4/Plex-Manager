@@ -26,6 +26,7 @@ import {
     Cpu,
     Image as ImageIcon,
     Trophy,
+    Film,
 } from 'lucide-react';
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -174,6 +175,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
     'media-automation': Cpu,
     'poster-sets': ImageIcon,
     overlays: Layers,
+    editions: Film,
     achievements: Trophy,
     system: Settings,
     contact: Phone,
@@ -340,7 +342,7 @@ export const SettingsDashboard: React.FC = () => {
         if (mediaServerType === 'plex') return SETTINGS_TAB_GROUPS;
         return SETTINGS_TAB_GROUPS.map((group) => ({
             ...group,
-            tabs: group.tabs.filter((tab) => tab.id !== 'collexions' && tab.id !== 'overlays'),
+            tabs: group.tabs.filter((tab) => tab.id !== 'collexions' && tab.id !== 'overlays' && tab.id !== 'editions'),
         })).filter((group) => group.tabs.length > 0);
     }, [mediaServerType]);
     const settingsTabsFlat = settingsTabGroups.flatMap((group) => group.tabs);
@@ -489,6 +491,7 @@ export const SettingsDashboard: React.FC = () => {
     const [mediaAutomationHomeWidgetEnabled, setMediaAutomationHomeWidgetEnabled] = useState(false);
     const [posterSetsEnabled, setPosterSetsEnabled] = useState(false);
     const [overlaysEnabled, setOverlaysEnabled] = useState(false);
+    const [editionsEnabled, setEditionsEnabled] = useState(false);
     const [achievementsEnabled, setAchievementsEnabled] = useState(false);
     const [achievementsLeaderboardEnabled, setAchievementsLeaderboardEnabled] = useState(true);
     const [achievementsHomeWidgetEnabled, setAchievementsHomeWidgetEnabled] = useState(true);
@@ -1221,6 +1224,9 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.overlaysEnabled !== undefined) {
                 setOverlaysEnabled(!!initialSettings.overlaysEnabled);
             }
+            if (initialSettings.editionsEnabled !== undefined) {
+                setEditionsEnabled(!!initialSettings.editionsEnabled);
+            }
             if (initialSettings.achievementsEnabled !== undefined) {
                 setAchievementsEnabled(!!initialSettings.achievementsEnabled);
             }
@@ -1734,6 +1740,7 @@ export const SettingsDashboard: React.FC = () => {
             mediaAutomationHomeWidgetEnabled,
             posterSetsEnabled,
             overlaysEnabled,
+            editionsEnabled,
             achievementsEnabled,
             achievementsLeaderboardEnabled,
             achievementsHomeWidgetEnabled,
@@ -3406,6 +3413,7 @@ export const SettingsDashboard: React.FC = () => {
                                         mediaAutomation: mediaAutomationEnabled,
                                         posterSets: posterSetsEnabled,
                                         overlays: overlaysEnabled,
+                                        editions: editionsEnabled,
                                         achievements: achievementsEnabled,
                                         maintenance: maintenanceExperimentalEnabled,
                                     }}
@@ -4288,6 +4296,34 @@ export const SettingsDashboard: React.FC = () => {
                                 )}
                                 <p className="text-xs text-muted mt-3">
                                     Prefer off-hours runs if you also use Kometa or Poster Sets bulk poster uploads on the same libraries.
+                                </p>
+                            </section>
+                        </div>
+                    )}
+                    {activeTab === 'editions' && (
+                        <div className="mb-8 animate-fade-in space-y-6">
+                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Editions</h3>
+                            <section id={getSettingsSectionElementId('editions')} className="space-y-3 scroll-mt-24">
+                                <SettingsToggleRow
+                                    title="Enable Editions"
+                                    hint={<SettingHint>Admin nav for Plex Edition tags (cuts, HDR, codecs, sources, and more). Uses Plex credentials from Media Player. Module order and webhooks are configured on the Editions page.</SettingHint>}
+                                    checked={editionsEnabled}
+                                    onChange={setEditionsEnabled}
+                                />
+                                <p className={`text-xs mt-2 font-semibold ${editionsEnabled ? 'text-green-300' : 'text-yellow-300'}`}>
+                                    Current status: {editionsEnabled ? 'ON' : 'OFF'}
+                                </p>
+                                {editionsEnabled && (
+                                    <button
+                                        type="button"
+                                        className="mt-3 px-4 py-2 rounded-md font-bold transition-all bg-plex text-background hover:bg-plex-hover"
+                                        onClick={() => window.location.assign(portalUrl('/editions'))}
+                                    >
+                                        Open Editions
+                                    </button>
+                                )}
+                                <p className="text-xs text-muted mt-3">
+                                    Requires the Editions Python worker (`editions/cli.py`). Prefer a backup before processing your whole library.
                                 </p>
                             </section>
                         </div>

@@ -1,6 +1,6 @@
 export const SETTINGS_TABS = [
     'plex', 'notifications', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'layout',
-    'achievements', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'overlays', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
+    'achievements', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'overlays', 'editions', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
 ] as const;
 
 export type SettingsTabId = typeof SETTINGS_TABS[number];
@@ -89,6 +89,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'media-automation', tabId: 'media-automation', label: 'Media Automation', group: 'Automation', keywords: ['media', 'automation', 'ffmpeg', 'worker', 'transcode', 'remux', 'pipeline', 'hardware', 'nvenc', 'qsv', 'vaapi', 'quiet hours', 'schedule', 'overnight', 'gotify'] },
     { id: 'poster-sets', tabId: 'poster-sets', label: 'Poster Sets', group: 'Automation', keywords: ['poster', 'sets', 'mediux', 'theposterdb', 'artwork', 'plex posters', 'title cards'] },
     { id: 'overlays', tabId: 'overlays', label: 'Overlays', group: 'Automation', keywords: ['overlays', 'new season', 'banner', 'kometa', 'poster overlay', 'season overlay'] },
+    { id: 'editions', tabId: 'editions', label: 'Editions', group: 'Automation', keywords: ['editions', 'edition manager', 'plex edition', 'cut', 'remux', 'hdr', 'audio codec', 'webhook'] },
     { id: 'system', tabId: 'system', label: 'System', group: 'Automation', keywords: ['system', 'diagnostics', 'backup'] },
     { id: 'system/health', tabId: 'system', sectionId: 'health', label: 'Health Dashboard', group: 'Automation', keywords: ['health', 'score', 'alerts', 'integrations'] },
     { id: 'system/maintenance', tabId: 'system', sectionId: 'maintenance', label: 'Cleaner Experimental Mode', group: 'Automation', keywords: ['cleaner', 'maintenance', 'experimental'] },

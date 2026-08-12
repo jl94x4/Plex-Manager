@@ -61,6 +61,7 @@ import {
 } from './lib/media-automation/index.js';
 import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook, startTpdbCacheDailyRefresh } from './lib/poster-sets/index.js';
 import { createOverlaysRouter } from './lib/overlays/index.js';
+import { createEditionsRouter } from './lib/editions/index.js';
 import { startOverlaysScheduler, startOverlaysBundleScheduler, runOverlaysScheduledJob } from './lib/overlays/scheduler.js';
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
@@ -882,6 +883,7 @@ const rejectPlexOauthState = (req, res, { redirectOnSuccess = false } = {}) => {
 };
 
 app.use(express.json({ limit: '1mb' })); // Poster Sets Warm + other admin payloads; was 50kb (413 on large Warm)
+app.use(express.urlencoded({ extended: true, limit: '2mb' })); // Plex webhook form payloads
 app.use(cookieParser()); // Middleware to parse cookies
 
 // CSRF defense for cookie-authenticated API mutations: require same-origin
@@ -922,6 +924,8 @@ const isSameOriginApiRequest = (req) => {
 const portalCsrfMiddleware = (req, res, next) => {
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
     if (!String(req.path || '').startsWith('/api/')) return next();
+    // External integrations (no browser session / CSRF header).
+    if (String(req.path || '').startsWith('/api/editions/webhook')) return next();
     const headerOk = String(req.get(PORTAL_CSRF_HEADER) || '') === PORTAL_CSRF_VALUE;
     if (headerOk || isSameOriginApiRequest(req)) return next();
     return res.status(403).json({ error: 'CSRF validation failed.' });
@@ -4329,6 +4333,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         mediaAutomationHomeWidget: !!config.mediaAutomationEnabled && !!config.mediaAutomationHomeWidgetEnabled,
         posterSets: !!config.posterSetsEnabled,
         overlays: !!config.overlaysEnabled,
+        editions: !!config.editionsEnabled && isPlexMediaServer,
         achievements: !!config.achievementsEnabled,
         achievementsLeaderboard: !!config.achievementsEnabled && config.achievementsLeaderboardEnabled !== false,
         // Portal engine unlocks Discover; Seerr URL still works when using Seerr as engine.
@@ -4749,6 +4754,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 mediaAutomation: mediaAutomationConfigForApi(config),
                 posterSetsEnabled: !!config.posterSetsEnabled,
                 overlaysEnabled: !!config.overlaysEnabled,
+                editionsEnabled: !!config.editionsEnabled,
                 achievementsEnabled: !!config.achievementsEnabled,
                 achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
                 achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
@@ -4910,6 +4916,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 mediaAutomation: mediaAutomationConfigForApi({}),
                 posterSetsEnabled: false,
                 overlaysEnabled: false,
+                editionsEnabled: false,
                 achievementsEnabled: false,
                 achievementsLeaderboardEnabled: true,
                 achievementsHomeWidgetEnabled: true,
@@ -4982,7 +4989,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -5402,6 +5409,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         overlaysEnabled: overlaysEnabled !== undefined
             ? !!overlaysEnabled
             : !!existingConfig.overlaysEnabled,
+        editionsEnabled: editionsEnabled !== undefined
+            ? !!editionsEnabled
+            : !!existingConfig.editionsEnabled,
         achievementsEnabled: achievementsEnabled !== undefined
             ? !!achievementsEnabled
             : !!existingConfig.achievementsEnabled,
@@ -16971,6 +16981,16 @@ const systemJobs = {
         lastDurationMs: null,
         lastError: null,
     },
+    editionsProcess: {
+        id: 'editionsProcess',
+        name: 'Editions: Process',
+        description: 'Writes Plex Edition titles from the Editions worker (process all / one / reset / backup).',
+        lastRun: null,
+        nextRun: null,
+        running: false,
+        lastDurationMs: null,
+        lastError: null,
+    },
 };
 
 const markTaskStart = (task) => {
@@ -23421,6 +23441,32 @@ app.use('/api/overlays', createOverlaysRouter({
     markTaskStart,
     markTaskEnd,
     systemJob: systemJobs.overlaysNewSeason,
+}));
+
+const requireEditions = async (req, res, next) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!config.editionsEnabled) {
+            return res.status(403).json({ error: 'Editions is disabled. Enable it in Settings first.' });
+        }
+        if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex') {
+            return res.status(403).json({ error: 'Editions is Plex-only.' });
+        }
+        return next();
+    } catch {
+        return res.status(500).json({ error: 'Failed to check Editions feature flag.' });
+    }
+};
+
+app.use('/api/editions', createEditionsRouter({
+    Router: express.Router,
+    requireAdmin,
+    requireEditions,
+    loadPortalConfig: async () => loadFile(CONFIG_PATH, {}),
+    resolvePlex: resolveOverlaysPlex,
+    markTaskStart,
+    markTaskEnd,
+    systemJob: systemJobs.editionsProcess,
 }));
 
 const findMediaAutomationLibraryForPath = async (candidate) => {

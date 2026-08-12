@@ -8,6 +8,7 @@ import type { PortalServiceOptions } from '../requests/types';
 import type { RequestOptionsPayload } from './requestSeasonUtils';
 import {
     formatQuotaHint,
+    isMainSeasonNumber,
     seasonStatusBadgeClass,
 } from './requestSeasonUtils';
 import { resolveTmdbImageUrl } from './tmdbImageUrl';
@@ -308,9 +309,10 @@ export const RequestModal: React.FC<Props> = ({
             setShowAdvanced(false);
 
             if (payload.mediaType === 'tv' && Array.isArray(payload.seasons)) {
+                // Match Seerr: never auto-select Specials (season 0) — user must opt in.
                 setSelectedSeasons(
                     payload.seasons
-                        .filter((s) => s.requestable)
+                        .filter((s) => s.requestable && isMainSeasonNumber(Number(s.seasonNumber)))
                         .map((s) => Number(s.seasonNumber))
                         .filter((n) => Number.isFinite(n)),
                 );
@@ -361,6 +363,10 @@ export const RequestModal: React.FC<Props> = ({
     const requestableSeasons = useMemo(
         () => (options?.seasons || []).filter((s) => s.requestable),
         [options?.seasons],
+    );
+    const requestableMainSeasons = useMemo(
+        () => requestableSeasons.filter((s) => isMainSeasonNumber(Number(s.seasonNumber))),
+        [requestableSeasons],
     );
 
     const hdQuotaBlocked = !!(
@@ -451,7 +457,7 @@ export const RequestModal: React.FC<Props> = ({
 
     const selectAllRequestable = () => {
         setSelectedSeasons(
-            requestableSeasons
+            requestableMainSeasons
                 .map((s) => Number(s.seasonNumber))
                 .filter((n) => Number.isFinite(n)),
         );
@@ -462,7 +468,7 @@ export const RequestModal: React.FC<Props> = ({
     };
 
     const selectMissingOnly = () => {
-        const missing = requestableSeasons
+        const missing = requestableMainSeasons
             .filter((s) => s.statusLabel === 'Not requested')
             .map((s) => Number(s.seasonNumber))
             .filter((n) => Number.isFinite(n));
@@ -564,10 +570,10 @@ export const RequestModal: React.FC<Props> = ({
         if (!options) return null;
         const is4k = quality === '4k';
         const form = qualityForms[quality];
-        const allRequestableSelected = mediaType === 'tv'
-            && requestableSeasons.length > 0
-            && selectedSeasons.length === requestableSeasons.length
-            && requestableSeasons.every((s) => selectedSeasons.includes(Number(s.seasonNumber)));
+        const allMainRequestableSelected = mediaType === 'tv'
+            && requestableMainSeasons.length > 0
+            && requestableMainSeasons.every((s) => selectedSeasons.includes(Number(s.seasonNumber)));
+        const hasSpecialsSelected = selectedSeasons.some((n) => !isMainSeasonNumber(n));
 
         const body: Record<string, unknown> = {
             mediaType,
@@ -575,7 +581,13 @@ export const RequestModal: React.FC<Props> = ({
             is4k: is4k || undefined,
         };
         if (mediaType === 'tv') {
-            body.seasons = allRequestableSelected && requestableSeasons.length === (options.seasons?.length || 0)
+            // Prefer explicit season lists when Specials are in play so we never
+            // accidentally request season 0 via Seerr's seasons:"all".
+            const allSeasonsAreMain = (options.seasons || []).every((s) => isMainSeasonNumber(Number(s.seasonNumber)));
+            body.seasons = allMainRequestableSelected
+                && !hasSpecialsSelected
+                && requestableMainSeasons.length === (options.seasons?.length || 0)
+                && allSeasonsAreMain
                 ? 'all'
                 : [...selectedSeasons].sort((a, b) => a - b);
         }

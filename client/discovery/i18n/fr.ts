@@ -52,6 +52,7 @@ export const fr: DeepPartial<EnCatalog> = {
         mediaAutomation: 'Media Automation',
         posterSets: 'Poster Sets',
         overlays: 'Overlays',
+        editions: 'Éditions',
         requests: 'Demandes',
         discoverRequest: 'Découvrir et demander',
         request: 'Demander',

@@ -40,6 +40,9 @@ ENV COLLEXIONS_EMBEDDED_PORT=15755
 ENV POSTER_SETS_APP_DIR=/app/poster-sets
 ENV OVERLAYS_APP_DIR=/app/overlays
 ENV OVERLAYS_PYTHON=/opt/poster-sets-venv/bin/python
+ENV EDITIONS_APP_DIR=/app/editions
+ENV EDITIONS_PYTHON=/opt/poster-sets-venv/bin/python
+ENV EDITIONS_BACKUP_DIR=/app/config/editions/metadata_backup
 
 # ffmpeg supplies both ffmpeg and ffprobe. Mesa provides AMD VAAPI; Intel media /
 # QSV runtime libs are installed when Bookworm publishes them for the arch.
@@ -154,10 +157,20 @@ COPY overlays/assets /app/overlays/assets
 RUN /opt/poster-sets-venv/bin/pip install --no-cache-dir -r /app/overlays/requirements.txt \
     && chown -R node:node /app/overlays
 
+# Editions headless worker (Plex Edition tags) — shares poster-sets venv (requests).
+COPY editions/requirements.txt /app/editions/requirements.txt
+COPY editions/cli.py /app/editions/cli.py
+COPY editions/edition_manager.py /app/editions/edition_manager.py
+COPY editions/modules /app/editions/modules
+COPY editions/README.md /app/editions/README.md
+COPY editions/THIRD_PARTY_LICENSE.txt /app/editions/THIRD_PARTY_LICENSE.txt
+RUN /opt/poster-sets-venv/bin/pip install --no-cache-dir -r /app/editions/requirements.txt \
+    && chown -R node:node /app/editions
+
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-RUN mkdir -p config/media-automation/work config/poster-sets config/overlays backup \
+RUN mkdir -p config/media-automation/work config/poster-sets config/overlays config/editions/metadata_backup backup \
     && chown -R node:node /app
 
 EXPOSE 2121
