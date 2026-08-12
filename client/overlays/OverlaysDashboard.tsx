@@ -573,6 +573,28 @@ export const OverlaysDashboard: React.FC = () => {
                         </button>
                         <button
                             type="button"
+                            className={buttonClass}
+                            disabled={busy !== null || jobRunning || !workerReady}
+                            onClick={() => startBackgroundJob('previewRecently', () => overlaysApi.preview({ bundle: 'recently' }))}
+                        >
+                            {busy === 'previewRecently' || status?.command === 'preview-recently'
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : null}
+                            {t('overlays.actions.previewRecently')}
+                        </button>
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={busy !== null || jobRunning || !workerReady}
+                            onClick={() => startBackgroundJob('previewKometa', () => overlaysApi.preview({ bundle: 'kometa' }))}
+                        >
+                            {busy === 'previewKometa' || status?.command === 'preview-kometa'
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : null}
+                            {t('overlays.actions.previewKometa')}
+                        </button>
+                        <button
+                            type="button"
                             className={`${buttonClass} border-emerald-500/40 text-emerald-100`}
                             disabled={!canPromote}
                             onClick={promotePreview}
@@ -607,7 +629,7 @@ export const OverlaysDashboard: React.FC = () => {
                             disabled={busy !== null || jobRunning || !workerReady}
                             onClick={() => startBackgroundJob('runRecently', () => overlaysApi.run({ preview: false, bundle: 'recently' }))}
                         >
-                            {busy === 'runRecently' || String(status?.command || '').includes('recently')
+                            {busy === 'runRecently' || status?.command === 'run-recently'
                                 ? <Loader2 className="h-4 w-4 animate-spin" />
                                 : <Play className="h-4 w-4" />}
                             {t('overlays.actions.runRecently')}
@@ -618,7 +640,7 @@ export const OverlaysDashboard: React.FC = () => {
                             disabled={busy !== null || jobRunning || !workerReady}
                             onClick={() => startBackgroundJob('runKometa', () => overlaysApi.run({ preview: false, bundle: 'kometa' }))}
                         >
-                            {busy === 'runKometa' || String(status?.command || '').includes('kometa')
+                            {busy === 'runKometa' || status?.command === 'run-kometa'
                                 ? <Loader2 className="h-4 w-4 animate-spin" />
                                 : <Play className="h-4 w-4" />}
                             {t('overlays.actions.runKometa')}

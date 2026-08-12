@@ -45,10 +45,12 @@ Credit: overlay PNGs from [Kometa-Team/Kometa](https://github.com/Kometa-Team/Ko
 
 Preview / Run now only runs the **core** bundle (Live, New Season, New Episode, Top 10).
 
-- **Run Recently Added** — Recently Added banners only (system job `Overlays: Recently Added`)
-- **Run Media / Kometa** — resolution / status / ratings / network only (system job `Overlays: Media / Kometa`)
+- **Preview Recently Added** / **Run Recently Added** — Recently Added banners only
+- **Preview Media / Kometa** / **Run Media / Kometa** — resolution / status / ratings / network only
 
-Each has its own schedule hours in Settings (0 = off). They share one worker lock so two overlay runs never stamp posters at the same time.
+Preview writes composites under `config/overlays/preview/` (no Plex upload). Promote preview → live stamps tracked preview rows.
+
+Each bundle has its own schedule hours in Settings (0 = off). They share one worker lock so two overlay runs never stamp posters at the same time.
 
 ## Setup
 
