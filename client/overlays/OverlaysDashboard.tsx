@@ -264,6 +264,7 @@ export const OverlaysDashboard: React.FC = () => {
     const [sampleCandidates, setSampleCandidates] = useState<Array<{ ratingKey: string; title: string }>>([]);
     const [gallery, setGallery] = useState<Array<{ name: string; kind: string; url: string; mtime: number }>>([]);
     const [collapsedBinges, setCollapsedBinges] = useState<Record<string, boolean>>({});
+    const [collapsedKometaSections, setCollapsedKometaSections] = useState<Record<string, boolean>>({});
     const [jobCardExpanded, setJobCardExpanded] = useState<Record<JobCardId, boolean>>({
         banners: false,
         recently: false,
@@ -279,6 +280,7 @@ export const OverlaysDashboard: React.FC = () => {
     const [collectionPickerLoading, setCollectionPickerLoading] = useState(false);
     const [collectionPickerError, setCollectionPickerError] = useState('');
     const [newCollectionRuleName, setNewCollectionRuleName] = useState('');
+    const [newCollectionRuleLibrary, setNewCollectionRuleLibrary] = useState('');
     const [newCollectionRuleKey, setNewCollectionRuleKey] = useState('');
     const [newCollectionRuleFile, setNewCollectionRuleFile] = useState<File | null>(null);
     const sampleLoadedRef = React.useRef(false);
@@ -508,6 +510,65 @@ export const OverlaysDashboard: React.FC = () => {
     const collectionsEnabled = configDraft.customCollectionOverlaysEnabled === true
         && collectionRules.length > 0;
 
+    const formatKometaFamilies = useCallback((row: any) => {
+        if (!row?.families || typeof row.families !== 'object') return '—';
+        return Object.entries(row.families)
+            .map(([family, meta]: [string, any]) => `${family}:${meta?.name || '?'}`)
+            .join(', ');
+    }, []);
+
+    const kometaSections = useMemo(() => {
+        type Section = {
+            id: string;
+            title: string;
+            library: string;
+            kind: 'collection' | 'other';
+            rows: any[];
+        };
+        const byId = new Map<string, Section>();
+        const other: Section = {
+            id: 'other-kometa',
+            title: '',
+            library: '',
+            kind: 'other',
+            rows: [],
+        };
+        for (const row of kometaItems) {
+            const fam = row?.families?.custom_collection;
+            if (!fam || typeof fam !== 'object') {
+                other.rows.push(row);
+                continue;
+            }
+            const ruleId = String(fam.extra?.ruleId || fam.name || '').trim();
+            const rule = collectionRules.find((r) => r.id === ruleId);
+            const title = String(
+                fam.extra?.collectionTitle
+                || rule?.collectionTitle
+                || fam.text
+                || rule?.name
+                || ruleId
+                || 'Collection',
+            ).trim() || 'Collection';
+            const library = String(
+                fam.extra?.library || rule?.library || row.library || '',
+            ).trim();
+            const id = `collection:${ruleId || title}:${library}`;
+            let section = byId.get(id);
+            if (!section) {
+                section = { id, title, library, kind: 'collection', rows: [] };
+                byId.set(id, section);
+            }
+            section.rows.push(row);
+        }
+        const next = [...byId.values()].sort((a, b) => {
+            const la = `${a.library} ${a.title}`.toLowerCase();
+            const lb = `${b.library} ${b.title}`.toLowerCase();
+            return la.localeCompare(lb);
+        });
+        if (other.rows.length) next.push(other);
+        return next;
+    }, [kometaItems, collectionRules]);
+
     const tabs = useMemo(() => ([
         { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
         { id: 'shows' as const, label: t('overlays.tabs.shows', { count: showCount, episodes: episodeCount }), icon: List },
@@ -573,9 +634,12 @@ export const OverlaysDashboard: React.FC = () => {
         setCollectionPickerLoading(true);
         setCollectionPickerError('');
         try {
+            if (sections.length === 0) {
+                await loadSections();
+            }
             const list = await collexionsApi.getCollections(false, { light: true });
             const opts = (Array.isArray(list) ? list : [])
-                .filter((c) => c?.ratingKey)
+                .filter((c) => c?.ratingKey && String(c.library || '').trim())
                 .map((c) => ({
                     value: String(c.ratingKey),
                     label: `${c.title || c.ratingKey}${c.library ? ` (${c.library})` : ''}`,
@@ -593,7 +657,7 @@ export const OverlaysDashboard: React.FC = () => {
         } finally {
             setCollectionPickerLoading(false);
         }
-    }, [t]);
+    }, [t, sections.length, loadSections]);
 
     useEffect(() => {
         if (jobCardExpanded.collections && collectionPickerOptions.length === 0 && !collectionPickerLoading) {
@@ -601,22 +665,62 @@ export const OverlaysDashboard: React.FC = () => {
         }
     }, [jobCardExpanded.collections, collectionPickerOptions.length, collectionPickerLoading, loadCollectionPicker]);
 
+    const libraryPickerOptions = useMemo(() => {
+        const fromSections = sections
+            .map((s) => ({
+                value: String(s.title || '').trim(),
+                label: `${s.title}${s.type ? ` (${s.type})` : ''}`,
+                sectionId: String(s.id || s.key || ''),
+            }))
+            .filter((s) => s.value);
+        if (fromSections.length) return fromSections;
+        // Fallback from known collection libraries if sections not loaded yet.
+        const seen = new Set<string>();
+        const fromCollections: Array<{ value: string; label: string; sectionId: string }> = [];
+        for (const opt of collectionPickerOptions) {
+            const lib = String(opt.library || '').trim();
+            if (!lib || seen.has(lib.toLowerCase())) continue;
+            seen.add(lib.toLowerCase());
+            fromCollections.push({ value: lib, label: lib, sectionId: '' });
+        }
+        return fromCollections.sort((a, b) => a.label.localeCompare(b.label));
+    }, [sections, collectionPickerOptions]);
+
+    const filteredCollectionOptions = useMemo(() => {
+        const lib = newCollectionRuleLibrary.trim().toLowerCase();
+        if (!lib) return [];
+        return collectionPickerOptions.filter((o) => String(o.library || '').trim().toLowerCase() === lib);
+    }, [collectionPickerOptions, newCollectionRuleLibrary]);
+
     const addCollectionOverlayRule = useCallback(async () => {
+        const library = newCollectionRuleLibrary.trim();
+        if (!library) {
+            toast(t('overlays.jobs.collections.libraryRequired'), 'error');
+            return;
+        }
         if (!newCollectionRuleKey || !newCollectionRuleFile) {
             toast(t('overlays.jobs.collections.saveHint'), 'error');
+            return;
+        }
+        const picked = collectionPickerOptions.find((o) => o.value === newCollectionRuleKey);
+        if (!picked || String(picked.library || '').trim().toLowerCase() !== library.toLowerCase()) {
+            toast(t('overlays.jobs.collections.libraryMismatch'), 'error');
             return;
         }
         try {
             const up = await overlaysApi.uploadPreset('collection', newCollectionRuleFile);
             const imageId = String(up?.preset?.id || '').trim();
             if (!imageId) throw new Error('Upload failed');
-            const picked = collectionPickerOptions.find((o) => o.value === newCollectionRuleKey);
+            const sectionMeta = libraryPickerOptions.find(
+                (o) => o.value.toLowerCase() === library.toLowerCase(),
+            );
             const rule: CustomCollectionOverlayRule = {
                 id: `cc-${Date.now().toString(36)}`,
-                name: (newCollectionRuleName || picked?.title || imageId).trim(),
+                name: (newCollectionRuleName || picked.title || imageId).trim(),
                 collectionRatingKey: newCollectionRuleKey,
-                collectionTitle: picked?.title || '',
-                library: picked?.library || '',
+                collectionTitle: picked.title || '',
+                library,
+                librarySectionId: sectionMeta?.sectionId || '',
                 image: imageId,
             };
             setConfigDraft((prev) => ({
@@ -625,6 +729,7 @@ export const OverlaysDashboard: React.FC = () => {
                 customCollectionOverlays: [...(Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : []), rule],
             }));
             setNewCollectionRuleName('');
+            setNewCollectionRuleLibrary('');
             setNewCollectionRuleKey('');
             setNewCollectionRuleFile(null);
             await refresh();
@@ -633,10 +738,12 @@ export const OverlaysDashboard: React.FC = () => {
             toast(e?.message || 'Upload failed', 'error');
         }
     }, [
+        newCollectionRuleLibrary,
         newCollectionRuleKey,
         newCollectionRuleFile,
         newCollectionRuleName,
         collectionPickerOptions,
+        libraryPickerOptions,
         toast,
         t,
         refresh,
@@ -972,6 +1079,49 @@ export const OverlaysDashboard: React.FC = () => {
             await runAction('revertKometa', () => overlaysApi.revertKometa());
             await refresh();
         })();
+    };
+
+    const revertKometaSection = (section: { id: string; title: string; rows: any[] }) => {
+        void (async () => {
+            const count = section.rows.length;
+            if (!count) return;
+            const title = section.id === 'other-kometa'
+                ? t('overlays.kometa.otherSection', { count })
+                : section.title;
+            const ok = await askConfirm(
+                t('overlays.kometa.revertSectionConfirm', { count, title }),
+                {
+                    title: t('overlays.kometa.revertSectionTitle'),
+                    confirmLabel: t('overlays.kometa.revertSection'),
+                    cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+                    danger: true,
+                },
+            );
+            if (!ok) return;
+            await runAction('revertKometa', async () => {
+                for (const row of section.rows) {
+                    await overlaysApi.revertKometa(row.ratingKey);
+                }
+            });
+            await refresh();
+        })();
+    };
+
+    const sectionHeading = (section: { id: string; title: string; library: string; rows: any[] }) => {
+        if (section.id === 'other-kometa') {
+            return t('overlays.kometa.otherSection', { count: section.rows.length });
+        }
+        if (section.library) {
+            return t('overlays.kometa.collectionSection', {
+                title: section.title,
+                library: section.library,
+                count: section.rows.length,
+            });
+        }
+        return t('overlays.kometa.collectionSectionNoLibrary', {
+            title: section.title,
+            count: section.rows.length,
+        });
     };
 
     const promotePreview = () => {
@@ -2128,11 +2278,37 @@ export const OverlaysDashboard: React.FC = () => {
                                 </label>
                                 <div>
                                     <div className="mb-1 flex items-center justify-between gap-2">
-                                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.ruleCollection')}</span>
+                                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.ruleLibrary')}</span>
                                         <button
                                             type="button"
                                             className="text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
                                             disabled={collectionPickerLoading}
+                                            onClick={() => void loadCollectionPicker()}
+                                        >
+                                            {collectionPickerLoading
+                                                ? t('overlays.jobs.collections.loadingCollections')
+                                                : t('overlays.actions.loadSections')}
+                                        </button>
+                                    </div>
+                                    <CustomSelect
+                                        value={newCollectionRuleLibrary}
+                                        onChange={(next) => {
+                                            setNewCollectionRuleLibrary(next);
+                                            setNewCollectionRuleKey('');
+                                        }}
+                                        options={[
+                                            { value: '', label: t('overlays.jobs.collections.pickLibrary') },
+                                            ...libraryPickerOptions.map((o) => ({ value: o.value, label: o.label })),
+                                        ]}
+                                    />
+                                </div>
+                                <div>
+                                    <div className="mb-1 flex items-center justify-between gap-2">
+                                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.ruleCollection')}</span>
+                                        <button
+                                            type="button"
+                                            className="text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
+                                            disabled={collectionPickerLoading || !newCollectionRuleLibrary}
                                             onClick={() => void loadCollectionPicker()}
                                         >
                                             {collectionPickerLoading
@@ -2144,8 +2320,16 @@ export const OverlaysDashboard: React.FC = () => {
                                         value={newCollectionRuleKey}
                                         onChange={setNewCollectionRuleKey}
                                         options={[
-                                            { value: '', label: t('overlays.jobs.collections.pickCollection') },
-                                            ...collectionPickerOptions,
+                                            {
+                                                value: '',
+                                                label: newCollectionRuleLibrary
+                                                    ? t('overlays.jobs.collections.pickCollection')
+                                                    : t('overlays.jobs.collections.pickLibrary'),
+                                            },
+                                            ...filteredCollectionOptions.map((o) => ({
+                                                value: o.value,
+                                                label: o.title || o.label,
+                                            })),
                                         ]}
                                     />
                                     {collectionPickerError ? (
@@ -2167,7 +2351,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 <button
                                     type="button"
                                     className={buttonClass}
-                                    disabled={!newCollectionRuleKey || !newCollectionRuleFile || busy !== null}
+                                    disabled={!newCollectionRuleLibrary || !newCollectionRuleKey || !newCollectionRuleFile || busy !== null}
                                     onClick={() => void addCollectionOverlayRule()}
                                 >
                                     <Upload className="h-4 w-4" /> {t('overlays.jobs.collections.uploadImage')}
@@ -2579,94 +2763,126 @@ export const OverlaysDashboard: React.FC = () => {
                     {kometaItems.length === 0 ? (
                         <p className="text-sm text-muted">{t('overlays.kometa.empty')}</p>
                     ) : (
-                        <>
-                            <div className="space-y-2 md:hidden">
-                                {kometaItems.map((row) => (
-                                    <div key={row.ratingKey} className="rounded-xl border border-white/10 bg-black/25 p-3">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <p className="font-semibold leading-snug text-text">{row.title}</p>
-                                                <p className="mt-1 text-xs text-muted">{row.library || '—'}</p>
-                                                <p className="mt-1 text-[11px] leading-snug text-muted">
-                                                    {row.families && typeof row.families === 'object'
-                                                        ? Object.entries(row.families)
-                                                            .map(([family, meta]: [string, any]) => `${family}:${meta?.name || '?'}`)
-                                                            .join(', ')
-                                                        : '—'}
+                        <div className="space-y-3">
+                            {kometaSections.map((section) => {
+                                const collapsed = collapsedKometaSections[section.id] === true;
+                                return (
+                                    <div
+                                        key={section.id}
+                                        className="overflow-hidden rounded-xl border border-white/10 bg-black/25"
+                                    >
+                                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2.5">
+                                            <button
+                                                type="button"
+                                                className="min-w-0 flex-1 text-left"
+                                                onClick={() => setCollapsedKometaSections((prev) => ({
+                                                    ...prev,
+                                                    [section.id]: !collapsed,
+                                                }))}
+                                                aria-expanded={!collapsed}
+                                            >
+                                                <p className="text-sm font-semibold text-text">
+                                                    <span className="mr-1.5 inline-block w-3 text-muted">
+                                                        {collapsed ? '▸' : '▾'}
+                                                    </span>
+                                                    {sectionHeading(section)}
                                                 </p>
-                                            </div>
+                                            </button>
                                             <button
                                                 type="button"
                                                 className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
-                                                disabled={busy !== null || jobRunning}
-                                                onClick={() => void runAction('revertKometa', async () => {
-                                                    await overlaysApi.revertKometa(row.ratingKey);
-                                                    await refresh();
-                                                })}
+                                                disabled={busy !== null || jobRunning || !workerReady}
+                                                onClick={() => revertKometaSection(section)}
                                             >
-                                                {t('overlays.actions.revert')}
+                                                {t('overlays.kometa.revertSection')}
                                             </button>
                                         </div>
-                                        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-                                            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
-                                                {row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}
-                                            </span>
-                                            {row.timestamp ? (
-                                                <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
-                                                    {new Date(row.timestamp).toLocaleString()}
-                                                </span>
-                                            ) : null}
-                                        </div>
+                                        {!collapsed && (
+                                            <>
+                                                <div className="space-y-2 p-3 md:hidden">
+                                                    {section.rows.map((row) => (
+                                                        <div key={row.ratingKey} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="min-w-0">
+                                                                    <p className="font-semibold leading-snug text-text">{row.title}</p>
+                                                                    <p className="mt-1 text-xs text-muted">{row.library || '—'}</p>
+                                                                    <p className="mt-1 text-[11px] leading-snug text-muted">
+                                                                        {formatKometaFamilies(row)}
+                                                                    </p>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                                    disabled={busy !== null || jobRunning}
+                                                                    onClick={() => void runAction('revertKometa', async () => {
+                                                                        await overlaysApi.revertKometa(row.ratingKey);
+                                                                        await refresh();
+                                                                    })}
+                                                                >
+                                                                    {t('overlays.actions.revert')}
+                                                                </button>
+                                                            </div>
+                                                            <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                                                                <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
+                                                                    {row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}
+                                                                </span>
+                                                                {row.timestamp ? (
+                                                                    <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
+                                                                        {new Date(row.timestamp).toLocaleString()}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <div className="hidden overflow-x-auto md:block">
+                                                    <table className="min-w-full text-left text-sm">
+                                                        <thead className="text-xs uppercase text-muted">
+                                                            <tr>
+                                                                <th className="px-3 py-2">{t('overlays.table.title')}</th>
+                                                                <th className="px-2 py-2">{t('overlays.table.library')}</th>
+                                                                <th className="px-2 py-2">{t('overlays.kometa.families')}</th>
+                                                                <th className="px-2 py-2">{t('overlays.table.mode')}</th>
+                                                                <th className="px-2 py-2">{t('overlays.table.when')}</th>
+                                                                <th className="px-2 py-2" />
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {section.rows.map((row) => (
+                                                                <tr key={row.ratingKey} className="border-t border-white/10">
+                                                                    <td className="px-3 py-2 font-medium">{row.title}</td>
+                                                                    <td className="px-2 py-2 text-muted">{row.library || '—'}</td>
+                                                                    <td className="px-2 py-2 text-xs text-muted">
+                                                                        {formatKometaFamilies(row)}
+                                                                    </td>
+                                                                    <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
+                                                                    <td className="px-2 py-2 text-muted">
+                                                                        {row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}
+                                                                    </td>
+                                                                    <td className="px-2 py-2 text-right">
+                                                                        <button
+                                                                            type="button"
+                                                                            className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                                            disabled={busy !== null || jobRunning}
+                                                                            onClick={() => void runAction('revertKometa', async () => {
+                                                                                await overlaysApi.revertKometa(row.ratingKey);
+                                                                                await refresh();
+                                                                            })}
+                                                                        >
+                                                                            {t('overlays.actions.revert')}
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
-                                ))}
-                            </div>
-                            <div className="hidden overflow-x-auto md:block">
-                            <table className="min-w-full text-left text-sm">
-                                <thead className="text-xs uppercase text-muted">
-                                    <tr>
-                                        <th className="px-2 py-2">{t('overlays.table.title')}</th>
-                                        <th className="px-2 py-2">{t('overlays.table.library')}</th>
-                                        <th className="px-2 py-2">{t('overlays.kometa.families')}</th>
-                                        <th className="px-2 py-2">{t('overlays.table.mode')}</th>
-                                        <th className="px-2 py-2">{t('overlays.table.when')}</th>
-                                        <th className="px-2 py-2" />
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {kometaItems.map((row) => (
-                                        <tr key={row.ratingKey} className="border-t border-white/10">
-                                            <td className="px-2 py-2 font-medium">{row.title}</td>
-                                            <td className="px-2 py-2 text-muted">{row.library || '—'}</td>
-                                            <td className="px-2 py-2 text-xs text-muted">
-                                                {row.families && typeof row.families === 'object'
-                                                    ? Object.entries(row.families)
-                                                        .map(([family, meta]: [string, any]) => `${family}:${meta?.name || '?'}`)
-                                                        .join(', ')
-                                                    : '—'}
-                                            </td>
-                                            <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
-                                            <td className="px-2 py-2 text-muted">
-                                                {row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}
-                                            </td>
-                                            <td className="px-2 py-2 text-right">
-                                                <button
-                                                    type="button"
-                                                    className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
-                                                    disabled={busy !== null || jobRunning}
-                                                    onClick={() => void runAction('revertKometa', async () => {
-                                                        await overlaysApi.revertKometa(row.ratingKey);
-                                                        await refresh();
-                                                    })}
-                                                >
-                                                    {t('overlays.actions.revert')}
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            </div>
-                        </>
+                                );
+                            })}
+                        </div>
                     )}
                 </DashboardPanel>
                 </div>

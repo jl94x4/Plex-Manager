@@ -157,6 +157,7 @@ def enabled_families(config: dict) -> list[str]:
         if isinstance(rules, list) and any(
             str((r or {}).get("collectionRatingKey") or (r or {}).get("collection_rating_key") or "").strip()
             and str((r or {}).get("image") or "").strip()
+            and str((r or {}).get("library") or (r or {}).get("libraryTitle") or "").strip()
             for r in rules
             if isinstance(r, dict)
         ):
@@ -175,7 +176,9 @@ def _custom_collection_rules(config: dict) -> list[dict]:
             continue
         collection_key = str(row.get("collectionRatingKey") or row.get("collection_rating_key") or "").strip()
         image = str(row.get("image") or row.get("presetId") or row.get("preset_id") or "").strip()
-        if not collection_key or not image:
+        library = str(row.get("library") or row.get("libraryTitle") or row.get("library_title") or "").strip()
+        # Library is required — never stamp without an explicit Plex library scope.
+        if not collection_key or not image or not library:
             continue
         rule_id = str(row.get("id") or "").strip() or f"rule-{collection_key}"
         if rule_id in seen:
@@ -186,27 +189,76 @@ def _custom_collection_rules(config: dict) -> list[dict]:
             "name": str(row.get("name") or row.get("title") or "").strip() or rule_id,
             "collectionRatingKey": collection_key,
             "collectionTitle": str(row.get("collectionTitle") or row.get("collection_title") or "").strip(),
-            "library": str(row.get("library") or "").strip(),
+            "library": library,
+            "librarySectionId": str(
+                row.get("librarySectionId")
+                or row.get("library_section_id")
+                or row.get("sectionId")
+                or row.get("section_id")
+                or ""
+            ).strip(),
             "image": image,
         })
     return out
 
 
-def _resolve_collection_member_keys(plex, collection_rating_key: str, progress: ProgressFn | None = None) -> set[str]:
+def _item_library_title(item) -> str:
+    for attr in ("librarySectionTitle", "sectionTitle"):
+        try:
+            value = getattr(item, attr, None)
+            if value:
+                return str(value).strip()
+        except Exception:
+            continue
+    try:
+        section = item.section() if callable(getattr(item, "section", None)) else None
+        if section is not None and getattr(section, "title", None):
+            return str(section.title).strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _library_matches(item_or_coll, expected_library: str) -> bool:
+    expected = str(expected_library or "").strip().lower()
+    if not expected:
+        return False
+    actual = _item_library_title(item_or_coll).lower()
+    return bool(actual) and actual == expected
+
+
+def _resolve_collection_member_keys(
+    plex,
+    collection_rating_key: str,
+    *,
+    library: str,
+    progress: ProgressFn | None = None,
+) -> set[str]:
     key = str(collection_rating_key or "").strip()
-    if not key:
+    expected_library = str(library or "").strip()
+    if not key or not expected_library:
         return set()
     try:
         coll = plex.fetchItem(int(key))
     except Exception as exc:
         _progress(progress, f"Collection {key}: fetch failed ({exc})")
         return set()
+    if not _library_matches(coll, expected_library):
+        actual = _item_library_title(coll) or "?"
+        _progress(
+            progress,
+            f"Collection {key}: skipped — library mismatch (expected '{expected_library}', got '{actual}')",
+        )
+        return set()
     members: set[str] = set()
     try:
         for item in (coll.items() or []):
             rk = str(getattr(item, "ratingKey", "") or "").strip()
-            if rk:
-                members.add(rk)
+            if not rk:
+                continue
+            if not _library_matches(item, expected_library):
+                continue
+            members.add(rk)
     except Exception as exc:
         _progress(progress, f"Collection {key}: items() failed ({exc})")
         return set()
@@ -249,10 +301,21 @@ def _apply_custom_collection_winners(
     # ratingKey -> first matching rule + resolved image path
     member_rule: dict[str, tuple[dict, Path]] = {}
     for rule in rules:
-        members = _resolve_collection_member_keys(plex, rule["collectionRatingKey"], progress)
+        if not rule.get("library"):
+            msg = f"custom_collection {rule['id']}: library is required — skipped"
+            if errors is not None:
+                errors.append(msg)
+            _progress(progress, msg)
+            continue
+        members = _resolve_collection_member_keys(
+            plex,
+            rule["collectionRatingKey"],
+            library=rule["library"],
+            progress=progress,
+        )
         _progress(
             progress,
-            f"Collection badge '{rule.get('name') or rule['id']}': {len(members)} member(s)",
+            f"Collection badge '{rule.get('name') or rule['id']}' [{rule['library']}]: {len(members)} member(s)",
         )
         image_path = _resolve_custom_preset_path(paths, rule["image"])
         if image_path is None:
@@ -276,6 +339,7 @@ def _apply_custom_collection_winners(
                 "ruleId": rule["id"],
                 "collectionRatingKey": rule["collectionRatingKey"],
                 "collectionTitle": rule.get("collectionTitle") or "",
+                "library": rule.get("library") or "",
             },
         )
         row = should.get(rk)
@@ -289,11 +353,9 @@ def _apply_custom_collection_winners(
             item_type = str(getattr(item, "type", "") or "").lower()
             if item_type == "episode":
                 continue  # collection badges are for show/movie posters
-            library = ""
-            try:
-                library = str(getattr(item, "librarySectionTitle", "") or "")
-            except Exception:
-                library = ""
+            if not _library_matches(item, rule.get("library") or ""):
+                continue
+            library = _item_library_title(item) or str(rule.get("library") or "")
             row = {
                 "item": item,
                 "library": library,
@@ -301,6 +363,8 @@ def _apply_custom_collection_winners(
                 "winners": {},
             }
             should[rk] = row
+        elif not _library_matches(row.get("item"), rule.get("library") or ""):
+            continue
         if "custom_collection" not in row["winners"]:
             row["winners"]["custom_collection"] = winner
 

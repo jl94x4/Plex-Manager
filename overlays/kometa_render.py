@@ -99,7 +99,8 @@ KOMETA_SLOTS: dict[str, dict[str, Any]] = {
         "anchorX": "left", "anchorY": "top", "bottomClip": 0.0,
     },
     "custom_collection": {
-        "x": 0.985, "y": 0.02, "width": 0.28, "maxHeight": 0.12,
+        # Inset from the corner — Plex UI rounds poster tiles and clips flush badges.
+        "x": 0.94, "y": 0.035, "width": 0.12, "maxHeight": 0.09,
         "anchorX": "right", "anchorY": "top", "bottomClip": 0.0,
     },
 }

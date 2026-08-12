@@ -47,7 +47,9 @@ export type CustomCollectionOverlayRule = {
     name: string;
     collectionRatingKey: string;
     collectionTitle?: string;
-    library?: string;
+    /** Required Plex library section title — badges only apply inside this library. */
+    library: string;
+    librarySectionId?: string;
     image: string;
 };
 
@@ -123,10 +125,10 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
         bottomClip: 0.10,
     },
     custom_collection: {
-        x: 0.985,
-        y: 0.02,
-        width: 0.28,
-        maxHeight: 0.12,
+        x: 0.94,
+        y: 0.035,
+        width: 0.12,
+        maxHeight: 0.09,
         anchorX: 'right',
         anchorY: 'top',
         bottomClip: 0,

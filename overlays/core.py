@@ -578,13 +578,26 @@ def _apply_with_placement(
     placement: dict[str, Any],
 ) -> Image.Image:
     max_h = placement.get("maxHeight")
+    if max_h is None:
+        max_h = placement.get("max_height")
     max_height_ratio = float(max_h) if max_h is not None else None
+    # bottomClip may be 0 (Kometa corner badges) — do not use `or 0.10` (0 is falsy).
+    raw_clip = placement.get("bottomClip")
+    if raw_clip is None:
+        raw_clip = placement.get("bottom_clip")
+    if raw_clip is None:
+        bottom_clip_ratio = 0.10
+    else:
+        try:
+            bottom_clip_ratio = float(raw_clip)
+        except (TypeError, ValueError):
+            bottom_clip_ratio = 0.10
     return _apply_overlay(
         base_img,
         overlay_img,
         width_ratio=float(placement.get("width") or 0.92),
         max_height_ratio=max_height_ratio,
-        bottom_clip_ratio=float(placement.get("bottomClip") or 0.10),
+        bottom_clip_ratio=bottom_clip_ratio,
         x=float(placement.get("x") if placement.get("x") is not None else 0.5),
         y=float(placement.get("y") if placement.get("y") is not None else 1.0),
         anchor_x=str(placement.get("anchorX") or "center"),
