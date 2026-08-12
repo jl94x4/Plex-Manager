@@ -53,10 +53,20 @@ const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-
 const DEFAULT_CONFIG: OverlaysConfig = {
     enabled: true,
     previewMode: false,
+    newSeasonEnabled: true,
     newSeasonDays: 21,
+    newSeasonWatchNowStyle: false,
     newEpisodeEnabled: true,
     newEpisodeDays: 6,
+    newEpisodeWatchNowStyle: false,
     skipNewEpisodeOnBinge: true,
+    recentlyAddedEnabled: false,
+    recentlyAddedDays: 7,
+    liveScheduleEnabled: false,
+    liveScheduleDays: 1,
+    top10Enabled: false,
+    top10Count: 10,
+    tmdbAirDateFallback: true,
     librarySectionIds: [],
     overlayPresetId: 'new-season',
     episodeOverlayPresetId: 'new-episode',
@@ -1006,16 +1016,58 @@ export const OverlaysDashboard: React.FC = () => {
                         onChange={(skipIfKometaOverlayLabel) => setConfigDraft((prev) => ({ ...prev, skipIfKometaOverlayLabel }))}
                     />
                     <SettingsToggleRow
+                        title={t('overlays.settings.newSeasonEnabled')}
+                        description={t('overlays.settings.newSeasonEnabledHint')}
+                        checked={configDraft.newSeasonEnabled !== false}
+                        onChange={(newSeasonEnabled) => setConfigDraft((prev) => ({ ...prev, newSeasonEnabled }))}
+                    />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.newSeasonWatchNowStyle')}
+                        description={t('overlays.settings.newSeasonWatchNowStyleHint')}
+                        checked={configDraft.newSeasonWatchNowStyle === true}
+                        onChange={(newSeasonWatchNowStyle) => setConfigDraft((prev) => ({ ...prev, newSeasonWatchNowStyle }))}
+                    />
+                    <SettingsToggleRow
                         title={t('overlays.settings.newEpisodeEnabled')}
                         description={t('overlays.settings.newEpisodeEnabledHint')}
                         checked={configDraft.newEpisodeEnabled !== false}
                         onChange={(newEpisodeEnabled) => setConfigDraft((prev) => ({ ...prev, newEpisodeEnabled }))}
                     />
                     <SettingsToggleRow
+                        title={t('overlays.settings.newEpisodeWatchNowStyle')}
+                        description={t('overlays.settings.newEpisodeWatchNowStyleHint')}
+                        checked={configDraft.newEpisodeWatchNowStyle === true}
+                        onChange={(newEpisodeWatchNowStyle) => setConfigDraft((prev) => ({ ...prev, newEpisodeWatchNowStyle }))}
+                    />
+                    <SettingsToggleRow
                         title={t('overlays.settings.skipNewEpisodeOnBinge')}
                         description={t('overlays.settings.skipNewEpisodeOnBingeHint')}
                         checked={configDraft.skipNewEpisodeOnBinge !== false}
                         onChange={(skipNewEpisodeOnBinge) => setConfigDraft((prev) => ({ ...prev, skipNewEpisodeOnBinge }))}
+                    />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.recentlyAddedEnabled')}
+                        description={t('overlays.settings.recentlyAddedEnabledHint')}
+                        checked={configDraft.recentlyAddedEnabled === true}
+                        onChange={(recentlyAddedEnabled) => setConfigDraft((prev) => ({ ...prev, recentlyAddedEnabled }))}
+                    />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.liveScheduleEnabled')}
+                        description={t('overlays.settings.liveScheduleEnabledHint')}
+                        checked={configDraft.liveScheduleEnabled === true}
+                        onChange={(liveScheduleEnabled) => setConfigDraft((prev) => ({ ...prev, liveScheduleEnabled }))}
+                    />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.top10Enabled')}
+                        description={t('overlays.settings.top10EnabledHint')}
+                        checked={configDraft.top10Enabled === true}
+                        onChange={(top10Enabled) => setConfigDraft((prev) => ({ ...prev, top10Enabled }))}
+                    />
+                    <SettingsToggleRow
+                        title={t('overlays.settings.tmdbAirDateFallback')}
+                        description={t('overlays.settings.tmdbAirDateFallbackHint')}
+                        checked={configDraft.tmdbAirDateFallback !== false}
+                        onChange={(tmdbAirDateFallback) => setConfigDraft((prev) => ({ ...prev, tmdbAirDateFallback }))}
                     />
 
                     <div className="grid gap-4 border-b border-border/40 py-4 md:grid-cols-2">
@@ -1052,6 +1104,51 @@ export const OverlaysDashboard: React.FC = () => {
                             <span className="mt-1 block text-[11px] text-muted">
                                 {t('overlays.settings.newEpisodeWindowHint')}
                             </span>
+                        </label>
+                        <label className="block">
+                            <span className={fieldLabelClass}>{t('overlays.fields.recentlyAddedDays')}</span>
+                            <input
+                                type="number"
+                                min={1}
+                                max={90}
+                                className={fieldInputClass}
+                                value={configDraft.recentlyAddedDays ?? 7}
+                                onChange={(e) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    recentlyAddedDays: Math.max(1, Math.min(90, Number(e.target.value) || 7)),
+                                }))}
+                            />
+                        </label>
+                        <label className="block">
+                            <span className={fieldLabelClass}>{t('overlays.fields.liveScheduleDays')}</span>
+                            <input
+                                type="number"
+                                min={0}
+                                max={14}
+                                className={fieldInputClass}
+                                value={configDraft.liveScheduleDays ?? 1}
+                                onChange={(e) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    liveScheduleDays: Math.max(0, Math.min(14, Number(e.target.value) || 0)),
+                                }))}
+                            />
+                            <span className="mt-1 block text-[11px] text-muted">
+                                {t('overlays.settings.liveScheduleDaysHint')}
+                            </span>
+                        </label>
+                        <label className="block">
+                            <span className={fieldLabelClass}>{t('overlays.fields.top10Count')}</span>
+                            <input
+                                type="number"
+                                min={1}
+                                max={50}
+                                className={fieldInputClass}
+                                value={configDraft.top10Count ?? 10}
+                                onChange={(e) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    top10Count: Math.max(1, Math.min(50, Number(e.target.value) || 10)),
+                                }))}
+                            />
                         </label>
                         <label className="block">
                             <span className={fieldLabelClass}>{t('overlays.fields.scheduleHours')}</span>

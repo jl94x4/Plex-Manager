@@ -1,0 +1,741 @@
+"""Extra overlay modes: Live schedule, Recently Added, Top 10."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any, Callable
+
+from PIL import Image, ImageDraw
+
+ProgressFn = Callable[[str], None]
+
+
+def _progress(progress: ProgressFn | None, message: str) -> None:
+    if progress:
+        progress(message)
+
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _load_log(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        import json
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_log(path: Path, log: dict) -> None:
+    import json
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(log, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _find_font(size: int):
+    candidates = [
+        Path(r"C:\Windows\Fonts\arialbd.ttf"),
+        Path(r"C:\Windows\Fonts\segoeuib.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
+    ]
+    from PIL import ImageFont
+    for path in candidates:
+        if path.exists():
+            try:
+                return ImageFont.truetype(str(path), size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
+
+def render_live_split(day_label: str) -> Image.Image:
+    """Netflix-style Live | {Day} split pill."""
+    left, right = "Live", str(day_label or "Today").strip() or "Today"
+    h = 140
+    pad = 18
+    font = _find_font(int(h * 0.42))
+    dummy = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    lb = dummy.textbbox((0, 0), left, font=font)
+    rb = dummy.textbbox((0, 0), right, font=font)
+    lw = max(lb[2] - lb[0] + pad * 2, int(h * 1.6))
+    rw = max(rb[2] - rb[0] + pad * 2, int(h * 1.6))
+    w = lw + rw
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    red = (229, 9, 20, 255)
+    white = (255, 255, 255, 255)
+    black = (20, 20, 20, 255)
+    r = h // 2
+    draw.rounded_rectangle([0, 0, w, h], radius=r, fill=white)
+    draw.rounded_rectangle([0, 0, lw + r, h], radius=r, fill=red)
+    draw.rectangle([lw, 0, lw + r, h], fill=red)
+    draw.rectangle([lw, 0, w, h], fill=white)
+    draw.pieslice([w - h, 0, w, h], 270, 90, fill=white)
+    draw.rectangle([lw, 0, w - r, h], fill=white)
+    ltb = draw.textbbox((0, 0), left, font=font)
+    rtb = draw.textbbox((0, 0), right, font=font)
+    draw.text(
+        ((lw - (ltb[2] - ltb[0])) / 2 - ltb[0], (h - (ltb[3] - ltb[1])) / 2 - ltb[1]),
+        left,
+        font=font,
+        fill=white,
+    )
+    draw.text(
+        (lw + (rw - (rtb[2] - rtb[0])) / 2 - rtb[0], (h - (rtb[3] - rtb[1])) / 2 - rtb[1]),
+        right,
+        font=font,
+        fill=black,
+    )
+    return img
+
+
+def _weekday_label(dt: datetime) -> str:
+    return dt.strftime("%A")
+
+
+def _backup_mode_dir(paths: dict, mode: str, rating_key: str) -> Path:
+    root = paths["backups"] / mode / str(rating_key)
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _clear_mode_backup(paths: dict, mode: str, rating_key: str) -> None:
+    folder = paths["backups"] / mode / str(rating_key)
+    if not folder.exists():
+        return
+    for child in folder.iterdir():
+        try:
+            child.unlink()
+        except Exception:
+            pass
+    try:
+        folder.rmdir()
+    except Exception:
+        pass
+
+
+def _stamp_show_badge(
+    *,
+    plex,
+    show,
+    badge: Image.Image,
+    paths: dict,
+    preview_mode: bool,
+    progress: ProgressFn | None,
+    mode: str,
+    placement: dict,
+    apply_fn,
+    library: str = "",
+    extra_meta: dict | None = None,
+) -> dict:
+    from core import _download_poster, _library_title, _sanitize_filename
+
+    poster = _download_poster(plex, getattr(show, "thumb", None) or "")
+    if poster is None:
+        raise RuntimeError(f"Failed to download poster for {getattr(show, 'title', '')}")
+
+    key = str(show.ratingKey)
+    if not preview_mode:
+        folder = _backup_mode_dir(paths, mode, key)
+        backup = folder / "show.png"
+        if not backup.exists():
+            poster.convert("RGBA").save(backup)
+            _progress(progress, f"Backed up ({mode}): {show.title}")
+
+    result = apply_fn(poster.copy(), badge, placement)
+    safe = _sanitize_filename(f"{show.title}_{mode}")
+    now = datetime.now()
+    entry = {
+        "title": show.title,
+        "timestamp": now.isoformat(),
+        "preview_only": bool(preview_mode),
+        "mode": mode,
+        "library": (library or _library_title(show) or "").strip(),
+        "hasBackup": (_backup_mode_dir(paths, mode, key) / "show.png").exists(),
+        **(extra_meta or {}),
+    }
+    if preview_mode:
+        out = paths["preview"] / f"{safe}.png"
+        result.save(out)
+        entry["previewShow"] = str(out)
+        _progress(progress, f"[Preview] {mode}: {show.title}")
+    else:
+        temp = paths["preview"] / f"temp_{safe}.png"
+        result.save(temp)
+        try:
+            show.uploadPoster(filepath=str(temp))
+            _progress(progress, f"Uploaded {mode}: {show.title}")
+        finally:
+            if temp.exists():
+                temp.unlink()
+    return entry
+
+
+def _restore_show_mode(show, paths: dict, mode: str, progress: ProgressFn | None) -> bool:
+    key = str(getattr(show, "ratingKey", "") or "")
+    backup = paths["backups"] / mode / key / "show.png"
+    if not backup.exists():
+        return False
+    try:
+        show.uploadPoster(filepath=str(backup))
+        _progress(progress, f"Restored {mode} backup: {getattr(show, 'title', key)}")
+        _clear_mode_backup(paths, mode, key)
+        return True
+    except Exception as exc:
+        _progress(progress, f"Restore {mode} failed for {key}: {exc}")
+        return False
+
+
+def _apply_with_explicit_placement(base_img: Image.Image, overlay_img: Image.Image, placement: dict) -> Image.Image:
+    from core import _apply_with_placement
+    return _apply_with_placement(base_img, overlay_img, placement)
+
+
+BOTTOM_PLACEMENT = {
+    "x": 0.5,
+    "y": 1.0,
+    "width": 0.72,
+    "anchorX": "center",
+    "anchorY": "bottom",
+    "bottomClip": 0.08,
+}
+
+TOP10_PLACEMENT = {
+    "x": 0.0,
+    "y": 0.0,
+    "width": 0.22,
+    "maxHeight": 0.22,
+    "anchorX": "left",
+    "anchorY": "top",
+    "bottomClip": 0.0,
+}
+
+
+def discover_live_shows(plex, config: dict, sections, progress: ProgressFn | None = None, resolver=None):
+    """Shows whose latest episode aired within liveScheduleDays."""
+    from core import _as_datetime, _has_kometa_overlay_label
+
+    days = int(config.get("liveScheduleDays") or config.get("live_schedule_days") or 1)
+    cutoff = datetime.now() - timedelta(days=max(0, days))
+    skip_kometa = _as_bool(config.get("skipIfKometaOverlayLabel", config.get("skip_if_kometa_overlay_label")), True)
+    should: dict[str, dict] = {}
+    for section in sections:
+        try:
+            for show in section.all():
+                key = str(getattr(show, "ratingKey", "") or "")
+                if not key:
+                    continue
+                if skip_kometa and _has_kometa_overlay_label(show):
+                    continue
+                try:
+                    eps = list(show.episodes() or [])
+                except Exception:
+                    continue
+                latest = None
+                latest_dt = None
+                # Prefer dated Plex eps; only TMDB-fill a short tail of undated ones.
+                undated_tail: list = []
+                for ep in eps:
+                    aired = _as_datetime(getattr(ep, "originallyAvailableAt", None))
+                    if aired is None:
+                        undated_tail.append(ep)
+                        continue
+                    if latest_dt is None or aired > latest_dt:
+                        latest_dt = aired
+                        latest = ep
+                if resolver is not None and getattr(resolver, "active", False) and undated_tail:
+                    # Newest-looking undated first (highest season/episode index).
+                    undated_tail.sort(
+                        key=lambda ep: (
+                            int(getattr(ep, "parentIndex", None) or getattr(ep, "seasonNumber", None) or 0),
+                            int(getattr(ep, "index", None) or 0),
+                        ),
+                        reverse=True,
+                    )
+                    for ep in undated_tail[:8]:
+                        aired = resolver.resolve_episode_aired(ep, show)
+                        if aired is None:
+                            continue
+                        if latest_dt is None or aired > latest_dt:
+                            latest_dt = aired
+                            latest = ep
+                if latest_dt is None or latest_dt < cutoff:
+                    continue
+                should[key] = {
+                    "show": show,
+                    "library": section.title,
+                    "airedAt": latest_dt.isoformat(),
+                    "dayLabel": _weekday_label(latest_dt),
+                }
+        except Exception as exc:
+            _progress(progress, f"Live scan failed for {getattr(section, 'title', '?')}: {exc}")
+    _progress(progress, f"Live schedule eligible: {len(should)}")
+    return should
+
+
+def _prune_mode_when_disabled(
+    plex,
+    paths: dict,
+    mode: str,
+    log_path: Path,
+    preview_mode: bool,
+    progress: ProgressFn | None,
+) -> tuple[int, list[str], int]:
+    """Restore/remove all tracked stamps for a mode when its toggle is off."""
+    log = _load_log(log_path)
+    if not log:
+        return 0, [], 0
+    _progress(progress, f"{mode} overlays disabled — pruning tracked stamps…")
+    removed = 0
+    errors: list[str] = []
+    for key in list(log.keys()):
+        entry = log.get(key) or {}
+        title = entry.get("title") or key
+        try:
+            if preview_mode:
+                if bool(entry.get("preview_only")):
+                    del log[key]
+                    removed += 1
+                continue
+            try:
+                show = plex.fetchItem(f"/library/metadata/{key}")
+            except Exception:
+                del log[key]
+                _clear_mode_backup(paths, mode, key)
+                removed += 1
+                continue
+            _restore_show_mode(show, paths, mode, progress)
+            del log[key]
+            removed += 1
+            _progress(progress, f"Removed {mode} overlay (disabled): {title}")
+        except Exception as exc:
+            errors.append(f"{mode} disable-remove {key}: {exc}")
+    _save_log(log_path, log)
+    return removed, errors, len(log)
+
+
+def run_live_overlays(
+    plex,
+    config: dict,
+    paths: dict,
+    preview_mode: bool,
+    progress: ProgressFn | None,
+    reserved_keys: set[str] | None = None,
+    resolver=None,
+) -> dict:
+    log_path = paths["liveLog"]
+    if not _as_bool(config.get("liveScheduleEnabled", config.get("live_schedule_enabled")), False):
+        removed, errors, total = _prune_mode_when_disabled(
+            plex, paths, "live", log_path, preview_mode, progress
+        )
+        return {
+            "liveEnabled": False,
+            "liveAdded": 0,
+            "liveRemoved": removed,
+            "liveTotal": total,
+            "liveErrors": errors,
+            "liveKeys": set(),
+        }
+
+    from core import _iter_tv_sections
+
+    reserved = reserved_keys or set()
+    log = _load_log(log_path)
+    sections = list(_iter_tv_sections(plex, config))
+    candidates = discover_live_shows(plex, config, sections, progress, resolver=resolver)
+    should = {k: v for k, v in candidates.items() if k not in reserved}
+
+    added = removed = 0
+    errors: list[str] = []
+    for key, meta in sorted(should.items(), key=lambda kv: kv[0]):
+        existing = log.get(key)
+        try:
+            if preview_mode:
+                badge = render_live_split(meta["dayLabel"])
+                entry = _stamp_show_badge(
+                    plex=plex,
+                    show=meta["show"],
+                    badge=badge,
+                    paths=paths,
+                    preview_mode=True,
+                    progress=progress,
+                    mode="live",
+                    placement=BOTTOM_PLACEMENT,
+                    apply_fn=_apply_with_explicit_placement,
+                    library=meta.get("library") or "",
+                    extra_meta={"dayLabel": meta["dayLabel"], "airedAt": meta.get("airedAt")},
+                )
+                if existing is None:
+                    log[key] = entry
+                    added += 1
+                else:
+                    log[key] = {**existing, **entry} if isinstance(existing, dict) else entry
+                continue
+            needs = existing is None or bool(existing.get("preview_only"))
+            if not needs:
+                continue
+            badge = render_live_split(meta["dayLabel"])
+            entry = _stamp_show_badge(
+                plex=plex,
+                show=meta["show"],
+                badge=badge,
+                paths=paths,
+                preview_mode=False,
+                progress=progress,
+                mode="live",
+                placement=BOTTOM_PLACEMENT,
+                apply_fn=_apply_with_explicit_placement,
+                library=meta.get("library") or "",
+                extra_meta={"dayLabel": meta["dayLabel"], "airedAt": meta.get("airedAt")},
+            )
+            log[key] = {**(existing or {}), **entry, "preview_only": False}
+            added += 1
+        except Exception as exc:
+            errors.append(f"live {meta['show'].title}: {exc}")
+
+    for key in list(log.keys()):
+        if key in should:
+            continue
+        entry = log.get(key) or {}
+        title = entry.get("title") or key
+        try:
+            if preview_mode:
+                if bool(entry.get("preview_only")):
+                    del log[key]
+                    removed += 1
+                continue
+            try:
+                show = plex.fetchItem(f"/library/metadata/{key}")
+            except Exception:
+                del log[key]
+                _clear_mode_backup(paths, "live", key)
+                removed += 1
+                continue
+            _restore_show_mode(show, paths, "live", progress)
+            del log[key]
+            removed += 1
+            _progress(progress, f"Removed live overlay: {title}")
+        except Exception as exc:
+            errors.append(f"live remove {key}: {exc}")
+
+    _save_log(log_path, log)
+    return {
+        "liveEnabled": True,
+        "liveAdded": added,
+        "liveRemoved": removed,
+        "liveTotal": len(log),
+        "liveEligible": len(should),
+        "liveErrors": errors,
+        "liveKeys": set(should.keys()),
+    }
+
+
+def discover_recently_added(plex, config: dict, sections, progress: ProgressFn | None = None):
+    from core import _as_datetime, _has_kometa_overlay_label
+
+    days = int(config.get("recentlyAddedDays") or config.get("recently_added_days") or 7)
+    cutoff = datetime.now() - timedelta(days=max(1, days))
+    skip_kometa = _as_bool(config.get("skipIfKometaOverlayLabel", config.get("skip_if_kometa_overlay_label")), True)
+    should: dict[str, dict] = {}
+    for section in sections:
+        try:
+            # Prefer section recentlyAdded when available
+            items = []
+            try:
+                items = list(section.recentlyAdded(maxresults=200) or [])
+            except Exception:
+                items = list(section.all() or [])
+            for item in items:
+                # Want show-level keys
+                show = item
+                itype = str(getattr(item, "type", "") or getattr(item, "TYPE", "") or "").lower()
+                try:
+                    if itype in {"episode", "season"} or hasattr(item, "show"):
+                        show = item.show()
+                except Exception:
+                    show = item
+                key = str(getattr(show, "ratingKey", "") or "")
+                if not key or key in should:
+                    continue
+                if skip_kometa and _has_kometa_overlay_label(show):
+                    continue
+                added = _as_datetime(getattr(item, "addedAt", None)) or _as_datetime(getattr(show, "addedAt", None))
+                if added is None or added < cutoff:
+                    continue
+                should[key] = {
+                    "show": show,
+                    "library": section.title,
+                    "addedAt": added.isoformat(),
+                }
+        except Exception as exc:
+            _progress(progress, f"Recently Added scan failed for {getattr(section, 'title', '?')}: {exc}")
+    _progress(progress, f"Recently Added eligible: {len(should)}")
+    return should
+
+
+def run_recently_added_overlays(
+    plex,
+    config: dict,
+    paths: dict,
+    preview_mode: bool,
+    progress: ProgressFn | None,
+    reserved_keys: set[str] | None = None,
+) -> dict:
+    log_path = paths["recentlyAddedLog"]
+    if not _as_bool(config.get("recentlyAddedEnabled", config.get("recently_added_enabled")), False):
+        removed, errors, total = _prune_mode_when_disabled(
+            plex, paths, "recently", log_path, preview_mode, progress
+        )
+        return {
+            "recentlyAddedEnabled": False,
+            "recentlyAdded": 0,
+            "recentlyRemoved": removed,
+            "recentlyTotal": total,
+            "recentlyErrors": errors,
+            "recentlyKeys": set(),
+        }
+
+    from core import _iter_tv_sections
+
+    reserved = reserved_keys or set()
+    log = _load_log(log_path)
+    asset = paths["assets"] / "recently-added.png"
+    if not asset.exists():
+        return {"recentlyAddedEnabled": True, "recentlyAdded": 0, "recentlyRemoved": 0, "recentlyTotal": 0, "recentlyErrors": ["missing recently-added.png"]}
+
+    badge = Image.open(asset)
+    sections = list(_iter_tv_sections(plex, config))
+    candidates = discover_recently_added(plex, config, sections, progress)
+    should = {k: v for k, v in candidates.items() if k not in reserved}
+
+    added = removed = 0
+    errors: list[str] = []
+    for key, meta in sorted(should.items(), key=lambda kv: kv[0]):
+        existing = log.get(key)
+        try:
+            if preview_mode:
+                entry = _stamp_show_badge(
+                    plex=plex,
+                    show=meta["show"],
+                    badge=badge,
+                    paths=paths,
+                    preview_mode=True,
+                    progress=progress,
+                    mode="recently",
+                    placement=BOTTOM_PLACEMENT,
+                    apply_fn=_apply_with_explicit_placement,
+                    library=meta.get("library") or "",
+                    extra_meta={"addedAt": meta.get("addedAt")},
+                )
+                if existing is None:
+                    log[key] = entry
+                    added += 1
+                else:
+                    log[key] = {**existing, **entry} if isinstance(existing, dict) else entry
+                continue
+            needs = existing is None or bool(existing.get("preview_only"))
+            if not needs:
+                continue
+            entry = _stamp_show_badge(
+                plex=plex,
+                show=meta["show"],
+                badge=badge,
+                paths=paths,
+                preview_mode=False,
+                progress=progress,
+                mode="recently",
+                placement=BOTTOM_PLACEMENT,
+                apply_fn=_apply_with_explicit_placement,
+                library=meta.get("library") or "",
+                extra_meta={"addedAt": meta.get("addedAt")},
+            )
+            log[key] = {**(existing or {}), **entry, "preview_only": False}
+            added += 1
+        except Exception as exc:
+            errors.append(f"recently {meta['show'].title}: {exc}")
+
+    for key in list(log.keys()):
+        if key in should:
+            continue
+        entry = log.get(key) or {}
+        try:
+            if preview_mode:
+                if bool(entry.get("preview_only")):
+                    del log[key]
+                    removed += 1
+                continue
+            try:
+                show = plex.fetchItem(f"/library/metadata/{key}")
+            except Exception:
+                del log[key]
+                _clear_mode_backup(paths, "recently", key)
+                removed += 1
+                continue
+            _restore_show_mode(show, paths, "recently", progress)
+            del log[key]
+            removed += 1
+        except Exception as exc:
+            errors.append(f"recently remove {key}: {exc}")
+
+    _save_log(log_path, log)
+    return {
+        "recentlyAddedEnabled": True,
+        "recentlyAdded": added,
+        "recentlyRemoved": removed,
+        "recentlyTotal": len(log),
+        "recentlyEligible": len(should),
+        "recentlyErrors": errors,
+        "recentlyKeys": set(should.keys()),
+    }
+
+
+def discover_top10(plex, config: dict, sections, progress: ProgressFn | None = None):
+    from core import _has_kometa_overlay_label
+
+    limit = int(config.get("top10Count") or config.get("top10_count") or 10)
+    limit = max(1, min(50, limit))
+    skip_kometa = _as_bool(config.get("skipIfKometaOverlayLabel", config.get("skip_if_kometa_overlay_label")), True)
+    scored: list[tuple[float, str, Any, str]] = []
+    for section in sections:
+        try:
+            for show in section.all():
+                key = str(getattr(show, "ratingKey", "") or "")
+                if not key:
+                    continue
+                if skip_kometa and _has_kometa_overlay_label(show):
+                    continue
+                score = 0.0
+                for attr in ("audienceRating", "rating", "userRating"):
+                    val = getattr(show, attr, None)
+                    try:
+                        if val is not None:
+                            score = max(score, float(val))
+                    except (TypeError, ValueError):
+                        pass
+                # Prefer items with any rating; fall back to 0
+                scored.append((score, key, show, section.title))
+        except Exception as exc:
+            _progress(progress, f"Top 10 scan failed for {getattr(section, 'title', '?')}: {exc}")
+    scored.sort(key=lambda row: (-row[0], str(getattr(row[2], "title", "")).lower()))
+    top = scored[:limit]
+    should = {
+        key: {"show": show, "library": library, "score": score, "rank": idx + 1}
+        for idx, (score, key, show, library) in enumerate(top)
+    }
+    _progress(progress, f"Top {limit} eligible: {len(should)}")
+    return should
+
+
+def run_top10_overlays(plex, config: dict, paths: dict, preview_mode: bool, progress: ProgressFn | None) -> dict:
+    log_path = paths["top10Log"]
+    if not _as_bool(config.get("top10Enabled", config.get("top10_enabled")), False):
+        removed, errors, total = _prune_mode_when_disabled(
+            plex, paths, "top10", log_path, preview_mode, progress
+        )
+        return {
+            "top10Enabled": False,
+            "top10Added": 0,
+            "top10Removed": removed,
+            "top10Total": total,
+            "top10Errors": errors,
+        }
+
+    from core import _iter_tv_sections
+
+    log = _load_log(log_path)
+    asset = paths["assets"] / "top-10.png"
+    if not asset.exists():
+        return {"top10Enabled": True, "top10Added": 0, "top10Removed": 0, "top10Total": 0, "top10Errors": ["missing top-10.png"]}
+
+    badge = Image.open(asset)
+    sections = list(_iter_tv_sections(plex, config))
+    should = discover_top10(plex, config, sections, progress)
+
+    added = removed = 0
+    errors: list[str] = []
+    for key, meta in sorted(should.items(), key=lambda kv: kv[1].get("rank", 99)):
+        existing = log.get(key)
+        try:
+            if preview_mode:
+                entry = _stamp_show_badge(
+                    plex=plex,
+                    show=meta["show"],
+                    badge=badge,
+                    paths=paths,
+                    preview_mode=True,
+                    progress=progress,
+                    mode="top10",
+                    placement=TOP10_PLACEMENT,
+                    apply_fn=_apply_with_explicit_placement,
+                    library=meta.get("library") or "",
+                    extra_meta={"rank": meta.get("rank"), "score": meta.get("score")},
+                )
+                if existing is None:
+                    log[key] = entry
+                    added += 1
+                else:
+                    log[key] = {**existing, **entry} if isinstance(existing, dict) else entry
+                continue
+            needs = existing is None or bool(existing.get("preview_only"))
+            if not needs:
+                continue
+            entry = _stamp_show_badge(
+                plex=plex,
+                show=meta["show"],
+                badge=badge,
+                paths=paths,
+                preview_mode=False,
+                progress=progress,
+                mode="top10",
+                placement=TOP10_PLACEMENT,
+                apply_fn=_apply_with_explicit_placement,
+                library=meta.get("library") or "",
+                extra_meta={"rank": meta.get("rank"), "score": meta.get("score")},
+            )
+            log[key] = {**(existing or {}), **entry, "preview_only": False}
+            added += 1
+        except Exception as exc:
+            errors.append(f"top10 {meta['show'].title}: {exc}")
+
+    for key in list(log.keys()):
+        if key in should:
+            continue
+        entry = log.get(key) or {}
+        try:
+            if preview_mode:
+                if bool(entry.get("preview_only")):
+                    del log[key]
+                    removed += 1
+                continue
+            try:
+                show = plex.fetchItem(f"/library/metadata/{key}")
+            except Exception:
+                del log[key]
+                _clear_mode_backup(paths, "top10", key)
+                removed += 1
+                continue
+            _restore_show_mode(show, paths, "top10", progress)
+            del log[key]
+            removed += 1
+        except Exception as exc:
+            errors.append(f"top10 remove {key}: {exc}")
+
+    _save_log(log_path, log)
+    return {
+        "top10Enabled": True,
+        "top10Added": added,
+        "top10Removed": removed,
+        "top10Total": len(log),
+        "top10Eligible": len(should),
+        "top10Errors": errors,
+    }

@@ -19,6 +19,14 @@ Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on *
 - **Episode thumbs:** New Episode (default 6-day window)
 - `skipNewEpisodeOnBinge` (default on): if 3+ episodes of the same season share an air date, skip episode + season New Episode stamps
 
+## Badge modes (each has a Settings toggle)
+
+- **New Season / New Episode** — existing air-date windows; optional **Watch Now** split style toggles
+- **Live | {weekday}** — latest episode aired within Live window; highest-priority bottom badge
+- **Recently Added** — Plex `addedAt` within window; skipped if Live or New Season already claimed the show
+- **TOP 10** — top-rated shows (audience/rating); corner badge, can stack with bottom badges
+- **TMDB air-date fallback** — when Plex lacks `originallyAvailableAt`, resolve dates via TMDB (portal API key) for recently-added undated episodes; applies to New Episode / New Season / Live
+
 ## Placement
 
 - Overlays → **Placement** tab: drag/resize the banner on sample art (show / season / episode targets)

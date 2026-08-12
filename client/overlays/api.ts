@@ -68,10 +68,20 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
 export type OverlaysConfig = {
     enabled?: boolean;
     previewMode?: boolean;
+    newSeasonEnabled?: boolean;
     newSeasonDays?: number;
+    newSeasonWatchNowStyle?: boolean;
     newEpisodeEnabled?: boolean;
     newEpisodeDays?: number;
+    newEpisodeWatchNowStyle?: boolean;
     skipNewEpisodeOnBinge?: boolean;
+    recentlyAddedEnabled?: boolean;
+    recentlyAddedDays?: number;
+    liveScheduleEnabled?: boolean;
+    liveScheduleDays?: number;
+    top10Enabled?: boolean;
+    top10Count?: number;
+    tmdbAirDateFallback?: boolean;
     librarySectionIds?: string[];
     overlayPresetId?: string;
     episodeOverlayPresetId?: string;
