@@ -1227,47 +1227,47 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             wanted_labels = _winner_label_names(winners)
             current_thumb = _item_poster_thumb(item)
             tracked_thumb = str(existing.get("posterThumb") or "").strip() if isinstance(existing, dict) else ""
-            # Signature alone is not enough: New Season / manual / TPDB poster replaces wipe
-            # the badge while leaving the log Live with the same winners → silent skip.
-            # Plex thumb URLs bump whenever art changes, so mismatch forces a restamp.
-            # Custom collection badges always restamp — skip was leaving members without badges.
-            art_unchanged = bool(tracked_thumb) and tracked_thumb == current_thumb
+            # Skip when winners are unchanged. If we already recorded a poster thumb and
+            # Plex art changed (New Season / TPDB / manual), restamp. Legacy rows with no
+            # posterThumb just get the token backfilled — do not force a full re-upload.
+            poster_replaced = bool(tracked_thumb) and tracked_thumb != current_thumb
             if (
                 existing
                 and not preview_mode
                 and not bool(existing.get("preview_only"))
                 and not bool(existing.get("needsRestamp"))
                 and existing.get("signature") == sig
-                and art_unchanged
-                and not has_collection_badge
+                and not poster_replaced
             ):
-                # Already stamped — still backfill / refresh Plex Labels when missing or drifted.
                 prev_labels = existing.get("overlayLabels") if isinstance(existing.get("overlayLabels"), list) else None
+                updated = dict(existing)
+                dirty = False
+                if not tracked_thumb and current_thumb:
+                    updated["posterThumb"] = current_thumb
+                    dirty = True
                 if prev_labels is None or sorted(prev_labels) != sorted(wanted_labels):
                     try:
                         synced = _sync_plex_labels(item, wanted_labels, previous=prev_labels or [])
-                        existing = {**existing, "overlayLabels": synced}
-                        log[key] = existing
+                        updated["overlayLabels"] = synced
+                        dirty = True
                     except Exception as exc:
                         errors.append(f"kometa labels {getattr(item, 'title', key)}: {exc}")
+                if dirty:
+                    log[key] = updated
                 skipped += 1
+                if has_collection_badge:
+                    cc_stamped_ok.add(key)
                 continue
-            if has_collection_badge and not preview_mode:
-                _progress(
-                    progress,
-                    f"Collection badge stamp: {getattr(item, 'title', key)}",
-                )
-            elif (
+            if (
                 existing
                 and not preview_mode
                 and not bool(existing.get("preview_only"))
                 and existing.get("signature") == sig
-                and not art_unchanged
+                and poster_replaced
             ):
-                why = "poster changed since last stamp" if tracked_thumb else "no poster thumb recorded yet"
                 _progress(
                     progress,
-                    f"Restamping {getattr(item, 'title', key)} ({why})",
+                    f"Restamping {getattr(item, 'title', key)} (poster changed since last stamp)",
                 )
 
             # Preview rows must always be restamped on a live Run (never left as Preview).
@@ -1411,7 +1411,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 _progress(
                     progress,
                     f"Collection badge '{(rules_by_id.get(rid) or {}).get('name') or rid}': "
-                    f"all {len(members)} member(s) stamped",
+                    f"all {len(members)} member(s) up to date",
                 )
                 continue
             names = []
@@ -1422,7 +1422,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             extra = f" (+{len(missing) - len(names)} more)" if len(missing) > len(names) else ""
             msg = (
                 f"Collection badge '{(rules_by_id.get(rid) or {}).get('name') or rid}': "
-                f"{len(missing)}/{len(members)} member(s) NOT stamped this run — {', '.join(names)}{extra}"
+                f"{len(missing)}/{len(members)} member(s) still need a stamp — {', '.join(names)}{extra}"
             )
             errors.append(msg)
             _progress(progress, msg)
