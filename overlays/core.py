@@ -8,6 +8,7 @@ import json
 import os
 import random
 import re
+import sys
 import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -18,6 +19,11 @@ from PIL import Image
 from plexapi.server import PlexServer
 
 ProgressFn = Callable[[str], None]
+
+# Sibling imports (tmdb_dates, modes_extra) must resolve even if cwd ≠ this file's dir.
+_APP_DIR = str(Path(__file__).resolve().parent)
+if _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
 
 
 def _progress(progress: ProgressFn | None, message: str) -> None:

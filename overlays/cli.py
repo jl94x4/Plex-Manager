@@ -7,6 +7,12 @@ import argparse
 import json
 import sys
 import traceback
+from pathlib import Path
+
+# Ensure sibling modules (core, tmdb_dates, modes_extra) resolve even when cwd differs.
+_APP_DIR = str(Path(__file__).resolve().parent)
+if _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
 
 from core import (
     generate_overlay_samples,
