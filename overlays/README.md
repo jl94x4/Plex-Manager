@@ -31,7 +31,9 @@ Phase 1–3 of SMP Overlays — New Season on **show posters**, New Episode on *
 - **Ratings** — score + Kometa `rating/TMDb.png` (etc.); movies and/or shows; allow/deny keys
 - **Network** — Kometa `network/color/{Name}.png` matched from Plex network/studio; TV only; allow/deny keys
 
-Images are cached at runtime under `config/overlays/kometa-images/` (not vendored in git). Library picker includes movie + TV sections (TV-only modes ignore movies). Placement tab edits New Season/Episode targets **and** these Kometa-style slots (defaults match Kometa offsets on a 1000×1500 poster).
+Images are **vendored** under `overlays/assets/kometa-images/` (full Kometa `defaults/overlays/images` tree + Inter fonts) and copied into the Docker image. Runtime may still write extras under `config/overlays/kometa-images/` if a logo is missing. Library picker includes movie + TV sections (TV-only modes ignore movies). Placement tab edits New Season/Episode targets **and** these Kometa-style slots (defaults match Kometa offsets on a 1000×1500 poster).
+
+Credit: overlay PNGs from [Kometa-Team/Kometa](https://github.com/Kometa-Team/Kometa); Inter fonts from [Kometa-Team/Default-Images](https://github.com/Kometa-Team/Default-Images). Re-sync with `python scripts/sync-kometa-overlay-images.py`.
 
 ## Placement
 

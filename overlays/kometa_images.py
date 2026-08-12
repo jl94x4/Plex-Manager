@@ -1,19 +1,24 @@
-"""Download and cache overlay images from the official Kometa GitHub repo.
+"""Resolve Kometa overlay images from the bundled asset tree (preferred) or runtime cache.
 
-Source of truth:
-  https://github.com/Kometa-Team/Kometa/tree/master/defaults/overlays/images
+Bundled source (vendored from Kometa):
+  overlays/assets/kometa-images/  ← defaults/overlays/images from Kometa-Team/Kometa
+  overlays/assets/kometa-images/fonts/  ← Inter fonts from Kometa-Team/Default-Images
+
+Runtime cache (optional extras / fallback downloads):
+  config/overlays/kometa-images/
 """
 
 from __future__ import annotations
 
 import json
 import re
-import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Iterable
 
 from PIL import Image
+
+BUNDLED_DIR = Path(__file__).resolve().parent / "assets" / "kometa-images"
 
 KOMETA_RAW_BASE = (
     "https://raw.githubusercontent.com/Kometa-Team/Kometa/master/defaults/overlays/images"
@@ -21,27 +26,42 @@ KOMETA_RAW_BASE = (
 KOMETA_API_BASE = (
     "https://api.github.com/repos/Kometa-Team/Kometa/contents/defaults/overlays/images"
 )
-# Inter fonts used by Kometa text overlays (Default-Images fonts).
 KOMETA_FONT_URLS = {
-    "medium": "https://raw.githubusercontent.com/Kometa-Team/Default-Images/master/fonts/Inter-Medium.ttf",
-    "bold": "https://raw.githubusercontent.com/Kometa-Team/Default-Images/master/fonts/Inter-Bold.ttf",
+    "medium": "https://raw.githubusercontent.com/Kometa-Team/Default-Images/master/Inter-Medium.ttf",
+    "bold": "https://raw.githubusercontent.com/Kometa-Team/Default-Images/master/Inter-Bold.ttf",
 }
 
 _USER_AGENT = "ServerManagerPortal-Overlays/1.0"
 
 
+def bundled_dir() -> Path:
+    return BUNDLED_DIR
+
+
 def default_cache_dir(paths: dict | None = None) -> Path:
+    """Writable runtime cache (not the read-only bundled tree)."""
     if isinstance(paths, dict):
         explicit = paths.get("kometaImages") or paths.get("kometa_images")
         if explicit:
-            return Path(explicit)
+            p = Path(explicit)
+            # Never treat the bundled tree as a writable cache root.
+            try:
+                if p.resolve() != BUNDLED_DIR.resolve():
+                    return p
+            except Exception:
+                return p
         root = paths.get("root")
         if root:
             return Path(root) / "kometa-images"
         assets = paths.get("assets")
         if assets:
-            return Path(assets).parent / "kometa-images"
-    return Path(__file__).resolve().parent / "assets" / "kometa-images"
+            candidate = Path(assets).parent / "kometa-images"
+            try:
+                if candidate.resolve() != BUNDLED_DIR.resolve():
+                    return candidate
+            except Exception:
+                return candidate
+    return Path(__file__).resolve().parent.parent / "config" / "overlays" / "kometa-images"
 
 
 def _http_get(url: str, timeout: float = 10.0) -> bytes:
@@ -56,10 +76,24 @@ def ensure_cache_dir(cache_dir: Path | None = None, paths: dict | None = None) -
     return out
 
 
+def _clean_rel(rel: str) -> str:
+    return str(rel or "").replace("\\", "/").lstrip("/")
+
+
+def bundled_path(rel: str) -> Path:
+    return BUNDLED_DIR / _clean_rel(rel)
+
+
+def cache_path(rel: str, cache_dir: Path | None = None, paths: dict | None = None) -> Path:
+    return ensure_cache_dir(cache_dir, paths) / _clean_rel(rel)
+
+
 def local_path(rel: str, cache_dir: Path | None = None, paths: dict | None = None) -> Path:
-    root = ensure_cache_dir(cache_dir, paths)
-    clean = str(rel or "").replace("\\", "/").lstrip("/")
-    return root / clean
+    """Prefer bundled asset; otherwise the writable cache path."""
+    bundled = bundled_path(rel)
+    if bundled.exists() and bundled.stat().st_size > 0:
+        return bundled
+    return cache_path(rel, cache_dir, paths)
 
 
 def fetch_image(
@@ -69,24 +103,35 @@ def fetch_image(
     paths: dict | None = None,
     force: bool = False,
     timeout: float = 10.0,
+    allow_download: bool = True,
 ) -> Path | None:
-    """Download a relative overlay image (e.g. resolution/4khdr.png) into the cache."""
+    """Resolve a relative overlay image, preferring the bundled tree."""
     from urllib.parse import quote
 
-    rel = str(rel or "").replace("\\", "/").lstrip("/")
+    rel = _clean_rel(rel)
     if not rel:
         return None
-    dest = local_path(rel, cache_dir, paths)
+
+    bundled = bundled_path(rel)
+    if bundled.exists() and bundled.stat().st_size > 0 and not force:
+        return bundled
+
+    dest = cache_path(rel, cache_dir, paths)
     if dest.exists() and dest.stat().st_size > 0 and not force:
         return dest
+
+    if not allow_download:
+        return bundled if bundled.exists() and bundled.stat().st_size > 0 else None
+
     dest.parent.mkdir(parents=True, exist_ok=True)
-    # Encode each path segment so names like Disney+.png work.
     encoded = "/".join(quote(seg, safe="._-") for seg in rel.split("/"))
     url = f"{KOMETA_RAW_BASE}/{encoded}"
     try:
         data = _http_get(url, timeout=timeout)
     except Exception:
-        return dest if dest.exists() and dest.stat().st_size > 0 else None
+        return dest if dest.exists() and dest.stat().st_size > 0 else (
+            bundled if bundled.exists() and bundled.stat().st_size > 0 else None
+        )
     if not data:
         return None
     dest.write_bytes(data)
@@ -99,7 +144,10 @@ def load_image(
     cache_dir: Path | None = None,
     paths: dict | None = None,
 ) -> Image.Image | None:
-    path = fetch_image(rel, cache_dir=cache_dir, paths=paths)
+    path = fetch_image(rel, cache_dir=cache_dir, paths=paths, allow_download=False)
+    if path is None:
+        # Bundled miss (or incomplete vendor) — one short download attempt.
+        path = fetch_image(rel, cache_dir=cache_dir, paths=paths, allow_download=True, timeout=8.0)
     if not path or not path.exists():
         return None
     try:
@@ -115,30 +163,39 @@ def ensure_font(
     size: int = 42,
     weight: str = "medium",
 ):
-    """Return a Pillow font, preferring Kometa's Inter family."""
+    """Return a Pillow font, preferring bundled Inter, then cache, then system fonts."""
     from PIL import ImageFont
 
-    root = ensure_cache_dir(cache_dir, paths)
     weight_key = "bold" if str(weight).lower() in {"bold", "b", "700"} else "medium"
     filename = "Inter-Bold.ttf" if weight_key == "bold" else "Inter-Medium.ttf"
-    font_path = root / "fonts" / filename
-    if not font_path.exists() or font_path.stat().st_size < 1000:
-        font_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            font_path.write_bytes(_http_get(KOMETA_FONT_URLS[weight_key]))
-        except Exception:
-            pass
-    if font_path.exists():
-        try:
-            return ImageFont.truetype(str(font_path), size)
-        except Exception:
-            pass
-    for candidate in (
+    candidates = [
+        BUNDLED_DIR / "fonts" / filename,
+        ensure_cache_dir(cache_dir, paths) / "fonts" / filename,
         Path(r"C:\Windows\Fonts\arialbd.ttf"),
         Path(r"C:\Windows\Fonts\segoeuib.ttf"),
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
         Path("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"),
-    ):
+    ]
+    for font_path in candidates[:2]:
+        if font_path.exists() and font_path.stat().st_size > 1000:
+            try:
+                return ImageFont.truetype(str(font_path), size)
+            except Exception:
+                continue
+    # Optional one-shot download into writable cache only.
+    cache_font = ensure_cache_dir(cache_dir, paths) / "fonts" / filename
+    if not cache_font.exists() or cache_font.stat().st_size < 1000:
+        cache_font.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            cache_font.write_bytes(_http_get(KOMETA_FONT_URLS[weight_key], timeout=15.0))
+        except Exception:
+            pass
+    if cache_font.exists():
+        try:
+            return ImageFont.truetype(str(cache_font), size)
+        except Exception:
+            pass
+    for candidate in candidates[2:]:
         if candidate.exists():
             try:
                 return ImageFont.truetype(str(candidate), size)
@@ -163,7 +220,13 @@ def list_network_names(
     paths: dict | None = None,
     style: str = "color",
 ) -> list[str]:
-    """Cached list of network logo basenames (without .png)."""
+    """List network logo basenames from the bundled tree (fallback: GitHub + cache index)."""
+    bundled = BUNDLED_DIR / "network" / style
+    if bundled.is_dir():
+        names = sorted(p.stem for p in bundled.glob("*.png") if p.is_file())
+        if names:
+            return names
+
     root = ensure_cache_dir(cache_dir, paths)
     index = root / "indexes" / f"network-{style}.json"
     if index.exists():
@@ -192,7 +255,6 @@ def _norm(text: str) -> str:
     return s
 
 
-# Common Plex studio/network strings → Kometa image keys
 _NETWORK_ALIASES: dict[str, str] = {
     "hbo": "HBO",
     "homeboxoffice": "HBO",
@@ -278,7 +340,6 @@ def resolve_network_key(
             return by_norm[an]
         if alias in names:
             return alias
-    # substring / containment
     for key_norm, key in by_norm.items():
         if key_norm and (key_norm in n or n in key_norm):
             if len(key_norm) >= 3 and len(n) >= 3:
@@ -307,7 +368,6 @@ def resolution_rel(
     elif res in {"480", "480p", "sd"}:
         base = "480p"
     elif res:
-        # Unknown — try hdr-only / dv-only assets
         base = None
 
     if base:
@@ -366,10 +426,7 @@ def prefetch_common(
     include_networks: Iterable[str] | None = None,
     progress=None,
 ) -> list[str]:
-    """Warm cache with common resolution/audio/rating assets (+ optional networks).
-
-    Fail-fast: short timeouts, skip missing remotes, never block a full library run.
-    """
+    """Verify common assets resolve from the bundled tree (no network when vendored)."""
     rels = [
         "resolution/4k.png",
         "resolution/4khdr.png",
@@ -395,17 +452,15 @@ def prefetch_common(
         key = resolve_network_key(name, cache_dir=cache_dir, paths=paths) or name
         rels.append(f"network/color/{key}.png")
     ok = []
-    for i, rel in enumerate(rels, start=1):
-        if progress and i == 1:
-            progress(f"Kometa image cache: fetching {len(rels)} common assets…")
-        if fetch_image(rel, cache_dir=cache_dir, paths=paths, timeout=8.0):
+    for rel in rels:
+        if fetch_image(rel, cache_dir=cache_dir, paths=paths, allow_download=False):
             ok.append(rel)
     try:
         ensure_font(cache_dir=cache_dir, paths=paths, size=42)
     except Exception:
         pass
     if progress:
-        progress(f"Kometa image cache: {len(ok)}/{len(rels)} ready")
+        progress(f"Kometa bundled images: {len(ok)}/{len(rels)} common assets available")
     return ok
 
 
