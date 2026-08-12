@@ -201,7 +201,13 @@ const Gallery: React.FC = () => {
             void enrichPins(finalList);
         } catch (e: any) {
             console.error('Failed to fetch collections', e);
-            setLoadError(e?.message || 'Failed to load collections from Plex.');
+            const raw = String(e?.message || '');
+            const is524 = /\b524\b/.test(raw) || /origin took too long/i.test(raw);
+            setLoadError(
+                is524
+                    ? 'Request timed out (HTTP 524) — the origin took too long. Retry; a cached list may appear after the first successful scan.'
+                    : (raw || 'Failed to load collections from Plex.'),
+            );
             setCollections([]);
             setLoading(false);
         }

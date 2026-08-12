@@ -6,7 +6,7 @@ import { CustomSelect } from '../shared/ui';
 import type { OverlayPlacementKind, OverlaysPlacement } from './api';
 import { DEFAULT_OVERLAY_PLACEMENT } from './api';
 
-export type PlacementKind = 'show' | 'season' | 'episode' | 'recently' | 'media' | 'status' | 'ratings' | 'network';
+export type PlacementKind = 'show' | 'season' | 'episode' | 'recently' | 'media' | 'status' | 'ratings' | 'network' | 'custom_collection';
 
 type PresetOption = { value: string; label: string };
 
@@ -15,6 +15,7 @@ type Props = {
     seasonPresetId: string;
     episodePresetId: string;
     recentlyPresetId: string;
+    collectionPresetId?: string;
     seasonPresetOptions: PresetOption[];
     episodePresetOptions: PresetOption[];
     recentlyPresetOptions: PresetOption[];
@@ -34,7 +35,7 @@ const fieldInputClass = 'mt-1 w-full rounded-lg border border-white/10 bg-black/
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
 const BANNER_KINDS: PlacementKind[] = ['show', 'season', 'episode', 'recently'];
-const KOMETA_KINDS: PlacementKind[] = ['media', 'status', 'ratings', 'network'];
+const KOMETA_KINDS: PlacementKind[] = ['media', 'status', 'ratings', 'network', 'custom_collection'];
 
 const kindBaseUrl = (kind: PlacementKind, bust: number) => {
     const sampleKind = kind === 'episode' ? 'episode-base' : 'show-base';
@@ -46,8 +47,13 @@ const kindBannerUrl = (
     seasonPresetId: string,
     episodePresetId: string,
     recentlyPresetId: string,
+    collectionPresetId: string,
     bust: number,
 ) => {
+    if (kind === 'custom_collection') {
+        const id = collectionPresetId || 'placement-custom_collection';
+        return `/api/overlays/preset-file?id=${encodeURIComponent(id)}&kind=season&t=${encodeURIComponent(String(bust))}`;
+    }
     if (kind === 'media' || kind === 'status' || kind === 'ratings' || kind === 'network') {
         return `/api/overlays/preset-file?id=${encodeURIComponent(`placement-${kind}`)}&kind=season&t=${encodeURIComponent(String(bust))}`;
     }
@@ -116,6 +122,7 @@ export const PlacementEditor: React.FC<Props> = ({
     seasonPresetId,
     episodePresetId,
     recentlyPresetId,
+    collectionPresetId = '',
     seasonPresetOptions,
     episodePresetOptions,
     recentlyPresetOptions,
@@ -273,7 +280,7 @@ export const PlacementEditor: React.FC<Props> = ({
         onRecentlyPresetChange,
     ]);
 
-    const bannerSrc = kindBannerUrl(kind, seasonPresetId, episodePresetId, recentlyPresetId, sampleBust);
+    const bannerSrc = kindBannerUrl(kind, seasonPresetId, episodePresetId, recentlyPresetId, collectionPresetId, sampleBust);
 
     const renderKindButton = (k: PlacementKind) => {
         const active = kind === k;

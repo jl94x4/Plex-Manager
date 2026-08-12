@@ -106,6 +106,14 @@ from kometa_engine import enabled_families
 assert "resolution" in enabled_families({"mediaInfoEnabled": True})
 assert "ribbon" in enabled_families({"ribbonOverlayEnabled": True})
 assert "content_rating" in enabled_families({"contentRatingEnabled": True})
+assert "custom_collection" in enabled_families({
+    "customCollectionOverlaysEnabled": True,
+    "customCollectionOverlays": [{"id": "t", "collectionRatingKey": "1", "image": "collection-fire"}],
+})
+assert "custom_collection" not in enabled_families({
+    "customCollectionOverlaysEnabled": True,
+    "customCollectionOverlays": [],
+})
 assert enabled_families({}) == []
 
 # Content rating + episode info helpers (no Plex)

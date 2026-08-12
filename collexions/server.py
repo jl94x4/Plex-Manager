@@ -176,6 +176,9 @@ GALLERY_CACHE = {
     'ttl': 300, # 5 minutes
     'version': 2,  # bump when thumb shape/fallback changes
 }
+# Background refresh for stale-while-revalidate gallery lists (avoids Cloudflare 524).
+_GALLERY_REFRESH_LOCK = threading.Lock()
+_GALLERY_REFRESH_RUNNING = set()  # cache_version ints currently refreshing
 PRESETS_CACHE = {
     'data': None,
     'timestamp': 0,
@@ -1244,16 +1247,24 @@ def _find_collections_by_title(library, title):
     return matches
 
 
-def _collection_item_count(coll):
+def _collection_item_count(coll, allow_fetch=False):
+    """Best-effort item count. Gallery list must pass allow_fetch=False (never coll.items())."""
     try:
-        if getattr(coll, 'smart', False):
-            return len(coll.items())
         child_count = getattr(coll, 'childCount', None)
         if child_count is not None:
             return int(child_count)
+        if not allow_fetch:
+            return 0
+        if getattr(coll, 'smart', False):
+            return len(coll.items())
         return len(coll.items())
     except Exception:
         return 0
+
+
+def _collection_item_count_light(coll):
+    """Gallery-safe count — childCount only, never fetches items (CF 524 hotspot)."""
+    return _collection_item_count(coll, allow_fetch=False)
 
 
 def _pick_primary_collection(collections):
@@ -1262,7 +1273,7 @@ def _pick_primary_collection(collections):
         return None
     return max(
         collections,
-        key=lambda coll: (_collection_item_count(coll), int(getattr(coll, 'ratingKey', 0) or 0)),
+        key=lambda coll: (_collection_item_count(coll, allow_fetch=True), int(getattr(coll, 'ratingKey', 0) or 0)),
     )
 
 
@@ -2565,31 +2576,8 @@ def _collection_is_pinned(coll):
     return False
 
 
-@app.route('/api/collections')
-@require_auth
-def list_collections():
-    global GALLERY_CACHE
-
-    force_refresh = request.args.get('refresh', 'false').lower() == 'true'
-    # light=true (default): skip per-collection visibility() for fast first paint
-    light = request.args.get('light', 'true').lower() != 'false'
-    cache_version = 3 if light else 4
-
-    now = time.time()
-    if (
-        not force_refresh
-        and GALLERY_CACHE['data'] is not None
-        and GALLERY_CACHE.get('version') == cache_version
-        and now - GALLERY_CACHE['timestamp'] < GALLERY_CACHE['ttl']
-    ):
-        print(f"Serving collections from cache (light={light})")
-        return jsonify(GALLERY_CACHE['data'])
-
-    plex = get_plex_instance()
-    if not plex:
-        return jsonify({"error": "Plex not configured"}), 400
-
-    config = load_config()
+def _scan_collections_list(plex, config, light=True):
+    """Build the gallery collections payload (no coll.items() when light)."""
     lib_names = config.get('library_names', [])
     collexions_label = config.get('collexions_label', 'Collexions').lower()
     from urllib.parse import quote
@@ -2636,18 +2624,137 @@ def list_collections():
                     "has_label": has_label,
                     "thumb": thumb,
                     "ratingKey": str(coll.ratingKey),
-                    "itemCount": _collection_item_count(coll),
+                    "itemCount": _collection_item_count_light(coll),
                     "key": meta_key,
                     "plexUrl": plex_url,
                 })
         except Exception as e:
             print(f"Error fetching collections from {lib_name}: {e}")
+    return all_collections
+
+
+def _refresh_gallery_cache_bg(cache_version, light):
+    """Background Plex scan so Cloudflare never waits on a full gallery rebuild."""
+    global GALLERY_CACHE, _GALLERY_REFRESH_RUNNING
+    try:
+        plex = get_plex_instance()
+        if not plex:
+            return
+        config = load_config()
+        all_collections = _scan_collections_list(plex, config, light=light)
+        GALLERY_CACHE['data'] = all_collections
+        GALLERY_CACHE['timestamp'] = time.time()
+        GALLERY_CACHE['version'] = cache_version
+        logging.info(
+            "Gallery cache refreshed in background (light=%s, count=%s)",
+            light,
+            len(all_collections),
+        )
+    except Exception as exc:
+        logging.warning("Background gallery refresh failed: %s", exc)
+    finally:
+        with _GALLERY_REFRESH_LOCK:
+            _GALLERY_REFRESH_RUNNING.discard(cache_version)
+
+
+def _schedule_gallery_refresh(cache_version, light):
+    with _GALLERY_REFRESH_LOCK:
+        if cache_version in _GALLERY_REFRESH_RUNNING:
+            return
+        _GALLERY_REFRESH_RUNNING.add(cache_version)
+    threading.Thread(
+        target=_refresh_gallery_cache_bg,
+        args=(cache_version, light),
+        daemon=True,
+        name=f"gallery-refresh-{cache_version}",
+    ).start()
+
+
+@app.route('/api/collections')
+@require_auth
+def list_collections():
+    global GALLERY_CACHE
+
+    force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+    # light=true (default): skip per-collection visibility() for fast first paint
+    light = request.args.get('light', 'true').lower() != 'false'
+    cache_version = 3 if light else 4
+
+    now = time.time()
+    cache_hit = (
+        GALLERY_CACHE['data'] is not None
+        and GALLERY_CACHE.get('version') == cache_version
+    )
+    cache_fresh = cache_hit and (now - GALLERY_CACHE['timestamp'] < GALLERY_CACHE['ttl'])
+
+    # Fresh cache — serve immediately.
+    if cache_fresh and not force_refresh:
+        print(f"Serving collections from cache (light={light})")
+        return jsonify(GALLERY_CACHE['data'])
+
+    # Stale-while-revalidate: return last good list instantly (survives CF ~100s timeout)
+    # and refresh in the background. Manual refresh also prefers this when a prior scan exists.
+    if cache_hit:
+        print(f"Serving stale collections cache + background refresh (light={light}, force={force_refresh})")
+        _schedule_gallery_refresh(cache_version, light)
+        return jsonify(GALLERY_CACHE['data'])
+
+    plex = get_plex_instance()
+    if not plex:
+        return jsonify({"error": "Plex not configured"}), 400
+
+    config = load_config()
+    all_collections = _scan_collections_list(plex, config, light=light)
 
     GALLERY_CACHE['data'] = all_collections
     GALLERY_CACHE['timestamp'] = time.time()
     GALLERY_CACHE['version'] = cache_version
 
     return jsonify(all_collections)
+
+
+@app.route('/api/collections/<rating_key>/items')
+@require_auth
+def list_collection_items(rating_key):
+    """Return member ratingKeys for one Plex collection (used by overlays + tooling)."""
+    plex = get_plex_instance()
+    if not plex:
+        return jsonify({"error": "Plex not configured"}), 400
+
+    key = str(rating_key or '').strip()
+    if not key or not key.isdigit():
+        return jsonify({"error": "Invalid collection ratingKey"}), 400
+
+    try:
+        coll = plex.fetchItem(int(key))
+    except Exception as exc:
+        logging.warning("fetchItem collection %s failed: %s", key, exc)
+        return jsonify({"error": "Collection not found"}), 404
+
+    members = []
+    seen = set()
+    try:
+        for item in (coll.items() or []):
+            rk = str(getattr(item, 'ratingKey', '') or '').strip()
+            if not rk or rk in seen:
+                continue
+            seen.add(rk)
+            members.append({
+                "ratingKey": rk,
+                "title": getattr(item, 'title', '') or '',
+                "type": str(getattr(item, 'type', '') or ''),
+                "library": getattr(item, 'librarySectionTitle', None) or '',
+            })
+    except Exception as exc:
+        logging.warning("collection items %s failed: %s", key, exc)
+        return jsonify({"error": f"Failed to list collection items: {exc}"}), 500
+
+    return jsonify({
+        "ratingKey": key,
+        "title": getattr(coll, 'title', '') or '',
+        "count": len(members),
+        "items": members,
+    })
 
 
 @app.route('/api/collections/resolve-pins', methods=['POST'])

@@ -27,13 +27,14 @@ import { CustomSelect, SettingsToggleRow, StyledCheckbox } from '../shared/ui';
 import { askConfirm } from '../shared/confirm';
 import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { useDiscoverI18n } from '../discovery/i18n';
-import { overlaysApi, DEFAULT_OVERLAY_PLACEMENT, type OverlaysConfig, type OverlaysPlacement } from './api';
+import { overlaysApi, DEFAULT_OVERLAY_PLACEMENT, type OverlaysConfig, type OverlaysPlacement, type CustomCollectionOverlayRule } from './api';
 import { PlacementEditor } from './PlacementEditor';
 import { OverlayJobCard } from './OverlayJobCard';
+import { api as collexionsApi } from '../collexions/api';
 
 type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'advanced' | 'activity';
-type JobCardId = 'banners' | 'recently' | 'kometa';
-type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'promote' | 'resetAll' | 'resetShows' | 'resetEpisodes' | 'run' | 'runRecently' | 'runKometa' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample' | 'revertKometa';
+type JobCardId = 'banners' | 'recently' | 'kometa' | 'collections';
+type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'previewCollections' | 'promote' | 'resetAll' | 'resetShows' | 'resetEpisodes' | 'run' | 'runRecently' | 'runKometa' | 'runCollections' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample' | 'revertKometa';
 
 const OVERLAY_TABS: TabId[] = ['overview', 'shows', 'gallery', 'placement', 'advanced', 'activity'];
 
@@ -142,6 +143,8 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     ribbonDenyKeys: [],
     mediastingerOverlayEnabled: false,
     ratingsSource: 'tmdb',
+    customCollectionOverlaysEnabled: false,
+    customCollectionOverlays: [],
     statusOverlayEnabled: false,
     statusAiringDays: 14,
     statusLibrarySectionIds: [],
@@ -265,7 +268,19 @@ export const OverlaysDashboard: React.FC = () => {
         banners: false,
         recently: false,
         kometa: false,
+        collections: false,
     });
+    const [collectionPickerOptions, setCollectionPickerOptions] = useState<Array<{
+        value: string;
+        label: string;
+        title: string;
+        library: string;
+    }>>([]);
+    const [collectionPickerLoading, setCollectionPickerLoading] = useState(false);
+    const [collectionPickerError, setCollectionPickerError] = useState('');
+    const [newCollectionRuleName, setNewCollectionRuleName] = useState('');
+    const [newCollectionRuleKey, setNewCollectionRuleKey] = useState('');
+    const [newCollectionRuleFile, setNewCollectionRuleFile] = useState<File | null>(null);
     const sampleLoadedRef = React.useRef(false);
     const wasRunningRef = React.useRef(false);
 
@@ -487,6 +502,11 @@ export const OverlaysDashboard: React.FC = () => {
         || configDraft.streamingOverlayEnabled === true
         || configDraft.ribbonOverlayEnabled === true
         || configDraft.mediastingerOverlayEnabled === true;
+    const collectionRules = Array.isArray(configDraft.customCollectionOverlays)
+        ? configDraft.customCollectionOverlays
+        : [];
+    const collectionsEnabled = configDraft.customCollectionOverlaysEnabled === true
+        && collectionRules.length > 0;
 
     const tabs = useMemo(() => ([
         { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
@@ -541,6 +561,98 @@ export const OverlaysDashboard: React.FC = () => {
             ...season.filter((opt) => opt.value !== 'recently-added'),
         ];
     }, [status?.presets]);
+
+    const collectionPresetPreviewId = useMemo(() => {
+        const fromRules = collectionRules.find((r) => r?.image)?.image;
+        if (fromRules) return String(fromRules);
+        const custom = (status?.presets || []).find((p: { kind?: string }) => p.kind === 'collection');
+        return custom?.id || '';
+    }, [collectionRules, status?.presets]);
+
+    const loadCollectionPicker = useCallback(async () => {
+        setCollectionPickerLoading(true);
+        setCollectionPickerError('');
+        try {
+            const list = await collexionsApi.getCollections(false, { light: true });
+            const opts = (Array.isArray(list) ? list : [])
+                .filter((c) => c?.ratingKey)
+                .map((c) => ({
+                    value: String(c.ratingKey),
+                    label: `${c.title || c.ratingKey}${c.library ? ` (${c.library})` : ''}`,
+                    title: String(c.title || ''),
+                    library: String(c.library || ''),
+                }))
+                .sort((a, b) => a.label.localeCompare(b.label));
+            setCollectionPickerOptions(opts);
+            if (!opts.length) {
+                setCollectionPickerError(t('overlays.jobs.collections.noCollections'));
+            }
+        } catch (e: any) {
+            setCollectionPickerOptions([]);
+            setCollectionPickerError(e?.message || t('overlays.jobs.collections.noCollections'));
+        } finally {
+            setCollectionPickerLoading(false);
+        }
+    }, [t]);
+
+    useEffect(() => {
+        if (jobCardExpanded.collections && collectionPickerOptions.length === 0 && !collectionPickerLoading) {
+            void loadCollectionPicker();
+        }
+    }, [jobCardExpanded.collections, collectionPickerOptions.length, collectionPickerLoading, loadCollectionPicker]);
+
+    const addCollectionOverlayRule = useCallback(async () => {
+        if (!newCollectionRuleKey || !newCollectionRuleFile) {
+            toast(t('overlays.jobs.collections.saveHint'), 'error');
+            return;
+        }
+        try {
+            const up = await overlaysApi.uploadPreset('collection', newCollectionRuleFile);
+            const imageId = String(up?.preset?.id || '').trim();
+            if (!imageId) throw new Error('Upload failed');
+            const picked = collectionPickerOptions.find((o) => o.value === newCollectionRuleKey);
+            const rule: CustomCollectionOverlayRule = {
+                id: `cc-${Date.now().toString(36)}`,
+                name: (newCollectionRuleName || picked?.title || imageId).trim(),
+                collectionRatingKey: newCollectionRuleKey,
+                collectionTitle: picked?.title || '',
+                library: picked?.library || '',
+                image: imageId,
+            };
+            setConfigDraft((prev) => ({
+                ...prev,
+                customCollectionOverlaysEnabled: true,
+                customCollectionOverlays: [...(Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : []), rule],
+            }));
+            setNewCollectionRuleName('');
+            setNewCollectionRuleKey('');
+            setNewCollectionRuleFile(null);
+            await refresh();
+            toast(t('overlays.jobs.collections.addRule'));
+        } catch (e: any) {
+            toast(e?.message || 'Upload failed', 'error');
+        }
+    }, [
+        newCollectionRuleKey,
+        newCollectionRuleFile,
+        newCollectionRuleName,
+        collectionPickerOptions,
+        toast,
+        t,
+        refresh,
+    ]);
+
+    const removeCollectionOverlayRule = useCallback((id: string) => {
+        setConfigDraft((prev) => {
+            const next = (Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : [])
+                .filter((r) => r.id !== id);
+            return {
+                ...prev,
+                customCollectionOverlays: next,
+                customCollectionOverlaysEnabled: next.length > 0 ? prev.customCollectionOverlaysEnabled : false,
+            };
+        });
+    }, []);
 
     const bingeGroups = useMemo(() => {
         const map = new Map<string, any[]>();
@@ -635,6 +747,10 @@ export const OverlaysDashboard: React.FC = () => {
         status: { ...DEFAULT_OVERLAY_PLACEMENT.status!, ...(configDraft.placement?.status || {}) },
         ratings: { ...DEFAULT_OVERLAY_PLACEMENT.ratings!, ...(configDraft.placement?.ratings || {}) },
         network: { ...DEFAULT_OVERLAY_PLACEMENT.network!, ...(configDraft.placement?.network || {}) },
+        custom_collection: {
+            ...DEFAULT_OVERLAY_PLACEMENT.custom_collection!,
+            ...(configDraft.placement?.custom_collection || {}),
+        },
     };
 
     const savePlacement = () => runAction('saveSettings', async () => {
@@ -654,7 +770,7 @@ export const OverlaysDashboard: React.FC = () => {
         }
     });
 
-    const resetPlacementKind = (kind: 'show' | 'season' | 'episode' | 'recently' | 'media' | 'status' | 'ratings' | 'network') => {
+    const resetPlacementKind = (kind: 'show' | 'season' | 'episode' | 'recently' | 'media' | 'status' | 'ratings' | 'network' | 'custom_collection') => {
         setConfigDraft((prev) => {
             const nextPlacement = {
                 ...DEFAULT_OVERLAY_PLACEMENT,
@@ -667,6 +783,10 @@ export const OverlaysDashboard: React.FC = () => {
                 status: { ...DEFAULT_OVERLAY_PLACEMENT.status!, ...(prev.placement?.status || {}) },
                 ratings: { ...DEFAULT_OVERLAY_PLACEMENT.ratings!, ...(prev.placement?.ratings || {}) },
                 network: { ...DEFAULT_OVERLAY_PLACEMENT.network!, ...(prev.placement?.network || {}) },
+                custom_collection: {
+                    ...DEFAULT_OVERLAY_PLACEMENT.custom_collection!,
+                    ...(prev.placement?.custom_collection || {}),
+                },
                 [kind]: { ...DEFAULT_OVERLAY_PLACEMENT[kind]! },
             };
             return { ...prev, placement: nextPlacement };
@@ -1929,6 +2049,136 @@ export const OverlaysDashboard: React.FC = () => {
                             </button>
 
                         </OverlayJobCard>
+
+                        <OverlayJobCard
+                            title={t('overlays.jobs.collections.title')}
+                            hint={t('overlays.jobs.collections.hint')}
+                            statusLabel={kometaJobActive
+                                ? t('overlays.jobs.status.running')
+                                : !collectionsEnabled
+                                    ? t('overlays.jobs.status.off')
+                                    : t('overlays.jobs.status.idle')}
+                            statusTone={kometaJobActive ? 'running' : !collectionsEnabled ? 'off' : 'idle'}
+                            enabledSummary={collectionsEnabled
+                                ? t('overlays.jobs.collections.enabledOn', { count: collectionRules.length })
+                                : t('overlays.jobs.collections.enabledOff')}
+                            previewLabel={t('overlays.actions.previewKometa')}
+                            runLabel={t('overlays.actions.runKometa')}
+                            expandLabel={t('overlays.jobs.expand')}
+                            collapseLabel={t('overlays.jobs.collapse')}
+                            expanded={jobCardExpanded.collections}
+                            onToggleExpand={() => toggleJobCard('collections')}
+                            onPreview={() => startBackgroundJob('previewCollections', () => overlaysApi.preview({ bundle: 'kometa' }))}
+                            onRun={() => startBackgroundJob('runCollections', () => overlaysApi.run({ preview: false, bundle: 'kometa' }))}
+                            previewBusy={busy === 'previewCollections' || busy === 'previewKometa' || (kometaJobActive && runningCommand === 'preview-kometa')}
+                            runBusy={busy === 'runCollections' || busy === 'runKometa' || (kometaJobActive && runningCommand === 'run-kometa')}
+                            actionsDisabled={busy !== null || jobRunning || !workerReady}
+                        >
+                            <p className="mb-3 text-[11px] text-muted">{t('overlays.jobs.collections.settingsHint')}</p>
+                            <SettingsToggleRow
+                                title={t('overlays.jobs.collections.title')}
+                                description={t('overlays.jobs.collections.firstWins')}
+                                checked={configDraft.customCollectionOverlaysEnabled === true}
+                                onChange={(customCollectionOverlaysEnabled) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    customCollectionOverlaysEnabled,
+                                }))}
+                            />
+
+                            <div className="mb-3 space-y-2">
+                                {collectionRules.length === 0 ? (
+                                    <p className="text-sm text-muted">{t('overlays.jobs.collections.emptyRules')}</p>
+                                ) : (
+                                    collectionRules.map((rule) => (
+                                        <div
+                                            key={rule.id}
+                                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/30 px-3 py-2"
+                                        >
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-semibold text-text truncate">{rule.name}</p>
+                                                <p className="text-[11px] text-muted truncate">
+                                                    {rule.collectionTitle || rule.collectionRatingKey}
+                                                    {rule.library ? ` · ${rule.library}` : ''}
+                                                    {' · '}
+                                                    {rule.image}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                onClick={() => removeCollectionOverlayRule(rule.id)}
+                                            >
+                                                {t('overlays.jobs.collections.removeRule')}
+                                            </button>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                                <span className={fieldLabelClass}>{t('overlays.jobs.collections.addRule')}</span>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.ruleName')}</span>
+                                    <input
+                                        className={fieldInputClass}
+                                        value={newCollectionRuleName}
+                                        onChange={(e) => setNewCollectionRuleName(e.target.value)}
+                                        placeholder="Trending"
+                                    />
+                                </label>
+                                <div>
+                                    <div className="mb-1 flex items-center justify-between gap-2">
+                                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.ruleCollection')}</span>
+                                        <button
+                                            type="button"
+                                            className="text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
+                                            disabled={collectionPickerLoading}
+                                            onClick={() => void loadCollectionPicker()}
+                                        >
+                                            {collectionPickerLoading
+                                                ? t('overlays.jobs.collections.loadingCollections')
+                                                : t('overlays.jobs.collections.loadCollections')}
+                                        </button>
+                                    </div>
+                                    <CustomSelect
+                                        value={newCollectionRuleKey}
+                                        onChange={setNewCollectionRuleKey}
+                                        options={[
+                                            { value: '', label: t('overlays.jobs.collections.pickCollection') },
+                                            ...collectionPickerOptions,
+                                        ]}
+                                    />
+                                    {collectionPickerError ? (
+                                        <p className="mt-1 text-[11px] text-red-300">{collectionPickerError}</p>
+                                    ) : null}
+                                </div>
+                                <label className="block">
+                                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.ruleImage')}</span>
+                                    <input
+                                        type="file"
+                                        accept="image/png,.png"
+                                        className={`${fieldInputClass} file:mr-3 file:rounded file:border-0 file:bg-plex/20 file:px-2 file:py-1 file:text-xs file:font-bold file:text-plex`}
+                                        onChange={(e) => setNewCollectionRuleFile(e.target.files?.[0] || null)}
+                                    />
+                                    {newCollectionRuleFile ? (
+                                        <span className="mt-1 block text-[11px] text-muted">{newCollectionRuleFile.name}</span>
+                                    ) : null}
+                                </label>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={!newCollectionRuleKey || !newCollectionRuleFile || busy !== null}
+                                    onClick={() => void addCollectionOverlayRule()}
+                                >
+                                    <Upload className="h-4 w-4" /> {t('overlays.jobs.collections.uploadImage')}
+                                </button>
+                                <p className="text-[11px] text-muted">{t('overlays.jobs.collections.saveHint')}</p>
+                            </div>
+
+                            <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
+                                <Save className="h-4 w-4" /> {t('overlays.actions.save')}
+                            </button>
+                        </OverlayJobCard>
                     </div>
 
                     <div className="flex flex-col gap-2 rounded-xl border border-white/5 bg-black/20 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2505,6 +2755,7 @@ export const OverlaysDashboard: React.FC = () => {
                     seasonPresetId={configDraft.overlayPresetId || 'new-season'}
                     episodePresetId={configDraft.episodeOverlayPresetId || 'new-episode'}
                     recentlyPresetId={configDraft.recentlyAddedPresetId || 'recently-added'}
+                    collectionPresetId={collectionPresetPreviewId}
                     seasonPresetOptions={seasonPresetOptions}
                     episodePresetOptions={episodePresetOptions}
                     recentlyPresetOptions={recentlyPresetOptions}

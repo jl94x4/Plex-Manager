@@ -37,9 +37,19 @@ export type OverlaysPlacement = {
     ratings?: OverlayPlacementKind;
     network?: OverlayPlacementKind;
     recently?: OverlayPlacementKind;
+    custom_collection?: OverlayPlacementKind;
 };
 
 export type OverlayPlacement = OverlaysPlacement;
+
+export type CustomCollectionOverlayRule = {
+    id: string;
+    name: string;
+    collectionRatingKey: string;
+    collectionTitle?: string;
+    library?: string;
+    image: string;
+};
 
 export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
     show: {
@@ -112,6 +122,15 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
         anchorY: 'bottom',
         bottomClip: 0.10,
     },
+    custom_collection: {
+        x: 0.985,
+        y: 0.02,
+        width: 0.28,
+        maxHeight: 0.12,
+        anchorX: 'right',
+        anchorY: 'top',
+        bottomClip: 0,
+    },
 };
 
 export type MediaInfoParts = {
@@ -174,6 +193,8 @@ export type OverlaysConfig = {
     ribbonDenyKeys?: string[];
     mediastingerOverlayEnabled?: boolean;
     ratingsSource?: string;
+    customCollectionOverlaysEnabled?: boolean;
+    customCollectionOverlays?: CustomCollectionOverlayRule[];
     statusOverlayEnabled?: boolean;
     statusAiringDays?: number;
     statusLibrarySectionIds?: string[];
@@ -223,7 +244,7 @@ export type OverlayPreset = {
     id: string;
     file?: string;
     source?: 'bundled' | 'custom';
-    kind?: 'season' | 'episode';
+    kind?: 'season' | 'episode' | 'collection';
 };
 
 export const overlaysApi = {
@@ -252,7 +273,7 @@ export const overlaysApi = {
     }>,
     revertKometa: (ratingKey?: string) => apiFetch(`${ROOT}/revert-kometa`, json(ratingKey ? { ratingKey } : {})),
     presets: () => apiFetch(`${ROOT}/presets`) as Promise<{ presets: OverlayPreset[] }>,
-    uploadPreset: async (kind: 'season' | 'episode', file: File) => {
+    uploadPreset: async (kind: 'season' | 'episode' | 'collection', file: File) => {
         const buf = await file.arrayBuffer();
         const response = await fetch(
             `${ROOT}/presets/upload?kind=${encodeURIComponent(kind)}&name=${encodeURIComponent(file.name || 'banner')}`,

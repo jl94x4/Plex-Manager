@@ -98,6 +98,10 @@ KOMETA_SLOTS: dict[str, dict[str, Any]] = {
         "x": 0.015, "y": 0.02, "width": 0.305, "maxHeight": 0.12,
         "anchorX": "left", "anchorY": "top", "bottomClip": 0.0,
     },
+    "custom_collection": {
+        "x": 0.985, "y": 0.02, "width": 0.28, "maxHeight": 0.12,
+        "anchorX": "right", "anchorY": "top", "bottomClip": 0.0,
+    },
 }
 
 # Family slot → legacy Placement-tab key so existing user offsets keep working.
@@ -128,6 +132,7 @@ FAMILY_RENDER_ORDER = [
     "resolution",
     "edition",
     "episode_info",
+    "custom_collection",
 ]
 
 # EXIF marker Kometa writes on stamped art (tag 0x04BC = "overlay").
@@ -347,6 +352,32 @@ def render_winner(winner: Winner, *, config: dict | None, paths: dict | None) ->
         from kometa_images import load_image
 
         return load_image(winner.image_rel or "", paths=paths)
+
+    if family == "custom_collection":
+        # Uploaded PNG badge (no Kometa backdrop) — absolute path or custom preset id.
+        rel = str(winner.image_rel or "").strip()
+        if rel:
+            path = Path(rel)
+            if path.is_file():
+                try:
+                    return Image.open(path).convert("RGBA")
+                except Exception:
+                    pass
+            from kometa_images import load_image
+
+            badge = load_image(rel, paths=paths)
+            if badge is not None:
+                return badge
+        custom_dir = Path((paths or {}).get("customPresets") or "")
+        key = str(winner.key or "").strip()
+        if key and custom_dir:
+            hit = custom_dir / (key if key.lower().endswith(".png") else f"{key}.png")
+            if hit.is_file():
+                try:
+                    return Image.open(hit).convert("RGBA")
+                except Exception:
+                    pass
+        return _text_on_backdrop(str(winner.text or winner.name).upper(), paths=paths)
 
     return None
 

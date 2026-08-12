@@ -206,9 +206,8 @@ class CollexionsApiService {
     }
 
     async getCollections(forceRefresh = false, opts?: { light?: boolean }): Promise<PlexCollection[]> {
-        if (forceRefresh) {
-            try { await apiFetch(base('/cache/clear'), { method: 'POST', body: '{}' }); } catch { /* ignore */ }
-        }
+        // Do not wipe the gallery cache before listing — the worker serves a stale list
+        // immediately and refreshes in the background (avoids Cloudflare HTTP 524).
         const params = new URLSearchParams();
         if (forceRefresh) params.append('refresh', 'true');
         // Default light=true on the worker — skip visibility() for fast first paint
@@ -221,6 +220,20 @@ class CollexionsApiService {
         );
         if (data && typeof data === 'object' && !Array.isArray(data)) return data.collections || [];
         return data || [];
+    }
+
+    async getCollectionItems(ratingKey: string): Promise<{
+        ratingKey: string;
+        title: string;
+        count: number;
+        items: Array<{ ratingKey: string; title: string; type: string; library: string }>;
+    }> {
+        const key = String(ratingKey || '').trim();
+        return withTimeout(
+            cx(`/collections/${encodeURIComponent(key)}/items`),
+            COLLEXIONS_LONG_MS,
+            'Loading collection items',
+        );
     }
 
     async resolveCollectionPins(

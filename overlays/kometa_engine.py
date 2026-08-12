@@ -44,6 +44,7 @@ FAMILY_SCOPE = {
     "streaming": "streaming",
     "ribbon": "ribbon",
     "mediastinger": "media",
+    "custom_collection": "custom_collection",
 }
 
 
@@ -151,7 +152,157 @@ def enabled_families(config: dict) -> list[str]:
         families.append("ribbon")
     if _as_bool(_cfg(config, "mediastingerOverlayEnabled", "mediastinger_overlay_enabled"), False):
         families.append("mediastinger")
+    if _as_bool(_cfg(config, "customCollectionOverlaysEnabled", "custom_collection_overlays_enabled"), False):
+        rules = _cfg(config, "customCollectionOverlays", "custom_collection_overlays", []) or []
+        if isinstance(rules, list) and any(
+            str((r or {}).get("collectionRatingKey") or (r or {}).get("collection_rating_key") or "").strip()
+            and str((r or {}).get("image") or "").strip()
+            for r in rules
+            if isinstance(r, dict)
+        ):
+            families.append("custom_collection")
     return families
+
+
+def _custom_collection_rules(config: dict) -> list[dict]:
+    raw = _cfg(config, "customCollectionOverlays", "custom_collection_overlays", []) or []
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    seen: set[str] = set()
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        collection_key = str(row.get("collectionRatingKey") or row.get("collection_rating_key") or "").strip()
+        image = str(row.get("image") or row.get("presetId") or row.get("preset_id") or "").strip()
+        if not collection_key or not image:
+            continue
+        rule_id = str(row.get("id") or "").strip() or f"rule-{collection_key}"
+        if rule_id in seen:
+            continue
+        seen.add(rule_id)
+        out.append({
+            "id": rule_id,
+            "name": str(row.get("name") or row.get("title") or "").strip() or rule_id,
+            "collectionRatingKey": collection_key,
+            "collectionTitle": str(row.get("collectionTitle") or row.get("collection_title") or "").strip(),
+            "library": str(row.get("library") or "").strip(),
+            "image": image,
+        })
+    return out
+
+
+def _resolve_collection_member_keys(plex, collection_rating_key: str, progress: ProgressFn | None = None) -> set[str]:
+    key = str(collection_rating_key or "").strip()
+    if not key:
+        return set()
+    try:
+        coll = plex.fetchItem(int(key))
+    except Exception as exc:
+        _progress(progress, f"Collection {key}: fetch failed ({exc})")
+        return set()
+    members: set[str] = set()
+    try:
+        for item in (coll.items() or []):
+            rk = str(getattr(item, "ratingKey", "") or "").strip()
+            if rk:
+                members.add(rk)
+    except Exception as exc:
+        _progress(progress, f"Collection {key}: items() failed ({exc})")
+        return set()
+    return members
+
+
+def _resolve_custom_preset_path(paths: dict, image_id: str) -> Path | None:
+    name = str(image_id or "").strip()
+    if not name:
+        return None
+    if name.lower().endswith(".png"):
+        candidate = Path(name)
+        if candidate.is_file():
+            return candidate
+        name = name[:-4]
+    custom_dir = Path(paths.get("customPresets") or "")
+    hit = custom_dir / f"{name}.png"
+    if hit.is_file():
+        return hit
+    assets = Path(paths.get("assets") or "")
+    bundled = assets / f"{name}.png"
+    if bundled.is_file():
+        return bundled
+    return None
+
+
+def _apply_custom_collection_winners(
+    plex,
+    config: dict,
+    paths: dict,
+    should: dict[str, dict],
+    *,
+    progress: ProgressFn | None = None,
+    errors: list[str] | None = None,
+) -> None:
+    """Inject custom_collection winners from live Plex membership (first matching rule wins)."""
+    rules = _custom_collection_rules(config)
+    if not rules:
+        return
+    # ratingKey -> first matching rule + resolved image path
+    member_rule: dict[str, tuple[dict, Path]] = {}
+    for rule in rules:
+        members = _resolve_collection_member_keys(plex, rule["collectionRatingKey"], progress)
+        _progress(
+            progress,
+            f"Collection badge '{rule.get('name') or rule['id']}': {len(members)} member(s)",
+        )
+        image_path = _resolve_custom_preset_path(paths, rule["image"])
+        if image_path is None:
+            msg = f"custom_collection {rule['id']}: image not found ({rule['image']})"
+            if errors is not None:
+                errors.append(msg)
+            _progress(progress, msg)
+            continue
+        for rk in members:
+            if rk not in member_rule:
+                member_rule[rk] = (rule, image_path)
+
+    for rk, (rule, image_path) in member_rule.items():
+        winner = Winner(
+            family="custom_collection",
+            name=str(rule["id"]),
+            key=str(rule["image"]),
+            text=str(rule.get("name") or rule["id"]),
+            image_rel=str(image_path),
+            extra={
+                "ruleId": rule["id"],
+                "collectionRatingKey": rule["collectionRatingKey"],
+                "collectionTitle": rule.get("collectionTitle") or "",
+            },
+        )
+        row = should.get(rk)
+        if row is None:
+            try:
+                item = plex.fetchItem(int(rk))
+            except Exception as exc:
+                if errors is not None:
+                    errors.append(f"custom_collection fetch {rk}: {exc}")
+                continue
+            item_type = str(getattr(item, "type", "") or "").lower()
+            if item_type == "episode":
+                continue  # collection badges are for show/movie posters
+            library = ""
+            try:
+                library = str(getattr(item, "librarySectionTitle", "") or "")
+            except Exception:
+                library = ""
+            row = {
+                "item": item,
+                "library": library,
+                "itemType": item_type,
+                "winners": {},
+            }
+            should[rk] = row
+        if "custom_collection" not in row["winners"]:
+            row["winners"]["custom_collection"] = winner
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +490,12 @@ def _resolution_variant_allowed(config: dict) -> Callable[[str, str], bool]:
 
 
 def _signature(winners: dict[str, Winner], config: dict) -> str:
-    parts = [f"{family}:{winner.name}" for family, winner in sorted(winners.items())]
+    parts = []
+    for family, winner in sorted(winners.items()):
+        part = f"{family}:{winner.name}"
+        if family == "custom_collection" and winner.key:
+            part = f"{part}:{winner.key}"
+        parts.append(part)
     style = [
         f"audiostyle={_cfg(config, 'audioCodecStyle', 'audio_codec_style', 'compact')}",
         f"ratingsrc={_cfg(config, 'ratingsSource', 'ratings_source', 'tmdb')}",
@@ -465,6 +621,9 @@ def _collect_section_plans(plex, config: dict) -> dict[str, dict]:
     plans: dict[str, dict] = {}
     seen_modes: dict[str, list] = {}
     for family in families:
+        if family == "custom_collection":
+            # Membership is resolved via collection.items() — not a library section scan.
+            continue
         mode = FAMILY_SCOPE[family]
         if mode not in seen_modes:
             seen_modes[mode] = list(_sections_for_kometa_mode(plex, config, mode))
@@ -701,6 +860,17 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                     errors.append(f"{family} {getattr(item, 'title', key)}: {exc}")
             if row["winners"]:
                 should[key] = row
+
+    if "custom_collection" in families:
+        _progress(progress, "Resolving custom collection badge membership…")
+        _apply_custom_collection_winners(
+            plex,
+            config,
+            paths,
+            should,
+            progress=progress,
+            errors=errors,
+        )
 
     _progress(progress, f"Kometa eligible: {len(should)} of {scanned} scanned")
 
