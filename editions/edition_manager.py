@@ -70,10 +70,14 @@ _progress_total = 1
 _progress_done = 0
 
 BACKUP_DIR = Path(os.environ.get('EDITIONS_BACKUP_DIR') or (Path(__file__).parent / 'metadata_backup'))
-BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-
-# Undo snapshot - separate from manual backups
 UNDO_SNAPSHOT_FILE = BACKUP_DIR / '.undo_snapshot.json'
+
+
+def _config_ini_path() -> Path:
+    env = os.environ.get('EDITIONS_CONFIG_INI')
+    if env:
+        return Path(env)
+    return Path(__file__).parent / 'config' / 'config.ini'
 
 def _ensure_utf8_stream(stream):
     try:
@@ -291,8 +295,8 @@ MODULE_TO_VAR = {
 
 def get_template_settings():
     """Load template settings from config."""
-    config_file = Path(__file__).parent / 'config' / 'config.ini'
-    config = ConfigParser()
+    config_file = _config_ini_path()
+    config = ConfigParser(interpolation=None)
     config.read(config_file, encoding="utf-8")
 
     template_format = config.get('template', 'format', fallback='auto').strip()
@@ -361,8 +365,8 @@ def format_edition_title(module_results: dict, modules: list, template_format: s
 
 # Initialize settings
 def initialize_settings():
-    config_file = Path(__file__).parent / 'config' / 'config.ini'
-    config = ConfigParser()
+    config_file = _config_ini_path()
+    config = ConfigParser(interpolation=None)
     config.read(config_file, encoding="utf-8")
 
     server = config.get('server', 'address')
@@ -397,15 +401,8 @@ def initialize_settings():
     # Higher values = fewer API calls, but larger responses. 50 is a safe default.
     metadata_batch_size = config.getint('performance', 'metadata_batch_size', fallback=50)
 
-    try:
-        headers = {'X-Plex-Token': token, 'Accept': 'application/json'}
-        response = make_request(f'{server}/library/sections', headers)
-        server_name = response['MediaContainer'].get('friendlyName', server)
-        logger.info(f"Successfully connected to server: {server_name}")
-    except requests.exceptions.RequestException as err:
-        logger.error("Server connection failed, please check the settings in the configuration file or your network.")
-        time.sleep(10)
-        raise SystemExit(err)
+    if not str(server or '').strip() or not str(token or '').strip():
+        raise RuntimeError('Plex server address and token are required.')
 
     return (
         server,
@@ -772,6 +769,7 @@ def reset_movie(server, token, movie):
 # Backup metadata
 def _backup_filename() -> Path:
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     return BACKUP_DIR / f"metadata_backup_{ts}.json"
 
 def list_backups() -> List[Path]:

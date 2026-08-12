@@ -17,12 +17,13 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from configparser import ConfigParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-CONFIG_PATH = ROOT / "config" / "config.ini"
+CONFIG_PATH = Path(os.environ.get("EDITIONS_CONFIG_INI") or (ROOT / "config" / "config.ini"))
 
 ALL_MODULES = [
     "AudioChannels",
@@ -70,7 +71,7 @@ class JsonlLogHandler(logging.Handler):
 
 def write_config_ini(cfg: dict) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    parser = ConfigParser()
+    parser = ConfigParser(interpolation=None)
 
     server = cfg.get("server") if isinstance(cfg.get("server"), dict) else {}
     modules = cfg.get("modules") if isinstance(cfg.get("modules"), dict) else {}

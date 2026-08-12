@@ -42,6 +42,8 @@ ENV OVERLAYS_APP_DIR=/app/overlays
 ENV OVERLAYS_PYTHON=/opt/poster-sets-venv/bin/python
 ENV EDITIONS_APP_DIR=/app/editions
 ENV EDITIONS_PYTHON=/opt/poster-sets-venv/bin/python
+ENV EDITIONS_CONFIG_DIR=/app/config/editions
+ENV EDITIONS_CONFIG_INI=/app/config/editions/config.ini
 ENV EDITIONS_BACKUP_DIR=/app/config/editions/metadata_backup
 
 # ffmpeg supplies both ffmpeg and ffprobe. Mesa provides AMD VAAPI; Intel media /

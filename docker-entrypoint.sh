@@ -8,6 +8,7 @@ MEDIA_AUTOMATION_CONFIG_DIR=${MEDIA_AUTOMATION_CONFIG_DIR:-$CONFIG_DIR/media-aut
 MEDIA_AUTOMATION_WORK_DIR=${MEDIA_AUTOMATION_WORK_DIR:-$MEDIA_AUTOMATION_CONFIG_DIR/work}
 POSTER_SETS_CONFIG_DIR=${POSTER_SETS_CONFIG_DIR:-$CONFIG_DIR/poster-sets}
 OVERLAYS_CONFIG_DIR=${OVERLAYS_CONFIG_DIR:-$CONFIG_DIR/overlays}
+EDITIONS_CONFIG_DIR=${EDITIONS_CONFIG_DIR:-$CONFIG_DIR/editions}
 
 # Unraid appdata mounts are often root-owned; fix permissions before dropping privileges.
 mkdir -p \
@@ -18,14 +19,17 @@ mkdir -p \
   "$MEDIA_AUTOMATION_CONFIG_DIR" \
   "$MEDIA_AUTOMATION_WORK_DIR" \
   "$POSTER_SETS_CONFIG_DIR" \
-  "$OVERLAYS_CONFIG_DIR"
+  "$OVERLAYS_CONFIG_DIR" \
+  "$EDITIONS_CONFIG_DIR" \
+  "$EDITIONS_CONFIG_DIR/metadata_backup"
 chown -R "$PUID:$PGID" \
   "$CONFIG_DIR" \
   /app/backup \
   "$MEDIA_AUTOMATION_CONFIG_DIR" \
   "$MEDIA_AUTOMATION_WORK_DIR" \
   "$POSTER_SETS_CONFIG_DIR" \
-  "$OVERLAYS_CONFIG_DIR"
+  "$OVERLAYS_CONFIG_DIR" \
+  "$EDITIONS_CONFIG_DIR"
 
 # Collect GIDs from /dev/dri so QSV/VAAPI work after dropping to PUID:PGID.
 # renderD* is commonly root:render mode 660 — gosu alone does not keep those groups.
