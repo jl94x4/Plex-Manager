@@ -645,7 +645,7 @@ export const en = {
             maxHeight: 'Max height %',
             maxHeightHint: 'Caps banner height relative to the poster (prevents giant badges on tall art).',
             bottomClip: 'Bottom clip %',
-            bottomClipHint: 'Shaves the bottom of the banner for a flush Netflix-style edge. 0 keeps full rounded corners; ~10 is the default.',
+            bottomClipHint: 'Shaves the bottom of the banner for a flush Netflix-style edge. 0 keeps full rounded corners (Season Poster + Episode Thumb default). Show poster New Season still defaults to ~10.',
             resetKind: 'Reset this target',
             save: 'Save placement',
             dragHint: 'Drag to move',

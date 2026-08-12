@@ -96,10 +96,9 @@ export const PlacementEditor: React.FC<Props> = ({
     const current = placement[kind] || DEFAULT_OVERLAY_PLACEMENT[kind];
 
     const measureArt = useCallback(() => {
-        const img = artRef.current;
         const stage = stageRef.current;
-        if (!img || !stage) return;
-        const rect = img.getBoundingClientRect();
+        if (!stage) return;
+        const rect = stage.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
             setArtSize({ w: rect.width, h: rect.height });
         }
@@ -178,6 +177,7 @@ export const PlacementEditor: React.FC<Props> = ({
 
     const box = bannerBox(artSize.w, artSize.h, bannerNat.w, bannerNat.h, current);
     const kindLabel = (k: PlacementKind) => t(`overlays.placement.kinds.${k}`);
+    const stageAspectClass = kind === 'episode' ? 'aspect-video' : 'aspect-[2/3]';
 
     return (
         <DashboardPanel title={t('overlays.placement.title')} subtitle={t('overlays.placement.subtitle')}>
@@ -200,19 +200,21 @@ export const PlacementEditor: React.FC<Props> = ({
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
                 <div
                     ref={stageRef}
-                    className="relative mx-auto w-full max-w-[420px] overflow-hidden rounded-lg border border-border/60 bg-black/40"
+                    className={`relative mx-auto w-full overflow-hidden rounded-lg border border-border/60 bg-black/40 ${
+                        kind === 'episode' ? 'max-w-[560px]' : 'max-w-[420px]'
+                    } ${stageAspectClass}`}
                 >
                     {!baseFailed ? (
                         <img
                             ref={artRef}
                             src={kindBaseUrl(kind, sampleBust)}
                             alt=""
-                            className="block w-full"
+                            className="absolute inset-0 h-full w-full object-cover"
                             onLoad={measureArt}
                             onError={() => setBaseFailed(true)}
                         />
                     ) : (
-                        <div className="flex aspect-[2/3] items-center justify-center p-6 text-center text-sm text-muted">
+                        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted">
                             {t('overlays.placement.needSample')}
                         </div>
                     )}
@@ -224,7 +226,6 @@ export const PlacementEditor: React.FC<Props> = ({
                                 top: box.top,
                                 width: box.width,
                                 height: box.keepH,
-                                // Clip matches worker bottomClip; keep transparent so PNG rounded corners show.
                                 overflow: 'hidden',
                             }}
                             onPointerDown={onPointerDownMove}
@@ -239,7 +240,7 @@ export const PlacementEditor: React.FC<Props> = ({
                                     width: box.width,
                                     height: box.height,
                                     marginTop: -box.clip,
-                                    objectFit: 'fill',
+                                    objectFit: 'contain',
                                 }}
                                 onLoad={(e) => {
                                     const img = e.currentTarget;

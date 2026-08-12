@@ -647,7 +647,7 @@ export const fr: DeepPartial<EnCatalog> = {
             maxHeight: 'Hauteur max %',
             maxHeightHint: 'Limite la hauteur de la bannière par rapport au poster (évite les badges trop grands).',
             bottomClip: 'Rogner bas %',
-            bottomClipHint: 'Coupe le bas de la bannière pour un bord flush style Netflix. 0 garde les coins arrondis ; ~10 est la valeur par défaut.',
+            bottomClipHint: 'Coupe le bas de la bannière pour un bord flush style Netflix. 0 garde les coins arrondis (défaut Saison + Vignette épisode). New Season sur poster série reste ~10 par défaut.',
             resetKind: 'Réinitialiser cette cible',
             save: 'Enregistrer le placement',
             dragHint: 'Glisser pour déplacer',
