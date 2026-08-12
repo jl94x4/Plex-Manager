@@ -509,6 +509,7 @@ export const fr: DeepPartial<EnCatalog> = {
             logged: 'Journalisés',
             loggedCounts: '{shows} séries · {episodes} ép.',
             schedule: 'Planification',
+            lastRun: 'Dernière exécution',
             everyHours: 'Toutes les {hours} h',
             disabled: 'Désactivé',
         },
@@ -539,20 +540,20 @@ export const fr: DeepPartial<EnCatalog> = {
             },
             banners: {
                 title: 'Bannières (cœur)',
-                hint: 'Live, New Season, New Episode et Top 10 — aperçu ou exécution de ce lot seul.',
+                hint: 'Badges New Season, New Episode, Live et Top 10.',
                 enabledSummary: 'Saison {season} · Épisode {episode} · Live {live} · Top 10 {top10}',
             },
             recently: {
                 title: 'Recently Added',
-                hint: 'Tamponne les titres récemment ajoutés à Plex (addedAt). Planning séparé des bannières cœur.',
+                hint: 'Badge les titres nouvellement ajoutés à Plex (addedAt).',
                 enabledOn: 'Activé · fenêtre de {days} jours',
                 enabledOff: 'Désactivé',
             },
             kometa: {
                 title: 'Media / Kometa',
-                hint: 'Overlays en parité Kometa (résolution, audio, statut, streaming, rubans, etc.). Passage plus lourd — à garder séparé du cœur.',
+                hint: 'Résolution, audio, statut, streaming, rubans, et plus.',
                 enabledSummary: 'Media {media} · Statut {status} · Notes {ratings} · Chaîne {network} · Extra {extra}',
-                settingsHint: 'Les bascules par job sont ici (pas dans Avancé). Dépliez chaque famille pour filtres/styles. Les bibliothèques se choisissent toujours dans Avancé.',
+                settingsHint: 'Activez les familles ci-dessous. Les bibliothèques suivent Advanced ; cette carte peut surcharger.',
                 groups: {
                     media: 'Résolution · édition · audio · format',
                     showMeta: 'Statut · chaîne · streaming',
@@ -584,7 +585,7 @@ export const fr: DeepPartial<EnCatalog> = {
         },
         quick: {
             title: 'Outils bibliothèque',
-            subtitle: 'Scannez ou réconciliez depuis la vue d’ensemble. Les réglages par job sont dans chaque carte ci-dessus.',
+            subtitle: 'Scannez ou réconciliez depuis la vue d’ensemble.',
             daysHint: 'Les jours de saison contrôlent combien de temps une saison reste « nouvelle ». Les jours d’épisode sont à 6 par défaut pour garder le badge New Episode sur le dernier épisode des séries hebdomadaires.',
             previewHintBeforePreviewPath: 'L’aperçu écrit dans',
             previewHintBetweenPaths: 'Le mode live envoie les posters vers Plex et met à jour',

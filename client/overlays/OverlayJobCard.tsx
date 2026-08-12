@@ -3,6 +3,7 @@ import { ChevronDown, Loader2, Play } from 'lucide-react';
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover disabled:opacity-50';
+const ghostButtonClass = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-semibold text-muted hover:bg-white/5 hover:text-text disabled:opacity-50';
 
 export type OverlayJobCardProps = {
     title: string;
@@ -51,8 +52,8 @@ export const OverlayJobCard: React.FC<OverlayJobCardProps> = ({
 
     return (
         <section className="rounded-xl border border-white/10 bg-black/30 overflow-hidden">
-            <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-base font-semibold text-text">{title}</h3>
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${toneClass}`}>
@@ -86,7 +87,7 @@ export const OverlayJobCard: React.FC<OverlayJobCardProps> = ({
                     </button>
                     <button
                         type="button"
-                        className={buttonClass}
+                        className={ghostButtonClass}
                         aria-expanded={expanded}
                         onClick={onToggleExpand}
                     >

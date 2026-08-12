@@ -507,6 +507,7 @@ export const en = {
             logged: 'Logged',
             loggedCounts: '{shows} shows · {episodes} eps',
             schedule: 'Schedule',
+            lastRun: 'Last run',
             everyHours: 'Every {hours}h',
             disabled: 'Disabled',
         },
@@ -537,20 +538,20 @@ export const en = {
             },
             banners: {
                 title: 'Banners (core)',
-                hint: 'Live, New Season, New Episode, and Top 10 — preview or run this bundle alone.',
+                hint: 'New Season, New Episode, Live, and Top 10 badges.',
                 enabledSummary: 'Season {season} · Episode {episode} · Live {live} · Top 10 {top10}',
             },
             recently: {
                 title: 'Recently Added',
-                hint: 'Stamp titles newly added to Plex (addedAt). Separate schedule from core banners.',
+                hint: 'Badge shows newly added to Plex (addedAt).',
                 enabledOn: 'Enabled · {days}-day window',
                 enabledOff: 'Disabled',
             },
             kometa: {
                 title: 'Media / Kometa',
-                hint: 'Kometa-parity overlays (resolution, audio, status, streaming, ribbons, and more). Heavier pass — keep separate from core.',
+                hint: 'Resolution, audio, status, streaming, ribbons, and more.',
                 enabledSummary: 'Media {media} · Status {status} · Ratings {ratings} · Network {network} · Extra {extra}',
-                settingsHint: 'Per-job toggles live here (not under Advanced). Expand each family for filters/styles. Libraries are still chosen in Advanced.',
+                settingsHint: 'Toggle families below. Libraries default to Advanced; this card can override.',
                 groups: {
                     media: 'Resolution · edition · audio · format',
                     showMeta: 'Status · network · streaming',
@@ -582,7 +583,7 @@ export const en = {
         },
         quick: {
             title: 'Library tools',
-            subtitle: 'Scan or reconcile without leaving Overview. Per-job settings live in each card above.',
+            subtitle: 'Scan or reconcile without leaving Overview.',
             daysHint: 'Season days control how long a season counts as “new”. Episode days default to 6 so weekly shows keep a New Episode badge on the latest ep.',
             previewHintBeforePreviewPath: 'Preview writes to',
             previewHintBetweenPaths: 'Live mode uploads posters to Plex and updates',

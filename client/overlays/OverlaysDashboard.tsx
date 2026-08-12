@@ -8,7 +8,6 @@ import {
     List,
     Loader2,
     Move,
-    Play,
     RefreshCw,
     RotateCcw,
     Save,
@@ -21,7 +20,6 @@ import {
     DashboardHero,
     DashboardPageShell,
     DashboardPanel,
-    DashboardStatCard,
     DashboardSubnav,
     dashboardSubnavLinkClass,
 } from '../shared/dashboard/DashboardChrome';
@@ -232,9 +230,9 @@ export const OverlaysDashboard: React.FC = () => {
     const [gallery, setGallery] = useState<Array<{ name: string; kind: string; url: string; mtime: number }>>([]);
     const [collapsedBinges, setCollapsedBinges] = useState<Record<string, boolean>>({});
     const [jobCardExpanded, setJobCardExpanded] = useState<Record<JobCardId, boolean>>({
-        banners: true,
-        recently: true,
-        kometa: true,
+        banners: false,
+        recently: false,
+        kometa: false,
     });
     const sampleLoadedRef = React.useRef(false);
     const wasRunningRef = React.useRef(false);
@@ -844,10 +842,23 @@ export const OverlaysDashboard: React.FC = () => {
                     <div className="flex min-w-0 flex-col items-center gap-1 px-2 py-2.5 text-center sm:items-start sm:px-3 sm:py-3 sm:text-left">
                         <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
                             <Clock3 className="h-3.5 w-3.5 text-plex" />
-                            <span>{t('overlays.status.schedule')}</span>
+                            <span>{t('overlays.status.lastRun')}</span>
                         </div>
                         <p className="truncate text-sm font-semibold sm:text-[15px]">
-                            {configDraft.scheduleHours ? t('overlays.status.everyHours', { hours: configDraft.scheduleHours }) : t('overlays.status.disabled')}
+                            {status?.lastRunAt
+                                ? new Date(status.lastRunAt).toLocaleString()
+                                : t('overlays.overview.never')}
+                        </p>
+                        <p className="truncate text-[11px] text-muted">
+                            {summary
+                                ? t('overlays.overview.lastRunHint', {
+                                    added: String(summary.added ?? 0),
+                                    removed: String(summary.removed ?? 0),
+                                    preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
+                                })
+                                : (configDraft.scheduleHours
+                                    ? t('overlays.status.everyHours', { hours: configDraft.scheduleHours })
+                                    : t('overlays.status.disabled'))}
                         </p>
                     </div>
                 </div>
@@ -881,44 +892,8 @@ export const OverlaysDashboard: React.FC = () => {
             </DashboardSubnav>
 
             {tab === 'overview' && (
-                <div className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        <DashboardStatCard
-                            label={t('overlays.overview.loggedOverlays')}
-                            value={status?.logCount ?? showCount}
-                            icon={<Layers className="h-4 w-4 text-sky-300" />}
-                            glow="sky"
-                        />
-                        <DashboardStatCard
-                            label={t('overlays.overview.loggedEpisodes')}
-                            value={status?.episodeLogCount ?? episodeCount}
-                            hint={t('overlays.overview.episodeWindowHint', { days: configDraft.newEpisodeDays ?? 6 })}
-                            icon={<Play className="h-4 w-4 text-rose-300" />}
-                            glow="rose"
-                        />
-                        <DashboardStatCard
-                            label={t('overlays.overview.lastRun')}
-                            value={status?.lastRunAt ? new Date(status.lastRunAt).toLocaleString() : t('overlays.overview.never')}
-                            hint={summary ? t('overlays.overview.lastRunHint', {
-                                added: String(summary.added ?? 0),
-                                removed: String(summary.removed ?? 0),
-                                preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
-                            }) : undefined}
-                            icon={<Clock3 className="h-4 w-4 text-plex" />}
-                            glow="plex"
-                            valueClassName="text-lg md:text-xl"
-                        />
-                        <DashboardStatCard
-                            label={t('overlays.overview.newSeasonWindow')}
-                            value={t('overlays.overview.daysValue', { count: configDraft.newSeasonDays || 21 })}
-                            hint={t('overlays.overview.presetHint', { preset: configDraft.overlayPresetId || 'new-season' })}
-                            icon={<Settings2 className="h-4 w-4 text-amber-300" />}
-                            glow="amber"
-                            valueClassName="text-lg md:text-xl"
-                        />
-                    </div>
-
-                    <div className="space-y-3">
+                <div className="space-y-3">
+                    <div className="space-y-2">
                         <OverlayJobCard
                             title={t('overlays.jobs.banners.title')}
                             hint={t('overlays.jobs.banners.hint')}
@@ -1803,7 +1778,7 @@ export const OverlaysDashboard: React.FC = () => {
                         </OverlayJobCard>
                     </div>
 
-                    <DashboardPanel title={t('overlays.quick.title')} subtitle={t('overlays.quick.subtitle')}>
+                    <div className="flex flex-col gap-2 rounded-xl border border-white/5 bg-black/20 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
@@ -1825,10 +1800,10 @@ export const OverlaysDashboard: React.FC = () => {
                                 {t('overlays.actions.reconcileDryRun')}
                             </button>
                         </div>
-                        <p className="mt-3 text-xs text-muted">
+                        <p className="text-[11px] text-muted sm:max-w-md sm:text-right">
                             {t('overlays.quick.previewHintBeforePreviewPath')} <code>config/overlays/preview/</code>. {t('overlays.quick.previewHintBetweenPaths')} <code>overlaid_log.json</code>.
                         </p>
-                    </DashboardPanel>
+                    </div>
                 </div>
             )}
 
