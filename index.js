@@ -1343,6 +1343,8 @@ import {
     mapJellyfinSessionToNowPlaying,
     sessionBelongsToPlexUser,
     sessionBelongsToJellyfinUser,
+    pickOwnPlexNowPlayingSession,
+    asArray as plexSessionAsArray,
 } from './lib/streams/nowPlaying.js';
 const PLEX_API = 'https://plex.tv/api';
 
@@ -6401,12 +6403,13 @@ const fetchPlexServerAccounts = async (uri, config) => {
         headers: plexClientHeaders(config.plexToken),
     }, 8000).then(r => r.json()).catch(() => null);
 
-    const accounts = accountsRes?.MediaContainer?.Account || [];
+    const accounts = plexSessionAsArray(accountsRes?.MediaContainer?.Account);
     const map = {};
     accounts.forEach((acc) => {
         map[String(acc.id)] = {
             id: String(acc.id),
             name: acc.name || '',
+            email: acc.email || '',
             thumb: acc.thumb || null,
         };
     });
@@ -13688,7 +13691,7 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
                     .then((r) => (r.ok ? r.json() : []))
                     .catch(() => [])
             ));
-            const mine = (Array.isArray(sessions) ? sessions : []).find((session) => (
+            const mine = plexSessionAsArray(sessions).find((session) => (
                 session?.NowPlayingItem
                 && sessionBelongsToJellyfinUser(session, {
                     jellyfinId: req.user?.jellyfinId || localUser?.jellyfinId,
@@ -13749,14 +13752,32 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
                 .then((r) => r.json())
                 .catch(() => null)
         ));
-        const list = Array.isArray(sessionsData?.MediaContainer?.Metadata)
-            ? sessionsData.MediaContainer.Metadata
-            : [];
-        const mineMeta = list.find((metadata) => sessionBelongsToPlexUser(metadata, {
+        const list = plexSessionAsArray(sessionsData?.MediaContainer?.Metadata);
+
+        const username = req.user?.username || localUser?.username || '';
+        const email = req.user?.email || localUser?.email || '';
+        const plexId = req.user?.plexId || localUser?.plexId || null;
+        const aliases = [username, email, localUser?.username, localUser?.email]
+            .filter(Boolean);
+        if (accountId) {
+            try {
+                const { map: accountMap } = await fetchPlexServerAccounts(uri, config);
+                const account = accountMap?.[String(accountId)];
+                if (account?.name) aliases.push(account.name);
+                if (account?.email) aliases.push(account.email);
+            } catch {
+                // identity still works from username / plex ids
+            }
+        }
+
+        const mineMeta = pickOwnPlexNowPlayingSession(list, {
             accountId,
-            username: req.user?.username || localUser?.username,
-            email: req.user?.email || localUser?.email,
-        }));
+            accountIds: [accountId, localUser?.plexAccountId, plexId].filter(Boolean),
+            plexId,
+            username,
+            email,
+            aliases,
+        });
         if (!mineMeta) return res.json({ available: true, enabled: true, session: null });
 
         let mapped = mapPlexSessionToNowPlaying(mineMeta);
