@@ -2734,17 +2734,38 @@ def list_collection_items(rating_key):
     members = []
     seen = set()
     try:
-        for item in (coll.items() or []):
-            rk = str(getattr(item, 'ratingKey', '') or '').strip()
-            if not rk or rk in seen:
-                continue
-            seen.add(rk)
-            members.append({
-                "ratingKey": rk,
-                "title": getattr(item, 'title', '') or '',
-                "type": str(getattr(item, 'type', '') or ''),
-                "library": getattr(item, 'librarySectionTitle', None) or '',
-            })
+        # Paginate — Plex container defaults truncate large collections.
+        start = 0
+        page_size = 100
+        key_path = getattr(coll, 'key', None) or f'/library/metadata/{key}'
+        while True:
+            try:
+                batch = coll.fetchItems(f'{key_path}/children', container_start=start, container_size=page_size)
+            except TypeError:
+                batch = list(coll.items() or [])
+                start = -1  # signal single-shot
+            except Exception:
+                if start == 0:
+                    batch = list(coll.items() or [])
+                    start = -1
+                else:
+                    break
+            if not batch:
+                break
+            for item in batch:
+                rk = str(getattr(item, 'ratingKey', '') or '').strip()
+                if not rk or rk in seen:
+                    continue
+                seen.add(rk)
+                members.append({
+                    "ratingKey": rk,
+                    "title": getattr(item, 'title', '') or '',
+                    "type": str(getattr(item, 'type', '') or ''),
+                    "library": getattr(item, 'librarySectionTitle', None) or '',
+                })
+            if start < 0 or len(batch) < page_size:
+                break
+            start += page_size
     except Exception as exc:
         logging.warning("collection items %s failed: %s", key, exc)
         return jsonify({"error": f"Failed to list collection items: {exc}"}), 500

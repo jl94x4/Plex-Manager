@@ -227,6 +227,62 @@ def _library_matches(item_or_coll, expected_library: str) -> bool:
     return bool(actual) and actual == expected
 
 
+def _iter_collection_children(coll, *, page_size: int = 100):
+    """Yield every child of a Plex collection (paginated — default container size is not enough)."""
+    key = getattr(coll, "key", None)
+    if not key:
+        try:
+            yield from (coll.items() or [])
+        except Exception:
+            return
+        return
+    start = 0
+    size = max(20, int(page_size or 100))
+    while True:
+        try:
+            batch = coll.fetchItems(f"{key}/children", container_start=start, container_size=size)
+        except TypeError:
+            # Older plexapi: no container kwargs
+            try:
+                yield from (coll.items() or [])
+            except Exception:
+                return
+            return
+        except Exception:
+            try:
+                if start == 0:
+                    yield from (coll.items() or [])
+            except Exception:
+                return
+            return
+        if not batch:
+            break
+        for item in batch:
+            yield item
+        if len(batch) < size:
+            break
+        start += size
+
+
+def _collection_member_target_key(item) -> str | None:
+    """Map a collection child to the show/movie ratingKey we stamp."""
+    itype = str(getattr(item, "type", "") or "").lower()
+    rk = str(getattr(item, "ratingKey", "") or "").strip()
+    if not rk:
+        return None
+    if itype == "episode":
+        show_rk = str(
+            getattr(item, "grandparentRatingKey", None)
+            or getattr(item, "showRatingKey", None)
+            or "",
+        ).strip()
+        return show_rk or None
+    if itype == "season":
+        parent = str(getattr(item, "parentRatingKey", "") or "").strip()
+        return parent or rk
+    return rk
+
+
 def _resolve_collection_member_keys(
     plex,
     collection_rating_key: str,
@@ -251,17 +307,31 @@ def _resolve_collection_member_keys(
         )
         return set()
     members: set[str] = set()
+    skipped_mismatch = 0
+    skipped_empty = 0
     try:
-        for item in (coll.items() or []):
-            rk = str(getattr(item, "ratingKey", "") or "").strip()
+        for item in _iter_collection_children(coll):
+            rk = _collection_member_target_key(item)
             if not rk:
+                skipped_empty += 1
                 continue
-            if not _library_matches(item, expected_library):
+            # coll.items()/children often omit librarySectionTitle on partial objects.
+            # The collection itself is already library-scoped — only exclude when the
+            # child reports a *different* library title (smart multi-library edge case).
+            actual = _item_library_title(item)
+            if actual and actual.strip().lower() != expected_library.strip().lower():
+                skipped_mismatch += 1
                 continue
             members.add(rk)
     except Exception as exc:
         _progress(progress, f"Collection {key}: items() failed ({exc})")
         return set()
+    if skipped_mismatch or skipped_empty:
+        _progress(
+            progress,
+            f"Collection {key}: resolved {len(members)} member(s) "
+            f"(skipped empty={skipped_empty}, other-library={skipped_mismatch})",
+        )
     return members
 
 
@@ -353,9 +423,11 @@ def _apply_custom_collection_winners(
             item_type = str(getattr(item, "type", "") or "").lower()
             if item_type == "episode":
                 continue  # collection badges are for show/movie posters
-            if not _library_matches(item, rule.get("library") or ""):
+            actual_lib = _item_library_title(item)
+            expected_lib = str(rule.get("library") or "").strip()
+            if actual_lib and expected_lib and actual_lib.strip().lower() != expected_lib.lower():
                 continue
-            library = _item_library_title(item) or str(rule.get("library") or "")
+            library = actual_lib or expected_lib
             row = {
                 "item": item,
                 "library": library,
@@ -363,8 +435,11 @@ def _apply_custom_collection_winners(
                 "winners": {},
             }
             should[rk] = row
-        elif not _library_matches(row.get("item"), rule.get("library") or ""):
-            continue
+        else:
+            actual_lib = _item_library_title(row.get("item"))
+            expected_lib = str(rule.get("library") or "").strip()
+            if actual_lib and expected_lib and actual_lib.strip().lower() != expected_lib.lower():
+                continue
         if "custom_collection" not in row["winners"]:
             row["winners"]["custom_collection"] = winner
 
@@ -935,6 +1010,11 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             progress=progress,
             errors=errors,
         )
+        cc_queued = sum(
+            1 for row in should.values()
+            if isinstance(row, dict) and "custom_collection" in (row.get("winners") or {})
+        )
+        _progress(progress, f"Custom collection badges queued for {cc_queued} title(s)")
 
     _progress(progress, f"Kometa eligible: {len(should)} of {scanned} scanned")
 
@@ -973,12 +1053,22 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 if poster is None:
                     raise RuntimeError("failed to download poster")
                 original = poster.convert("RGBA")
+                # Prefer New Season / core show backup when live art already has our
+                # Kometa EXIF marker (or another portal stamp) and we have no kometa backup yet.
                 if has_overlay_marker(poster) and existing is None:
-                    _progress(
-                        progress,
-                        f"Skipping {getattr(item, 'title', key)} — poster already carries an overlay marker and no backup exists",
-                    )
-                    continue
+                    ns_backup = Path(paths["backups"]) / str(key) / "show.png"
+                    if ns_backup.is_file():
+                        original = Image.open(ns_backup).convert("RGBA")
+                        _progress(
+                            progress,
+                            f"Using New Season backup as kometa base: {getattr(item, 'title', key)}",
+                        )
+                    else:
+                        _progress(
+                            progress,
+                            f"Skipping {getattr(item, 'title', key)} — poster already carries an overlay marker and no backup exists",
+                        )
+                        continue
                 if not preview_mode:
                     backup.parent.mkdir(parents=True, exist_ok=True)
                     original.save(backup)
