@@ -355,62 +355,45 @@ def render_winner(winner: Winner, *, config: dict | None, paths: dict | None) ->
         return load_image(winner.image_rel or "", paths=paths)
 
     if family == "custom_collection":
-        # Uploaded PNG badge(s) — one or more collection rules can match the same title.
-        def _load_collection_badge(rel: str, key: str) -> Image.Image | None:
-            text = str(rel or "").strip()
-            if text:
-                path = Path(text)
-                if path.is_file():
-                    try:
-                        return Image.open(path).convert("RGBA")
-                    except Exception:
-                        pass
-                from kometa_images import load_image
+        # Single uploaded PNG badge (no stacking — first collection rule wins).
+        rel = str(winner.image_rel or "").strip()
+        if rel:
+            path = Path(rel)
+            if path.is_file():
+                try:
+                    return Image.open(path).convert("RGBA")
+                except Exception:
+                    pass
+            from kometa_images import load_image
 
-                badge = load_image(text, paths=paths)
-                if badge is not None:
-                    return badge
-            custom_dir = Path((paths or {}).get("customPresets") or "")
-            kid = str(key or "").strip()
-            if kid and custom_dir:
-                hit = custom_dir / (kid if kid.lower().endswith(".png") else f"{kid}.png")
-                if hit.is_file():
-                    try:
-                        return Image.open(hit).convert("RGBA")
-                    except Exception:
-                        pass
-            return None
-
-        layers: list[Image.Image] = []
+            badge = load_image(rel, paths=paths)
+            if badge is not None:
+                return badge
+        custom_dir = Path((paths or {}).get("customPresets") or "")
+        key = str(winner.key or "").strip()
+        if key and custom_dir:
+            hit = custom_dir / (key if key.lower().endswith(".png") else f"{key}.png")
+            if hit.is_file():
+                try:
+                    return Image.open(hit).convert("RGBA")
+                except Exception:
+                    pass
+        # Legacy stacked logs: use the first badge only.
         badges = (winner.extra or {}).get("badges") if isinstance(winner.extra, dict) else None
         if isinstance(badges, list) and badges:
-            for row in badges:
-                if not isinstance(row, dict):
-                    continue
-                img = _load_collection_badge(
-                    str(row.get("imagePath") or row.get("image") or ""),
-                    str(row.get("image") or ""),
-                )
-                if img is not None:
-                    layers.append(img)
-        if not layers:
-            single = _load_collection_badge(str(winner.image_rel or ""), str(winner.key or ""))
-            if single is not None:
-                layers.append(single)
-        if not layers:
-            return _text_on_backdrop(str(winner.text or winner.name).upper(), paths=paths)
-        if len(layers) == 1:
-            return layers[0]
-        # Stack multiple collection badges vertically in the same corner slot.
-        gap = 12
-        width = max(img.width for img in layers)
-        height = sum(img.height for img in layers) + gap * (len(layers) - 1)
-        stack = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-        y = 0
-        for img in layers:
-            stack.alpha_composite(img, (max(0, width - img.width), y))
-            y += img.height + gap
-        return stack
+            first = badges[0] if isinstance(badges[0], dict) else None
+            if first:
+                for cand in (first.get("imagePath"), first.get("image")):
+                    text = str(cand or "").strip()
+                    if not text:
+                        continue
+                    path = Path(text)
+                    if path.is_file():
+                        try:
+                            return Image.open(path).convert("RGBA")
+                        except Exception:
+                            pass
+        return _text_on_backdrop(str(winner.text or winner.name).upper(), paths=paths)
 
     return None
 

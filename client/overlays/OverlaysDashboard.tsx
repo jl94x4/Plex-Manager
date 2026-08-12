@@ -4,6 +4,7 @@ import {
     AlertTriangle,
     CheckCircle2,
     Clock3,
+    FolderKanban,
     Layers,
     List,
     Loader2,
@@ -34,11 +35,11 @@ import { PlacementEditor } from './PlacementEditor';
 import { OverlayJobCard } from './OverlayJobCard';
 import { api as collexionsApi } from '../collexions/api';
 
-type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'advanced' | 'activity';
+type TabId = 'overview' | 'shows' | 'collections' | 'gallery' | 'placement' | 'advanced' | 'activity';
 type JobCardId = 'banners' | 'recently' | 'kometa' | 'collections';
 type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'previewCollections' | 'promote' | 'resetAll' | 'resetShows' | 'resetEpisodes' | 'run' | 'runRecently' | 'runKometa' | 'runCollections' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample' | 'revertKometa';
 
-const OVERLAY_TABS: TabId[] = ['overview', 'shows', 'gallery', 'placement', 'advanced', 'activity'];
+const OVERLAY_TABS: TabId[] = ['overview', 'shows', 'collections', 'gallery', 'placement', 'advanced', 'activity'];
 
 const parseOverlaysTab = (hash = typeof window !== 'undefined' ? window.location.hash : ''): TabId => {
     const raw = String(hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim().toLowerCase();
@@ -551,14 +552,12 @@ export const OverlaysDashboard: React.FC = () => {
                 other.rows.push(row);
                 continue;
             }
-            const badgeRows = Array.isArray(fam.extra?.badges) && fam.extra.badges.length > 0
-                ? fam.extra.badges.filter((b: any) => b && typeof b === 'object')
-                : [{
-                    ruleId: fam.extra?.ruleId || fam.name,
-                    name: fam.text || fam.name,
-                    collectionTitle: fam.extra?.collectionTitle,
-                    library: fam.extra?.library,
-                }];
+            const badgeRows = [{
+                ruleId: fam.extra?.ruleId || fam.name,
+                name: fam.text || fam.name,
+                collectionTitle: fam.extra?.collectionTitle,
+                library: fam.extra?.library,
+            }];
             const seenRule = new Set<string>();
             for (const badge of badgeRows) {
                 const ruleId = String(badge.ruleId || fam.extra?.ruleId || fam.name || '').trim();
@@ -616,6 +615,29 @@ export const OverlaysDashboard: React.FC = () => {
         return next;
     }, [kometaItems, collectionRules]);
 
+    const collectionSections = useMemo(
+        () => kometaSections.filter((section) => section.kind === 'collection'),
+        [kometaSections],
+    );
+    const otherKometaSections = useMemo(
+        () => kometaSections.filter((section) => section.kind === 'other'),
+        [kometaSections],
+    );
+    const kometaOtherCount = useMemo(
+        () => otherKometaSections.reduce((sum, section) => sum + section.rows.length, 0),
+        [otherKometaSections],
+    );
+    const collectionTrackedCount = useMemo(() => {
+        const keys = new Set<string>();
+        for (const section of collectionSections) {
+            for (const row of section.rows) {
+                const key = String(row?.ratingKey || '').trim();
+                if (key) keys.add(key);
+            }
+        }
+        return keys.size;
+    }, [collectionSections]);
+
     const renameCollectionRule = useCallback(async (ruleId: string, nextName: string) => {
         const name = String(nextName || '').trim();
         if (!ruleId || !name) {
@@ -655,12 +677,21 @@ export const OverlaysDashboard: React.FC = () => {
 
     const tabs = useMemo(() => ([
         { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
-        { id: 'shows' as const, label: t('overlays.tabs.shows', { count: showCount, episodes: episodeCount }), icon: List },
+        {
+            id: 'shows' as const,
+            label: t('overlays.tabs.shows', { count: showCount, episodes: episodeCount, kometa: kometaOtherCount }),
+            icon: List,
+        },
+        {
+            id: 'collections' as const,
+            label: t('overlays.tabs.collections', { count: collectionTrackedCount }),
+            icon: FolderKanban,
+        },
         { id: 'gallery' as const, label: t('overlays.tabs.gallery'), icon: Layers },
         { id: 'placement' as const, label: t('overlays.tabs.placement'), icon: Move },
         { id: 'advanced' as const, label: t('overlays.tabs.advanced'), icon: Settings2 },
         { id: 'activity' as const, label: t('overlays.tabs.activity'), icon: Activity },
-    ]), [showCount, episodeCount, t]);
+    ]), [showCount, episodeCount, kometaOtherCount, collectionTrackedCount, t]);
 
     const toggleJobCard = useCallback((id: JobCardId) => {
         setJobCardExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -1174,6 +1205,8 @@ export const OverlaysDashboard: React.FC = () => {
     const canResetShows = showCount > 0 && !jobRunning && !resetBusy;
     const canResetEpisodes = episodeCount > 0 && !jobRunning && !resetBusy;
     const canRevertKometa = kometaItems.length > 0 && !jobRunning && busy !== 'revertKometa' && workerReady;
+    const canRevertOtherKometa = kometaOtherCount > 0 && !jobRunning && busy !== 'revertKometa' && workerReady;
+    const canRevertCollections = collectionTrackedCount > 0 && !jobRunning && busy !== 'revertKometa' && workerReady;
     const previewOnlyShows = status?.previewOnlyShows ?? shows.filter((row) => row.previewOnly).length;
     const previewOnlyEpisodes = status?.previewOnlyEpisodes ?? episodes.filter((row) => row.previewOnly).length;
     const previewOnlySeasons = status?.previewOnlySeasons ?? 0;
@@ -1231,6 +1264,65 @@ export const OverlaysDashboard: React.FC = () => {
             await runAction('revertKometa', () => overlaysApi.revertKometa());
             await refresh();
         })();
+    };
+
+    const revertKometaRows = (
+        rows: any[],
+        {
+            confirmKey,
+            titleKey,
+            confirmLabelKey,
+            count,
+        }: {
+            confirmKey: string;
+            titleKey: string;
+            confirmLabelKey: string;
+            count: number;
+        },
+    ) => {
+        void (async () => {
+            if (!count) return;
+            const ok = await askConfirm(
+                t(confirmKey, { count }),
+                {
+                    title: t(titleKey),
+                    confirmLabel: t(confirmLabelKey),
+                    cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+                    danger: true,
+                },
+            );
+            if (!ok) return;
+            const seen = new Set<string>();
+            await runAction('revertKometa', async () => {
+                for (const row of rows) {
+                    const key = String(row?.ratingKey || '').trim();
+                    if (!key || seen.has(key)) continue;
+                    seen.add(key);
+                    await overlaysApi.revertKometa(key);
+                }
+            });
+            await refresh();
+        })();
+    };
+
+    const revertOtherKometa = () => {
+        const rows = otherKometaSections.flatMap((section) => section.rows);
+        revertKometaRows(rows, {
+            confirmKey: 'overlays.kometa.revertOtherConfirm',
+            titleKey: 'overlays.kometa.revertOtherTitle',
+            confirmLabelKey: 'overlays.actions.revertAllKometa',
+            count: kometaOtherCount,
+        });
+    };
+
+    const revertAllCollections = () => {
+        const rows = collectionSections.flatMap((section) => section.rows);
+        revertKometaRows(rows, {
+            confirmKey: 'overlays.kometa.revertCollectionsConfirm',
+            titleKey: 'overlays.kometa.revertCollectionsTitle',
+            confirmLabelKey: 'overlays.actions.revertAllCollections',
+            count: collectionTrackedCount,
+        });
     };
 
     const revertKometaSection = (section: { id: string; title: string; rows: any[] }) => {
@@ -2666,6 +2758,10 @@ export const OverlaysDashboard: React.FC = () => {
                 <DashboardPanel
                     title={t('overlays.shows.title')}
                     subtitle={t('overlays.shows.subtitle')}
+                    collapsible
+                    defaultCollapsed
+                    collapseLabel={t('overlays.kometa.collapseSection')}
+                    expandLabel={t('overlays.kometa.expandSection')}
                     controls={(
                         <button
                             type="button"
@@ -2775,6 +2871,10 @@ export const OverlaysDashboard: React.FC = () => {
                 <DashboardPanel
                     title={t('overlays.episodes.title')}
                     subtitle={t('overlays.episodes.subtitle')}
+                    collapsible
+                    defaultCollapsed
+                    collapseLabel={t('overlays.kometa.collapseSection')}
+                    expandLabel={t('overlays.kometa.expandSection')}
                     controls={(
                         <button
                             type="button"
@@ -3014,25 +3114,29 @@ export const OverlaysDashboard: React.FC = () => {
                 </DashboardPanel>
 
                 <DashboardPanel
-                    title={t('overlays.kometa.trackedTitle', { count: kometaItems.length })}
-                    subtitle={t('overlays.kometa.trackedSubtitle')}
+                    title={t('overlays.kometa.trackedTitle', { count: kometaOtherCount })}
+                    subtitle={t('overlays.kometa.trackedSubtitleShows')}
+                    collapsible
+                    defaultCollapsed
+                    collapseLabel={t('overlays.kometa.collapseSection')}
+                    expandLabel={t('overlays.kometa.expandSection')}
                     controls={(
                         <button
                             type="button"
                             className={`${buttonClass} border-amber-500/40 text-amber-100`}
-                            disabled={!canRevertKometa}
-                            onClick={revertAllKometa}
+                            disabled={!canRevertOtherKometa}
+                            onClick={revertOtherKometa}
                         >
                             <RotateCcw className="h-4 w-4" /> {t('overlays.actions.revertAllKometa')}
                         </button>
                     )}
                 >
-                    {kometaItems.length === 0 && collectionRules.length === 0 ? (
-                        <p className="text-sm text-muted">{t('overlays.kometa.empty')}</p>
+                    {kometaOtherCount === 0 ? (
+                        <p className="text-sm text-muted">{t('overlays.kometa.emptyOther')}</p>
                     ) : (
                         <div className="space-y-3">
-                            {kometaSections.map((section) => {
-                                const collapsed = collapsedKometaSections[section.id] === true;
+                            {otherKometaSections.map((section) => {
+                                const collapsed = collapsedKometaSections[section.id] !== false;
                                 return (
                                     <div
                                         key={section.id}
@@ -3202,6 +3306,204 @@ export const OverlaysDashboard: React.FC = () => {
                         </div>
                     )}
                 </DashboardPanel>
+                </div>
+            )}
+
+            {tab === 'collections' && (
+                <div className="space-y-4">
+                    <DashboardPanel
+                        title={t('overlays.kometa.trackedCollectionsTitle', { count: collectionTrackedCount })}
+                        subtitle={t('overlays.kometa.trackedCollectionsSubtitle')}
+                        collapsible
+                        defaultCollapsed
+                        collapseLabel={t('overlays.kometa.collapseSection')}
+                        expandLabel={t('overlays.kometa.expandSection')}
+                        controls={(
+                            <button
+                                type="button"
+                                className={`${buttonClass} border-amber-500/40 text-amber-100`}
+                                disabled={!canRevertCollections}
+                                onClick={revertAllCollections}
+                            >
+                                <RotateCcw className="h-4 w-4" /> {t('overlays.actions.revertAllCollections')}
+                            </button>
+                        )}
+                    >
+                        {collectionRules.length === 0 && collectionTrackedCount === 0 ? (
+                            <p className="text-sm text-muted">{t('overlays.kometa.emptyCollections')}</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {collectionSections.map((section) => {
+                                    const collapsed = collapsedKometaSections[section.id] !== false;
+                                    return (
+                                        <div
+                                            key={section.id}
+                                            className="overflow-hidden rounded-xl border border-white/10 bg-black/25"
+                                        >
+                                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-3 py-2.5">
+                                                <div className="flex min-w-0 flex-1 items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        className="shrink-0 text-muted"
+                                                        onClick={() => setCollapsedKometaSections((prev) => ({
+                                                            ...prev,
+                                                            [section.id]: !collapsed,
+                                                        }))}
+                                                        aria-expanded={!collapsed}
+                                                        aria-label={collapsed
+                                                            ? t('overlays.kometa.expandSection')
+                                                            : t('overlays.kometa.collapseSection')}
+                                                    >
+                                                        <span className="inline-block w-3">{collapsed ? '▸' : '▾'}</span>
+                                                    </button>
+                                                    {section.ruleId && renamingRuleId === section.ruleId ? (
+                                                        <input
+                                                            className={`${fieldInputClass} mt-0 max-w-md py-1.5`}
+                                                            value={renameDraft}
+                                                            autoFocus
+                                                            onChange={(e) => setRenameDraft(e.target.value)}
+                                                            onBlur={() => void renameCollectionRule(section.ruleId, renameDraft)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    e.preventDefault();
+                                                                    void renameCollectionRule(section.ruleId, renameDraft);
+                                                                }
+                                                                if (e.key === 'Escape') {
+                                                                    setRenamingRuleId(null);
+                                                                    setRenameDraft('');
+                                                                }
+                                                            }}
+                                                        />
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            className="group min-w-0 flex-1 text-left"
+                                                            onClick={() => {
+                                                                if (section.ruleId) {
+                                                                    startRenameRule(section.ruleId, section.title);
+                                                                    return;
+                                                                }
+                                                                setCollapsedKometaSections((prev) => ({
+                                                                    ...prev,
+                                                                    [section.id]: !collapsed,
+                                                                }));
+                                                            }}
+                                                            title={section.ruleId
+                                                                ? t('overlays.jobs.collections.rename')
+                                                                : undefined}
+                                                        >
+                                                            <p className="truncate text-sm font-semibold text-text group-hover:text-plex">
+                                                                {sectionHeading(section)}
+                                                                {section.ruleId ? (
+                                                                    <Pencil className="ml-1.5 inline h-3 w-3 text-muted opacity-60 group-hover:opacity-100" />
+                                                                ) : null}
+                                                            </p>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                    disabled={busy !== null || jobRunning || !workerReady || section.rows.length === 0}
+                                                    onClick={() => revertKometaSection(section)}
+                                                >
+                                                    {t('overlays.kometa.revertSection')}
+                                                </button>
+                                            </div>
+                                            {!collapsed && (
+                                                section.rows.length === 0 ? (
+                                                    <p className="px-3 py-3 text-sm text-muted">
+                                                        {t('overlays.kometa.sectionEmpty')}
+                                                    </p>
+                                                ) : (
+                                                    <>
+                                                        <div className="space-y-2 p-3 md:hidden">
+                                                            {section.rows.map((row) => (
+                                                                <div key={row.ratingKey} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                                                                    <div className="flex items-start justify-between gap-3">
+                                                                        <div className="min-w-0">
+                                                                            <p className="font-semibold leading-snug text-text">{row.title}</p>
+                                                                            <p className="mt-1 text-xs text-muted">{row.library || '—'}</p>
+                                                                            <p className="mt-1 text-[11px] leading-snug text-muted">
+                                                                                {formatKometaFamilies(row)}
+                                                                            </p>
+                                                                        </div>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                                            disabled={busy !== null || jobRunning}
+                                                                            onClick={() => void runAction('revertKometa', async () => {
+                                                                                await overlaysApi.revertKometa(row.ratingKey);
+                                                                                await refresh();
+                                                                            })}
+                                                                        >
+                                                                            {t('overlays.actions.revert')}
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                                                                        <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
+                                                                            {row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}
+                                                                        </span>
+                                                                        {row.timestamp ? (
+                                                                            <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
+                                                                                {new Date(row.timestamp).toLocaleString()}
+                                                                            </span>
+                                                                        ) : null}
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <div className="hidden overflow-x-auto md:block">
+                                                            <table className="min-w-full text-left text-sm">
+                                                                <thead className="text-xs uppercase text-muted">
+                                                                    <tr>
+                                                                        <th className="px-3 py-2">{t('overlays.table.title')}</th>
+                                                                        <th className="px-2 py-2">{t('overlays.table.library')}</th>
+                                                                        <th className="px-2 py-2">{t('overlays.kometa.families')}</th>
+                                                                        <th className="px-2 py-2">{t('overlays.table.mode')}</th>
+                                                                        <th className="px-2 py-2">{t('overlays.table.when')}</th>
+                                                                        <th className="px-2 py-2" />
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {section.rows.map((row) => (
+                                                                        <tr key={row.ratingKey} className="border-t border-white/10">
+                                                                            <td className="px-3 py-2 font-medium">{row.title}</td>
+                                                                            <td className="px-2 py-2 text-muted">{row.library || '—'}</td>
+                                                                            <td className="px-2 py-2 text-xs text-muted">
+                                                                                {formatKometaFamilies(row)}
+                                                                            </td>
+                                                                            <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
+                                                                            <td className="px-2 py-2 text-muted">
+                                                                                {row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}
+                                                                            </td>
+                                                                            <td className="px-2 py-2 text-right">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                                                    disabled={busy !== null || jobRunning}
+                                                                                    onClick={() => void runAction('revertKometa', async () => {
+                                                                                        await overlaysApi.revertKometa(row.ratingKey);
+                                                                                        await refresh();
+                                                                                    })}
+                                                                                >
+                                                                                    {t('overlays.actions.revert')}
+                                                                                </button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </>
+                                                )
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </DashboardPanel>
                 </div>
             )}
 

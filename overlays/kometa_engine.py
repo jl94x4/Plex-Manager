@@ -456,8 +456,8 @@ def _apply_custom_collection_winners(
 ) -> dict[str, set[str]]:
     """Inject custom_collection winners from live Plex membership.
 
-    An item may belong to multiple configured collections — all matching badges
-    are stacked (previously first-rule-wins hid later collections from the tracked list).
+    First matching rule wins — a title gets at most one collection badge even if it
+    belongs to several configured collections.
 
     Returns rule_id -> set of member ratingKeys discovered in Plex.
     """
@@ -465,9 +465,9 @@ def _apply_custom_collection_winners(
     rule_members: dict[str, set[str]] = {}
     if not rules:
         return rule_members
-    # ratingKey -> ordered list of (rule, image_path)
-    member_badges: dict[str, list[tuple[dict, Path]]] = {}
-    rule_members: dict[str, set[str]] = {}
+    # ratingKey -> first matching (rule, image_path)
+    member_rule: dict[str, tuple[dict, Path]] = {}
+    claimed_elsewhere: dict[str, int] = {rule["id"]: 0 for rule in rules}
     for rule in rules:
         if not rule.get("library"):
             msg = f"custom_collection {rule['id']}: library is required — skipped"
@@ -495,12 +495,14 @@ def _apply_custom_collection_winners(
             _progress(progress, msg)
             continue
         for rk in members:
-            member_badges.setdefault(rk, []).append((rule, image_path))
+            if rk in member_rule:
+                claimed_elsewhere[rule["id"]] = claimed_elsewhere.get(rule["id"], 0) + 1
+                continue
+            member_rule[rk] = (rule, image_path)
 
     queued_by_rule: dict[str, int] = {rule["id"]: 0 for rule in rules}
     dropped = 0
-    for rk, badge_rows in member_badges.items():
-        expected_libs = [(r, p) for r, p in badge_rows]
+    for rk, (rule, image_path) in member_rule.items():
         row = should.get(rk)
         item = row.get("item") if row else None
         if item is None:
@@ -522,26 +524,28 @@ def _apply_custom_collection_winners(
             if show_rk and show_rk != rk:
                 show_item = _fetch_plex_item(plex, show_rk)
                 if show_item is not None:
+                    # Show may already be claimed under its ratingKey.
+                    if show_rk in member_rule and member_rule[show_rk][0]["id"] != rule["id"]:
+                        claimed_elsewhere[rule["id"]] = claimed_elsewhere.get(rule["id"], 0) + 1
+                        continue
                     rk = show_rk
                     item = show_item
                     item_type = str(getattr(item, "type", "") or "").lower()
                     row = should.get(rk)
         actual_lib = _item_library_title(item)
         actual_id = _item_library_section_id(item)
-        compatible_rows: list[tuple[dict, Path]] = []
-        for rule, image_path in expected_libs:
-            if _libraries_compatible(
-                actual_lib,
-                str(rule.get("library") or "").strip(),
-                actual_id=actual_id,
-                expected_id=str(rule.get("librarySectionId") or "").strip(),
-            ):
-                compatible_rows.append((rule, image_path))
-        if not compatible_rows:
+        expected_lib = str(rule.get("library") or "").strip()
+        expected_sid = str(rule.get("librarySectionId") or "").strip()
+        if not _libraries_compatible(
+            actual_lib,
+            expected_lib,
+            actual_id=actual_id,
+            expected_id=expected_sid,
+        ):
             title = getattr(item, "title", None) or rk
             msg = (
                 f"Collection badge skip '{title}': library "
-                f"'{actual_lib or '?'}' did not match any collection rule"
+                f"'{actual_lib or '?'}' != '{expected_lib}'"
             )
             if errors is not None:
                 errors.append(msg)
@@ -549,36 +553,21 @@ def _apply_custom_collection_winners(
             dropped += 1
             continue
 
-        badges_extra = []
-        for rule, image_path in compatible_rows:
-            badges_extra.append({
+        winner = Winner(
+            family="custom_collection",
+            name=str(rule["id"]),
+            key=str(rule["image"]),
+            text=str(rule.get("name") or rule["id"]),
+            image_rel=str(image_path),
+            extra={
                 "ruleId": rule["id"],
-                "name": str(rule.get("name") or rule["id"]),
                 "collectionRatingKey": rule["collectionRatingKey"],
                 "collectionTitle": rule.get("collectionTitle") or "",
                 "library": rule.get("library") or "",
-                "image": rule["image"],
-                "imagePath": str(image_path),
-            })
-            queued_by_rule[rule["id"]] = queued_by_rule.get(rule["id"], 0) + 1
-
-        primary_rule, primary_path = compatible_rows[0]
-        winner = Winner(
-            family="custom_collection",
-            name=str(primary_rule["id"]),
-            key=str(primary_rule["image"]),
-            text=str(primary_rule.get("name") or primary_rule["id"]),
-            image_rel=str(primary_path),
-            extra={
-                "ruleId": primary_rule["id"],
-                "collectionRatingKey": primary_rule["collectionRatingKey"],
-                "collectionTitle": primary_rule.get("collectionTitle") or "",
-                "library": primary_rule.get("library") or "",
-                "badges": badges_extra,
             },
         )
         if row is None:
-            library = actual_lib or str(primary_rule.get("library") or "")
+            library = actual_lib or expected_lib
             row = {
                 "item": item,
                 "library": library,
@@ -588,17 +577,23 @@ def _apply_custom_collection_winners(
             should[rk] = row
         else:
             row["item"] = item
-        row["winners"]["custom_collection"] = winner
+        # Never stack a second collection badge on top of an existing winner.
+        if "custom_collection" not in row["winners"]:
+            row["winners"]["custom_collection"] = winner
+            queued_by_rule[rule["id"]] = queued_by_rule.get(rule["id"], 0) + 1
 
     for rule in rules:
         rid = rule["id"]
         total = len(rule_members.get(rid) or [])
         queued = int(queued_by_rule.get(rid) or 0)
-        if total and queued != total:
+        stolen = int(claimed_elsewhere.get(rid) or 0)
+        if total and (queued != total or stolen):
+            bits = [f"queued {queued}/{total} for stamping"]
+            if stolen:
+                bits.append(f"{stolen} already claimed by an earlier collection rule")
             _progress(
                 progress,
-                f"Collection badge '{rule.get('name') or rid}': queued {queued}/{total} "
-                f"for stamping (see skip lines above for the rest)",
+                f"Collection badge '{rule.get('name') or rid}': " + "; ".join(bits),
             )
         elif total:
             _progress(
@@ -798,19 +793,8 @@ def _signature(winners: dict[str, Winner], config: dict) -> str:
     parts = []
     for family, winner in sorted(winners.items()):
         part = f"{family}:{winner.name}"
-        if family == "custom_collection":
-            badges = (winner.extra or {}).get("badges") if isinstance(winner.extra, dict) else None
-            if isinstance(badges, list) and badges:
-                badge_keys = []
-                for badge in badges:
-                    if not isinstance(badge, dict):
-                        continue
-                    badge_keys.append(
-                        f"{badge.get('ruleId') or ''}:{badge.get('image') or badge.get('imagePath') or ''}"
-                    )
-                part = f"{family}:{','.join(sorted(badge_keys))}"
-            elif winner.key:
-                part = f"{part}:{winner.key}"
+        if family == "custom_collection" and winner.key:
+            part = f"{part}:{winner.key}"
         parts.append(part)
     style = [
         f"audiostyle={_cfg(config, 'audioCodecStyle', 'audio_codec_style', 'compact')}",

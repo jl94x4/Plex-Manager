@@ -187,24 +187,76 @@ export const DashboardPanel: React.FC<{
     controls?: React.ReactNode;
     children: React.ReactNode;
     className?: string;
-}> = ({ title, subtitle, badge, controls, children, className = '' }) => (
-    <section className={`${dashboardPanelClass} p-4 md:p-5 ${className}`.trim()}>
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-                <h2 className="text-lg font-bold tracking-tight text-text">{title}</h2>
-                {subtitle ? <p className="mt-0.5 text-xs text-muted">{subtitle}</p> : null}
-            </div>
-            {(controls || badge) ? (
-                <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
-                    {controls}
-                    {badge}
+    /** When true, title row toggles body visibility. */
+    collapsible?: boolean;
+    /** Controlled collapse state (true = body hidden). */
+    collapsed?: boolean;
+    /** Uncontrolled initial collapse when `collapsed` is omitted. */
+    defaultCollapsed?: boolean;
+    onCollapsedChange?: (collapsed: boolean) => void;
+    collapseLabel?: string;
+    expandLabel?: string;
+}> = ({
+    title,
+    subtitle,
+    badge,
+    controls,
+    children,
+    className = '',
+    collapsible = false,
+    collapsed: collapsedProp,
+    defaultCollapsed = false,
+    onCollapsedChange,
+    collapseLabel = 'Collapse',
+    expandLabel = 'Expand',
+}) => {
+    const [uncontrolledCollapsed, setUncontrolledCollapsed] = React.useState(defaultCollapsed);
+    const collapsed = collapsedProp !== undefined ? collapsedProp : uncontrolledCollapsed;
+    const setCollapsed = (next: boolean) => {
+        if (collapsedProp === undefined) setUncontrolledCollapsed(next);
+        onCollapsedChange?.(next);
+    };
+    const toggle = () => setCollapsed(!collapsed);
+
+    return (
+        <section className={`${dashboardPanelClass} p-4 md:p-5 ${className}`.trim()}>
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                    {collapsible ? (
+                        <button
+                            type="button"
+                            className="group flex min-w-0 max-w-full items-start gap-2 text-left"
+                            onClick={toggle}
+                            aria-expanded={!collapsed}
+                            aria-label={collapsed ? expandLabel : collapseLabel}
+                        >
+                            <span className="mt-1 inline-block w-3 shrink-0 text-muted" aria-hidden>
+                                {collapsed ? '▸' : '▾'}
+                            </span>
+                            <span className="min-w-0">
+                                <h2 className="text-lg font-bold tracking-tight text-text group-hover:text-plex">{title}</h2>
+                                {subtitle ? <p className="mt-0.5 text-xs text-muted">{subtitle}</p> : null}
+                            </span>
+                        </button>
+                    ) : (
+                        <>
+                            <h2 className="text-lg font-bold tracking-tight text-text">{title}</h2>
+                            {subtitle ? <p className="mt-0.5 text-xs text-muted">{subtitle}</p> : null}
+                        </>
+                    )}
                 </div>
-            ) : null}
-        </div>
-        {children}
-    </section>
-);
+                {(controls || badge) ? (
+                    <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+                        {controls}
+                        {badge}
+                    </div>
+                ) : null}
+            </div>
+            {collapsible && collapsed ? null : children}
+        </section>
+    );
+};
 
 export const DashboardSubnav: React.FC<{ children: React.ReactNode; className?: string }> = ({
     children,
