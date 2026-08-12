@@ -8,6 +8,12 @@ import { DEFAULT_OVERLAY_PLACEMENT } from './api';
 
 export type PlacementKind = 'show' | 'season' | 'episode' | 'recently' | 'media' | 'status' | 'ratings' | 'network' | 'custom_collection';
 
+export type CollectionPlacementRule = {
+    id: string;
+    name: string;
+    image: string;
+};
+
 type PresetOption = { value: string; label: string };
 
 type Props = {
@@ -16,6 +22,7 @@ type Props = {
     episodePresetId: string;
     recentlyPresetId: string;
     collectionPresetId?: string;
+    collectionRules?: CollectionPlacementRule[];
     seasonPresetOptions: PresetOption[];
     episodePresetOptions: PresetOption[];
     recentlyPresetOptions: PresetOption[];
@@ -35,7 +42,14 @@ const fieldInputClass = 'mt-1 w-full rounded-lg border border-white/10 bg-black/
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
 const BANNER_KINDS: PlacementKind[] = ['show', 'season', 'episode', 'recently'];
-const KOMETA_KINDS: PlacementKind[] = ['media', 'status', 'ratings', 'network', 'custom_collection'];
+const CORE_KOMETA_KINDS: PlacementKind[] = ['media', 'status', 'ratings', 'network'];
+
+const collectionTargetId = (ruleId: string) => `cc:${ruleId}`;
+
+const placementKindFromTarget = (targetId: string): PlacementKind => {
+    if (String(targetId || '').startsWith('cc:')) return 'custom_collection';
+    return targetId as PlacementKind;
+};
 
 const kindBaseUrl = (kind: PlacementKind, bust: number) => {
     const sampleKind = kind === 'episode' ? 'episode-base' : 'show-base';
@@ -47,11 +61,11 @@ const kindBannerUrl = (
     seasonPresetId: string,
     episodePresetId: string,
     recentlyPresetId: string,
-    collectionPresetId: string,
+    collectionImageId: string,
     bust: number,
 ) => {
     if (kind === 'custom_collection') {
-        const id = collectionPresetId || 'placement-custom_collection';
+        const id = collectionImageId || 'placement-custom_collection';
         return `/api/overlays/preset-file?id=${encodeURIComponent(id)}&kind=season&t=${encodeURIComponent(String(bust))}`;
     }
     if (kind === 'media' || kind === 'status' || kind === 'ratings' || kind === 'network') {
@@ -123,6 +137,7 @@ export const PlacementEditor: React.FC<Props> = ({
     episodePresetId,
     recentlyPresetId,
     collectionPresetId = '',
+    collectionRules = [],
     seasonPresetOptions,
     episodePresetOptions,
     recentlyPresetOptions,
@@ -136,7 +151,7 @@ export const PlacementEditor: React.FC<Props> = ({
     onResetKind,
 }) => {
     const { t } = useDiscoverI18n();
-    const [kind, setKind] = useState<PlacementKind>('show');
+    const [targetId, setTargetId] = useState<string>('show');
     const [baseFailed, setBaseFailed] = useState(false);
     const [bannerNat, setBannerNat] = useState({ w: 800, h: 200 });
     const stageRef = useRef<HTMLDivElement | null>(null);
@@ -151,7 +166,42 @@ export const PlacementEditor: React.FC<Props> = ({
         artH: number;
     } | null>(null);
 
+    const kind = placementKindFromTarget(targetId);
+    const activeCollectionRule = useMemo(() => {
+        if (!targetId.startsWith('cc:')) return null;
+        const id = targetId.slice(3);
+        return collectionRules.find((r) => r.id === id) || null;
+    }, [targetId, collectionRules]);
+
+    const collectionTargets = useMemo(() => {
+        if (collectionRules.length > 0) {
+            return collectionRules.map((rule) => ({
+                id: collectionTargetId(rule.id),
+                label: rule.name || rule.id,
+                image: rule.image,
+            }));
+        }
+        return [{
+            id: 'custom_collection',
+            label: t('overlays.placement.kinds.custom_collection'),
+            image: collectionPresetId || '',
+        }];
+    }, [collectionRules, collectionPresetId, t]);
+
+    // Keep selection valid when rules are renamed/removed.
+    useEffect(() => {
+        if (!targetId.startsWith('cc:') && targetId !== 'custom_collection') return;
+        const stillValid = collectionTargets.some((c) => c.id === targetId);
+        if (!stillValid) {
+            setTargetId(collectionTargets[0]?.id || 'show');
+        }
+    }, [collectionTargets, targetId]);
+
     const current = placement[kind] || DEFAULT_OVERLAY_PLACEMENT[kind] || DEFAULT_OVERLAY_PLACEMENT.show;
+    const collectionImageId = activeCollectionRule?.image
+        || (targetId === 'custom_collection' ? collectionPresetId : '')
+        || collectionPresetId
+        || '';
 
     const measureArt = useCallback(() => {
         const stage = stageRef.current;
@@ -166,7 +216,7 @@ export const PlacementEditor: React.FC<Props> = ({
         setBaseFailed(false);
         const id = window.setTimeout(measureArt, 50);
         return () => window.clearTimeout(id);
-    }, [kind, sampleBust, measureArt]);
+    }, [targetId, sampleBust, collectionImageId, measureArt]);
 
     useEffect(() => {
         const onResize = () => measureArt();
@@ -219,49 +269,60 @@ export const PlacementEditor: React.FC<Props> = ({
                 const nx = Math.max(0, Math.min(1, drag.orig.x + dx / drag.artW));
                 const ny = Math.max(0, Math.min(1, drag.orig.y + dy / drag.artH));
                 patchKind({ x: nx, y: ny });
-            } else {
-                const nw = Math.max(0.05, Math.min(1, drag.orig.width + dx / drag.artW));
-                patchKind({ width: nw });
+                return;
             }
+            const nextW = Math.max(0.05, Math.min(1, drag.orig.width + dx / drag.artW));
+            patchKind({ width: nextW });
         };
-        const onUp = () => { dragRef.current = null; };
+        const onUp = () => {
+            dragRef.current = null;
+        };
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointercancel', onUp);
         return () => {
             window.removeEventListener('pointermove', onMove);
             window.removeEventListener('pointerup', onUp);
+            window.removeEventListener('pointercancel', onUp);
         };
     }, [patchKind]);
 
     const box = bannerBox(artSize.w, artSize.h, bannerNat.w, bannerNat.h, current);
-    const kindLabel = (k: PlacementKind) => t(`overlays.placement.kinds.${k}`);
     const stageAspectClass = kind === 'episode' ? 'aspect-video' : 'aspect-[2/3]';
-    const showBottomClip = kind === 'show' || kind === 'season' || kind === 'episode' || kind === 'recently';
+    const showBottomClip = BANNER_KINDS.includes(kind);
+
+    const kindLabel = useCallback((k: PlacementKind) => t(`overlays.placement.kinds.${k}`), [t]);
+
+    const targetLabel = useCallback((id: string) => {
+        if (id.startsWith('cc:') || id === 'custom_collection') {
+            const hit = collectionTargets.find((c) => c.id === id);
+            return hit?.label || kindLabel('custom_collection');
+        }
+        return kindLabel(id as PlacementKind);
+    }, [collectionTargets, kindLabel]);
 
     const presetControls = useMemo(() => {
-        if (kind === 'show') {
+        if (kind === 'show' || kind === 'season') {
             return {
-                label: t('overlays.settings.overlayPreset'),
-                value: seasonPresetId || 'new-season',
-                options: seasonPresetOptions.length ? seasonPresetOptions : [{ value: 'new-season', label: 'new-season' }],
+                label: t('overlays.placement.presetHint'),
+                value: seasonPresetId,
+                options: seasonPresetOptions,
                 onChange: onSeasonPresetChange,
             };
         }
-        if (kind === 'season' || kind === 'episode') {
+        if (kind === 'episode') {
             return {
-                label: t('overlays.settings.episodeOverlayPreset'),
-                value: episodePresetId || 'new-episode',
-                options: episodePresetOptions.length ? episodePresetOptions : [{ value: 'new-episode', label: 'new-episode' }],
+                label: t('overlays.placement.presetHint'),
+                value: episodePresetId,
+                options: episodePresetOptions,
                 onChange: onEpisodePresetChange,
             };
         }
         if (kind === 'recently') {
             return {
-                label: t('overlays.settings.recentlyAddedPreset'),
-                value: recentlyPresetId || 'recently-added',
-                options: recentlyPresetOptions.length
-                    ? recentlyPresetOptions
-                    : [{ value: 'recently-added', label: 'recently-added' }],
+                label: t('overlays.placement.presetHint'),
+                value: recentlyPresetId,
+                options: recentlyPresetOptions,
                 onChange: onRecentlyPresetChange,
             };
         }
@@ -270,35 +331,57 @@ export const PlacementEditor: React.FC<Props> = ({
         kind,
         t,
         seasonPresetId,
-        episodePresetId,
-        recentlyPresetId,
         seasonPresetOptions,
-        episodePresetOptions,
-        recentlyPresetOptions,
         onSeasonPresetChange,
+        episodePresetId,
+        episodePresetOptions,
         onEpisodePresetChange,
+        recentlyPresetId,
+        recentlyPresetOptions,
         onRecentlyPresetChange,
     ]);
 
-    const bannerSrc = kindBannerUrl(kind, seasonPresetId, episodePresetId, recentlyPresetId, collectionPresetId, sampleBust);
+    const bannerSrc = kindBannerUrl(
+        kind,
+        seasonPresetId,
+        episodePresetId,
+        recentlyPresetId,
+        collectionImageId,
+        sampleBust,
+    );
 
-    const renderKindButton = (k: PlacementKind) => {
-        const active = kind === k;
+    const renderTargetButton = (id: string, label: string) => {
+        const active = targetId === id;
         return (
             <button
-                key={k}
+                key={id}
                 type="button"
-                onClick={() => setKind(k)}
+                onClick={() => setTargetId(id)}
                 className={`w-full rounded-lg px-2.5 py-2 text-left text-xs font-semibold transition-colors ${
                     active
                         ? 'bg-plex text-background shadow-sm shadow-plex/20'
                         : 'text-text/85 hover:bg-white/5 hover:text-text'
                 }`}
             >
-                {kindLabel(k)}
+                {label}
             </button>
         );
     };
+
+    const mobileOptions = useMemo(() => ([
+        ...BANNER_KINDS.map((k) => ({
+            value: k,
+            label: `${t('overlays.placement.groupBanners')}: ${kindLabel(k)}`,
+        })),
+        ...CORE_KOMETA_KINDS.map((k) => ({
+            value: k,
+            label: `${t('overlays.placement.groupKometa')}: ${kindLabel(k)}`,
+        })),
+        ...collectionTargets.map((c) => ({
+            value: c.id,
+            label: `${t('overlays.placement.groupCollections')}: ${c.label}`,
+        })),
+    ]), [t, kindLabel, collectionTargets]);
 
     return (
         <DashboardPanel
@@ -318,34 +401,39 @@ export const PlacementEditor: React.FC<Props> = ({
             )}
         >
             <div className="grid gap-4 lg:grid-cols-[160px_minmax(200px,280px)_minmax(0,1fr)]">
-                {/* Target list — dropdown on mobile, side nav on desktop */}
                 <aside className="min-w-0">
                     <div className="lg:hidden">
                         <span className={fieldLabelClass}>{t('overlays.placement.target')}</span>
                         <CustomSelect
                             className="mt-1"
-                            value={kind}
-                            onChange={(id) => setKind(id as PlacementKind)}
-                            options={[
-                                ...BANNER_KINDS.map((k) => ({ value: k, label: `${t('overlays.placement.groupBanners')}: ${kindLabel(k)}` })),
-                                ...KOMETA_KINDS.map((k) => ({ value: k, label: `${t('overlays.placement.groupKometa')}: ${kindLabel(k)}` })),
-                            ]}
+                            value={targetId}
+                            onChange={setTargetId}
+                            options={mobileOptions}
                         />
                     </div>
                     <div className="hidden rounded-xl border border-white/10 bg-black/20 p-2 lg:block">
                         <p className={`${fieldLabelClass} px-2.5 pb-1.5 pt-1`}>{t('overlays.placement.groupBanners')}</p>
                         <div className="flex flex-col">
-                            {BANNER_KINDS.map(renderKindButton)}
+                            {BANNER_KINDS.map((k) => renderTargetButton(k, kindLabel(k)))}
                         </div>
                         <div className="my-2 border-t border-white/10" />
                         <p className={`${fieldLabelClass} px-2.5 pb-1.5 pt-1`}>{t('overlays.placement.groupKometa')}</p>
                         <div className="flex flex-col">
-                            {KOMETA_KINDS.map(renderKindButton)}
+                            {CORE_KOMETA_KINDS.map((k) => renderTargetButton(k, kindLabel(k)))}
                         </div>
+                        <div className="my-2 border-t border-white/10" />
+                        <p className={`${fieldLabelClass} px-2.5 pb-1.5 pt-1`}>{t('overlays.placement.groupCollections')}</p>
+                        <div className="flex flex-col">
+                            {collectionTargets.map((c) => renderTargetButton(c.id, c.label))}
+                        </div>
+                        {collectionRules.length === 0 ? (
+                            <p className="mt-1 px-2.5 text-[10px] leading-snug text-muted">
+                                {t('overlays.placement.collectionRulesHint')}
+                            </p>
+                        ) : null}
                     </div>
                 </aside>
 
-                {/* Preview — fixed useful size, no giant empty gutters */}
                 <div className="min-w-0">
                     <div
                         ref={stageRef}
@@ -363,13 +451,13 @@ export const PlacementEditor: React.FC<Props> = ({
                                 onError={() => setBaseFailed(true)}
                             />
                         ) : (
-                            <div className="absolute inset-0 flex items-center justify-center p-5 text-center text-sm text-muted">
+                            <div className="flex h-full items-center justify-center p-4 text-center text-xs text-muted">
                                 {t('overlays.placement.needSample')}
                             </div>
                         )}
                         {!baseFailed && (
                             <div
-                                className="absolute cursor-move"
+                                className="absolute z-10 cursor-move"
                                 style={{
                                     left: box.left,
                                     top: box.top,
@@ -381,20 +469,17 @@ export const PlacementEditor: React.FC<Props> = ({
                                 title={t('overlays.placement.dragHint')}
                             >
                                 <img
-                                    key={bannerSrc}
                                     src={bannerSrc}
                                     alt=""
-                                    draggable={false}
-                                    className="pointer-events-none max-w-none select-none"
+                                    className="pointer-events-none block max-w-none"
                                     style={{
                                         width: box.width,
                                         height: box.height,
-                                        marginTop: -box.clip,
-                                        objectFit: 'contain',
+                                        marginTop: 0,
                                     }}
                                     onLoad={(e) => {
                                         const img = e.currentTarget;
-                                        if (img.naturalWidth > 0) {
+                                        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
                                             setBannerNat({ w: img.naturalWidth, h: img.naturalHeight });
                                         }
                                     }}
@@ -419,11 +504,14 @@ export const PlacementEditor: React.FC<Props> = ({
                     </p>
                 </div>
 
-                {/* Controls */}
                 <div className="min-w-0 space-y-4 rounded-xl border border-white/10 bg-black/20 p-3 sm:p-4">
                     <div>
-                        <p className="text-sm font-bold text-text">{kindLabel(kind)}</p>
-                        <p className="mt-0.5 text-[11px] text-muted">{t('overlays.placement.hint')}</p>
+                        <p className="text-sm font-bold text-text">{targetLabel(targetId)}</p>
+                        <p className="mt-0.5 text-[11px] text-muted">
+                            {kind === 'custom_collection'
+                                ? t('overlays.placement.collectionSharedHint')
+                                : t('overlays.placement.hint')}
+                        </p>
                     </div>
 
                     {presetControls && (

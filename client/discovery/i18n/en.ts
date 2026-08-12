@@ -697,6 +697,9 @@ export const en = {
             outlineHint: 'Yellow outline is the drag handle — the PNG keeps its own corners.',
             groupBanners: 'Banners',
             groupKometa: 'Kometa',
+            groupCollections: 'Collections',
+            collectionRulesHint: 'Add collection overlays on Overview to list each by name here.',
+            collectionSharedHint: 'All collection badges share this corner placement — preview uses this rule’s PNG.',
             target: 'Target',
             kinds: {
                 show: 'Show poster',

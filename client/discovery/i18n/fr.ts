@@ -699,6 +699,9 @@ export const fr: DeepPartial<EnCatalog> = {
             outlineHint: 'Le contour jaune est la poignée — le PNG garde ses coins.',
             groupBanners: 'Bannières',
             groupKometa: 'Kometa',
+            groupCollections: 'Collections',
+            collectionRulesHint: 'Ajoutez des overlays de collection dans Overview pour les lister par nom ici.',
+            collectionSharedHint: 'Tous les badges de collection partagent ce placement — l’aperçu utilise le PNG de cette règle.',
             target: 'Cible',
             kinds: {
                 show: 'Affiche série',

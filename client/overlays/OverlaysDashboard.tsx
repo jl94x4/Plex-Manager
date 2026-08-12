@@ -3115,6 +3115,11 @@ export const OverlaysDashboard: React.FC = () => {
                     episodePresetId={configDraft.episodeOverlayPresetId || 'new-episode'}
                     recentlyPresetId={configDraft.recentlyAddedPresetId || 'recently-added'}
                     collectionPresetId={collectionPresetPreviewId}
+                    collectionRules={collectionRules.map((r) => ({
+                        id: r.id,
+                        name: r.name || r.collectionTitle || r.id,
+                        image: r.image,
+                    }))}
                     seasonPresetOptions={seasonPresetOptions}
                     episodePresetOptions={episodePresetOptions}
                     recentlyPresetOptions={recentlyPresetOptions}
