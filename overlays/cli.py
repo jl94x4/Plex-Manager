@@ -61,6 +61,7 @@ def main() -> int:
             "reconcile",
             "reset-one",
             "reset-all",
+            "revert-kometa",
             "promote",
             "sections",
             "sample",
@@ -123,6 +124,12 @@ def main() -> int:
 
         if args.command == "reset-all":
             write_event("result", **reset_all(config, progress=progress))
+            return 0
+
+        if args.command == "revert-kometa":
+            from kometa_engine import revert_kometa
+            key = str(request.get("ratingKey") or request.get("rating_key") or "").strip() or None
+            write_event("result", **revert_kometa(config, rating_key=key, progress=progress))
             return 0
 
         if args.command == "promote":

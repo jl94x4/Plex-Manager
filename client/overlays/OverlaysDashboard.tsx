@@ -35,7 +35,7 @@ import { OverlayJobCard } from './OverlayJobCard';
 
 type TabId = 'overview' | 'shows' | 'gallery' | 'placement' | 'advanced' | 'activity';
 type JobCardId = 'banners' | 'recently' | 'kometa';
-type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'promote' | 'resetAll' | 'run' | 'runRecently' | 'runKometa' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample';
+type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'promote' | 'resetAll' | 'run' | 'runRecently' | 'runKometa' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample' | 'revertKometa';
 
 type SampleMeta = {
     exists: boolean;
@@ -86,6 +86,30 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     mediaInfoLibrarySectionIds: [],
     mediaInfoAllowKeys: [],
     mediaInfoDenyKeys: [],
+    editionOverlayEnabled: false,
+    audioCodecEnabled: false,
+    audioCodecStyle: 'compact',
+    videoFormatEnabled: false,
+    kometaAddOverlayLabel: false,
+    aspectOverlayEnabled: false,
+    versionsOverlayEnabled: false,
+    languageCountEnabled: false,
+    languagesOverlayEnabled: false,
+    languagesAllowCodes: [],
+    kometaFlagStyle: 'round',
+    runtimesOverlayEnabled: false,
+    directPlayOverlayEnabled: false,
+    episodeInfoOverlayEnabled: false,
+    contentRatingEnabled: false,
+    contentRatingScheme: 'us',
+    ribbonOverlayEnabled: false,
+    ribbonStyle: 'yellow',
+    ribbonIncludeMovies: true,
+    ribbonIncludeShows: true,
+    ribbonAllowKeys: [],
+    ribbonDenyKeys: [],
+    mediastingerOverlayEnabled: false,
+    ratingsSource: 'tmdb',
     statusOverlayEnabled: false,
     statusAiringDays: 14,
     statusLibrarySectionIds: [],
@@ -102,6 +126,12 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     networkLibrarySectionIds: [],
     networkAllowKeys: [],
     networkDenyKeys: [],
+    streamingOverlayEnabled: false,
+    streamingRegion: 'US',
+    streamingIncludeMovies: true,
+    streamingIncludeShows: true,
+    streamingAllowKeys: [],
+    streamingDenyKeys: [],
     librarySectionIds: [],
     overlayPresetId: 'new-season',
     episodeOverlayPresetId: 'new-episode',
@@ -125,6 +155,7 @@ export const OverlaysDashboard: React.FC = () => {
     const [configDraft, setConfigDraft] = useState<OverlaysConfig>(DEFAULT_CONFIG);
     const [shows, setShows] = useState<any[]>([]);
     const [episodes, setEpisodes] = useState<any[]>([]);
+    const [kometaItems, setKometaItems] = useState<any[]>([]);
     const [sections, setSections] = useState<Array<{ id: string; key: string; title: string; type?: string }>>([]);
     const [reconcile, setReconcile] = useState<any>(null);
     const [importText, setImportText] = useState('');
@@ -152,15 +183,17 @@ export const OverlaysDashboard: React.FC = () => {
     }, []);
 
     const refresh = useCallback(async () => {
-        const [nextStatus, showsRes, episodesRes] = await Promise.all([
+        const [nextStatus, showsRes, episodesRes, kometaRes] = await Promise.all([
             overlaysApi.status(),
             overlaysApi.shows().catch(() => ({ shows: [] })),
             overlaysApi.episodes().catch(() => ({ episodes: [] })),
+            overlaysApi.kometa().catch(() => ({ items: [] })),
         ]);
         setStatus(nextStatus);
+        setShows(Array.isArray(showsRes?.shows) ? showsRes.shows : []);
+        setEpisodes(Array.isArray(episodesRes?.episodes) ? episodesRes.episodes : []);
+        setKometaItems(Array.isArray(kometaRes?.items) ? kometaRes.items : []);
         if (nextStatus?.config) setConfigDraft({ ...DEFAULT_CONFIG, ...nextStatus.config });
-        setShows(showsRes.shows || []);
-        setEpisodes(episodesRes.episodes || []);
         return nextStatus;
     }, []);
 
@@ -248,9 +281,23 @@ export const OverlaysDashboard: React.FC = () => {
         || configDraft.liveScheduleEnabled === true
         || configDraft.top10Enabled === true;
     const kometaEnabled = configDraft.mediaInfoEnabled === true
+        || configDraft.editionOverlayEnabled === true
+        || configDraft.audioCodecEnabled === true
+        || configDraft.videoFormatEnabled === true
+        || configDraft.aspectOverlayEnabled === true
+        || configDraft.versionsOverlayEnabled === true
+        || configDraft.languageCountEnabled === true
+        || configDraft.languagesOverlayEnabled === true
+        || configDraft.runtimesOverlayEnabled === true
+        || configDraft.directPlayOverlayEnabled === true
+        || configDraft.episodeInfoOverlayEnabled === true
+        || configDraft.contentRatingEnabled === true
         || configDraft.statusOverlayEnabled === true
         || configDraft.ratingsOverlayEnabled === true
-        || configDraft.networkOverlayEnabled === true;
+        || configDraft.networkOverlayEnabled === true
+        || configDraft.streamingOverlayEnabled === true
+        || configDraft.ribbonOverlayEnabled === true
+        || configDraft.mediastingerOverlayEnabled === true;
 
     const tabs = useMemo(() => ([
         { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
@@ -516,6 +563,7 @@ export const OverlaysDashboard: React.FC = () => {
     }, [tab]);
 
     const canResetAll = trackedTotal > 0 && !jobRunning && busy !== 'resetAll';
+    const canRevertKometa = kometaItems.length > 0 && !jobRunning && busy !== 'revertKometa' && workerReady;
     const previewOnlyShows = status?.previewOnlyShows ?? shows.filter((row) => row.previewOnly).length;
     const previewOnlyEpisodes = status?.previewOnlyEpisodes ?? episodes.filter((row) => row.previewOnly).length;
     const previewOnlySeasons = status?.previewOnlySeasons ?? 0;
@@ -535,6 +583,23 @@ export const OverlaysDashboard: React.FC = () => {
             );
             if (!ok) return;
             await runAction('resetAll', () => overlaysApi.resetAll());
+        })();
+    };
+
+    const revertAllKometa = () => {
+        void (async () => {
+            const ok = await askConfirm(
+                t('overlays.kometa.revertAllConfirm', { count: kometaItems.length }),
+                {
+                    title: t('overlays.kometa.revertAllTitle'),
+                    confirmLabel: t('overlays.actions.revertAllKometa'),
+                    cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+                    danger: true,
+                },
+            );
+            if (!ok) return;
+            await runAction('revertKometa', () => overlaysApi.revertKometa());
+            await refresh();
         })();
     };
 
@@ -999,6 +1064,14 @@ export const OverlaysDashboard: React.FC = () => {
                                 status: configDraft.statusOverlayEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
                                 ratings: configDraft.ratingsOverlayEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
                                 network: configDraft.networkOverlayEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
+                                extra: [
+                                    configDraft.streamingOverlayEnabled && 'streaming',
+                                    configDraft.ribbonOverlayEnabled && 'ribbon',
+                                    configDraft.audioCodecEnabled && 'audio',
+                                    configDraft.editionOverlayEnabled && 'edition',
+                                ].filter(Boolean).length
+                                    ? t('overlays.jobs.on')
+                                    : t('overlays.jobs.off'),
                             })}
                             previewLabel={t('overlays.actions.previewKometa')}
                             runLabel={t('overlays.actions.runKometa')}
@@ -1237,6 +1310,203 @@ export const OverlaysDashboard: React.FC = () => {
                                     </label>
                                 </div>
                             )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.editionOverlayEnabled')}
+                                description={t('overlays.settings.editionOverlayEnabledHint')}
+                                checked={configDraft.editionOverlayEnabled === true}
+                                onChange={(editionOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, editionOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.audioCodecEnabled')}
+                                description={t('overlays.settings.audioCodecEnabledHint')}
+                                checked={configDraft.audioCodecEnabled === true}
+                                onChange={(audioCodecEnabled) => setConfigDraft((prev) => ({ ...prev, audioCodecEnabled }))}
+                            />
+                            {configDraft.audioCodecEnabled === true && (
+                                <label className="mb-3 block max-w-xs">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.audioCodecStyle')}</span>
+                                    <CustomSelect
+                                        value={configDraft.audioCodecStyle || 'compact'}
+                                        onChange={(audioCodecStyle) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            audioCodecStyle: audioCodecStyle as 'compact' | 'standard',
+                                        }))}
+                                        options={[
+                                            { value: 'compact', label: t('overlays.settings.audioCodecStyleCompact') },
+                                            { value: 'standard', label: t('overlays.settings.audioCodecStyleStandard') },
+                                        ]}
+                                    />
+                                </label>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.videoFormatEnabled')}
+                                description={t('overlays.settings.videoFormatEnabledHint')}
+                                checked={configDraft.videoFormatEnabled === true}
+                                onChange={(videoFormatEnabled) => setConfigDraft((prev) => ({ ...prev, videoFormatEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.streamingOverlayEnabled')}
+                                description={t('overlays.settings.streamingOverlayEnabledHint')}
+                                checked={configDraft.streamingOverlayEnabled === true}
+                                onChange={(streamingOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, streamingOverlayEnabled }))}
+                            />
+                            {configDraft.streamingOverlayEnabled === true && (
+                                <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                                    <label className="block max-w-xs">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.streamingRegion')}</span>
+                                        <input
+                                            type="text"
+                                            maxLength={2}
+                                            className={fieldInputClass}
+                                            value={configDraft.streamingRegion || 'US'}
+                                            onChange={(e) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                streamingRegion: e.target.value.toUpperCase().slice(0, 2),
+                                            }))}
+                                        />
+                                    </label>
+                                    <div className="flex flex-wrap gap-3">
+                                        <StyledCheckbox
+                                            checked={configDraft.streamingIncludeShows !== false}
+                                            label={t('overlays.settings.includeShows')}
+                                            onChange={(streamingIncludeShows) => setConfigDraft((prev) => ({ ...prev, streamingIncludeShows }))}
+                                        />
+                                        <StyledCheckbox
+                                            checked={configDraft.streamingIncludeMovies !== false}
+                                            label={t('overlays.settings.includeMovies')}
+                                            onChange={(streamingIncludeMovies) => setConfigDraft((prev) => ({ ...prev, streamingIncludeMovies }))}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.aspectOverlayEnabled')}
+                                description={t('overlays.settings.aspectOverlayEnabledHint')}
+                                checked={configDraft.aspectOverlayEnabled === true}
+                                onChange={(aspectOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, aspectOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.versionsOverlayEnabled')}
+                                description={t('overlays.settings.versionsOverlayEnabledHint')}
+                                checked={configDraft.versionsOverlayEnabled === true}
+                                onChange={(versionsOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, versionsOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.languageCountEnabled')}
+                                description={t('overlays.settings.languageCountEnabledHint')}
+                                checked={configDraft.languageCountEnabled === true}
+                                onChange={(languageCountEnabled) => setConfigDraft((prev) => ({ ...prev, languageCountEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.languagesOverlayEnabled')}
+                                description={t('overlays.settings.languagesOverlayEnabledHint')}
+                                checked={configDraft.languagesOverlayEnabled === true}
+                                onChange={(languagesOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, languagesOverlayEnabled }))}
+                            />
+                            {configDraft.languagesOverlayEnabled === true && (
+                                <label className="mb-3 block max-w-xs">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.kometaFlagStyle')}</span>
+                                    <CustomSelect
+                                        value={configDraft.kometaFlagStyle || 'round'}
+                                        onChange={(kometaFlagStyle) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            kometaFlagStyle: kometaFlagStyle as 'round' | 'square',
+                                        }))}
+                                        options={[
+                                            { value: 'round', label: t('overlays.settings.flagStyleRound') },
+                                            { value: 'square', label: t('overlays.settings.flagStyleSquare') },
+                                        ]}
+                                    />
+                                </label>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.runtimesOverlayEnabled')}
+                                description={t('overlays.settings.runtimesOverlayEnabledHint')}
+                                checked={configDraft.runtimesOverlayEnabled === true}
+                                onChange={(runtimesOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, runtimesOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.directPlayOverlayEnabled')}
+                                description={t('overlays.settings.directPlayOverlayEnabledHint')}
+                                checked={configDraft.directPlayOverlayEnabled === true}
+                                onChange={(directPlayOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, directPlayOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.episodeInfoOverlayEnabled')}
+                                description={t('overlays.settings.episodeInfoOverlayEnabledHint')}
+                                checked={configDraft.episodeInfoOverlayEnabled === true}
+                                onChange={(episodeInfoOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, episodeInfoOverlayEnabled }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.contentRatingEnabled')}
+                                description={t('overlays.settings.contentRatingEnabledHint')}
+                                checked={configDraft.contentRatingEnabled === true}
+                                onChange={(contentRatingEnabled) => setConfigDraft((prev) => ({ ...prev, contentRatingEnabled }))}
+                            />
+                            {configDraft.contentRatingEnabled === true && (
+                                <label className="mb-3 block max-w-xs">
+                                    <span className={fieldLabelClass}>{t('overlays.settings.contentRatingScheme')}</span>
+                                    <CustomSelect
+                                        value={configDraft.contentRatingScheme || 'us'}
+                                        onChange={(contentRatingScheme) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            contentRatingScheme: contentRatingScheme as OverlaysConfig['contentRatingScheme'],
+                                        }))}
+                                        options={[
+                                            { value: 'us', label: 'US' },
+                                            { value: 'uk', label: 'UK' },
+                                            { value: 'de', label: 'DE' },
+                                            { value: 'au', label: 'AU' },
+                                            { value: 'nz', label: 'NZ' },
+                                            { value: 'commonsense', label: 'Common Sense' },
+                                        ]}
+                                    />
+                                </label>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.ribbonOverlayEnabled')}
+                                description={t('overlays.settings.ribbonOverlayEnabledHint')}
+                                checked={configDraft.ribbonOverlayEnabled === true}
+                                onChange={(ribbonOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, ribbonOverlayEnabled }))}
+                            />
+                            {configDraft.ribbonOverlayEnabled === true && (
+                                <div className="mb-3 space-y-3 rounded-lg border border-border/50 bg-background/30 p-3">
+                                    <label className="block max-w-xs">
+                                        <span className={fieldLabelClass}>{t('overlays.settings.ribbonStyle')}</span>
+                                        <CustomSelect
+                                            value={configDraft.ribbonStyle || 'yellow'}
+                                            onChange={(ribbonStyle) => setConfigDraft((prev) => ({
+                                                ...prev,
+                                                ribbonStyle: ribbonStyle as OverlaysConfig['ribbonStyle'],
+                                            }))}
+                                            options={[
+                                                { value: 'yellow', label: t('overlays.settings.ribbonYellow') },
+                                                { value: 'red', label: t('overlays.settings.ribbonRed') },
+                                                { value: 'black', label: t('overlays.settings.ribbonBlack') },
+                                                { value: 'gray', label: t('overlays.settings.ribbonGray') },
+                                            ]}
+                                        />
+                                    </label>
+                                    <div className="flex flex-wrap gap-3">
+                                        <StyledCheckbox
+                                            checked={configDraft.ribbonIncludeShows !== false}
+                                            label={t('overlays.settings.includeShows')}
+                                            onChange={(ribbonIncludeShows) => setConfigDraft((prev) => ({ ...prev, ribbonIncludeShows }))}
+                                        />
+                                        <StyledCheckbox
+                                            checked={configDraft.ribbonIncludeMovies !== false}
+                                            label={t('overlays.settings.includeMovies')}
+                                            onChange={(ribbonIncludeMovies) => setConfigDraft((prev) => ({ ...prev, ribbonIncludeMovies }))}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                            <SettingsToggleRow
+                                title={t('overlays.settings.mediastingerOverlayEnabled')}
+                                description={t('overlays.settings.mediastingerOverlayEnabledHint')}
+                                checked={configDraft.mediastingerOverlayEnabled === true}
+                                onChange={(mediastingerOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, mediastingerOverlayEnabled }))}
+                            />
                             <label className="block max-w-xs">
                                 <span className={fieldLabelClass}>{t('overlays.fields.kometaScheduleHours')}</span>
                                 <input
@@ -1254,6 +1524,14 @@ export const OverlaysDashboard: React.FC = () => {
                             </label>
                             <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
                                 <Save className="h-4 w-4" /> {t('overlays.actions.save')}
+                            </button>
+                            <button
+                                type="button"
+                                className={`${buttonClass} mt-2 border-amber-500/40 text-amber-100`}
+                                disabled={!canRevertKometa}
+                                onClick={revertAllKometa}
+                            >
+                                <RotateCcw className="h-4 w-4" /> {t('overlays.actions.revertAllKometa')}
                             </button>
                         </OverlayJobCard>
                     </div>
@@ -1467,6 +1745,72 @@ export const OverlaysDashboard: React.FC = () => {
                                             </tr>
                                         );
                                     })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </DashboardPanel>
+
+                <DashboardPanel
+                    title={t('overlays.kometa.trackedTitle', { count: kometaItems.length })}
+                    subtitle={t('overlays.kometa.trackedSubtitle')}
+                    controls={(
+                        <button
+                            type="button"
+                            className={`${buttonClass} border-amber-500/40 text-amber-100`}
+                            disabled={!canRevertKometa}
+                            onClick={revertAllKometa}
+                        >
+                            <RotateCcw className="h-4 w-4" /> {t('overlays.actions.revertAllKometa')}
+                        </button>
+                    )}
+                >
+                    {kometaItems.length === 0 ? (
+                        <p className="text-sm text-muted">{t('overlays.kometa.empty')}</p>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full text-left text-sm">
+                                <thead className="text-xs uppercase text-muted">
+                                    <tr>
+                                        <th className="px-2 py-2">{t('overlays.table.title')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.library')}</th>
+                                        <th className="px-2 py-2">{t('overlays.kometa.families')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.mode')}</th>
+                                        <th className="px-2 py-2">{t('overlays.table.when')}</th>
+                                        <th className="px-2 py-2" />
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {kometaItems.map((row) => (
+                                        <tr key={row.ratingKey} className="border-t border-white/10">
+                                            <td className="px-2 py-2 font-medium">{row.title}</td>
+                                            <td className="px-2 py-2 text-muted">{row.library || '—'}</td>
+                                            <td className="px-2 py-2 text-xs text-muted">
+                                                {row.families && typeof row.families === 'object'
+                                                    ? Object.entries(row.families)
+                                                        .map(([family, meta]: [string, any]) => `${family}:${meta?.name || '?'}`)
+                                                        .join(', ')
+                                                    : '—'}
+                                            </td>
+                                            <td className="px-2 py-2">{row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}</td>
+                                            <td className="px-2 py-2 text-muted">
+                                                {row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}
+                                            </td>
+                                            <td className="px-2 py-2 text-right">
+                                                <button
+                                                    type="button"
+                                                    className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                    disabled={busy !== null || jobRunning}
+                                                    onClick={() => void runAction('revertKometa', async () => {
+                                                        await overlaysApi.revertKometa(row.ratingKey);
+                                                        await refresh();
+                                                    })}
+                                                >
+                                                    {t('overlays.actions.revert')}
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
                         </div>

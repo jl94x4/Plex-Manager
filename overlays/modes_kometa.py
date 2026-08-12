@@ -480,6 +480,8 @@ def _mode_allow_deny(config: dict, mode: str) -> tuple[list, list]:
         "status": ("statusAllowKeys", "status_allow_keys", "statusDenyKeys", "status_deny_keys"),
         "ratings": ("ratingsAllowKeys", "ratings_allow_keys", "ratingsDenyKeys", "ratings_deny_keys"),
         "network": ("networkAllowKeys", "network_allow_keys", "networkDenyKeys", "network_deny_keys"),
+        "streaming": ("streamingAllowKeys", "streaming_allow_keys", "streamingDenyKeys", "streaming_deny_keys"),
+        "ribbon": ("ribbonAllowKeys", "ribbon_allow_keys", "ribbonDenyKeys", "ribbon_deny_keys"),
     }
     ac, as_, dc, ds = maps.get(mode, (None, None, None, None))
     if not ac:
@@ -514,6 +516,28 @@ def _sections_for_kometa_mode(plex, config: dict, mode: str):
     if mode == "ratings":
         include_movies = _as_bool(cfg.get("ratingsIncludeMovies", cfg.get("ratings_include_movies")), True)
         include_shows = _as_bool(cfg.get("ratingsIncludeShows", cfg.get("ratings_include_shows")), True)
+        types = []
+        if include_shows:
+            types.append("show")
+        if include_movies:
+            types.append("movie")
+        if not types:
+            return []
+        return list(_iter_sections(plex, cfg, types=tuple(types)))
+    if mode == "streaming":
+        include_movies = _as_bool(cfg.get("streamingIncludeMovies", cfg.get("streaming_include_movies")), True)
+        include_shows = _as_bool(cfg.get("streamingIncludeShows", cfg.get("streaming_include_shows")), True)
+        types = []
+        if include_shows:
+            types.append("show")
+        if include_movies:
+            types.append("movie")
+        if not types:
+            return []
+        return list(_iter_sections(plex, cfg, types=tuple(types)))
+    if mode == "ribbon":
+        include_movies = _as_bool(cfg.get("ribbonIncludeMovies", cfg.get("ribbon_include_movies")), True)
+        include_shows = _as_bool(cfg.get("ribbonIncludeShows", cfg.get("ribbon_include_shows")), True)
         types = []
         if include_shows:
             types.append("show")

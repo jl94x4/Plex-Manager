@@ -139,6 +139,31 @@ export type OverlaysConfig = {
     mediaInfoLibrarySectionIds?: string[];
     mediaInfoAllowKeys?: string[];
     mediaInfoDenyKeys?: string[];
+    editionOverlayEnabled?: boolean;
+    audioCodecEnabled?: boolean;
+    audioCodecStyle?: 'compact' | 'standard';
+    videoFormatEnabled?: boolean;
+    kometaAddOverlayLabel?: boolean;
+    aspectOverlayEnabled?: boolean;
+    versionsOverlayEnabled?: boolean;
+    languageCountEnabled?: boolean;
+    languagesOverlayEnabled?: boolean;
+    languagesAllowCodes?: string[];
+    kometaFlagStyle?: 'round' | 'square';
+    runtimesOverlayEnabled?: boolean;
+    directPlayOverlayEnabled?: boolean;
+    episodeInfoOverlayEnabled?: boolean;
+    contentRatingEnabled?: boolean;
+    contentRatingScheme?: 'us' | 'uk' | 'de' | 'au' | 'nz' | 'commonsense';
+    ribbonOverlayEnabled?: boolean;
+    ribbonStyle?: 'yellow' | 'red' | 'black' | 'gray';
+    ribbonIncludeMovies?: boolean;
+    ribbonIncludeShows?: boolean;
+    ribbonLibrarySectionIds?: string[];
+    ribbonAllowKeys?: string[];
+    ribbonDenyKeys?: string[];
+    mediastingerOverlayEnabled?: boolean;
+    ratingsSource?: string;
     statusOverlayEnabled?: boolean;
     statusAiringDays?: number;
     statusLibrarySectionIds?: string[];
@@ -155,6 +180,13 @@ export type OverlaysConfig = {
     networkLibrarySectionIds?: string[];
     networkAllowKeys?: string[];
     networkDenyKeys?: string[];
+    streamingOverlayEnabled?: boolean;
+    streamingRegion?: string;
+    streamingIncludeMovies?: boolean;
+    streamingIncludeShows?: boolean;
+    streamingLibrarySectionIds?: string[];
+    streamingAllowKeys?: string[];
+    streamingDenyKeys?: string[];
     librarySectionIds?: string[];
     overlayPresetId?: string;
     episodeOverlayPresetId?: string;
@@ -187,6 +219,21 @@ export const overlaysApi = {
     }) as Promise<{ ok: boolean; config: OverlaysConfig }>,
     shows: () => apiFetch(`${ROOT}/shows`),
     episodes: () => apiFetch(`${ROOT}/episodes`),
+    kometa: () => apiFetch(`${ROOT}/kometa`) as Promise<{
+        ok: boolean;
+        items: Array<{
+            ratingKey: string;
+            title: string;
+            library?: string;
+            itemType?: string;
+            timestamp?: string | null;
+            previewOnly?: boolean;
+            families?: Record<string, { name?: string; weight?: number }>;
+            hasBackup?: boolean;
+        }>;
+        total: number;
+    }>,
+    revertKometa: (ratingKey?: string) => apiFetch(`${ROOT}/revert-kometa`, json(ratingKey ? { ratingKey } : {})),
     presets: () => apiFetch(`${ROOT}/presets`) as Promise<{ presets: OverlayPreset[] }>,
     uploadPreset: async (kind: 'season' | 'episode', file: File) => {
         const buf = await file.arrayBuffer();

@@ -125,6 +125,7 @@ def _resolve_paths(config: dict) -> dict[str, Path]:
         "statusLog": root / "status_log.json",
         "ratingsLog": root / "ratings_log.json",
         "networkLog": root / "network_log.json",
+        "kometaLog": root / "kometa_overlaid_log.json",
         "overlay": overlay_path,
         "episodeOverlay": episode_overlay_path,
         "assets": assets_dir,
@@ -771,6 +772,8 @@ def _mode_section_ids(config: dict, mode: str) -> list | None:
         "status": ("statusLibrarySectionIds", "status_library_section_ids"),
         "ratings": ("ratingsLibrarySectionIds", "ratings_library_section_ids"),
         "network": ("networkLibrarySectionIds", "network_library_section_ids"),
+        "streaming": ("streamingLibrarySectionIds", "streaming_library_section_ids"),
+        "ribbon": ("ribbonLibrarySectionIds", "ribbon_library_section_ids"),
     }
     camel, snake = key_map.get(mode, (None, None))
     if not camel:
@@ -1936,21 +1939,22 @@ def _normalize_run_bundle(value) -> str:
 
 
 def _run_kometa_bundle(plex, config: dict, paths: dict, preview_mode: bool, progress: ProgressFn | None) -> dict:
-    from modes_kometa import run_all_kometa_style, ensure_placement_preview_badges
+    from modes_kometa import ensure_placement_preview_badges
+    from kometa_engine import run_kometa_parity
     try:
         ensure_placement_preview_badges(paths["assets"], paths=paths)
     except Exception:
         pass
-    summary = run_all_kometa_style(plex, config, paths, preview_mode, progress)
+    summary = run_kometa_parity(plex, config, paths, preview_mode, progress)
     out = {
         "ok": True,
         "runBundle": "kometa",
         "previewMode": preview_mode,
         "finishedAt": datetime.now().isoformat(),
-        "errors": list(summary.get("kometaStyleErrors") or []),
+        "errors": list(summary.get("kometaErrors") or []),
     }
     out.update(summary)
-    _progress(progress, "Done (kometa) — media / status / ratings / network pass finished")
+    _progress(progress, "Done (kometa) — parity pass finished")
     return out
 
 
@@ -2023,7 +2027,8 @@ def run_overlays(
 
     from tmdb_dates import create_resolver_from_config
     from modes_extra import run_live_overlays, run_recently_added_overlays, run_top10_overlays
-    from modes_kometa import run_all_kometa_style, ensure_placement_preview_badges
+    from modes_kometa import ensure_placement_preview_badges
+    from kometa_engine import run_kometa_parity
 
     try:
         ensure_placement_preview_badges(paths["assets"], paths=paths)
@@ -2034,8 +2039,8 @@ def run_overlays(
 
     kometa_summary: dict = {}
     if run_bundle == "all":
-        # Kometa-style corner/side badges first when doing a full combined pass.
-        kometa_summary = run_all_kometa_style(plex, config, paths, preview_mode, progress)
+        # Kometa-parity corner/side badges first when doing a full combined pass.
+        kometa_summary = run_kometa_parity(plex, config, paths, preview_mode, progress)
 
     live_summary = run_live_overlays(plex, config, paths, preview_mode, progress, resolver=resolver)
     reserved: set[str] = set(live_summary.get("liveKeys") or [])
@@ -2195,8 +2200,8 @@ def run_overlays(
         summary.update(recent_summary)
     if kometa_summary:
         summary.update(kometa_summary)
-        if kometa_summary.get("kometaStyleErrors"):
-            summary["errors"] = [*(summary.get("errors") or []), *kometa_summary["kometaStyleErrors"]]
+        if kometa_summary.get("kometaErrors"):
+            summary["errors"] = [*(summary.get("errors") or []), *kometa_summary["kometaErrors"]]
 
     episode_summary = run_new_episode_overlays(
         plex, config, paths, preview_mode, progress, resolver=resolver
@@ -2432,6 +2437,20 @@ def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None,
     prefer_episode = (kind or "").lower() in {"episode", "episodes", "ep"}
     prefer_season_ne = (kind or "").lower() in {"seasonepisode", "season-episode", "season_ne"}
     prefer_show = (kind or "").lower() in {"show", "shows", "season"}
+    prefer_kometa = (kind or "").lower() in {"kometa", "kometa-style", "media"}
+
+    from kometa_engine import kometa_log_path, revert_kometa
+    kometa_log = _load_log(kometa_log_path(paths))
+    if prefer_kometa or (not prefer_episode and not prefer_season_ne and not prefer_show and key in kometa_log):
+        result = revert_kometa(config, rating_key=key, progress=progress)
+        title = (kometa_log.get(key) or {}).get("title") or key
+        return {
+            "ok": True,
+            "kind": "kometa",
+            "ratingKey": key,
+            "title": title,
+            "restoredFromBackup": result.get("reverted", 0) > 0,
+        }
 
     if prefer_season_ne or _is_season_episode_log_key(key):
         show_key = key.split(":", 1)[-1] if _is_season_episode_log_key(key) else key
@@ -2549,6 +2568,16 @@ def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
 
     from modes_extra import _clear_mode_backup, _restore_show_mode, _load_log as _load_extra_log, _save_log as _save_extra_log
 
+    # Unified Kometa-parity overlays (resolution/edition/audio/format/status/ratings/network)
+    kometa_removed = 0
+    try:
+        from kometa_engine import revert_kometa
+        kometa_result = revert_kometa(config, rating_key=None, progress=progress)
+        kometa_removed = int(kometa_result.get("reverted") or 0)
+        failed.extend(kometa_result.get("failed") or [])
+    except Exception as exc:
+        failed.append(f"kometa revert: {exc}")
+
     extras_removed = 0
     for mode, log_key in (
         ("live", "liveLog"),
@@ -2581,6 +2610,7 @@ def reset_all(config: dict, progress: ProgressFn | None = None) -> dict:
         "removed": removed,
         "episodesRemoved": episodes_removed,
         "extrasRemoved": extras_removed,
+        "kometaRemoved": kometa_removed,
         "restoredFromBackup": restored_from_backup,
         "failed": failed,
         "remaining": len(log),
