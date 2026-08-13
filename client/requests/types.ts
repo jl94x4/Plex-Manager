@@ -107,6 +107,7 @@ export type PortalIssueItem = {
     comments: PortalIssueComment[];
     commentCount: number;
     seerrUrl: string;
+    ticketId?: number | null;
 };
 
 export type PortalIssueCounts = {

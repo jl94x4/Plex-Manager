@@ -69,6 +69,7 @@ import { startEditionsScheduler, runEditionsScheduledJob } from './lib/editions/
 import { startOverlaysScheduler, startOverlaysBundleScheduler, runOverlaysScheduledJob } from './lib/overlays/scheduler.js';
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { registerSupportTicketRoutes } from './lib/support-tickets/http.js';
+import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext } from './lib/achievements/index.js';
 import { loadAchievementsState } from './lib/achievements/store.js';
@@ -9510,17 +9511,73 @@ app.get('/api/discovery/my-issues', requireAuth, requireMember, async (req, res)
         if (getRequestEngine(config) === 'portal') {
             const portalIssues = getPortalIssueService(config);
             const payload = await portalIssues.listMemberIssues(req.user, { filter, take, skip });
-            return res.json({ configured: true, engine: 'portal', ...payload });
+            const results = await attachTicketIdsToIssues({
+                config,
+                dataDir: SUPPORT_TICKETS_DIR,
+                issues: payload.results,
+                engine: 'portal',
+            });
+            return res.json({ configured: true, engine: 'portal', ...payload, results });
         }
         const gate = getRequestAppGate(config);
         if (!gate.ready) return res.status(400).json({ error: 'Request app not configured' });
         const payload = await requestAppService.listMemberIssues(config, req.user, { filter, take, skip });
-        res.json({ configured: true, ...payload });
+        const results = await attachTicketIdsToIssues({
+            config,
+            dataDir: SUPPORT_TICKETS_DIR,
+            issues: payload.results,
+            engine: 'seerr',
+        });
+        res.json({ configured: true, ...payload, results });
     } catch (e) {
         log(`Discovery my-issues error: ${e.message}`);
         res.status(500).json({ error: e.message });
     }
 });
+
+const openSupportTicketFromMediaIssue = async (req, config, issue, message) => {
+    try {
+        const users = await loadFile(USERS_PATH, []);
+        const local = findLocalUserForSession(users, req.user);
+        const actor = {
+            id: local?.id || req.user?.id,
+            username: local?.username || req.user?.username,
+            email: local?.email || req.user?.email,
+            thumb: local?.thumb || req.user?.thumb,
+        };
+        const ticket = await createSupportTicketFromMediaIssue({
+            config,
+            dataDir: SUPPORT_TICKETS_DIR,
+            resolveUser: async (userId) => (
+                (users || []).find((u) => String(u?.id) === String(userId)) || null
+            ),
+            actor,
+            issue,
+            message,
+            log,
+        });
+        if (!ticket) return null;
+        const skip = actor.id != null ? String(actor.id) : '';
+        const href = `/support?ticket=${encodeURIComponent(String(ticket.id))}`;
+        const admins = (Array.isArray(users) ? users : []).filter((u) => (
+            u && u.isAdmin && u.id && String(u.id) !== skip
+        ));
+        for (const admin of admins) {
+            await createInAppNotification({
+                userId: admin.id,
+                type: 'support_ticket',
+                title: 'New media issue ticket',
+                body: `${ticket.createdBy?.displayName || 'A member'}: ${ticket.subject}`,
+                href,
+                meta: { ticketId: ticket.id, linkedIssueId: issue?.id },
+            }).catch(() => null);
+        }
+        return ticket;
+    } catch (error) {
+        log(`[support] media issue ticket failed: ${error?.message || error}`);
+        return null;
+    }
+};
 
 app.post('/api/discovery/issues', requireAuth, requireMember, async (req, res) => {
     try {
@@ -9536,7 +9593,8 @@ app.post('/api/discovery/issues', requireAuth, requireMember, async (req, res) =
                 problemSeason,
                 problemEpisode,
             });
-            return res.status(201).json({ success: true, issue });
+            const ticket = await openSupportTicketFromMediaIssue(req, config, issue, message);
+            return res.status(201).json({ success: true, issue, ticketId: ticket?.id || null });
         }
         const gate = getRequestAppGate(config);
         if (!gate.ready) return res.status(400).json({ error: 'Request app not configured' });
@@ -9551,7 +9609,8 @@ app.post('/api/discovery/issues', requireAuth, requireMember, async (req, res) =
             problemSeason,
             problemEpisode,
         });
-        res.status(201).json({ success: true, issue });
+        const ticket = await openSupportTicketFromMediaIssue(req, config, issue, message);
+        res.status(201).json({ success: true, issue, ticketId: ticket?.id || null });
     } catch (e) {
         const mapped = mapSeerrClientError(e.message, e.status);
         log(`Discovery create issue error: ${e.message}`);
@@ -9673,7 +9732,13 @@ app.get('/api/issues', requireAdmin, async (req, res) => {
         if (getRequestEngine(config) === 'portal') {
             const portalIssues = getPortalIssueService(config);
             const payload = await portalIssues.listIssues({ filter, take, skip });
-            return res.json({ configured: true, supported: true, connected: true, engine: 'portal', ...payload });
+            const results = await attachTicketIdsToIssues({
+                config,
+                dataDir: SUPPORT_TICKETS_DIR,
+                issues: payload.results,
+                engine: 'portal',
+            });
+            return res.json({ configured: true, supported: true, connected: true, engine: 'portal', ...payload, results });
         }
         const gate = getRequestAppGate(config);
         if (!gate.ready) {
@@ -9681,7 +9746,13 @@ app.get('/api/issues', requireAdmin, async (req, res) => {
         }
         try {
             const payload = await requestAppService.listIssues(config, { filter, take, skip });
-            res.json({ configured: true, supported: true, connected: true, ...payload });
+            const results = await attachTicketIdsToIssues({
+                config,
+                dataDir: SUPPORT_TICKETS_DIR,
+                issues: payload.results,
+                engine: 'seerr',
+            });
+            res.json({ configured: true, supported: true, connected: true, ...payload, results });
         } catch (error) {
             res.json({
                 ...buildRequestAppStatusPayload(config),
@@ -9705,12 +9776,24 @@ app.get('/api/issues/:id', requireAdmin, async (req, res) => {
         if (getRequestEngine(config) === 'portal') {
             const portalIssues = getPortalIssueService(config);
             const issue = await portalIssues.getIssue(issueId);
-            return res.json({ configured: true, engine: 'portal', issue });
+            const [withTicket] = await attachTicketIdsToIssues({
+                config,
+                dataDir: SUPPORT_TICKETS_DIR,
+                issues: [issue],
+                engine: 'portal',
+            });
+            return res.json({ configured: true, engine: 'portal', issue: withTicket || issue });
         }
         const gate = getRequestAppGate(config);
         if (!gate.ready) return res.status(400).json({ error: 'Request app not configured' });
         const issue = await requestAppService.getIssue(config, issueId);
-        res.json({ configured: true, issue });
+        const [withTicket] = await attachTicketIdsToIssues({
+            config,
+            dataDir: SUPPORT_TICKETS_DIR,
+            issues: [issue],
+            engine: 'seerr',
+        });
+        res.json({ configured: true, issue: withTicket || issue });
     } catch (error) {
         res.status(error.status || 502).json({ error: error.message || 'Failed to fetch issue' });
     }

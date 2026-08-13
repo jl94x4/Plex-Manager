@@ -81,7 +81,7 @@ export const ReportIssueModal: React.FC<Props> = ({
                 body: JSON.stringify(body),
             });
             if (res?.error) throw new Error(res.error);
-            onSuccess(t('issues.reportedSuccess'));
+            onSuccess(res?.ticketId ? t('issues.reportedSuccessTicket') : t('issues.reportedSuccess'));
             onClose();
         } catch (e: any) {
             onError(e?.message || t('issues.reportFailed'));

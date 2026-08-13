@@ -3,6 +3,7 @@ import {
     Check,
     ExternalLink,
     Film,
+    LifeBuoy,
     Loader2,
     MessageSquare,
     RefreshCw,
@@ -289,6 +290,15 @@ export const IssuesAdminPanel: React.FC<{ onCountsChange?: () => void }> = ({ on
                                     </div>
 
                                     <RequestCardActions>
+                                        {item.ticketId ? (
+                                            <a
+                                                href={portalUrl(`/support?ticket=${item.ticketId}`)}
+                                                className={`${requestCardActionBtnClass} border border-plex/40 text-plex hover:bg-plex/10 no-underline`}
+                                            >
+                                                <LifeBuoy className="w-3.5 h-3.5" />
+                                                {t('issuesAdmin.actions.openTicket')}
+                                            </a>
+                                        ) : null}
                                         <button
                                             type="button"
                                             disabled={busy}

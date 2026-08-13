@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle, Film, Loader2, MessageSquare, RotateCcw, Trash2, Tv } from 'lucide-react';
+import { CheckCircle, Film, LifeBuoy, Loader2, MessageSquare, RotateCcw, Trash2, Tv } from 'lucide-react';
 import { apiFetch } from '../shared/api';
+import { portalUrl } from '../shared/basePath';
 import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import { RequestCardActions, RequestCardShell, requestCardActionBtnClass } from '../requests/RequestCardShell';
 import type { PortalIssueItem } from '../requests/types';
@@ -269,6 +270,15 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                     </button>
 
                                     <RequestCardActions>
+                                        {item.ticketId ? (
+                                            <a
+                                                href={portalUrl(`/support?ticket=${item.ticketId}`)}
+                                                className={`${requestCardActionBtnClass} border border-plex/40 text-plex hover:bg-plex/10 no-underline`}
+                                            >
+                                                <LifeBuoy className="w-3.5 h-3.5" />
+                                                {t('issuesAdmin.actions.openTicket')}
+                                            </a>
+                                        ) : null}
                                         <button
                                             type="button"
                                             disabled={busy}
