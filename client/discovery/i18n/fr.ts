@@ -1615,6 +1615,32 @@ export const fr: DeepPartial<EnCatalog> = {
         toasts: { approvedCount: '{count} demande(s) approuvée(s)', approvedPartial: '{approved} demande(s) approuvée(s) sur {total}', declinedCount: '{count} demande(s) refusée(s)', declinedPartial: '{declined} demande(s) refusée(s) sur {total}', approvedTitle: '« {title} » approuvé', updatedTitle: '« {title} » mis à jour', declinedTitle: '« {title} » refusé', declinedAndBlocklisted: '« {title} » refusé et ajouté à la liste de blocage', retriedTitle: 'Nouvelle tentative pour « {title} »', deletedTitle: '« {title} » supprimé' },
         modal: { reviewApprove: 'Examiner et approuver', editRequest: 'Modifier la demande', loadingDetails: 'Chargement des détails de la demande...', loadFailed: 'Impossible de charger cette demande.', seasons: 'Saisons', on: 'Actif', season: 'Saison', episodes: 'Épisodes', noSeasonList: 'Aucune liste de saisons chargée pour cette série. Vérifiez la clé API TMDB ou le réseau, puis rouvrez cette demande.', advanced: 'Options avancées', destinationServer: 'Serveur de destination', qualityProfile: 'Profil de qualité', rootFolder: 'Dossier racine', requestAs: 'Demander au nom de', tags: 'Étiquettes', loadingOptions: 'Chargement des options du service...', saveChanges: 'Enregistrer les modifications', saveApprove: 'Enregistrer et approuver', free: 'libres', notSelected: 'Non sélectionnée', notRequested: 'Non demandée', declineRequest: 'Refuser la demande', declineCount: 'Refuser {count} demandes', deleteRequest: 'Supprimer la demande', declineTarget: 'Refuser {title} ?', reasonOptional: 'Motif (facultatif)', declinePlaceholder: 'Indiquez au demandeur pourquoi cette demande a été refusée...', blocklistTarget: 'Ajouter également {title} à la liste de blocage pour empêcher toute nouvelle demande.', decliningBlocking: 'Refus et blocage...', declining: 'Refus...', declineBlocklist: 'Refuser et bloquer', optionalReasonBulk: 'Le motif facultatif sera envoyé à chaque demandeur.', bulkReasonPlaceholder: 'Motif du refus de ces demandes...', deleting: 'Suppression...', permanentlyDelete: 'Supprimer définitivement {title} de votre application de demandes ?', deleteTarget: 'Supprimer la demande' },
     },
+    issuesAdmin: {
+        page: {
+            title: 'Signalements',
+            openSummary: '{count} signalement(s) de lecture ouvert(s) signalé(s) par les utilisateurs',
+            connectHint: 'Connectez Seerr dans Réglages → Intégrations pour gérer les signalements ici.',
+        },
+        filters: { open: 'Ouverts', resolved: 'Résolus' },
+        actions: {
+            openSeerr: 'Ouvrir Seerr', refresh: 'Actualiser', sendReply: 'Envoyer la réponse', deleting: 'Suppression…', deleteIssue: 'Supprimer le signalement',
+        },
+        labels: { updated: 'Mis à jour', reportedBy: 'Signalé par' },
+        empty: {
+            noIssues: 'Aucun signalement {filter}',
+            reportHint: 'Les utilisateurs peuvent signaler un problème de lecture depuis les titres disponibles dans Discover.',
+        },
+        errors: {
+            cannotConnect: 'Impossible de se connecter à votre application de demandes', loadIssues: 'Échec du chargement des signalements', update: 'Échec de la mise à jour du signalement',
+            addComment: 'Échec de l’ajout du commentaire', delete: 'Échec de la suppression du signalement',
+        },
+        toasts: {
+            resolvedTitle: '« {title} » résolu', reopenedTitle: '« {title} » rouvert', commentAddedTitle: 'Commentaire ajouté à « {title} »', deletedTitle: 'Signalement supprimé pour « {title} »',
+        },
+        dialogs: {
+            replyTitle: 'Répondre au signalement', replyPlaceholder: 'Répondre à l’utilisateur…', deleteBody: 'Supprimer définitivement le signalement pour {title} ?',
+        },
+    },
     person: {
         back: 'Retour à Discover',
         biography: 'Biographie',

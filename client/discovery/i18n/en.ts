@@ -1644,6 +1644,32 @@ export const en = {
             notSelected: 'Not selected', notRequested: 'Not requested',
         },
     },
+    issuesAdmin: {
+        page: {
+            title: 'Issues',
+            openSummary: '{count} open playback issues reported by users',
+            connectHint: 'Connect Seerr in Settings → Integrations to manage issues here.',
+        },
+        filters: { open: 'Open', resolved: 'Resolved' },
+        actions: {
+            openSeerr: 'Open Seerr', refresh: 'Refresh', sendReply: 'Send Reply', deleting: 'Deleting…', deleteIssue: 'Delete Issue',
+        },
+        labels: { updated: 'Updated', reportedBy: 'Reported by' },
+        empty: {
+            noIssues: 'No {filter} issues',
+            reportHint: 'Users can report playback problems from available titles in Discover.',
+        },
+        errors: {
+            cannotConnect: 'Cannot connect to your request app', loadIssues: 'Failed to load issues', update: 'Failed to update issue',
+            addComment: 'Failed to add comment', delete: 'Failed to delete issue',
+        },
+        toasts: {
+            resolvedTitle: 'Resolved "{title}"', reopenedTitle: 'Reopened "{title}"', commentAddedTitle: 'Comment added to "{title}"', deletedTitle: 'Deleted issue for "{title}"',
+        },
+        dialogs: {
+            replyTitle: 'Reply to issue', replyPlaceholder: 'Reply to the user…', deleteBody: 'Permanently delete the issue for {title}?',
+        },
+    },
     person: {
         back: 'Back to Discovery',
         biography: 'Biography',
