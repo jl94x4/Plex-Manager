@@ -21,12 +21,74 @@ export const getWebPushPermission = () => (
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
 );
 
+export const isIosDevice = () => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    if (/iPhone|iPad|iPod/i.test(ua)) return true;
+    // iPadOS 13+ desktop UA
+    return navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1;
+};
+
+export const isStandalonePwa = () => {
+    if (typeof window === 'undefined') return false;
+    return !!(
+        window.matchMedia?.('(display-mode: standalone)')?.matches
+        || window.matchMedia?.('(display-mode: fullscreen)')?.matches
+        || (navigator as any).standalone === true
+    );
+};
+
+/** iOS 16.4+ only delivers Web Push to a Safari Home Screen PWA — not Safari tabs or Chrome iOS. */
+export const getIosWebPushBlockReason = (): 'ios-version' | 'ios-not-standalone' | null => {
+    if (!isIosDevice()) return null;
+    const ua = navigator.userAgent || '';
+    const os = ua.match(/OS (\d+)[._](\d+)/);
+    const major = os ? Number(os[1]) : 0;
+    const minor = os ? Number(os[2]) : 0;
+    if (major > 0 && (major < 16 || (major === 16 && minor < 4))) return 'ios-version';
+    if (!isStandalonePwa()) return 'ios-not-standalone';
+    return null;
+};
+
+const waitForActiveWorker = async (registration: ServiceWorkerRegistration) => {
+    if (registration.active) return;
+    const worker = registration.installing || registration.waiting;
+    if (!worker) {
+        await navigator.serviceWorker.ready;
+        return;
+    }
+    await new Promise<void>((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error('Service worker did not activate')), 15000);
+        worker.addEventListener('statechange', () => {
+            if (worker.state === 'activated' || worker.state === 'redundant') {
+                window.clearTimeout(timer);
+                resolve();
+            }
+        });
+    });
+};
+
 export const subscribeWebPush = async () => {
     if (!webPushSupported()) {
-        throw new Error('Web Push is not supported in this browser');
+        const err = new Error('Web Push is not supported in this browser');
+        (err as Error & { code?: string }).code = 'unsupported';
+        throw err;
     }
     if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        throw new Error('Web Push requires HTTPS');
+        const err = new Error('Web Push requires HTTPS');
+        (err as Error & { code?: string }).code = 'insecure';
+        throw err;
+    }
+
+    const iosBlock = getIosWebPushBlockReason();
+    if (iosBlock) {
+        const err = new Error(
+            iosBlock === 'ios-version'
+                ? 'iPhone push needs iOS 16.4 or later'
+                : 'On iPhone, add the portal to your Home Screen from Safari, open that app, then enable push',
+        );
+        (err as Error & { code?: string }).code = iosBlock;
+        throw err;
     }
 
     const permission = await Notification.requestPermission();
@@ -44,6 +106,7 @@ export const subscribeWebPush = async () => {
             updateViaCache: 'none',
         });
     }
+    await waitForActiveWorker(registration);
     await navigator.serviceWorker.ready;
 
     const existing = await registration.pushManager.getSubscription();

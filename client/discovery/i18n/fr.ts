@@ -404,6 +404,8 @@ export const fr: DeepPartial<EnCatalog> = {
         toggleBrowserPushAria: 'Activer ou désactiver le push navigateur',
         browserPushSubscribed: 'Ce navigateur est abonné aux notifications push.',
         browserPushSubscribe: 'Abonnez ce navigateur pour recevoir les notifications push.',
+        iosPushAddToHomeScreen: 'Sur iPhone, Safari ne reçoit pas les push. Partager → Sur l’écran d’accueil, ouvrez cette icône, puis touchez Activer sur cet appareil.',
+        iosPushNeeds164: 'Les notifications push iPhone nécessitent iOS 16.4 ou plus récent.',
         enableOnThisDevice: 'Activer sur cet appareil',
         disableOnThisDevice: 'Désactiver sur cet appareil',
         enjoyingTempAccess: 'Vous profitez de votre accès temporaire ?',

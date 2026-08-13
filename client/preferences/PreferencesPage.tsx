@@ -4,7 +4,7 @@ import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { DashboardHero, DashboardPageShell, DashboardPanel } from '../shared/dashboard/DashboardChrome';
 import { Toast, type ToastMessage } from '../shared/toast';
-import { subscribeWebPush, unsubscribeWebPush, webPushSupported } from '../shared/webPushSubscribe';
+import { subscribeWebPush, unsubscribeWebPush, webPushSupported, getIosWebPushBlockReason } from '../shared/webPushSubscribe';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { DiscoverLocaleSelect } from '../discovery/i18n/DiscoverLocaleSelect';
 
@@ -74,6 +74,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
     const [notifyWebPush, setNotifyWebPush] = useState(user?.notifyWebPush !== false);
     const [browserPushReady, setBrowserPushReady] = useState(false);
     const browserPushSupportedFlag = webPushSupported();
+    const iosPushBlock = typeof window !== 'undefined' ? getIosWebPushBlockReason() : null;
 
     useEffect(() => {
         setNotifyRequestAvailableEmail(user?.notifyRequestAvailableEmail !== false);
@@ -329,16 +330,26 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
 
                             {browserPushSupportedFlag && (
                                 <div className="flex flex-col gap-2 border-t border-white/10 pt-4">
-                                    <p className="text-muted text-xs">
-                                        {browserPushReady
-                                            ? t('homeDashboard.browserPushSubscribed')
-                                            : t('homeDashboard.browserPushSubscribe')}
-                                    </p>
+                                    {iosPushBlock === 'ios-not-standalone' ? (
+                                        <p className="text-amber-300/90 text-xs leading-relaxed">
+                                            {t('homeDashboard.iosPushAddToHomeScreen')}
+                                        </p>
+                                    ) : iosPushBlock === 'ios-version' ? (
+                                        <p className="text-amber-300/90 text-xs leading-relaxed">
+                                            {t('homeDashboard.iosPushNeeds164')}
+                                        </p>
+                                    ) : (
+                                        <p className="text-muted text-xs">
+                                            {browserPushReady
+                                                ? t('homeDashboard.browserPushSubscribed')
+                                                : t('homeDashboard.browserPushSubscribe')}
+                                        </p>
+                                    )}
                                     <div className="flex flex-wrap gap-2">
                                         {!browserPushReady && (
                                             <button
                                                 type="button"
-                                                disabled={busy}
+                                                disabled={busy || !!iosPushBlock}
                                                 onClick={() => {
                                                     setBusy(true);
                                                     void (async () => {
@@ -347,7 +358,13 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
                                                             setBrowserPushReady(true);
                                                             setToast({ id: Date.now(), message: t('preferencesPage.pushEnabled'), type: 'success' });
                                                         } catch (e: any) {
-                                                            setToast({ id: Date.now(), message: e.message || t('preferencesPage.pushFailed'), type: 'error' });
+                                                            const code = e?.code;
+                                                            const message = code === 'ios-not-standalone'
+                                                                ? t('homeDashboard.iosPushAddToHomeScreen')
+                                                                : code === 'ios-version'
+                                                                    ? t('homeDashboard.iosPushNeeds164')
+                                                                    : (e.message || t('preferencesPage.pushFailed'));
+                                                            setToast({ id: Date.now(), message, type: 'error' });
                                                         } finally {
                                                             setBusy(false);
                                                         }

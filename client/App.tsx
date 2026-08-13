@@ -228,7 +228,7 @@ export const MainApp: React.FC = () => {
         let refreshing = false;
 
         const onControllerChange = () => {
-            // Pick up portal-sw v7 (push handlers) without requiring a manual hard refresh.
+            // Pick up portal-sw v8 (iOS push click URLs) without requiring a manual hard refresh.
             if (refreshing || cancelled) return;
             refreshing = true;
             window.location.reload();

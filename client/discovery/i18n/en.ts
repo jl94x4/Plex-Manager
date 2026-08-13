@@ -402,6 +402,8 @@ export const en = {
         toggleBrowserPushAria: 'Toggle browser push',
         browserPushSubscribed: 'This browser is subscribed for push notifications.',
         browserPushSubscribe: 'Subscribe this browser to receive push notifications.',
+        iosPushAddToHomeScreen: 'On iPhone, Safari cannot receive push. Open Share → Add to Home Screen, launch that icon, then tap Enable on this device.',
+        iosPushNeeds164: 'iPhone push notifications need iOS 16.4 or later.',
         enableOnThisDevice: 'Enable on this device',
         disableOnThisDevice: 'Disable on this device',
         enjoyingTempAccess: 'Enjoying your Temporary Access?',

@@ -16861,7 +16861,7 @@ if (BASE_PATH) {
 
 // Chromium Android uses this for WebAPK installability. Firefox deliberately does not
 // register it (a bad SW makes Firefox Install silently no-op).
-const serviceWorkerScript = `/* portal-sw v7 */
+const serviceWorkerScript = `/* portal-sw v8 */
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -16875,29 +16875,44 @@ self.addEventListener('activate', (event) => {
 // cross-origin posters (TMDB), fonts (Google), and Plex/user thumbs.
 self.addEventListener('fetch', () => {});
 
+const PORTAL_START = ${JSON.stringify(BASE_PATH ? `${BASE_PATH}/` : '/portal')};
+
+const toAbsoluteHref = (href) => {
+  try {
+    return new URL(String(href || PORTAL_START), self.registration.scope).href;
+  } catch (_) {
+    return PORTAL_START;
+  }
+};
+
 self.addEventListener('push', (event) => {
-  let data = { title: 'Notification', body: '', href: '/portal', tag: 'portal' };
+  let data = { title: 'Notification', body: '', href: PORTAL_START, tag: 'portal' };
   try {
     if (event.data) data = { ...data, ...event.data.json() };
   } catch (_) {}
+  const href = toAbsoluteHref(data.href);
+  let icon = '';
+  try { icon = new URL('static/pwa-icon-192.png', self.registration.scope).href; } catch (_) {}
   event.waitUntil(self.registration.showNotification(String(data.title || 'Notification'), {
     body: String(data.body || ''),
     tag: String(data.tag || 'portal'),
-    data: { href: String(data.href || '/portal') },
+    data: { href },
+    icon: icon || undefined,
+    badge: icon || undefined,
     renotify: true,
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const href = (event.notification && event.notification.data && event.notification.data.href) || '/portal';
+  const href = (event.notification && event.notification.data && event.notification.data.href) || toAbsoluteHref(PORTAL_START);
   event.waitUntil((async () => {
     const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of allClients) {
       try {
         if ('focus' in client) {
           await client.focus();
-          if (href && client.url && 'navigate' in client) {
+          if (href && 'navigate' in client) {
             try { await client.navigate(href); } catch (_) {}
           }
           return;
