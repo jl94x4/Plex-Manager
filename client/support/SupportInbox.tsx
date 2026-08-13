@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
+import { DashboardHero, DashboardPageShell } from '../shared/dashboard/DashboardChrome';
 import { formatDateTime } from '../shared/format';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { issueStatusBadgeClass } from '../discovery/issueUtils';
@@ -214,28 +215,27 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
     const unreadOn = (ticket: Ticket) => (isAdmin ? ticket.unreadForAdmin : ticket.unreadForUser);
 
     return (
-        <div className="w-full max-w-6xl mx-auto space-y-5 animate-fade-in pb-8">
+        <DashboardPageShell>
             <ToastContainer toasts={toasts} setToasts={setToasts} />
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-                <div>
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-plex font-bold mb-1">Support</p>
-                    <h1 className="text-3xl font-black text-text flex items-center gap-2">
-                        <LifeBuoy className="w-8 h-8 text-plex" /> {isAdmin ? 'Support inbox' : 'Contact admin'}
-                    </h1>
-                    <p className="text-sm text-muted mt-1">
-                        {isAdmin
-                            ? 'Reply to member tickets without leaving the portal.'
-                            : 'Message the server admin directly — no Discord or email required.'}
-                    </p>
-                </div>
-                <button
-                    type="button"
-                    onClick={() => setComposeOpen(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-plex text-background font-bold text-sm hover:bg-plex-hover"
-                >
-                    <Plus className="w-4 h-4" /> New ticket
-                </button>
-            </div>
+            <DashboardHero
+                accent="plex"
+                eyebrow="Support"
+                title={isAdmin ? 'Support inbox' : 'Contact admin'}
+                description={isAdmin
+                    ? 'Reply to member tickets without leaving the portal.'
+                    : 'Message the server admin directly — no Discord or email required.'}
+                icon={<LifeBuoy className="h-3.5 w-3.5" />}
+                secondaryBlob
+                actions={(
+                    <button
+                        type="button"
+                        onClick={() => setComposeOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-xl bg-plex px-4 py-2.5 text-sm font-bold text-background hover:bg-plex-hover"
+                    >
+                        <Plus className="w-4 h-4" /> New ticket
+                    </button>
+                )}
+            />
 
             <div className="flex flex-wrap gap-2">
                 {tabs.map((tab) => (
@@ -254,7 +254,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
 
             {error && <p className="text-sm text-red-300">{error}</p>}
 
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-4 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(18rem,28rem)_minmax(0,1fr)] gap-4 items-start">
                 <div className="space-y-2">
                     {loading ? (
                         <div className="glass-card p-8 text-center text-muted text-sm">
@@ -429,7 +429,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                     </form>
                 </div>
             )}
-        </div>
+        </DashboardPageShell>
     );
 };
 
