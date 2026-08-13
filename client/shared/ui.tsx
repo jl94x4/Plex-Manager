@@ -8,17 +8,21 @@ export type DropdownPosition = { top: number; left: number; width: number };
 
 export const getFixedDropdownPosition = (
     rect: DOMRect,
-    { width = 160, itemCount = 6, align = 'right' }: { width?: number; itemCount?: number; align?: 'left' | 'right' } = {},
+    { width = 160, height, itemCount = 6, align = 'right' }: { width?: number; height?: number; itemCount?: number; align?: 'left' | 'right' } = {},
 ): DropdownPosition | null => {
     if (rect.width <= 0 || rect.height <= 0) return null;
     const padding = 8;
-    const menuWidth = Math.max(width, rect.width);
-    const menuHeight = itemCount * 42 + 8;
+    const viewportW = window.innerWidth;
+    const viewportH = window.innerHeight;
+    const maxWidth = Math.max(80, viewportW - padding * 2);
+    const menuWidth = Math.min(Math.max(width, rect.width), maxWidth);
+    const menuHeight = Math.min(height ?? (itemCount * 42 + 8), Math.max(96, viewportH - padding * 2));
     let top = rect.bottom + padding;
     let left = align === 'right' ? rect.right - menuWidth : rect.left;
-    left = Math.max(padding, Math.min(left, window.innerWidth - menuWidth - padding));
-    if (top + menuHeight > window.innerHeight - padding) {
-        top = Math.max(padding, rect.top - menuHeight - padding);
+    left = Math.max(padding, Math.min(left, viewportW - menuWidth - padding));
+    if (top + menuHeight > viewportH - padding) {
+        const above = rect.top - menuHeight - padding;
+        top = above >= padding ? above : Math.max(padding, viewportH - menuHeight - padding);
     }
     return { top, left, width: menuWidth };
 };
@@ -29,11 +33,30 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ id, value, onChange,
     const triggerRef = useRef<HTMLDivElement>(null);
     const dropRef = useRef<HTMLDivElement>(null);
 
-    const updatePosition = useCallback(() => {
+    const updatePosition = useCallback((measured?: { width?: number; height?: number }) => {
         if (!triggerRef.current) return;
         const rect = triggerRef.current.getBoundingClientRect();
-        setDropPos(getFixedDropdownPosition(rect, { itemCount: Math.min(options.length, 6), align: 'left' }));
-    }, [options.length]);
+        const longest = options.reduce((max, opt) => Math.max(max, String(opt.label || '').length), 0);
+        const estimatedWidth = Math.max(rect.width, Math.min(longest * 8 + 48, window.innerWidth - 16));
+        setDropPos((prev) => {
+            const next = getFixedDropdownPosition(rect, {
+                width: measured?.width ?? estimatedWidth,
+                height: measured?.height,
+                itemCount: Math.min(options.length, 8),
+                align: 'left',
+            });
+            if (!next) return prev;
+            if (
+                prev
+                && Math.abs(prev.top - next.top) < 1
+                && Math.abs(prev.left - next.left) < 1
+                && Math.abs(prev.width - next.width) < 1
+            ) {
+                return prev;
+            }
+            return next;
+        });
+    }, [options]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -53,10 +76,19 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ id, value, onChange,
             return;
         }
         updatePosition();
-        const onReflow = () => updatePosition();
+        const refine = () => {
+            const menu = dropRef.current?.getBoundingClientRect();
+            if (menu && menu.width > 0) updatePosition({ width: menu.width, height: menu.height });
+        };
+        const frame = window.requestAnimationFrame(refine);
+        const onReflow = () => {
+            updatePosition();
+            window.requestAnimationFrame(refine);
+        };
         window.addEventListener('resize', onReflow);
         window.addEventListener('scroll', onReflow, true);
         return () => {
+            window.cancelAnimationFrame(frame);
             window.removeEventListener('resize', onReflow);
             window.removeEventListener('scroll', onReflow, true);
         };
@@ -72,7 +104,14 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ id, value, onChange,
     const dropdown = isOpen && dropPos ? ReactDOM.createPortal(
         <div
             ref={dropRef}
-            style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, minWidth: dropPos.width, zIndex: 99999 }}
+            style={{
+                position: 'fixed',
+                top: dropPos.top,
+                left: dropPos.left,
+                minWidth: dropPos.width,
+                maxWidth: 'calc(100vw - 16px)',
+                zIndex: 99999,
+            }}
             className="bg-card border border-border rounded-lg shadow-2xl py-1 max-h-64 overflow-y-auto custom-scrollbar"
         >
             {options.map((opt, index) => {

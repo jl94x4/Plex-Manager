@@ -135,8 +135,8 @@ export function PosterSetsLibraryBrowse({
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <CustomSelect
                         value={sectionKey}
                         onChange={(value) => {
@@ -144,11 +144,11 @@ export function PosterSetsLibraryBrowse({
                             setPage(0);
                         }}
                         options={sectionOptions.length ? sectionOptions : [{ value: '', label: 'No libraries' }]}
-                        className="min-w-[10rem] flex-1 sm:max-w-[14rem] sm:flex-none"
+                        className="min-w-0 flex-1 basis-[10rem] sm:max-w-[14rem] sm:flex-none"
                         compact
                         disabled={sectionsLoading || !sectionOptions.length}
                     />
-                    <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-0.5">
+                    <div className="inline-flex shrink-0 rounded-xl border border-white/10 bg-black/20 p-0.5">
                         {([
                             ['', 'All'],
                             ['movie', 'Movies'],
@@ -170,7 +170,7 @@ export function PosterSetsLibraryBrowse({
                         ))}
                     </div>
                 </div>
-                <div className="flex shrink-0 items-center justify-end gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <CustomSelect
                         value={cacheStatus}
                         onChange={(value) => {
@@ -178,7 +178,7 @@ export function PosterSetsLibraryBrowse({
                             setPage(0);
                         }}
                         options={CACHE_STATUS_OPTIONS}
-                        className="min-w-[8.5rem]"
+                        className="min-w-0 flex-1 basis-[8rem] sm:flex-none sm:w-[9.5rem]"
                         compact
                     />
                     <CustomSelect
@@ -188,19 +188,19 @@ export function PosterSetsLibraryBrowse({
                             setPage(0);
                         }}
                         options={SORT_OPTIONS}
-                        className="min-w-[9.5rem]"
+                        className="min-w-0 flex-1 basis-[8rem] sm:flex-none sm:w-[10.5rem]"
                         compact
                     />
                     <CustomSelect
                         value={gridSize === 'list' ? 'medium' : gridSize}
                         onChange={(value) => onGridSizeChange(normalizeUpgraderGridSize(value))}
                         options={UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list')}
-                        className="min-w-[9.5rem]"
+                        className="min-w-0 flex-1 basis-[8rem] sm:flex-none sm:w-[10.5rem]"
                         compact
                     />
                     <button
                         type="button"
-                        className={buttonClass}
+                        className={`${buttonClass} shrink-0`}
                         disabled={loading || disabled}
                         title="Refresh browse results"
                         onClick={() => void loadBrowse()}
@@ -231,19 +231,33 @@ export function PosterSetsLibraryBrowse({
                     <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
                         <h3 className="text-sm font-bold text-text">Browse library</h3>
                         <span className="text-[11px] text-muted">
-                            {total ? `${page * BROWSE_PAGE_SIZE + 1}–${Math.min(total, (page + 1) * BROWSE_PAGE_SIZE)} of ${total}` : `${items.length} titles`}
+                            {loading
+                                ? 'Updating…'
+                                : (total
+                                    ? `${page * BROWSE_PAGE_SIZE + 1}–${Math.min(total, (page + 1) * BROWSE_PAGE_SIZE)} of ${total}`
+                                    : `${items.length} titles`)}
                         </span>
                     </div>
-                    <div className={posterGridClass} style={posterGridStyle}>
-                        {items.map((item) => (
-                            <LibraryMediaCard
-                                key={`browse-${item.mediaType}-${item.id}`}
-                                item={item}
-                                disabled={disabled}
-                                onOpen={onOpenItem}
-                                cacheLevel={levelFor(item)}
-                            />
-                        ))}
+                    <div className="relative">
+                        <div className={`${posterGridClass} ${loading ? 'pointer-events-none opacity-40' : ''}`} style={posterGridStyle}>
+                            {items.map((item) => (
+                                <LibraryMediaCard
+                                    key={`browse-${item.mediaType}-${item.id}`}
+                                    item={item}
+                                    disabled={disabled}
+                                    onOpen={onOpenItem}
+                                    cacheLevel={levelFor(item)}
+                                />
+                            ))}
+                        </div>
+                        {loading ? (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/70 px-3 py-2 text-sm text-text shadow-lg">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Updating filters…
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
                     {pageCount > 1 ? (
                         <div className="flex items-center justify-center gap-2 pt-1">
