@@ -168,6 +168,18 @@ const formatBytes = (bytes: number) => {
 };
 
 const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jellyfin'; t: DiscoverTranslate }> = ({ serverStats, variant = 'plex', t }) => {
+    const catalogAsOf = (() => {
+        const raw = serverStats?.generatedAt;
+        const n = typeof raw === 'number' ? raw : Date.parse(String(raw || ''));
+        if (!Number.isFinite(n) || n <= 0) return null;
+        const mins = Math.max(0, Math.floor((Date.now() - n) / 60000));
+        if (mins < 1) return t('homeDashboard.catalogAsOfJustNow');
+        if (mins < 60) return t('homeDashboard.catalogAsOfMinutes', { count: mins });
+        const hours = Math.floor(mins / 60);
+        if (hours < 24) return t('homeDashboard.catalogAsOfHours', { count: hours });
+        return t('homeDashboard.catalogAsOfDays', { count: Math.floor(hours / 24) });
+    })();
+
     if (variant === 'jellyfin') {
         const totalBytes = Number(serverStats.totalCatalogBytes) || 0;
         const movies = Number(serverStats.movies) || 0;
@@ -180,6 +192,7 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
                     <p className="text-3xl md:text-4xl font-black text-text mt-1 tracking-tight">{formatBytes(totalBytes)}</p>
                     <p className="text-xs text-muted mt-1.5">
                         {t('homeDashboard.catalogSummary', { movies: movies.toLocaleString(), shows: shows.toLocaleString(), episodes: episodes.toLocaleString() })}
+                        {catalogAsOf ? ` · ${catalogAsOf}` : ''}
                     </p>
                 </div>
                 <div className="grid grid-cols-3 gap-2.5">
@@ -279,7 +292,9 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
                 <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{t('homeDashboard.totalLibrary')}</p>
                 <p className="text-2xl md:text-3xl font-black text-text mt-1 tracking-tight">{formatBytes(total)}</p>
                 {summaryBits.length > 0 ? (
-                    <p className="text-xs text-muted mt-1">{summaryBits.join(' · ')}</p>
+                    <p className="text-xs text-muted mt-1">{summaryBits.join(' · ')}{catalogAsOf ? ` · ${catalogAsOf}` : ''}</p>
+                ) : catalogAsOf ? (
+                    <p className="text-xs text-muted mt-1">{catalogAsOf}</p>
                 ) : null}
             </div>
 

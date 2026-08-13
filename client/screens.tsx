@@ -3272,11 +3272,17 @@ const LibraryDeltaBadge: React.FC<{ value?: number }> = ({ value }) => {
     return (
         <span 
             className={`text-sm font-bold ml-2 ${isPos ? 'text-green-500' : 'text-red-500'} animate-[fade-in_0.5s_ease-out] cursor-help`}
-            title="Added since the last daily library scan"
+            title="Change since the previous complete library scan"
         >
             {isPos ? '+' : ''}{value.toLocaleString()}
         </span>
     );
+};
+
+const formatCatalogScanAge = (generatedAt?: number | string | null) => {
+    const n = typeof generatedAt === 'number' ? generatedAt : Date.parse(String(generatedAt || ''));
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return new Date(n).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 };
 const AnimatedLeaderboard: React.FC<{ users: any[], resolveAvatar: (thumb: string | null | undefined, w?: number, h?: number) => string, isAdmin: boolean, onUserClick: (u: any) => void }> = ({ users, resolveAvatar, isAdmin, onUserClick }) => {
     const prevUsersRef = useRef<any[]>([]);
@@ -3599,7 +3605,10 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
             resolutions?: Record<string, number> | null,
             codecs?: Record<string, number> | null,
             fileSizes?: Record<string, any> | null,
-            deltas?: any
+            deltas?: any,
+            generatedAt?: number | string | null,
+            lastBuildFailures?: any[],
+            failedLibraries?: any[],
         },
         requestedPeriodDays?: string | number,
         cachePeriodDays?: string | number | null,
@@ -4076,7 +4085,7 @@ return (
                                 <DashboardStatCard
                                     label="Catalog Size"
                                     value={libraryHealth.totalCatalogItems.toLocaleString()}
-                                    hint={formatSizeCeil(libraryHealth.totalCatalogBytes ?? libraryHealth.sizeGB * 1024 ** 3)}
+                                    hint={`${formatSizeCeil(libraryHealth.totalCatalogBytes ?? libraryHealth.sizeGB * 1024 ** 3)}${formatCatalogScanAge(libraryHealth.generatedAt) ? ` · as of ${formatCatalogScanAge(libraryHealth.generatedAt)}` : ''}`}
                                     icon={<HardDrive className="h-4 w-4 text-violet-300" />}
                                     glow={dashboardGlowClass('violet')}
                                 />
@@ -4144,6 +4153,11 @@ return (
                                     glow={dashboardGlowClass('violet')}
                                 />
                             </div>
+                            {((libraryHealth.lastBuildFailures || []).length > 0 || (libraryHealth.failedLibraries || []).length > 0) ? (
+                                <p className="text-xs text-amber-300/90 -mt-1">
+                                    Last library scan could not finish. Catalog totals are from the last complete count — nothing was deleted.
+                                </p>
+                            ) : null}
 
                             {libraryHealth.resolutions && libraryHealth.codecs && libraryHealth.fileSizes && (() => {
                                 const sortedCodecs = Object.entries(libraryHealth.codecs || {})
@@ -6147,17 +6161,29 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
 };
 
 const RebuildLibraryCacheButton: React.FC = () => {
-    const [status, setStatus] = useState<'idle' | 'starting' | 'building' | 'done' | 'error'>('idle');
+    const [status, setStatus] = useState<'idle' | 'starting' | 'building' | 'done' | 'warn' | 'error'>('idle');
     const [lastBuilt, setLastBuilt] = useState<number | null>(null);
+    const [lastWarning, setLastWarning] = useState<string | null>(null);
+
+    const applyStatusPayload = (s: any, { finishing = false } = {}) => {
+        if (s.lastGeneratedAt) setLastBuilt(s.lastGeneratedAt);
+        const warning = String(s.lastWarning || '').trim() || null;
+        setLastWarning(warning);
+        if (s.isBuilding) {
+            setStatus('building');
+            return;
+        }
+        if (!finishing) return;
+        if (s.lastError) setStatus('error');
+        else if (warning || (Array.isArray(s.lastBuildFailures) && s.lastBuildFailures.length)) setStatus('warn');
+        else setStatus('done');
+        window.setTimeout(() => setStatus('idle'), 4000);
+    };
 
     const pollBuildStatus = useCallback(async () => {
         try {
             const s: any = await apiFetch('/api/plex/stats/status');
-            if (s.lastGeneratedAt) setLastBuilt(s.lastGeneratedAt);
-            if (!s.isBuilding) {
-                setStatus('done');
-                window.setTimeout(() => setStatus('idle'), 4000);
-            }
+            applyStatusPayload(s, { finishing: true });
         } catch {
             setStatus('error');
         }
@@ -6165,8 +6191,7 @@ const RebuildLibraryCacheButton: React.FC = () => {
 
     useEffect(() => {
         apiFetch('/api/plex/stats/status').then((s: any) => {
-            if (s.lastGeneratedAt) setLastBuilt(s.lastGeneratedAt);
-            if (s.isBuilding) setStatus('building');
+            applyStatusPayload(s, { finishing: false });
         }).catch(() => { });
     }, []);
 
@@ -6191,6 +6216,7 @@ const RebuildLibraryCacheButton: React.FC = () => {
                 disabled={isRunning}
                 className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all border
                     ${status === 'done' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
+                        status === 'warn' ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' :
                         status === 'error' ? 'bg-red-500/10 border-red-500/30 text-red-400' :
                             isRunning ? 'bg-white/5 border-white/10 text-muted cursor-not-allowed' :
                                 'bg-white/5 border-white/10 text-text hover:bg-white/10'}`}
@@ -6199,6 +6225,8 @@ const RebuildLibraryCacheButton: React.FC = () => {
                     <><div className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" /> Building Cache...</>
                 ) : status === 'done' ? (
                     <><CheckCircle size={14} /> Cache Updated!</>
+                ) : status === 'warn' ? (
+                    <><AlertCircle size={14} /> Totals kept</>
                 ) : status === 'error' ? (
                     <><AlertCircle size={14} /> Build Failed</>
                 ) : (
@@ -6209,6 +6237,9 @@ const RebuildLibraryCacheButton: React.FC = () => {
                 <p className="text-[10px] text-muted text-center">
                     Last built: {new Date(lastBuilt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                 </p>
+            )}
+            {lastWarning && status !== 'building' && status !== 'starting' && (
+                <p className="text-[10px] text-amber-300/90 text-center leading-snug">{lastWarning}</p>
             )}
         </div>
     );

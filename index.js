@@ -6916,7 +6916,9 @@ const buildPlexStatsCache = async () => {
             };
             cachedPlexStats = kept;
             await fs.writeFile(PLEX_STATS_CACHE_PATH, JSON.stringify(kept, null, 2));
-            markTaskEnd(systemJobs.plexStats, new Error(`Incomplete library size build: ${names}`));
+            markTaskEnd(systemJobs.plexStats, null, {
+                warning: new Error(`Incomplete library size build: ${names}`),
+            });
         };
 
         for (const dir of directories) {
@@ -7114,7 +7116,13 @@ const buildPlexStatsCache = async () => {
         cachedPlexStats = stats;
         await fs.writeFile(PLEX_STATS_CACHE_PATH, JSON.stringify(stats, null, 2));
         log(`[PlexStats] Cache built and saved — movies: ${totalMoviesCount}, shows: ${totalShowsCount}, music: ${totalMusicCount} (${totalMusicBytes} bytes), episodes: ${totalEpisodesCount}, artists: ${totalArtistsCount}, albums: ${totalAlbumsCount}, tracks: ${totalTracksCount}, libraries: ${libraries.length}${sizeFailures.length ? `, size-scan failed: ${sizeFailures.map((f) => f.title).join(', ')}` : ''}`);
-        markTaskEnd(systemJobs.plexStats, sizeFailures.length ? new Error(`Partial library size build: ${sizeFailures.map((f) => f.title).join(', ')}`) : null);
+        markTaskEnd(
+            systemJobs.plexStats,
+            null,
+            sizeFailures.length
+                ? { warning: new Error(`Partial library size build: ${sizeFailures.map((f) => f.title).join(', ')}`) }
+                : {},
+        );
     } catch (e) {
         log(`[PlexStats] Build failed: ${e.message}`);
         markTaskEnd(systemJobs.plexStats, e);
@@ -7192,6 +7200,8 @@ app.get('/api/plex/stats/status', requireAdmin, async (req, res) => {
         libraryCount: Array.isArray(stats?.libraries) ? stats.libraries.length : 0,
         failedLibraries: Array.isArray(stats?.failedLibraries) ? stats.failedLibraries : [],
         lastBuildFailures: Array.isArray(stats?.lastBuildFailures) ? stats.lastBuildFailures : [],
+        lastError: systemJobs.plexStats?.lastError || null,
+        lastWarning: systemJobs.plexStats?.lastWarning || null,
     });
 });
 
@@ -15068,6 +15078,8 @@ const summarizeLibraryHealth = (topLibraries = [], stats = {}, cachedData = {}) 
             : (stats.deltas || {}),
         failedLibraries: stats.failedLibraries || [],
         lastBuildFailures: stats.lastBuildFailures || [],
+        generatedAt: stats.generatedAt || null,
+        lastBuildFailedAt: stats.lastBuildFailedAt || null,
         resolutions: stats.resolutions || null,
         codecs: stats.codecs || null,
         fileSizes: stats.fileSizes || null
@@ -17389,17 +17401,21 @@ const systemJobs = {
 const markTaskStart = (task) => {
     task.running = true;
     task.lastError = null;
+    task.lastWarning = null;
     task._startedAt = Date.now();
     task.lastRun = new Date(task._startedAt).toISOString();
 };
 
-const markTaskEnd = (task, error = null) => {
+const markTaskEnd = (task, error = null, extras = {}) => {
     task.running = false;
     if (task._startedAt) {
         task.lastDurationMs = Date.now() - task._startedAt;
         delete task._startedAt;
     }
+    const warning = extras && extras.warning != null ? extras.warning : null;
     task.lastError = error ? (error.message || String(error)) : null;
+    // Incomplete-but-kept work is a warning, not a failed job (health score / Failed badge).
+    task.lastWarning = warning ? (warning.message || String(warning)) : null;
 };
 
 const REQUEST_STATUS_SYNC_INTERVAL_MS = 60 * 1000;

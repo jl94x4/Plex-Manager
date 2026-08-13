@@ -1044,15 +1044,19 @@ export const SettingsDashboard: React.FC = () => {
         const cacheTotal = cacheValues.length;
         const runningJobs = jobs.filter((job: any) => !!job.running).length;
         const failingJobs = jobs.filter((job: any) => !!job.lastError).length;
+        const warningJobs = jobs.filter((job: any) => !job.lastError && !!job.lastWarning).length;
         const alerts: string[] = [];
 
         // Not-configured integrations are informational only — they must not drag the
         // health score (issue #74). Score reflects caches + job health of the setup in use.
         if (cacheHealthy < cacheTotal) {
-            alerts.push(`${cacheTotal - cacheHealthy} cache file(s) are missing.`);
+            alerts.push(`${cacheTotal - cacheHealthy} cache file(s) have not been built yet.`);
         }
         if (failingJobs > 0) {
             alerts.push(`${failingJobs} background job(s) reported recent errors.`);
+        }
+        if (warningJobs > 0) {
+            alerts.push(`${warningJobs} background job(s) finished with a warning — last-good totals were kept.`);
         }
         if (diagnostics?.backup?.enabled && !diagnostics?.backup?.lastRunAt) {
             alerts.push('Auto backup is enabled but has not completed a run yet.');
@@ -3969,6 +3973,11 @@ export const SettingsDashboard: React.FC = () => {
                                                         <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
                                                         Failed
                                                     </span>
+                                                ) : task.lastWarning ? (
+                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                                        <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                                                        Warning
+                                                    </span>
                                                 ) : (
                                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-500/10 text-muted border border-border">
                                                         Idle
@@ -3981,6 +3990,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 <span><strong className="text-text">Next Run:</strong> {task.nextRun ? new Date(task.nextRun).toLocaleString() : 'Not Scheduled'}</span>
                                                 {task.lastDurationMs !== null && <span><strong className="text-text">Duration:</strong> {Math.round(task.lastDurationMs / 1000)}s</span>}
                                                 {task.lastError && <span className="bg-red-500/20 text-red-300 px-2 py-1 rounded"><strong>Error:</strong> {task.lastError}</span>}
+                                                {task.lastWarning && !task.lastError && <span className="bg-amber-500/20 text-amber-200 px-2 py-1 rounded"><strong>Warning:</strong> {task.lastWarning}</span>}
                                             </div>
                                         </div>
                                         <button
@@ -4587,6 +4597,7 @@ export const SettingsDashboard: React.FC = () => {
                                                     {task.lastDurationMs !== null ? ` · Duration: ${Math.round(task.lastDurationMs / 1000)}s` : ''}
                                                 </div>
                                                 {task.lastError && <div className="text-xs text-red-300 mt-1">Last error: {task.lastError}</div>}
+                                                {task.lastWarning && !task.lastError && <div className="text-xs text-amber-300 mt-1">Last warning: {task.lastWarning}</div>}
                                             </div>
                                             {task.running ? (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.15)] animate-pulse whitespace-nowrap">
@@ -4597,6 +4608,11 @@ export const SettingsDashboard: React.FC = () => {
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20 whitespace-nowrap">
                                                     <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
                                                     Failed
+                                                </span>
+                                            ) : task.lastWarning ? (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
+                                                    <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                                                    Warning
                                                 </span>
                                             ) : (
                                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-500/10 text-muted border border-border whitespace-nowrap">
