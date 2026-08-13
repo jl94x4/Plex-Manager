@@ -1302,6 +1302,7 @@ import {
     applyDiscoveryAvailabilityCacheToPayload,
     rebuildDiscoveryAvailabilityCache,
     createPortalRequestService,
+    createRequestStore,
     createPortalIssueService,
     createPortalBlocklistService,
     enrichDiscoveryPayloadWithTvdbPosters,
@@ -1370,6 +1371,7 @@ import {
     applyStatusHealthNotifyState,
     normalizeStatusNotifyDownAfterMinutes,
 } from './lib/notifications/opsNotify.js';
+import { enrichInAppNotificationItems } from './lib/notifications/mediaMeta.js';
 import { normalizeReleaseDatePreference, isFutureReleaseDate } from './lib/notifications/releaseDates.js';
 import {
     isDiscoverNowPlayingEnabled,
@@ -3914,7 +3916,17 @@ app.get('/api/notifications', requireAuth, requireMember, async (req, res) => {
         const limit = Math.max(1, Math.min(100, Number(req.query?.limit) || 30));
         const items = await listInAppNotificationsForUser(localUser.id, { limit });
         const unread = await countUnreadInAppNotifications(localUser.id);
-        res.json({ items, unread });
+        let enriched = items;
+        try {
+            const store = createRequestStore({ dataDir: REQUESTS_DIR });
+            enriched = await enrichInAppNotificationItems(items, {
+                getRequest: (id) => store.get(id),
+                loadUsers: () => loadFile(USERS_PATH, []),
+            });
+        } catch (enrichError) {
+            log(`[notifications] enrich failed: ${enrichError?.message || enrichError}`);
+        }
+        res.json({ items: enriched, unread });
     } catch (e) {
         log(`Error listing notifications: ${e.message}`);
         res.status(500).json({ error: 'Failed to load notifications' });

@@ -1268,6 +1268,100 @@ html.branded-skeleton .skeleton-base::after {
   animation: ma-live-pulse 1.6s ease-out infinite;
 }
 
+@keyframes notif-panel-in-down {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes notif-panel-in-up {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes notif-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes notif-bell-ping {
+  0% { transform: scale(1); opacity: 0.65; }
+  70%, 100% { transform: scale(2.35); opacity: 0; }
+}
+
+@keyframes notif-bell-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgb(var(--color-plex) / 0.55); }
+  50% { transform: scale(1.08); box-shadow: 0 0 0 4px rgb(var(--color-plex) / 0); }
+}
+
+@keyframes notif-unread-glow {
+  0%, 100% { opacity: 0.75; box-shadow: 0 0 0 0 rgb(var(--color-plex) / 0.45); }
+  50% { opacity: 1; box-shadow: 0 0 8px 1px rgb(var(--color-plex) / 0.35); }
+}
+
+.notif-panel-enter-down {
+  animation: notif-panel-in-down 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top right;
+}
+
+.notif-panel-enter-up {
+  animation: notif-panel-in-up 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: bottom left;
+}
+
+.notif-row-enter {
+  animation: notif-row-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.notif-unread-bar {
+  animation: notif-unread-glow 2s ease-in-out infinite;
+}
+
+.notif-header-icon {
+  box-shadow: 0 0 24px rgb(var(--color-plex) / 0.22);
+}
+
+.notif-mark-read:hover {
+  box-shadow: 0 0 16px rgb(var(--color-plex) / 0.18);
+}
+
+.notif-row-btn:hover {
+  box-shadow: inset 0 0 0 1px rgb(var(--color-plex) / 0.12);
+}
+
+.notif-bell-count {
+  display: flex;
+  min-width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+}
+
+.notif-bell-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: rgb(var(--color-plex));
+  animation: notif-bell-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.notif-bell-badge {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border-radius: 9999px;
+  background: rgb(var(--color-plex));
+  color: rgb(var(--color-bg));
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  animation: notif-bell-pulse 1.8s ease-in-out infinite;
+}
+
 .ma-meter-fill {
   position: relative;
   overflow: hidden;
@@ -1289,7 +1383,13 @@ html.branded-skeleton .skeleton-base::after {
 
 @media (prefers-reduced-motion: reduce) {
   .ma-live-dot,
-  .ma-meter-fill::after {
+  .ma-meter-fill::after,
+  .notif-bell-ping,
+  .notif-bell-badge,
+  .notif-unread-bar,
+  .notif-panel-enter-down,
+  .notif-panel-enter-up,
+  .notif-row-enter {
     animation: none;
   }
   .ma-meter-fill,

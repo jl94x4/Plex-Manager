@@ -22,6 +22,7 @@ import {
 import { apiFetch } from './api';
 import { IN_APP_NOTIFICATIONS_CHANGED_EVENT, notifyInAppNotificationsChanged } from './inAppNotificationsRefresh';
 import { resolveNotificationDestination } from './notificationDestination';
+import { resolveTmdbImageUrl } from '../discovery/tmdbImageUrl';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
 
@@ -37,6 +38,8 @@ export type InAppNotification = {
         requestId?: string | number | null;
         mediaType?: string | null;
         tmdbId?: string | number | null;
+        posterUrl?: string | null;
+        posterPath?: string | null;
         [key: string]: unknown;
     };
 };
@@ -57,38 +60,139 @@ const formatRelative = (iso: string | undefined, t: DiscoverTranslate) => {
 const typeVisual = (type?: string) => {
     switch (String(type || '')) {
         case 'request_available':
-            return { Icon: CircleCheck, tone: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' };
+            return {
+                Icon: CircleCheck,
+                tone: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/35',
+                tile: 'from-emerald-500/30 via-emerald-500/10 to-card',
+            };
         case 'request_approved':
-            return { Icon: Sparkles, tone: 'text-plex bg-plex/15 border-plex/30' };
+            return {
+                Icon: Sparkles,
+                tone: 'text-plex bg-plex/15 border-plex/35',
+                tile: 'from-plex/30 via-plex/10 to-card',
+            };
         case 'request_declined':
-            return { Icon: CircleX, tone: 'text-rose-400 bg-rose-500/15 border-rose-500/30' };
+            return {
+                Icon: CircleX,
+                tone: 'text-rose-400 bg-rose-500/15 border-rose-500/35',
+                tile: 'from-rose-500/30 via-rose-500/10 to-card',
+            };
         case 'request_season_available':
-            return { Icon: Tv, tone: 'text-sky-400 bg-sky-500/15 border-sky-500/30' };
+            return {
+                Icon: Tv,
+                tone: 'text-sky-400 bg-sky-500/15 border-sky-500/35',
+                tile: 'from-sky-500/30 via-sky-500/10 to-card',
+            };
         case 'request_new_episode':
-            return { Icon: Clapperboard, tone: 'text-violet-300 bg-violet-500/15 border-violet-500/30' };
+            return {
+                Icon: Clapperboard,
+                tone: 'text-violet-300 bg-violet-500/15 border-violet-500/35',
+                tile: 'from-violet-500/30 via-violet-500/10 to-card',
+            };
         case 'admin_pending':
-            return { Icon: ClipboardList, tone: 'text-amber-300 bg-amber-500/15 border-amber-500/30' };
+            return {
+                Icon: ClipboardList,
+                tone: 'text-amber-300 bg-amber-500/15 border-amber-500/35',
+                tile: 'from-amber-400/30 via-amber-500/10 to-card',
+            };
         case 'request_not_released':
-            return { Icon: Calendar, tone: 'text-sky-300 bg-sky-500/15 border-sky-500/30' };
+            return {
+                Icon: Calendar,
+                tone: 'text-sky-300 bg-sky-500/15 border-sky-500/35',
+                tile: 'from-cyan-500/25 via-sky-500/10 to-card',
+            };
         case 'admin_test':
-            return { Icon: Bell, tone: 'text-plex bg-plex/15 border-plex/30' };
+            return {
+                Icon: Bell,
+                tone: 'text-plex bg-plex/15 border-plex/35',
+                tile: 'from-plex/25 via-plex/10 to-card',
+            };
         case 'support_ticket':
-            return { Icon: LifeBuoy, tone: 'text-plex bg-plex/15 border-plex/30' };
+            return {
+                Icon: LifeBuoy,
+                tone: 'text-plex bg-plex/15 border-plex/35',
+                tile: 'from-orange-400/25 via-plex/10 to-card',
+            };
         case 'collexions_failed':
-            return { Icon: Layers, tone: 'text-rose-400 bg-rose-500/15 border-rose-500/30' };
+            return {
+                Icon: Layers,
+                tone: 'text-rose-400 bg-rose-500/15 border-rose-500/35',
+                tile: 'from-rose-500/30 via-fuchsia-500/10 to-card',
+            };
         case 'scanner_failed':
-            return { Icon: Radar, tone: 'text-amber-300 bg-amber-500/15 border-amber-500/30' };
+            return {
+                Icon: Radar,
+                tone: 'text-amber-300 bg-amber-500/15 border-amber-500/35',
+                tile: 'from-amber-500/30 via-orange-500/10 to-card',
+            };
         case 'status_down':
-            return { Icon: AlertTriangle, tone: 'text-rose-400 bg-rose-500/15 border-rose-500/30' };
+            return {
+                Icon: AlertTriangle,
+                tone: 'text-rose-400 bg-rose-500/15 border-rose-500/35',
+                tile: 'from-rose-600/35 via-rose-500/10 to-card',
+            };
         case 'status_up':
-            return { Icon: CircleCheck, tone: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' };
+            return {
+                Icon: CircleCheck,
+                tone: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/35',
+                tile: 'from-emerald-400/30 via-teal-500/10 to-card',
+            };
         case 'media_job_failed':
-            return { Icon: CircleX, tone: 'text-rose-400 bg-rose-500/15 border-rose-500/30' };
+            return {
+                Icon: CircleX,
+                tone: 'text-rose-400 bg-rose-500/15 border-rose-500/35',
+                tile: 'from-rose-500/30 via-orange-500/10 to-card',
+            };
         case 'media_job_completed':
-            return { Icon: Cpu, tone: 'text-plex bg-plex/15 border-plex/30' };
+            return {
+                Icon: Cpu,
+                tone: 'text-plex bg-plex/15 border-plex/35',
+                tile: 'from-plex/30 via-sky-500/10 to-card',
+            };
         default:
-            return { Icon: Inbox, tone: 'text-plex bg-plex/15 border-plex/30' };
+            return {
+                Icon: Inbox,
+                tone: 'text-plex bg-plex/15 border-plex/35',
+                tile: 'from-plex/20 via-white/5 to-card',
+            };
     }
+};
+
+const posterSrcFor = (item: InAppNotification) => {
+    const url = String(item.meta?.posterUrl || '').trim();
+    if (url) return url;
+    return resolveTmdbImageUrl(String(item.meta?.posterPath || ''), 'w185');
+};
+
+const NotificationArtwork: React.FC<{ item: InAppNotification }> = ({ item }) => {
+    const [broken, setBroken] = useState(false);
+    const posterSrc = posterSrcFor(item);
+    const showPoster = Boolean(posterSrc) && !broken;
+    const { Icon, tone, tile } = typeVisual(item.type);
+
+    return (
+        <span
+            className={`relative mt-0.5 inline-flex h-14 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border shadow-[0_8px_18px_rgba(0,0,0,0.28)] transition-transform duration-300 ease-out group-hover:scale-[1.06] group-hover:-translate-y-0.5 ${
+                showPoster ? 'border-white/15 bg-black/40' : `border ${tone} bg-gradient-to-br ${tile}`
+            }`}
+        >
+            {showPoster ? (
+                <img
+                    src={posterSrc}
+                    alt=""
+                    className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                    onError={() => setBroken(true)}
+                />
+            ) : (
+                <Icon className="h-4 w-4 drop-shadow-[0_1px_4px_rgba(0,0,0,0.45)]" />
+            )}
+            {showPoster && (
+                <span className={`absolute bottom-0.5 right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-md border shadow-sm ${tone}`}>
+                    <Icon className="h-2.5 w-2.5" />
+                </span>
+            )}
+        </span>
+    );
 };
 
 type Props = {
@@ -328,7 +432,9 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                 ref={panelRef}
                 role="dialog"
                 aria-label={t('notifications.title')}
-                className="fixed flex flex-col overflow-hidden rounded-2xl border border-border/80 shadow-2xl z-[400] bg-card/90 backdrop-blur-xl"
+                className={`notif-panel-enter fixed flex flex-col overflow-hidden rounded-2xl border border-border/80 shadow-[0_24px_64px_rgba(0,0,0,0.55)] z-[400] bg-card/90 backdrop-blur-xl ${
+                    placement === 'up' ? 'notif-panel-enter-up' : 'notif-panel-enter-down'
+                }`}
                 style={{
                     left: panelBox.left,
                     width: panelBox.width,
@@ -341,15 +447,15 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             >
                 <div className="relative shrink-0 overflow-hidden border-b border-border/70">
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-plex/20 via-plex/5 to-transparent" />
-                    <div className="relative flex items-start justify-between gap-3 px-5 py-4">
+                    <div className="relative flex items-start justify-between gap-3 px-4 py-3 sm:px-5">
                         <div className="min-w-0">
-                            <div className="flex items-center gap-2.5">
-                                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-plex/35 bg-plex/15 text-plex shadow-[0_0_24px_rgba(0,0,0,0.15)]">
-                                    <Bell className="h-4 w-4" />
+                            <div className="flex items-center gap-2">
+                                <span className="notif-header-icon inline-flex h-8 w-8 items-center justify-center rounded-xl border border-plex/35 bg-plex/15 text-plex">
+                                    <Bell className="h-3.5 w-3.5" />
                                 </span>
                                 <div className="min-w-0">
-                                    <p className="text-sm font-bold tracking-wide text-text">{t('notifications.title')}</p>
-                                    <p className="text-xs text-muted mt-0.5">
+                                    <p className="text-xs font-bold tracking-wide text-text">{t('notifications.title')}</p>
+                                    <p className="text-[10px] text-muted mt-0.5">
                                         {unread > 0
                                             ? t('notifications.unreadCount', { count: unread })
                                             : t('notifications.allCaughtUp')}
@@ -362,9 +468,9 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                 <button
                                     type="button"
                                     onClick={markAllRead}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-plex/30 bg-plex/10 px-2.5 py-1.5 text-[11px] font-semibold text-plex hover:bg-plex/20 transition-colors"
+                                    className="notif-mark-read inline-flex items-center gap-1 rounded-lg border border-plex/30 bg-plex/10 px-2 py-1 text-[10px] font-semibold text-plex transition-all duration-200 hover:bg-plex/20 hover:border-plex/50 active:scale-[0.97]"
                                 >
-                                    <CheckCheck className="h-3.5 w-3.5" />
+                                    <CheckCheck className="h-3 w-3" />
                                     {t('notifications.markAllRead')}
                                 </button>
                             )}
@@ -373,9 +479,9 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                     type="button"
                                     onClick={clearAll}
                                     disabled={clearing}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-white/5 px-2.5 py-1.5 text-[11px] font-semibold text-muted hover:text-text hover:border-border transition-colors disabled:opacity-50"
+                                    className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-white/5 px-2 py-1 text-[10px] font-semibold text-muted transition-all duration-200 hover:text-text hover:border-border hover:bg-white/10 active:scale-[0.97] disabled:opacity-50"
                                 >
-                                    <Trash2 className="h-3.5 w-3.5" />
+                                    <Trash2 className="h-3 w-3" />
                                     {t('notifications.clearAll')}
                                 </button>
                             )}
@@ -387,54 +493,55 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                     {loading && !items.length ? (
                         <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
                             <span className="h-10 w-10 rounded-2xl border border-border bg-white/5 animate-pulse" />
-                            <p className="text-sm text-muted">{t('common.loadingMore')}</p>
+                            <p className="text-xs text-muted">{t('common.loadingMore')}</p>
                         </div>
                     ) : !items.length ? (
                         <div className="h-full flex flex-col items-center justify-center gap-3 px-8 text-center">
-                            <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-plex/25 bg-plex/10 text-plex">
-                                <Inbox className="h-6 w-6" />
+                            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-plex/25 bg-plex/10 text-plex">
+                                <Inbox className="h-5 w-5" />
                             </span>
                             <div>
-                                <p className="text-base font-semibold text-text">{t('notifications.empty')}</p>
-                                <p className="text-sm text-muted mt-1 max-w-sm">{t('notifications.emptyHint')}</p>
+                                <p className="text-sm font-semibold text-text">{t('notifications.empty')}</p>
+                                <p className="text-xs text-muted mt-1 max-w-sm">{t('notifications.emptyHint')}</p>
                             </div>
                         </div>
                     ) : (
                         <ul className="py-1">
-                            {items.map((item) => {
+                            {items.map((item, index) => {
                                 const unreadItem = !item.readAt;
-                                const { Icon, tone } = typeVisual(item.type);
                                 const dest = resolveNotificationDestination(item);
                                 return (
-                                    <li key={item.id}>
+                                    <li
+                                        key={item.id}
+                                        className="notif-row-enter"
+                                        style={{ animationDelay: `${Math.min(index, 12) * 28}ms` }}
+                                    >
                                         <button
                                             type="button"
                                             onClick={() => openItem(item)}
-                                            className={`group relative w-full text-left px-4 sm:px-5 py-3.5 transition-colors border-b border-border/40 last:border-b-0 hover:bg-plex/5 focus-visible:outline-none focus-visible:bg-plex/10 ${
-                                                unreadItem ? 'bg-plex/[0.04]' : ''
+                                            className={`notif-row-btn group relative w-full text-left px-3.5 sm:px-4 py-3 transition-all duration-200 border-b border-border/40 last:border-b-0 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10 ${
+                                                unreadItem ? 'bg-plex/[0.045]' : ''
                                             }`}
                                         >
                                             {unreadItem && (
-                                                <span className="absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-plex" />
+                                                <span className="notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-plex" />
                                             )}
-                                            <div className="flex items-start gap-3">
-                                                <span className={`mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${tone}`}>
-                                                    <Icon className="h-4 w-4" />
-                                                </span>
+                                            <div className="flex items-start gap-2.5">
+                                                <NotificationArtwork item={item} />
                                                 <div className="min-w-0 flex-1">
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <p className={`text-sm leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <p className={`text-xs leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
                                                             {item.title}
                                                         </p>
-                                                        <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted opacity-0 -translate-x-1 transition-all group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
+                                                        <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
                                                     </div>
                                                     {item.body ? (
-                                                        <p className="text-sm text-muted mt-1 line-clamp-2 leading-relaxed">{item.body}</p>
+                                                        <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">{item.body}</p>
                                                     ) : null}
-                                                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                                                    <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]">
                                                         <span className="text-muted/80">{formatRelative(item.createdAt, t)}</span>
                                                         <span className="text-border">·</span>
-                                                        <span className="font-semibold text-plex/90 group-hover:text-plex">
+                                                        <span className="font-semibold text-plex/90 transition-colors duration-200 group-hover:text-plex">
                                                             {t(dest.labelKey)}
                                                         </span>
                                                     </div>
@@ -468,8 +575,11 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             >
                 <Bell className="w-4 h-4" />
                 {unread > 0 && (
-                    <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none pointer-events-none">
-                        {unread > 9 ? '9+' : unread}
+                    <span className="notif-bell-count absolute top-0.5 right-0.5 pointer-events-none">
+                        <span className="notif-bell-ping" aria-hidden="true" />
+                        <span className="notif-bell-badge">
+                            {unread > 9 ? '9+' : unread}
+                        </span>
                     </span>
                 )}
             </button>
