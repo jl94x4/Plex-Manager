@@ -895,13 +895,16 @@ export function LibraryTitleDetailPanel({
     const setsGridClassLandscape = 'grid grid-cols-[repeat(auto-fill,minmax(10rem,13rem))] justify-start gap-2.5';
     const panelShellClass = isModalLayout
         ? [
-            'fixed z-[101] flex max-h-[100dvh] flex-col bg-card shadow-2xl',
-            // Mobile: narrow sheet. Desktop: wide centered modal — must override max-w (width alone can't beat 520px).
-            'inset-y-0 right-0 h-[100dvh] w-full max-w-[min(100%,520px)] border-l border-white/10 pt-[env(safe-area-inset-top,0px)]',
-            'md:inset-auto md:left-1/2 md:top-1/2 md:h-auto md:w-[min(96vw,1320px)] md:max-w-[min(96vw,1320px)] md:max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-white/10 md:pt-0',
+            'fixed z-[330] flex flex-col bg-card shadow-2xl',
+            // Sit above the mobile bottom nav so pagination isn't trapped behind it.
+            'top-0 right-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] h-auto w-full max-w-[min(100%,520px)] border-l border-white/10 pt-[env(safe-area-inset-top,0px)]',
+            'md:inset-auto md:bottom-auto md:left-1/2 md:top-1/2 md:h-auto md:w-[min(96vw,1320px)] md:max-w-[min(96vw,1320px)] md:max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-white/10 md:pt-0',
         ].join(' ')
-        // Drawer: 520px on mobile, ~2× on md+ (1040px).
-        : 'fixed inset-y-0 right-0 z-[101] flex h-[100dvh] max-h-[100dvh] w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card pt-[env(safe-area-inset-top,0px)] shadow-2xl md:max-w-[min(100%,1040px)]';
+        : [
+            'fixed top-0 right-0 z-[330] flex h-auto w-full max-w-[min(100%,520px)] flex-col border-l border-white/10 bg-card pt-[env(safe-area-inset-top,0px)] shadow-2xl',
+            'bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))]',
+            'md:inset-y-0 md:bottom-0 md:h-auto md:max-h-none md:max-w-[min(100%,1040px)]',
+        ].join(' ');
 
     return (
         <ModalPortal open>
@@ -909,7 +912,7 @@ export function LibraryTitleDetailPanel({
             <button
                 type="button"
                 aria-label="Close title detail"
-                className="fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm"
+                className="fixed inset-0 z-[320] bg-background/80 backdrop-blur-sm"
                 onClick={onClose}
             />
             <div
@@ -955,7 +958,7 @@ export function LibraryTitleDetailPanel({
                     </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:p-5 custom-scrollbar">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-4 sm:p-5 custom-scrollbar">
                     {statusLoading ? (
                         <div className="mb-4 flex items-center gap-2 text-xs text-muted">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1252,29 +1255,6 @@ export function LibraryTitleDetailPanel({
                                     );
                                 })}
                             </div>
-                            {setsPageCount > 1 ? (
-                                <div className="flex items-center justify-center gap-2 pt-1">
-                                    <button
-                                        type="button"
-                                        className={buttonClass}
-                                        disabled={setsPage <= 1 || interactionLocked}
-                                        onClick={() => setSetsPage((page) => Math.max(1, page - 1))}
-                                    >
-                                        <ChevronLeft className="h-4 w-4" />
-                                    </button>
-                                    <span className="text-xs text-muted">
-                                        Page {Math.min(setsPage, setsPageCount)} / {setsPageCount}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        className={buttonClass}
-                                        disabled={setsPage >= setsPageCount || interactionLocked}
-                                        onClick={() => setSetsPage((page) => Math.min(setsPageCount, page + 1))}
-                                    >
-                                        <ChevronLeft className="h-4 w-4 rotate-180" />
-                                    </button>
-                                </div>
-                            ) : null}
                         </div>
                     ) : null}
 
@@ -1371,6 +1351,29 @@ export function LibraryTitleDetailPanel({
                         </div>
                     ) : null}
                 </div>
+                {setsPageCount > 1 && !selectedSet && searchSets.length > 0 && !loading ? (
+                    <div className="flex shrink-0 items-center justify-center gap-2 border-t border-white/10 bg-card px-4 py-2.5">
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={setsPage <= 1 || interactionLocked}
+                            onClick={() => setSetsPage((page) => Math.max(1, page - 1))}
+                        >
+                            <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <span className="text-xs text-muted">
+                            Page {Math.min(setsPage, setsPageCount)} / {setsPageCount}
+                        </span>
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={setsPage >= setsPageCount || interactionLocked}
+                            onClick={() => setSetsPage((page) => Math.min(setsPageCount, page + 1))}
+                        >
+                            <ChevronLeft className="h-4 w-4 rotate-180" />
+                        </button>
+                    </div>
+                ) : null}
             </div>
             </>
         </ModalPortal>
