@@ -6603,11 +6603,16 @@ const resolveLocalPlexAccountId = async (config, uri, sessionUser) => {
     const portalIds = [portalUser?.plexId, portalUser?.id, sessionUser?.id]
         .filter(Boolean)
         .map((id) => String(id).trim());
-    const isOwner = !!sessionUser?.isAdmin
+    // Impersonation must never resolve to the PMS owner account ("1"), even if
+    // a caller re-elevates isAdmin from the JWT actor / cloud plex.tv id.
+    const impersonating = isImpersonatingSession(sessionUser);
+    const isOwner = !impersonating && (
+        !!sessionUser?.isAdmin
         || isServerOwnerUser(sessionUser, config)
         || isServerOwnerUser(portalUser, config)
         || !!(adminCloudId && sessionPlexId && sessionPlexId === adminCloudId)
-        || !!(adminCloudId && portalIds.includes(adminCloudId));
+        || !!(adminCloudId && portalIds.includes(adminCloudId))
+    );
 
     if (!isOwner && portalUser?.plexAccountId) {
         const stored = String(portalUser.plexAccountId);
@@ -9856,7 +9861,10 @@ app.get('/api/discovery/because-you-watched', requireAuth, requireMember, async 
             return res.json({ seed: null, results: [], page: 1, totalPages: 1, totalResults: 0 });
         }
 
-        req.user.isAdmin = await resolveCurrentAdmin(req.user, config);
+        req.user.isAdmin = effectiveViewerIsAdmin(
+            req.user,
+            await resolveCurrentAdmin(getSessionActor(req.user), config),
+        );
         const accountID = await resolveLocalPlexAccountId(config, uri, req.user);
         if (!accountID) {
             return res.json({ seed: null, results: [], page: 1, totalPages: 1, totalResults: 0 });
@@ -16178,7 +16186,10 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         const uri = await getPlexConnectionUri(config);
         if (!uri) return res.status(503).json({ error: 'Cannot connect to Plex' });
 
-        req.user.isAdmin = await resolveCurrentAdmin(req.user, config);
+        req.user.isAdmin = effectiveViewerIsAdmin(
+            req.user,
+            await resolveCurrentAdmin(getSessionActor(req.user), config),
+        );
         const accountID = await resolveLocalPlexAccountId(config, uri, req.user);
 
         if (!accountID) {

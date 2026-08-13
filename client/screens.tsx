@@ -7471,6 +7471,13 @@ export const UserDashboard: React.FC<{
     const [wrapUpAchievementsSeed, setWrapUpAchievementsSeed] = useState(() => Date.now());
 
     const user = sessionInfo.account;
+    const wrapUpSubjectId = String(
+        sessionInfo?.impersonation?.targetUserId
+        || user?.id
+        || sessionInfo?.session?.id
+        || sessionInfo?.session?.username
+        || 'anon',
+    );
     // Prefer site default when account is missing/partial (admins often have no full users.json row).
     const nowPlayingEnabled = !user || user.showDiscoverNowPlaying !== false;
     const { session: nowPlaying } = useNowPlaying(nowPlayingEnabled);
@@ -7597,7 +7604,7 @@ export const UserDashboard: React.FC<{
     const analyticsFetchGenRef = useRef(0);
     const analyticsLoadingGenRef = useRef(0);
 
-    const wrapUpClientCacheKey = (days: number | string) => `smp.wrapup.analytics.v2:${days}`;
+    const wrapUpClientCacheKey = (days: number | string) => `smp.wrapup.analytics.v2:${wrapUpSubjectId}:${days}`;
     const readWrapUpClientCache = (days: number | string) => {
         try {
             const raw = sessionStorage.getItem(wrapUpClientCacheKey(days));
@@ -7681,7 +7688,7 @@ export const UserDashboard: React.FC<{
                 setAnalyticsLoading(false);
             }
         }
-    }, [user, sessionInfo?.session?.isAdmin, analyticsDays, isJellyfinPortal]);
+    }, [user, sessionInfo?.session?.isAdmin, analyticsDays, isJellyfinPortal, wrapUpSubjectId]);
 
     useEffect(() => {
         void fetchAnalytics();
@@ -7699,7 +7706,7 @@ export const UserDashboard: React.FC<{
 
         let cancelled = false;
         const daysQs = analyticsDays === 'all' ? 'all' : String(analyticsDays || 30);
-        const cacheKey = `smp.wrapup.achievements.v1:${daysQs}`;
+        const cacheKey = `smp.wrapup.achievements.v1:${wrapUpSubjectId}:${daysQs}`;
 
         const readCache = () => {
             try {
@@ -7818,6 +7825,7 @@ export const UserDashboard: React.FC<{
         sessionInfo?.session?.isAdmin,
         user,
         analyticsDays,
+        wrapUpSubjectId,
     ]);
 
     usePoll(() => { void fetchAnalytics({ silent: true }); }, 5 * 60 * 1000, { immediate: false });
