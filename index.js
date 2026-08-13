@@ -3926,9 +3926,22 @@ app.get('/api/notifications', requireAuth, requireMember, async (req, res) => {
         let enriched = items;
         try {
             const store = createRequestStore({ dataDir: REQUESTS_DIR });
+            const config = await loadFile(CONFIG_PATH, {});
+            const users = await loadFile(USERS_PATH, []);
+            const seerrReady = requestAppService.isRequestAppConfigured(config);
             enriched = await enrichInAppNotificationItems(items, {
-                getRequest: (id) => store.get(id),
-                loadUsers: () => loadFile(USERS_PATH, []),
+                getRequest: async (id) => {
+                    const key = String(id || '');
+                    if (key.startsWith('seerr:')) {
+                        if (!seerrReady) return null;
+                        const seerrId = key.slice('seerr:'.length);
+                        if (!seerrId) return null;
+                        const dto = await requestAppService.getRequest(config, seerrId);
+                        return mapSeerrRequestToLifecycleRecord(dto, users);
+                    }
+                    return store.get(id);
+                },
+                loadUsers: async () => users,
             });
         } catch (enrichError) {
             log(`[notifications] enrich failed: ${enrichError?.message || enrichError}`);
@@ -6454,12 +6467,12 @@ const requestAppService = createRequestAppService({
     resolveRequestAppFetchUrl,
     resolveMemberPlexToken: async (sessionUser) => {
         const users = await loadFile(USERS_PATH, []);
-        const key = String(sessionUser?.id || sessionUser?.plexId || '');
-        const local = Array.isArray(users)
-            ? users.find((user) => String(user?.id) === key || String(user?.plexId) === key)
-            : null;
-        return decryptPlexAuthToken(local?.plexAuthToken)
-            || decryptPlexAuthToken(sessionUser?.plexAuthToken);
+        const local = findLocalUserForSession(users, sessionUser);
+        const fromLocal = decryptPlexAuthToken(local?.plexAuthToken);
+        if (fromLocal) return fromLocal;
+        // Impersonation must not reuse the admin's Plex token (that auto-approves on Seerr).
+        if (sessionUser?.impersonatingUserId) return null;
+        return decryptPlexAuthToken(sessionUser?.plexAuthToken);
     },
 });
 
@@ -10471,6 +10484,7 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
             rootFolder,
             languageProfileId,
             tags,
+            posterPath: posterPathFromBody,
         } = req.body || {};
         if (!mediaType || !mediaId) return res.status(400).json({ error: 'Missing media details' });
 
@@ -10641,6 +10655,9 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
             title: data?.media?.title || data?.media?.name || req.body?.title || 'New request',
             type,
             tmdbId,
+            posterPath: data?.posterPath || data?.media?.posterPath || data?.media?.poster
+                || String(posterPathFromBody || '').trim()
+                || null,
             requestedBy: data?.requestedBy || {
                 email: req.user?.email,
                 username: req.user?.username,
@@ -10651,6 +10668,10 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
         if (!lifecycleRecord.title) lifecycleRecord.title = req.body?.title || 'New request';
         lifecycleRecord.mediaType = type;
         lifecycleRecord.tmdbId = tmdbId;
+        if (!lifecycleRecord.posterPath) {
+            const fromBody = String(posterPathFromBody || '').trim();
+            if (fromBody) lifecycleRecord.posterPath = fromBody;
+        }
         if (!lifecycleRecord.meta.requestedByEmail) {
             lifecycleRecord.meta.requestedByEmail = req.user?.email || null;
         }

@@ -584,6 +584,9 @@ export const RequestModal: React.FC<Props> = ({
             mediaId,
             is4k: is4k || undefined,
         };
+        const posterPath = options.posterPath || fallbackPosterPath || null;
+        if (posterPath) body.posterPath = posterPath;
+        if (fallbackTitle) body.title = fallbackTitle;
         if (mediaType === 'tv') {
             // Prefer explicit season lists when Specials are in play so we never
             // accidentally request season 0 via Seerr's seasons:"all".
