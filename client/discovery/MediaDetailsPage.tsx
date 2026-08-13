@@ -543,7 +543,8 @@ export const MediaDetailsPage: React.FC<{
             hide: false,
         }
         : null;
-    const visibleRequestButton = notifyCta || requestButton;
+    const preferRequestCta = !requestButton.disabled && requestButton.variant === 'action';
+    const visibleRequestButton = preferRequestCta ? requestButton : (notifyCta || requestButton);
     const requestButtonLabel = translateDiscoverStatus(t, visibleRequestButton.label);
     const mediaTypeLabel = mediaType === 'movie' ? t('mediaType.movie') : t('mediaType.tv');
     const seerrMediaId = Number(details.mediaInfo?.id);
@@ -739,7 +740,7 @@ export const MediaDetailsPage: React.FC<{
                     >
                         {visibleRequestButton.variant === 'available' ? (
                             <><CheckCircle className="w-4 h-4" /> {requestButtonLabel}</>
-                        ) : notifyCta ? (
+                        ) : notifyCta && !preferRequestCta ? (
                             <><Bell className="w-4 h-4" /> {requestButtonLabel}</>
                         ) : visibleRequestButton.variant === 'pending' ? (
                             <><Clock className="w-4 h-4" /> {requestButtonLabel}</>

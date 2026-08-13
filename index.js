@@ -1242,6 +1242,7 @@ import {
 import { leanRadarrMovieList, leanSonarrSeriesList } from './lib/portal-request/leanArrCatalog.js';
 import { getSonarrTrashCatalog, getSonarrTrashCustomFormat } from './lib/trash-guides-catalog.js';
 import { createRequestAppService, getRequestAppGate, mapSeerrClientError } from './lib/request-app-service.js';
+import { mapSeerrRequestToLifecycleRecord } from './lib/seerr-user-session.js';
 import {
     applyDiscoveryQueryParams,
     ensureSeerrDiscoverySettings,
@@ -6446,7 +6447,20 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
     }
 };
 
-const requestAppService = createRequestAppService({ fetchWithTimeout, resolveIntegrationUrlForFetch, resolveRequestAppFetchUrl });
+const requestAppService = createRequestAppService({
+    fetchWithTimeout,
+    resolveIntegrationUrlForFetch,
+    resolveRequestAppFetchUrl,
+    resolveMemberPlexToken: async (sessionUser) => {
+        const users = await loadFile(USERS_PATH, []);
+        const key = String(sessionUser?.id || sessionUser?.plexId || '');
+        const local = Array.isArray(users)
+            ? users.find((user) => String(user?.id) === key || String(user?.plexId) === key)
+            : null;
+        return decryptPlexAuthToken(local?.plexAuthToken)
+            || decryptPlexAuthToken(sessionUser?.plexAuthToken);
+    },
+});
 
 const normalizePlexToken = (token) => {
     if (token === undefined || token === null || token === SECRET_MASK) return token;
@@ -8347,7 +8361,7 @@ const overlaySeerrPendingRequestsOntoItems = async (config, sessionUser, items =
                         ? opts.mediaInfo
                         : null;
                     const mediaStatus = Number(opts?.mediaStatus ?? seerrInfo?.status);
-                    if (seerrInfo || (Number.isFinite(mediaStatus) && mediaStatus > 1)) {
+                    if (seerrInfo || (Number.isFinite(mediaStatus) && mediaStatus > 1) || opts?.canRequest) {
                         const mediaInfo = {
                             ...(item?.mediaInfo || {}),
                             ...(seerrInfo || {}),
@@ -8355,6 +8369,9 @@ const overlaySeerrPendingRequestsOntoItems = async (config, sessionUser, items =
                         if (Number.isFinite(mediaStatus) && mediaStatus > 0) {
                             mediaInfo.status = mediaStatus;
                         }
+                        if (opts?.libraryQualities) mediaInfo.libraryQualities = opts.libraryQualities;
+                        if (opts?.requestedQualities) mediaInfo.requestedQualities = opts.requestedQualities;
+                        if (typeof opts?.canRequest === 'boolean') mediaInfo.canRequest = opts.canRequest;
                         return [{ ...item, mediaInfo }];
                     }
                 }
@@ -10445,6 +10462,20 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
         if (is4k && !options.canRequest4k) {
             return res.status(403).json({ error: 'You do not have permission to request 4K media.' });
         }
+        if (type === 'movie' && is4k && (options.libraryQualities?.['4k'] || options.requestedQualities?.['4k'])) {
+            return res.status(409).json({
+                error: options.libraryQualities?.['4k']
+                    ? 'This movie is already available in 4K.'
+                    : 'This movie already has a 4K request.',
+            });
+        }
+        if (type === 'movie' && !is4k && (options.libraryQualities?.hd || options.requestedQualities?.hd)) {
+            return res.status(409).json({
+                error: options.libraryQualities?.hd
+                    ? 'This movie is already available.'
+                    : 'This movie already has a pending request.',
+            });
+        }
         if (is4k) {
             const fourKQuota = options.quota?.fourK;
             if (fourKQuota?.limit > 0 && fourKQuota.remaining === 0) {
@@ -10509,25 +10540,45 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
             }
         }
 
-        if (options.seerrUserId) body.userId = options.seerrUserId;
-
-        const data = await requestAppService.rawFetch(config, '/api/v1/request', {
-            method: 'POST',
-            body,
+        const data = await requestAppService.submitMemberRequest(config, req.user, {
+            mediaType: type,
+            mediaId: tmdbId,
+            is4k: !!is4k,
+            seasons: type === 'tv' ? body.seasons : null,
+            serverId: body.serverId,
+            profileId: body.profileId,
+            rootFolder: body.rootFolder,
+            languageProfileId: body.languageProfileId,
+            tags: body.tags,
         });
         const seerrStatus = Number(data?.status);
-        // Pending only — skip admin alert when Seerr auto-approves.
+        const users = await loadFile(USERS_PATH, []);
+        const lifecycleRecord = mapSeerrRequestToLifecycleRecord({
+            ...data,
+            title: data?.media?.title || data?.media?.name || req.body?.title || 'New request',
+            type,
+            tmdbId,
+            requestedBy: data?.requestedBy || {
+                email: req.user?.email,
+                username: req.user?.username,
+                displayName: req.user?.username,
+                plexId: req.user?.plexId,
+            },
+        }, users);
+        if (!lifecycleRecord.title) lifecycleRecord.title = req.body?.title || 'New request';
+        lifecycleRecord.mediaType = type;
+        lifecycleRecord.tmdbId = tmdbId;
+        if (!lifecycleRecord.meta.requestedByEmail) {
+            lifecycleRecord.meta.requestedByEmail = req.user?.email || null;
+        }
+        if (!lifecycleRecord.meta.requestedByName) {
+            lifecycleRecord.meta.requestedByName = req.user?.username || null;
+        }
+        // Pending → admin alert. Auto-approved (member actually has that Seerr permission) → member alert.
         if (seerrStatus === 1 || (!Number.isFinite(seerrStatus) && !data?.media)) {
-            await notifyAdminNewRequest(config, {
-                id: data?.id || 'seerr',
-                title: data?.media?.title || data?.media?.name || req.body?.title || 'New request',
-                mediaType: type,
-                tmdbId,
-                meta: {
-                    requestedByName: req.user?.username || null,
-                    requestedByEmail: req.user?.email || null,
-                },
-            });
+            await notifyAdminNewRequest(config, lifecycleRecord);
+        } else if (seerrStatus === 2) {
+            await notifyPortalRequestDecision(config, lifecycleRecord, { approved: true });
         }
         res.status(201).json(data);
     } catch (e) {
@@ -11502,23 +11553,23 @@ app.post('/api/requests/:id/approve', requireAdmin, async (req, res) => {
             await notifyPortalRequestDecision(config, result, { approved: true });
             return res.json({ success: true, title, engine: 'portal' });
         }
+        const existing = await requestAppService.getRequest(config, requestId).catch(() => null);
         const result = overrides
             ? await requestAppService.approveRequestWithOptions(config, requestId, overrides)
             : await requestAppService.approveRequest(config, requestId);
-        const title = result?.media?.title || result?.media?.name || req.body?.title || `Request #${requestId}`;
+        const users = await loadFile(USERS_PATH, []);
+        const lifecycleRecord = mapSeerrRequestToLifecycleRecord(
+            (result?.requestedBy || result?.media) ? result : existing,
+            users,
+        );
+        const title = lifecycleRecord.title
+            || result?.media?.title
+            || result?.media?.name
+            || req.body?.title
+            || `Request #${requestId}`;
+        lifecycleRecord.title = title;
         await appendAuditLog('request_approved', req.user, null, { requestId, title, overrides: overrides || null });
-        await notifyPortalRequestDecision(config, {
-            id: requestId,
-            title,
-            userId: result?.requestedBy?.id || result?.requestedBy?.plexId || result?.userId || null,
-            mediaType: result?.type || result?.mediaType || null,
-            tmdbId: result?.media?.tmdbId || result?.tmdbId || null,
-            year: result?.media?.releaseDate || result?.media?.firstAirDate || null,
-            meta: {
-                requestedByName: result?.requestedBy?.displayName || result?.requestedBy?.username || null,
-                requestedByEmail: result?.requestedBy?.email || null,
-            },
-        }, { approved: true });
+        await notifyPortalRequestDecision(config, lifecycleRecord, { approved: true });
         res.json({ success: true, title });
     } catch (error) {
         res.status(error.status || 502).json({ error: error.message || 'Failed to approve request' });
@@ -11577,21 +11628,25 @@ app.post('/api/requests/:id/decline', requireAdmin, async (req, res) => {
             }
             return res.json({ success: true, title, blacklisted });
         }
+        const existing = await requestAppService.getRequest(config, requestId).catch(() => null);
         const result = await requestAppService.declineRequest(config, requestId, reason);
-        const title = result?.media?.title || result?.media?.name || req.body?.title || `Request #${requestId}`;
+        const users = await loadFile(USERS_PATH, []);
+        const lifecycleRecord = mapSeerrRequestToLifecycleRecord(
+            (result?.requestedBy || result?.media) ? result : existing,
+            users,
+        );
+        const title = lifecycleRecord.title
+            || result?.media?.title
+            || result?.media?.name
+            || req.body?.title
+            || `Request #${requestId}`;
+        lifecycleRecord.title = title;
+        lifecycleRecord.meta = {
+            ...(lifecycleRecord.meta || {}),
+            declineReason: reason || null,
+        };
         await appendAuditLog('request_declined', req.user, null, { requestId, title, reason: reason || null });
-        await notifyPortalRequestDecision(config, {
-            id: requestId,
-            title,
-            userId: result?.requestedBy?.id || result?.requestedBy?.plexId || result?.userId || null,
-            mediaType: result?.type || result?.mediaType || null,
-            tmdbId: result?.media?.tmdbId || result?.tmdbId || null,
-            meta: {
-                requestedByName: result?.requestedBy?.displayName || result?.requestedBy?.username || null,
-                requestedByEmail: result?.requestedBy?.email || null,
-                declineReason: reason || null,
-            },
-        }, { declined: true, declineReason: reason });
+        await notifyPortalRequestDecision(config, lifecycleRecord, { declined: true, declineReason: reason });
 
         if (req.body?.blacklist) {
             const tmdbId = Number(req.body?.tmdbId);
@@ -13736,7 +13791,7 @@ app.get('/api/media-server/library/browse', requireAuth, requireAdmin, async (re
             || sort === 'cachedFirst';
         const plexSort = sort === 'cachedFirst' ? 'titleAsc' : sort;
         const bypassCache = shouldBypassLibraryCache(req);
-        const cacheKey = `media_library_browse_${mediaServerLibraryCacheId(config)}_${sectionKey}_${mediaType}_${sort}_${cacheStatus}_${start}_${limit}`;
+        const cacheKey = `media_library_browse_${mediaServerLibraryCacheId(config)}_${sectionKey}_${mediaType}_${sort}_${start}_${limit}`;
         const fetchBrowse = async () => {
             const browseOptions = {
                 sectionKey, mediaType, sort: plexSort, start, limit,
@@ -13752,11 +13807,13 @@ app.get('/api/media-server/library/browse', requireAuth, requireAdmin, async (re
                 const listAll = isEmbyLikeMediaServer(config)
                     ? listAllJellyfinLibraryBrowseItems
                     : listAllPlexLibraryBrowseItems;
-                const all = await listAll(config, mediaServerLibraryDeps(), {
+                const allCacheKey = `media_library_browse_all_${mediaServerLibraryCacheId(config)}_${sectionKey}_${mediaType}_${plexSort}`;
+                if (bypassCache) apiCache.delete(allCacheKey);
+                const all = await withCache(allCacheKey, 120_000, () => listAll(config, mediaServerLibraryDeps(), {
                     sectionKey,
                     mediaType,
                     sort: plexSort,
-                });
+                }));
                 const cachedKeys = await listTpdbCachedCoverageKeys();
                 const applied = applyTpdbCacheBrowse(all.items || [], {
                     cachedKeys,
@@ -13784,8 +13841,12 @@ app.get('/api/media-server/library/browse', requireAuth, requireAdmin, async (re
             }
             return browsePlexLibraryMedia(config, mediaServerLibraryDeps(), browseOptions);
         };
+        if (needsCacheIndex) {
+            const payload = await fetchBrowse();
+            return res.json({ serverType, ...payload });
+        }
         if (bypassCache) apiCache.delete(cacheKey);
-        const payload = await withCache(cacheKey, needsCacheIndex ? 30_000 : 120_000, fetchBrowse);
+        const payload = await withCache(cacheKey, 120_000, fetchBrowse);
         return res.json({ serverType, ...payload });
     } catch (e) {
         const status = Number(e.status) || 502;

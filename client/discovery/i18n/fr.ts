@@ -1441,6 +1441,7 @@ export const fr: DeepPartial<EnCatalog> = {
         loadingServerOptions: 'Chargement des options du serveur…',
         selectHdUhd: 'Sélectionnez HD, UHD ou les deux',
         alreadyInLibrary: 'Déjà dans la bibliothèque',
+        alreadyRequested: 'Déjà demandé',
         hdQuotaUsedUp: 'Quota HD épuisé',
         hdUnavailable: 'Demandes HD indisponibles',
         fourKQuotaUsedUp: 'Quota 4K épuisé',

@@ -381,12 +381,14 @@ export const RequestModal: React.FC<Props> = ({
     );
 
     const hdAllowed = !!options?.canRequest && !hdQuotaBlocked && options?.hasHdServer !== false
-        && !options?.libraryQualities?.hd;
+        && !options?.libraryQualities?.hd
+        && !options?.requestedQualities?.hd;
     const fourKAllowed = !!options?.canRequest
         && !!options?.canRequest4k
         && !!options?.has4kServer
         && !fourKQuotaBlocked
-        && !options?.libraryQualities?.['4k'];
+        && !options?.libraryQualities?.['4k']
+        && !options?.requestedQualities?.['4k'];
 
     const activeForm = qualityForms[advancedQuality];
     const filteredServers = useMemo(() => {
@@ -927,7 +929,9 @@ export const RequestModal: React.FC<Props> = ({
                                                 allowed: hdAllowed,
                                                 blockedHint: options?.libraryQualities?.hd
                                                     ? t('request.alreadyInLibrary')
-                                                    : hdQuotaBlocked
+                                                    : options?.requestedQualities?.hd
+                                                        ? t('request.alreadyRequested')
+                                                        : hdQuotaBlocked
                                                         ? t('request.hdQuotaUsedUp')
                                                         : t('request.hdUnavailable'),
                                             },
@@ -939,7 +943,9 @@ export const RequestModal: React.FC<Props> = ({
                                                 allowed: fourKAllowed,
                                                 blockedHint: options?.libraryQualities?.['4k']
                                                     ? t('request.alreadyInLibrary')
-                                                    : fourKQuotaBlocked
+                                                    : options?.requestedQualities?.['4k']
+                                                        ? t('request.alreadyRequested')
+                                                        : fourKQuotaBlocked
                                                         ? t('request.fourKQuotaUsedUp')
                                                         : (!options?.canRequest4k
                                                             ? t('request.fourKDisabled')

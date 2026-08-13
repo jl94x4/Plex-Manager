@@ -1439,6 +1439,7 @@ export const en = {
         loadingServerOptions: 'Loading server options…',
         selectHdUhd: 'Select HD, UHD, or both',
         alreadyInLibrary: 'Already in library',
+        alreadyRequested: 'Already requested',
         hdQuotaUsedUp: 'HD quota used up',
         hdUnavailable: 'HD requests unavailable',
         fourKQuotaUsedUp: '4K quota used up',

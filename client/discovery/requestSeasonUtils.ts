@@ -522,8 +522,10 @@ export type RequestOptionsPayload = {
     canRequestAdvanced?: boolean;
     has4kServer: boolean;
     hasHdServer: boolean;
-    /** Movie only — which qualities already have a file in Radarr. */
+    /** Movie only — which qualities already have a file in Radarr / Seerr. */
     libraryQualities?: { hd?: boolean; '4k'?: boolean } | null;
+    /** Movie only — which qualities already have an open Seerr request. */
+    requestedQualities?: { hd?: boolean; '4k'?: boolean } | null;
     /** Soft notice when one quality is in library but another can still be requested. */
     availabilityNote?: string | null;
     standardQuotaBlocked?: boolean;
@@ -680,16 +682,25 @@ export const getRequestButtonState = (
         const radarr = details?.radarrLibraryStatus;
         const hdHasFile = !!radarr?.hdHasFile;
         const fourKHasFile = !!radarr?.fourKHasFile;
+        const libQ = mediaInfo?.libraryQualities;
+        const reqQ = mediaInfo?.requestedQualities;
+        const seerrCanRequest = mediaInfo?.canRequest === true;
         // Only keep Request open when the *other* quality is monitored and still missing a file.
-        const qualityStillNeeded = !!radarr && (
+        const qualityStillNeeded = (!!radarr && (
             (hdHasFile && !fourKHasFile && !!radarr.fourKMatched)
             || (fourKHasFile && !hdHasFile && !!radarr.hdMatched)
-        );
+        )) || !!(libQ && (
+            (libQ.hd && !libQ['4k'] && !reqQ?.['4k'])
+            || (libQ['4k'] && !libQ.hd && !reqQ?.hd)
+        ));
 
-        if (status === MEDIA_STATUS.AVAILABLE && !qualityStillNeeded) {
+        if (status === MEDIA_STATUS.AVAILABLE && !qualityStillNeeded && !seerrCanRequest) {
             return { label: 'Available', disabled: true, variant: 'available' as const };
         }
-        if (status === MEDIA_STATUS.AVAILABLE && qualityStillNeeded) {
+        if (status === MEDIA_STATUS.AVAILABLE && (qualityStillNeeded || seerrCanRequest)) {
+            return { label: 'Request Movie', disabled: false, variant: 'action' as const };
+        }
+        if (seerrCanRequest && (status === MEDIA_STATUS.PROCESSING || status === MEDIA_STATUS.PENDING)) {
             return { label: 'Request Movie', disabled: false, variant: 'action' as const };
         }
         if (status === MEDIA_STATUS.PROCESSING) {
