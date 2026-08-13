@@ -4,6 +4,8 @@ This is a living planning document. Re-audit the current `nightly` branch before
 
 This file tracks UI i18n wiring and known remaining localization work. It does not guarantee translation completeness for every individual locale.
 
+The supported UI locale set is `en`, `fr`, `de`, `es`, `pt-BR`, `it`, `ja`, `pl`, `nl`, and `ru`. English is the source catalog; French is currently complete, German and Spanish are partial overlays, and the six newly registered locales are partial overlays that fall back to English.
+
 ## Status Meaning
 
 | State | Meaning |

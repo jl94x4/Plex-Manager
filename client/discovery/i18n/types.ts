@@ -3,6 +3,12 @@ export const DISCOVER_LOCALES = [
     { code: 'fr', label: 'French', nativeLabel: 'Français' },
     { code: 'de', label: 'German', nativeLabel: 'Deutsch' },
     { code: 'es', label: 'Spanish', nativeLabel: 'Español' },
+    { code: 'pt-BR', label: 'Portuguese (Brazil)', nativeLabel: 'Português (Brasil)' },
+    { code: 'it', label: 'Italian', nativeLabel: 'Italiano' },
+    { code: 'ja', label: 'Japanese', nativeLabel: '日本語' },
+    { code: 'pl', label: 'Polish', nativeLabel: 'Polski' },
+    { code: 'nl', label: 'Dutch', nativeLabel: 'Nederlands' },
+    { code: 'ru', label: 'Russian', nativeLabel: 'Русский' },
 ] as const;
 
 export type DiscoverLocale = (typeof DISCOVER_LOCALES)[number]['code'];
@@ -22,7 +28,7 @@ export const isDiscoverLocale = (value: unknown): value is DiscoverLocale => (
 export const matchDiscoverLocale = (value: unknown): DiscoverLocale | null => {
     const raw = String(value || '').trim().toLowerCase().replace(/_/g, '-');
     if (!raw) return null;
-    const exact = DISCOVER_LOCALES.find((locale) => locale.code === raw);
+    const exact = DISCOVER_LOCALES.find((locale) => locale.code.toLowerCase() === raw);
     if (exact) return exact.code;
     const base = raw.split('-')[0];
     return DISCOVER_LOCALES.find((locale) => locale.code === base)?.code || null;

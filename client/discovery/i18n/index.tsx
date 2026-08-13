@@ -4,6 +4,12 @@ import { en } from './en';
 import { fr } from './fr';
 import { de } from './de';
 import { es } from './es';
+import { ptBR } from './pt-BR';
+import { it } from './it';
+import { ja } from './ja';
+import { pl } from './pl';
+import { nl } from './nl';
+import { ru } from './ru';
 import {
     detectDiscoverBrowserLocale,
     isDiscoverLocale,
@@ -15,7 +21,7 @@ import {
     type DiscoverTranslateVars,
 } from './types';
 
-const catalogs: Record<DiscoverLocale, unknown> = { en, fr, de, es };
+const catalogs: Record<DiscoverLocale, unknown> = { en, fr, de, es, 'pt-BR': ptBR, it, ja, pl, nl, ru };
 
 const getPath = (obj: unknown, path: string): unknown => {
     let current: unknown = obj;

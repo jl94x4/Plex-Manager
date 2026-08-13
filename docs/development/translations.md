@@ -2,7 +2,7 @@
 
 This guide explains how to contribute UI translations to Server Manager Portal.
 
-It applies to French, German, Spanish, existing locales, and future locales. Keep translation changes focused, reviewable, and aligned with the project's current localization architecture.
+It applies to French, German, Spanish, Portuguese (Brazil), Italian, Japanese, Polish, Dutch, Russian, and future locales. Keep translation changes focused, reviewable, and aligned with the project's current localization architecture.
 
 ## Localization Architecture
 
@@ -11,7 +11,7 @@ Most translated UI chrome uses the Discover i18n system:
 | File / API | Purpose |
 | --- | --- |
 | `client/discovery/i18n/en.ts` | Source catalog. English strings live here first. |
-| `client/discovery/i18n/fr.ts`, `de.ts`, `es.ts` | Locale overlays. These mirror English keys where translated strings exist. |
+| `client/discovery/i18n/fr.ts`, `de.ts`, `es.ts`, and additional locale files | Locale overlays. These may be partial and mirror English keys where translated strings exist. |
 | `client/discovery/i18n/types.ts` | Supported locale metadata for the language menu. |
 | `client/discovery/i18n/index.tsx` | Catalog registry, provider, and translation helper. |
 | `DiscoverI18nProvider` | React provider for the active UI locale. |
@@ -19,6 +19,8 @@ Most translated UI chrome uses the Discover i18n system:
 | `t('dot.path')` | Translation lookup helper. |
 
 English is the source catalog. Missing locale keys fall back to English, so partially translated locales remain usable.
+
+The current supported UI locales are `en`, `fr`, `de`, `es`, `pt-BR`, `it`, `ja`, `pl`, `nl`, and `ru`. `pt-BR` is a regional locale and must remain distinct from generic Portuguese. The newly registered locale overlays may be partial; registration does not imply complete translation coverage.
 
 Do not introduce another global localization system. When adding localized UI chrome to the wider portal, prefer extending the existing Discover catalogs and wiring the UI through `useDiscoverI18n()` / `t(...)`.
 
