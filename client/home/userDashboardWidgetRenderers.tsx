@@ -267,9 +267,11 @@ const LibraryStatsContent: React.FC<{ serverStats: any; variant?: 'plex' | 'jell
         episodeCount > 0 ? t('homeDashboard.episodeCountLabel', { count: episodeCount.toLocaleString() }) : null,
         trackCount > 0 ? t('homeDashboard.trackCountLabel', { count: trackCount.toLocaleString() }) : null,
     ].filter(Boolean);
-    const failedNames = Array.isArray(serverStats.failedLibraries)
-        ? serverStats.failedLibraries.map((f: any) => f?.title).filter(Boolean)
-        : [];
+    const failedNames = [
+        ...(Array.isArray(serverStats.lastBuildFailures) ? serverStats.lastBuildFailures : []),
+        ...(Array.isArray(serverStats.failedLibraries) ? serverStats.failedLibraries : []),
+    ].map((f: any) => f?.title).filter(Boolean)
+        .filter((name, index, all) => all.indexOf(name) === index);
 
     return (
         <div className="space-y-3">

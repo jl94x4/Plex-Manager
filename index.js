@@ -92,7 +92,7 @@ import {
     JELLYSTAT_ANALYTICS_STALE_MS,
     pageSwrStats,
 } from './lib/page-swr-cache.js';
-import { asArray, extractPlexItemBytes } from './lib/plex-stats-bytes.js';
+import { asArray, extractPlexItemBytes, nextPlexContainerStart } from './lib/plex-stats-bytes.js';
 
 const resolveAppVersion = () => {
     const pkgVersion = resolvePackageVersion();
@@ -6845,6 +6845,7 @@ const loadPlexStatsFromDisk = async () => {
 
 /**
  * Crawls Plex for library sizes (paginated, 1 000 items per request).
+ * Item counts use Plex totalSize (cheap). Bytes still require a full crawl.
  * Writes results to plex-stats.json and updates the in-memory cache.
  * Never throws — errors are logged and the function returns null.
  */
@@ -6863,20 +6864,30 @@ const buildPlexStatsCache = async () => {
     log('[PlexStats] Starting background library size build...');
     try {
         const uri = await getPlexConnectionUri(config);
-        const PAGE_TIMEOUT_MS = 45_000;
+        const PAGE_TIMEOUT_MS = 90_000;
+        const PAGE = 1000;
         const plexStatsFetch = (url) => fetchWithTimeout(url, {
             headers: plexClientHeaders(config.plexToken),
         }, PAGE_TIMEOUT_MS);
+        const fetchPlexTotalSize = async (pathQuery) => {
+            const res = await plexStatsFetch(`${uri}${pathQuery}`);
+            if (!res.ok) throw new Error(`count failed: ${res.status}`);
+            const { MediaContainer: mc = {} } = await res.json();
+            return Number(mc.totalSize || mc.size || 0) || 0;
+        };
 
         const sectionsRes = await plexStatsFetch(`${uri}/library/sections`);
         if (!sectionsRes.ok) throw new Error(`Sections request failed: ${sectionsRes.status}`);
         const { MediaContainer: { Directory: directories = [] } } = await sectionsRes.json();
+        const existingStats = await loadFile(PLEX_STATS_CACHE_PATH, {});
+        const previousLibraries = Array.isArray(existingStats.libraries) ? existingStats.libraries : [];
 
         let totalMoviesCount = 0, totalShowsCount = 0, totalMusicCount = 0;
         let totalEpisodesCount = 0, totalArtistsCount = 0, totalAlbumsCount = 0, totalTracksCount = 0;
         let totalMoviesBytes = 0, totalShowsBytes = 0, totalMusicBytes = 0;
         let total4kMovies = 0;
         const fourKShows = new Set();
+        let byteScanComplete = true;
 
         const resolutions = { '4K': 0, '1080p': 0, '720p': 0, 'SD': 0, 'Other': 0 };
         const codecs = { 'H.265 / HEVC': 0, 'H.264 / AVC': 0, 'AV1': 0, 'Other': 0 };
@@ -6893,37 +6904,45 @@ const buildPlexStatsCache = async () => {
         const libraries = [];
         const failedLibraries = [];
 
+        const keepPreviousCache = async (failures, reason) => {
+            const names = failures.map((f) => f.title).join(', ');
+            log(`[PlexStats] ${reason} (failed: ${names}) — keeping previous catalog totals`);
+            const kept = {
+                ...existingStats,
+                lastBuildFailures: failures,
+                lastBuildFailedAt: Date.now(),
+                failedLibraries: [],
+                deltas: {},
+            };
+            cachedPlexStats = kept;
+            await fs.writeFile(PLEX_STATS_CACHE_PATH, JSON.stringify(kept, null, 2));
+            markTaskEnd(systemJobs.plexStats, new Error(`Incomplete library size build: ${names}`));
+        };
+
         for (const dir of directories) {
+            let count = 0;
+            let sectionEpisodes = 0;
+            let sectionTracks = 0;
+            let sectionAlbums = 0;
             try {
-                // ── Item count (single zero-size request) ──
-                let count = 0;
-                const countRes = await plexStatsFetch(
-                    `${uri}/library/sections/${dir.key}/all?X-Plex-Container-Start=0&X-Plex-Container-Size=0`,
+                count = await fetchPlexTotalSize(
+                    `/library/sections/${dir.key}/all?X-Plex-Container-Start=0&X-Plex-Container-Size=0`,
                 );
-                if (countRes.ok) {
-                    const { MediaContainer: mc } = await countRes.json();
-                    count = mc.totalSize || mc.size || 0;
-                    if (dir.type === 'movie') {
-                        totalMoviesCount += count;
-                    } else if (dir.type === 'show') {
-                        totalShowsCount += count;
-                    } else if (dir.type === 'artist') {
-                        totalMusicCount += count;
-                        totalArtistsCount += count;
-                        // Also fetch album count (type 9)
-                        const albCountRes = await plexStatsFetch(
-                            `${uri}/library/sections/${dir.key}/all?type=9&X-Plex-Container-Start=0&X-Plex-Container-Size=1`,
-                        );
-                        if (albCountRes.ok) {
-                            const { MediaContainer: albMc } = await albCountRes.json();
-                            totalAlbumsCount += albMc.totalSize || albMc.size || 0;
-                        }
-                    }
+                if (dir.type === 'show') {
+                    sectionEpisodes = await fetchPlexTotalSize(
+                        `/library/sections/${dir.key}/all?type=4&X-Plex-Container-Start=0&X-Plex-Container-Size=0`,
+                    );
+                } else if (dir.type === 'artist') {
+                    sectionAlbums = await fetchPlexTotalSize(
+                        `/library/sections/${dir.key}/all?type=9&X-Plex-Container-Start=0&X-Plex-Container-Size=0`,
+                    );
+                    sectionTracks = await fetchPlexTotalSize(
+                        `/library/sections/${dir.key}/all?type=10&X-Plex-Container-Start=0&X-Plex-Container-Size=0`,
+                    );
                 }
 
-                // ── Bytes (paginated) ──
-                // movie=1, episode=4, track=10
                 const typeParam = dir.type === 'movie' ? '?type=1' : dir.type === 'show' ? '?type=4' : dir.type === 'artist' ? '?type=10' : '';
+                let bytes = 0;
                 if (!typeParam) {
                     libraries.push({
                         key: String(dir.key),
@@ -6932,83 +6951,108 @@ const buildPlexStatsCache = async () => {
                         count,
                         bytes: 0,
                     });
+                    log(`[PlexStats] ${dir.title}: ${count} items, 0 bytes`);
                     continue;
                 }
 
-                let start = 0, bytes = 0, sectionEpisodes = 0, sectionTracks = 0;
-                const PAGE = 2000;
-                while (true) {
-                    const pageRes = await plexStatsFetch(
-                        `${uri}/library/sections/${dir.key}/all${typeParam}&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${PAGE}`,
-                    );
-                    if (!pageRes.ok) throw new Error(`page ${start} failed: ${pageRes.status}`);
-                    const { MediaContainer: { Metadata: items = [] } } = await pageRes.json();
-                    if (items.length === 0) break;
-                    
-                    if (dir.type === 'show') {
-                        sectionEpisodes += items.length;
-                        totalEpisodesCount += items.length;
-                    } else if (dir.type === 'artist') {
-                        sectionTracks += items.length;
-                        totalTracksCount += items.length;
-                    }
+                try {
+                    let start = 0;
+                    while (true) {
+                        const pageRes = await plexStatsFetch(
+                            `${uri}/library/sections/${dir.key}/all${typeParam}&includeGuids=0&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${PAGE}`,
+                        );
+                        if (!pageRes.ok) throw new Error(`page ${start} failed: ${pageRes.status}`);
+                        const { MediaContainer: { Metadata: items = [] } } = await pageRes.json();
+                        if (items.length === 0) break;
 
-                    for (const item of items) {
-                        let is4k = false;
-                        for (const media of asArray(item.Media)) {
-                            if (!media || typeof media !== 'object') continue;
-                            if (media.videoResolution === '4k') is4k = true;
+                        for (const item of items) {
+                            let is4k = false;
+                            for (const media of asArray(item.Media)) {
+                                if (!media || typeof media !== 'object') continue;
+                                if (media.videoResolution === '4k') is4k = true;
 
-                            if (dir.type === 'movie' || dir.type === 'show') {
-                                const res = String(media.videoResolution || '').toLowerCase();
-                                if (res === '4k' || res === '2160') resolutions['4K']++;
-                                else if (res === '1080') resolutions['1080p']++;
-                                else if (res === '720') resolutions['720p']++;
-                                else if (res === '576' || res === '480' || res === 'sd') resolutions['SD']++;
-                                else resolutions['Other']++;
+                                if (dir.type === 'movie' || dir.type === 'show') {
+                                    const res = String(media.videoResolution || '').toLowerCase();
+                                    if (res === '4k' || res === '2160') resolutions['4K']++;
+                                    else if (res === '1080') resolutions['1080p']++;
+                                    else if (res === '720') resolutions['720p']++;
+                                    else if (res === '576' || res === '480' || res === 'sd') resolutions['SD']++;
+                                    else resolutions['Other']++;
 
-                                const codec = String(media.videoCodec || '').toLowerCase();
-                                if (codec === 'hevc' || codec === 'h265') codecs['H.265 / HEVC']++;
-                                else if (codec === 'h264' || codec === 'avc') codecs['H.264 / AVC']++;
-                                else if (codec === 'av1') codecs['AV1']++;
-                                else codecs['Other']++;
-                            }
+                                    const codec = String(media.videoCodec || '').toLowerCase();
+                                    if (codec === 'hevc' || codec === 'h265') codecs['H.265 / HEVC']++;
+                                    else if (codec === 'h264' || codec === 'avc') codecs['H.264 / AVC']++;
+                                    else if (codec === 'av1') codecs['AV1']++;
+                                    else codecs['Other']++;
+                                }
 
-                            for (const part of asArray(media.Part)) {
-                                if (!part || typeof part !== 'object') continue;
-                                const partSize = Number(part.size ?? part.fileSize ?? 0);
-                                if (!Number.isFinite(partSize) || partSize <= 0) continue;
+                                for (const part of asArray(media.Part)) {
+                                    if (!part || typeof part !== 'object') continue;
+                                    const partSize = Number(part.size ?? part.fileSize ?? 0);
+                                    if (!Number.isFinite(partSize) || partSize <= 0) continue;
 
-                                if (dir.type === 'movie') {
-                                    const sizeMB = partSize / (1024 * 1024);
-                                    if (sizeMB < 500) fileSizes['0 - 500 MB'].movies++;
-                                    else if (sizeMB < 1500) fileSizes['500 MB - 1.5 GB'].movies++;
-                                    else if (sizeMB < 5000) fileSizes['1.5 GB - 5 GB'].movies++;
-                                    else if (sizeMB < 10000) fileSizes['5 GB - 10 GB'].movies++;
-                                    else fileSizes['10 GB+'].movies++;
-                                } else if (dir.type === 'show') {
-                                    const sizeMB = partSize / (1024 * 1024);
-                                    if (sizeMB < 500) fileSizes['0 - 500 MB'].shows++;
-                                    else if (sizeMB < 1500) fileSizes['500 MB - 1.5 GB'].shows++;
-                                    else if (sizeMB < 5000) fileSizes['1.5 GB - 5 GB'].shows++;
-                                    else if (sizeMB < 10000) fileSizes['5 GB - 10 GB'].shows++;
-                                    else fileSizes['10 GB+'].shows++;
+                                    if (dir.type === 'movie') {
+                                        const sizeMB = partSize / (1024 * 1024);
+                                        if (sizeMB < 500) fileSizes['0 - 500 MB'].movies++;
+                                        else if (sizeMB < 1500) fileSizes['500 MB - 1.5 GB'].movies++;
+                                        else if (sizeMB < 5000) fileSizes['1.5 GB - 5 GB'].movies++;
+                                        else if (sizeMB < 10000) fileSizes['5 GB - 10 GB'].movies++;
+                                        else fileSizes['10 GB+'].movies++;
+                                    } else if (dir.type === 'show') {
+                                        const sizeMB = partSize / (1024 * 1024);
+                                        if (sizeMB < 500) fileSizes['0 - 500 MB'].shows++;
+                                        else if (sizeMB < 1500) fileSizes['500 MB - 1.5 GB'].shows++;
+                                        else if (sizeMB < 5000) fileSizes['1.5 GB - 5 GB'].shows++;
+                                        else if (sizeMB < 10000) fileSizes['5 GB - 10 GB'].shows++;
+                                        else fileSizes['10 GB+'].shows++;
+                                    }
                                 }
                             }
-                        }
 
-                        bytes += extractPlexItemBytes(item);
+                            bytes += extractPlexItemBytes(item);
 
-                        if (is4k) {
-                            if (dir.type === 'movie') total4kMovies++;
-                            else if (dir.type === 'show') fourKShows.add(item.grandparentRatingKey || item.parentRatingKey || item.title);
+                            if (is4k) {
+                                if (dir.type === 'movie') total4kMovies++;
+                                else if (dir.type === 'show') fourKShows.add(item.grandparentRatingKey || item.parentRatingKey || item.title);
+                            }
                         }
+                        const nextStart = nextPlexContainerStart(start, items.length);
+                        if (nextStart == null) break;
+                        start = nextStart;
+                        const expectedItems = dir.type === 'show'
+                            ? sectionEpisodes
+                            : dir.type === 'artist'
+                                ? sectionTracks
+                                : count;
+                        if (expectedItems > 0 && start >= expectedItems) break;
                     }
-                    start += PAGE;
+                } catch (byteErr) {
+                    byteScanComplete = false;
+                    const prevLib = previousLibraries.find((lib) => String(lib.key) === String(dir.key));
+                    bytes = Number(prevLib?.bytes) || 0;
+                    failedLibraries.push({
+                        title: dir.title,
+                        type: dir.type,
+                        error: byteErr.message,
+                        countsOnly: true,
+                    });
+                    log(`[PlexStats] Size crawl failed for "${dir.title}" (${byteErr.message}) — keeping previous bytes, using Plex totals for counts`);
                 }
-                if (dir.type === 'movie') totalMoviesBytes += bytes;
-                else if (dir.type === 'show') totalShowsBytes += bytes;
-                else if (dir.type === 'artist') totalMusicBytes += bytes;
+
+                if (dir.type === 'movie') {
+                    totalMoviesCount += count;
+                    totalMoviesBytes += bytes;
+                } else if (dir.type === 'show') {
+                    totalShowsCount += count;
+                    totalEpisodesCount += sectionEpisodes;
+                    totalShowsBytes += bytes;
+                } else if (dir.type === 'artist') {
+                    totalMusicCount += count;
+                    totalArtistsCount += count;
+                    totalAlbumsCount += sectionAlbums;
+                    totalTracksCount += sectionTracks;
+                    totalMusicBytes += bytes;
+                }
 
                 libraries.push({
                     key: String(dir.key),
@@ -7026,12 +7070,18 @@ const buildPlexStatsCache = async () => {
             }
         }
 
+        const countFailures = failedLibraries.filter((f) => !f.countsOnly);
+        if (countFailures.length && existingStats.generatedAt) {
+            await keepPreviousCache(failedLibraries, 'Incomplete build');
+            return;
+        }
+
         const totalVideoTitles = totalMoviesCount + totalShowsCount;
         const total4kTitles = total4kMovies + fourKShows.size;
-        const existingStats = await loadFile(PLEX_STATS_CACHE_PATH, {});
-
-        const deltas = existingStats.deltas || {};
-        if (existingStats.movies !== undefined) {
+        const previousIncomplete = (Array.isArray(existingStats.failedLibraries) && existingStats.failedLibraries.length > 0)
+            || (Array.isArray(existingStats.lastBuildFailures) && existingStats.lastBuildFailures.length > 0);
+        const deltas = {};
+        if (existingStats.movies !== undefined && !previousIncomplete) {
             deltas.movies = totalMoviesCount - (existingStats.movies || 0);
             deltas.shows = totalShowsCount - (existingStats.shows || 0);
             deltas.episodes = totalEpisodesCount - (existingStats.episodes || 0);
@@ -7040,37 +7090,31 @@ const buildPlexStatsCache = async () => {
             deltas.tracks = totalTracksCount - (existingStats.tracks || 0);
         }
 
-        const existingTotalBytes = (Number(existingStats.moviesBytes) || 0)
-            + (Number(existingStats.showsBytes) || 0)
-            + (Number(existingStats.musicBytes) || 0);
-        const newTotalBytes = totalMoviesBytes + totalShowsBytes + totalMusicBytes;
-        if (failedLibraries.length && existingTotalBytes > newTotalBytes) {
-            const names = failedLibraries.map((f) => f.title).join(', ');
-            log(`[PlexStats] Incomplete build (failed: ${names}) — keeping previous cache (${existingTotalBytes} bytes > ${newTotalBytes} bytes)`);
-            markTaskEnd(systemJobs.plexStats, new Error(`Incomplete library size build: ${names}`));
-            return;
-        }
-
+        const sizeFailures = failedLibraries.filter((f) => f.countsOnly);
         const stats = {
             movies: totalMoviesCount, shows: totalShowsCount, music: totalMusicCount,
             episodes: totalEpisodesCount, artists: totalArtistsCount, albums: totalAlbumsCount, tracks: totalTracksCount,
             moviesBytes: totalMoviesBytes, showsBytes: totalShowsBytes, musicBytes: totalMusicBytes,
-            fourKPercent: totalVideoTitles > 0 ? Math.round((total4kTitles / totalVideoTitles) * 100) : 0,
+            fourKPercent: !byteScanComplete && existingStats.fourKPercent != null
+                ? existingStats.fourKPercent
+                : (totalVideoTitles > 0 ? Math.round((total4kTitles / totalVideoTitles) * 100) : 0),
             maxConcurrentStreams: existingStats.maxConcurrentStreams || 0,
             maxDirectPlays: existingStats.maxDirectPlays || 0,
             maxTranscodes: existingStats.maxTranscodes || 0,
             deltas,
-            resolutions,
-            codecs,
-            fileSizes,
+            resolutions: !byteScanComplete && existingStats.resolutions ? existingStats.resolutions : resolutions,
+            codecs: !byteScanComplete && existingStats.codecs ? existingStats.codecs : codecs,
+            fileSizes: !byteScanComplete && existingStats.fileSizes ? existingStats.fileSizes : fileSizes,
             libraries,
-            failedLibraries,
+            failedLibraries: [],
+            lastBuildFailures: sizeFailures,
+            lastBuildFailedAt: sizeFailures.length ? Date.now() : null,
             generatedAt: Date.now()
         };
         cachedPlexStats = stats;
         await fs.writeFile(PLEX_STATS_CACHE_PATH, JSON.stringify(stats, null, 2));
-        log(`[PlexStats] Cache built and saved — movies: ${totalMoviesCount}, shows: ${totalShowsCount}, music: ${totalMusicCount} (${totalMusicBytes} bytes), episodes: ${totalEpisodesCount}, artists: ${totalArtistsCount}, albums: ${totalAlbumsCount}, tracks: ${totalTracksCount}, libraries: ${libraries.length}${failedLibraries.length ? `, failed: ${failedLibraries.map((f) => f.title).join(', ')}` : ''}`);
-        markTaskEnd(systemJobs.plexStats, failedLibraries.length ? new Error(`Partial library size build: ${failedLibraries.map((f) => f.title).join(', ')}`) : null);
+        log(`[PlexStats] Cache built and saved — movies: ${totalMoviesCount}, shows: ${totalShowsCount}, music: ${totalMusicCount} (${totalMusicBytes} bytes), episodes: ${totalEpisodesCount}, artists: ${totalArtistsCount}, albums: ${totalAlbumsCount}, tracks: ${totalTracksCount}, libraries: ${libraries.length}${sizeFailures.length ? `, size-scan failed: ${sizeFailures.map((f) => f.title).join(', ')}` : ''}`);
+        markTaskEnd(systemJobs.plexStats, sizeFailures.length ? new Error(`Partial library size build: ${sizeFailures.map((f) => f.title).join(', ')}`) : null);
     } catch (e) {
         log(`[PlexStats] Build failed: ${e.message}`);
         markTaskEnd(systemJobs.plexStats, e);
@@ -7147,6 +7191,7 @@ app.get('/api/plex/stats/status', requireAdmin, async (req, res) => {
         hasCache: !!stats,
         libraryCount: Array.isArray(stats?.libraries) ? stats.libraries.length : 0,
         failedLibraries: Array.isArray(stats?.failedLibraries) ? stats.failedLibraries : [],
+        lastBuildFailures: Array.isArray(stats?.lastBuildFailures) ? stats.lastBuildFailures : [],
     });
 });
 
@@ -15017,7 +15062,12 @@ const summarizeLibraryHealth = (topLibraries = [], stats = {}, cachedData = {}) 
         artists: toNumber(stats.artists || stats.music, 0),
         albums: toNumber(stats.albums, 0),
         tracks: toNumber(stats.tracks, 0),
-        deltas: stats.deltas || {},
+        deltas: (Array.isArray(stats.failedLibraries) && stats.failedLibraries.length)
+            || (Array.isArray(stats.lastBuildFailures) && stats.lastBuildFailures.length)
+            ? {}
+            : (stats.deltas || {}),
+        failedLibraries: stats.failedLibraries || [],
+        lastBuildFailures: stats.lastBuildFailures || [],
         resolutions: stats.resolutions || null,
         codecs: stats.codecs || null,
         fileSizes: stats.fileSizes || null
