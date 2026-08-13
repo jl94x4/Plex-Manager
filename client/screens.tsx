@@ -1555,6 +1555,7 @@ const PersonalAnalyticsDashboard: React.FC<{ username: string, thumb: string | n
 };
 
 export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
+    const { locale, t } = useDiscoverI18n();
     const [detailsItem, setDetailsItem] = useState<any>(null);
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -1624,11 +1625,11 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
             if (res.error) throw new Error(res.error);
             setData(res);
         } catch (err: any) {
-            setError(err.message || 'Failed to load Media Stack data.');
+            setError(err.message || t('calendar.errors.loadFailed'));
         } finally {
             setIsLoading(false);
         }
-    }, [monthOffset]);
+    }, [monthOffset, t]);
 
     useEffect(() => {
         void fetchData();
@@ -1644,23 +1645,23 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
         tomorrow.setDate(tomorrow.getDate() + 1);
 
         const isMidnight = date.getHours() === 0 && date.getMinutes() === 0;
-        const timeStr = isMidnight ? '' : ` at ${formatTime(date)}`;
+        const timeStr = isMidnight ? '' : t('calendar.relative.atTime', { time: formatTime(date) });
 
         const diffDays = Math.ceil((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
         if (date >= today && date < tomorrow) {
-            return `Today${timeStr}`;
+            return `${t('calendar.relative.today')}${timeStr}`;
         }
         const dayAfterTomorrow = new Date(tomorrow);
         dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
         if (date >= tomorrow && date < dayAfterTomorrow) {
-            return `Tomorrow${timeStr}`;
+            return `${t('calendar.relative.tomorrow')}${timeStr}`;
         }
         if (diffDays > 1 && diffDays < 7) {
-            const dayName = date.toLocaleDateString([], { weekday: 'long' });
+            const dayName = date.toLocaleDateString(locale, { weekday: 'long' });
             return `${dayName}${timeStr}`;
         }
-        return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + timeStr;
+        return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' }) + timeStr;
     };
 
     const formatBytes = (bytes: number) => {
@@ -1681,9 +1682,9 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                     id: `${activeInstanceData.id}-sonarr-${ep.id || ep.airDateUtc || ep.airDate}-${ep.title}`,
                     type: 'tv',
                     service: activeInstanceData.name || 'Sonarr',
-                    title: ep.series?.title || 'Unknown Series',
+                    title: ep.series?.title || t('calendar.fallback.unknownSeries'),
                     subtitle: ep.portalRequest
-                        ? 'Requested — not aired yet'
+                        ? t('calendar.labels.requestedNotAired')
                         : `S${String(ep.seasonNumber).padStart(2, '0')}E${String(ep.episodeNumber).padStart(2, '0')} - ${ep.title}`,
                     date: new Date(ep.airDateUtc || ep.airDate),
                     hasFile: ep.hasFile,
@@ -1703,7 +1704,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                     type: 'movie',
                     service: activeInstanceData.name || 'Radarr',
                     title: movie.title,
-                    subtitle: movie.portalRequest ? 'Requested — not released yet' : (movie.studio || 'Movie Release'),
+                    subtitle: movie.portalRequest ? t('calendar.labels.requestedNotReleased') : (movie.studio || t('calendar.fallback.movieRelease')),
                     date: new Date(releaseDateStr),
                     hasFile: movie.hasFile,
                     monitored: movie.monitored,
@@ -1713,7 +1714,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
             });
         }
         return items.sort((a, b) => a.date.getTime() - b.date.getTime());
-    }, [activeInstanceData, isTvInstance]);
+    }, [activeInstanceData, isTvInstance, t]);
 
     const filteredCalendar = calendarItems;
 
@@ -1746,7 +1747,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                         if (cancelled) return;
                         setData(res);
                         setMonthOffset(offset);
-                        setAutoMonthNotice(`Showing the next month with ${isTvInstance ? 'TV' : 'movie'} releases (${new Date(new Date().setFullYear(new Date().getFullYear(), new Date().getMonth() + offset, 1)).toLocaleDateString('default', { month: 'long', year: 'numeric' })}).`);
+                        setAutoMonthNotice(t('calendar.relative.nextMonthNotice', { type: isTvInstance ? t('mediaType.tv') : t('mediaType.movie'), month: new Date(new Date().setFullYear(new Date().getFullYear(), new Date().getMonth() + offset, 1)).toLocaleDateString(locale, { month: 'long', year: 'numeric' }) }));
                         return;
                     }
                 } catch {
@@ -1754,24 +1755,24 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                 }
             }
             if (!cancelled) {
-                setAutoMonthNotice(`No ${isTvInstance ? 'TV' : 'movie'} releases found in the next 6 months.`);
+                setAutoMonthNotice(t('calendar.relative.noNextReleases', { type: isTvInstance ? t('mediaType.tv') : t('mediaType.movie') }));
             }
         };
         maybeAutoSelectMonthWithReleases();
         return () => {
             cancelled = true;
         };
-    }, [isTvInstance, filteredCalendar.length, data, monthOffset, activeInstanceId]);
+    }, [isTvInstance, filteredCalendar.length, data, monthOffset, activeInstanceId, locale, t]);
 
     const groupedCalendar = useMemo(() => {
         const groups: { [dateStr: string]: typeof filteredCalendar } = {};
         filteredCalendar.forEach(item => {
-            const dateStr = item.date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+            const dateStr = item.date.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
             if (!groups[dateStr]) groups[dateStr] = [];
             groups[dateStr].push(item);
         });
         return groups;
-    }, [filteredCalendar]);
+    }, [filteredCalendar, locale]);
 
     useEffect(() => {
         if (filteredCalendar.length > 0) {
@@ -1807,7 +1808,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                         }
                     }
                 } else {
-                    cleanTitle = item.sourceTitle || 'Unknown TV Show';
+                    cleanTitle = item.sourceTitle || t('calendar.fallback.unknownTvShow');
                 }
                 historyItems.push({
                     id: `${activeInstanceData.id}-sonarr-hist-${item.id}`,
@@ -1822,14 +1823,14 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                 historyItems.push({
                     id: `${activeInstanceData.id}-radarr-hist-${item.id}`,
                     service: activeInstanceData.name || 'Radarr',
-                    title: item.movie?.title || item.sourceTitle || 'Unknown Movie',
+                    title: item.movie?.title || item.sourceTitle || t('calendar.fallback.unknownMovie'),
                     date: new Date(item.date),
                     eventType: item.eventType
                 });
             });
         }
         return historyItems.sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 8);
-    }, [activeInstanceData, isTvInstance]);
+    }, [activeInstanceData, isTvInstance, t]);
 
     if (isLoading) {
         return (
@@ -1872,18 +1873,18 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
         if (!type) return '';
         switch (type.toLowerCase()) {
             case 'grabbed':
-                return 'Grabbed';
+                return t('calendar.events.grabbed');
             case 'downloadfolderimported':
             case 'moviefileimported':
             case 'imported':
-                return 'Imported';
+                return t('calendar.events.imported');
             case 'downloadfailed':
             case 'failed':
-                return 'Failed';
+                return t('calendar.events.failed');
             case 'episodefiledeleted':
             case 'moviefiledeleted':
             case 'deleted':
-                return 'Deleted';
+                return t('calendar.events.deleted');
             default:
                 return type
                     .replace(/([A-Z])/g, ' $1')
@@ -1898,11 +1899,11 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                 <div className="bg-card border border-border/40 rounded-2xl p-4 md:p-6 shadow-xl flex flex-col justify-between h-44 relative overflow-hidden">
                     <div className="flex justify-between items-start">
                         <h3 className="text-lg font-bold text-text/80">{name}</h3>
-                        <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-white/5 text-muted border border-white/5">Unconfigured</span>
+                        <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-white/5 text-muted border border-white/5">{t('calendar.status.unconfigured')}</span>
                     </div>
-                    <p className="text-xs text-muted leading-relaxed">Please set the URL and API key in Settings under the Media Stack tab to activate monitoring.</p>
+                    <p className="text-xs text-muted leading-relaxed">{t('calendar.empty.configurationHint')}</p>
                     <div className="text-right">
-                        <span className="text-xs font-bold text-plex hover:underline cursor-pointer">Configure in Settings →</span>
+                        <span className="text-xs font-bold text-plex hover:underline cursor-pointer">{t('calendar.actions.configureInSettings')}</span>
                     </div>
                 </div>
             );
@@ -1930,27 +1931,27 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                         <h3 className="text-lg font-bold text-text tracking-wide">{name}</h3>
                         <div className="flex items-center gap-2 mt-0.5">
                             <span className={`w-2 h-2 rounded-full ${isReachable ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`}></span>
-                            <span className={`text-[10px] font-bold tracking-wider uppercase ${isReachable ? 'text-green-500' : 'text-red-400'}`}>{isReachable ? 'Online' : 'Unavailable'}</span>
+                            <span className={`text-[10px] font-bold tracking-wider uppercase ${isReachable ? 'text-green-500' : 'text-red-400'}`}>{isReachable ? t('calendar.status.online') : t('status.unavailable')}</span>
                             {status?.version && <span className="text-[10px] text-muted font-bold">v{status.version}</span>}
                         </div>
                     </div>
                 </div>
                 {!isReachable && (
-                    <p className="text-[11px] text-red-300 mb-2">Unable to fetch data from {name}. Check URL/API key and local network reachability.</p>
+                    <p className="text-[11px] text-red-300 mb-2">{t('calendar.labels.unableToFetch', { name })}</p>
                 )}
 
                 {disk && (
                     <div className="bg-background/40 rounded-xl p-3 border border-white/5 mt-2">
                         <div className="flex justify-between items-end mb-1">
-                            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">Free Storage</span>
-                            <span className="text-xs font-bold text-text">{freeGB.toFixed(1)} GB free</span>
+                            <span className="text-[10px] font-bold text-muted uppercase tracking-wider">{t('calendar.status.freeStorage')}</span>
+                            <span className="text-xs font-bold text-text">{t('calendar.status.freeGb', { value: freeGB.toFixed(1) })}</span>
                         </div>
                         <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
                             <div className="bg-plex h-full rounded-full transition-all duration-500" style={{ width: `${usedPercent}%` }}></div>
                         </div>
                         <div className="flex justify-between text-[9px] text-muted/60 mt-1 font-medium">
-                            <span>{usedPercent.toFixed(0)}% Used</span>
-                            <span>{totalGB.toFixed(0)} GB Total</span>
+                            <span>{t('calendar.status.usedPercent', { value: usedPercent.toFixed(0) })}</span>
+                            <span>{t('calendar.status.totalGb', { value: totalGB.toFixed(0) })}</span>
                         </div>
                     </div>
                 )}
@@ -1977,7 +1978,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                             <h3 className="text-base font-bold text-text truncate">{label}</h3>
                             <div className="flex items-center gap-2 mt-0.5">
                                 <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`}></span>
-                                <span className={`text-[10px] font-bold tracking-wider uppercase ${isOnline ? 'text-green-500' : 'text-red-400'}`}>{isOnline ? 'Online' : 'Unavailable'}</span>
+                                <span className={`text-[10px] font-bold tracking-wider uppercase ${isOnline ? 'text-green-500' : 'text-red-400'}`}>{isOnline ? t('calendar.status.online') : t('status.unavailable')}</span>
                                 {tool?.version && <span className="text-[10px] text-muted font-bold">v{tool.version}</span>}
                             </div>
                         </div>
@@ -1995,7 +1996,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                     )}
                 </div>
                 <p className="text-xs text-muted mt-4 relative">
-                    {isBazarr ? 'Subtitle management and automation' : 'Music library automation'}
+                    {isBazarr ? t('calendar.labels.subtitleAutomation') : t('calendar.labels.musicAutomation')}
                     {tool?.error ? ` · ${tool.error}` : ''}
                 </p>
             </div>
@@ -2006,9 +2007,9 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
         <DashboardPageShell>
             <DashboardHero
                 accent="plex"
-                eyebrow="Calendar"
+                eyebrow={t('navigation.calendar')}
                 title={activeStackLabel}
-                description={isTvInstance ? 'TV series releases, downloads, and activity across your media stack.' : 'Movie releases, downloads, and activity across your media stack.'}
+                description={isTvInstance ? t('calendar.page.tvDescription') : t('calendar.page.movieDescription')}
                 icon={<Calendar className="h-3.5 w-3.5" />}
                 secondaryBlob
                 actions={(
@@ -2034,7 +2035,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                             className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5"
                         >
                             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                            Refresh
+                            {t('calendar.actions.refresh')}
                         </button>
                     </div>
                 )}
@@ -2050,7 +2051,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                 )}
 
                 <DashboardPanel
-                    title="Upcoming Releases"
+                    title={t('calendar.sections.upcomingReleases')}
                     controls={(
                         <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
                             <button type="button" onClick={() => { setAutoMonthNotice(''); setMonthOffset((m) => m - 1); }} className="rounded-lg p-1.5 text-muted transition hover:bg-white/10 hover:text-text">
@@ -2074,11 +2075,11 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                                 <Calendar className="w-12 h-12 text-muted/30 mx-auto mb-3" />
                                 {!activeStackConfigured ? (
                                     <>
-                                        <p>{activeStackLabel} is not configured yet.</p>
-                                        <p className="text-xs mt-2">Add the URL and API key in Settings → Integrations.</p>
+                                        <p>{t('calendar.empty.notConfigured', { name: activeStackLabel })}</p>
+                                        <p className="text-xs mt-2">{t('calendar.empty.configurationHint')}</p>
                                     </>
                                 ) : (
-                                    <p>No upcoming {isTvInstance ? 'TV' : 'movie'} releases for this month</p>
+                                    <p>{t('calendar.empty.noUpcoming', { type: isTvInstance ? t('mediaType.tv') : t('mediaType.movie') })}</p>
                                 )}
                             </div>
                         ) : (
@@ -2092,7 +2093,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                                             ) : (
                                                 <div className="w-full h-full flex flex-col items-center justify-center opacity-30">
                                                     {activeCalendarItem?.type === 'tv' ? <Tv className="w-10 h-10 md:w-20 md:h-20 mb-2 md:mb-4" /> : <Film className="w-10 h-10 md:w-20 md:h-20 mb-2 md:mb-4" />}
-                                                    <span className="font-bold uppercase tracking-widest text-[8px] md:text-sm">No Poster</span>
+                                                    <span className="font-bold uppercase tracking-widest text-[8px] md:text-sm">{t('calendar.empty.noPoster')}</span>
                                                 </div>
                                             )}
                                             <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-transparent flex flex-col justify-start p-2 md:p-4">
@@ -2133,13 +2134,13 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                                                         </span>
                                                         {item.hasFile ? (
                                                             <span className="text-[8px] md:text-[10px] font-bold text-green-500 bg-green-500/10 border border-green-500/20 rounded md:rounded-md px-1.5 py-0.5 whitespace-nowrap shrink-0">
-                                                                ✓ Ready
+                                                                {t('calendar.status.ready')}
                                                             </span>
                                                         ) : (
                                                             item.monitored && (
                                                                 <span className="text-[8px] md:text-[10px] font-bold text-plex bg-plex/10 border border-plex/20 rounded md:rounded-md px-1.5 py-0.5 flex items-center gap-1 whitespace-nowrap shrink-0">
                                                                     <span className="w-1 h-1 md:w-1.5 md:h-1.5 rounded-full bg-plex animate-pulse"></span>
-                                                                    Monitored
+                                                                    {t('calendar.status.monitored')}
                                                                 </span>
                                                             )
                                                         )}
@@ -2168,19 +2169,19 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="flex flex-col gap-8">
                         <DashboardPanel
-                            title={`${activeStackLabel} Downloads`}
-                            subtitle={`${activeQueue.length} active`}
+                            title={t('calendar.sections.downloads', { name: activeStackLabel })}
+                            subtitle={t('calendar.labels.active', { count: activeQueue.length })}
                             className="flex-grow flex flex-col"
                         >
                                 {!activeStackConfigured ? (
                                     <div className="text-center py-8 bg-background/30 rounded-xl border border-white/5 text-muted text-sm flex-grow flex flex-col justify-center items-center">
                                         <DownloadCloud className="w-10 h-10 text-muted/30 mx-auto mb-2" />
-                                        <p>{activeStackLabel} is not configured.</p>
+                                        <p>{t('calendar.empty.notConfigured', { name: activeStackLabel })}</p>
                                     </div>
                                 ) : activeQueue.length === 0 ? (
                                     <div className="text-center py-8 bg-background/30 rounded-xl border border-white/5 text-muted text-sm flex-grow flex flex-col justify-center items-center">
                                         <DownloadCloud className="w-10 h-10 text-muted/30 mx-auto mb-2" />
-                                        No active {isTvInstance ? 'TV' : 'movie'} downloads
+                                        {t('calendar.empty.noActiveDownloads', { type: isTvInstance ? t('mediaType.tv') : t('mediaType.movie') })}
                                     </div>
                                 ) : (
                                     activeQueue.map((item: any) => {
@@ -2192,7 +2193,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                                                 <div className="flex justify-between items-start gap-4">
                                                     <div className="flex flex-col gap-1 min-w-0">
                                                         <span className="font-bold text-sm text-text line-clamp-1 leading-snug">{item.title}</span>
-                                                        <span className="text-[10px] text-muted/60 font-semibold">{item.timeleft || 'Unknown time'} left</span>
+                                                        <span className="text-[10px] text-muted/60 font-semibold">{item.timeleft || t('calendar.empty.unknownTime')} left</span>
                                                     </div>
                                                     <span className="text-[10px] font-bold px-2 py-0.5 bg-plex/10 text-plex rounded-md border border-plex/20 uppercase tracking-wider">{item.status}</span>
                                                 </div>
@@ -2213,23 +2214,23 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
                     <div className="flex flex-col gap-4">
                         <h2 className="text-xl font-bold text-text flex items-center gap-2 mb-1">
                             {isTvInstance ? <Tv className="w-5 h-5 text-plex" /> : <Film className="w-5 h-5 text-plex" />}
-                            {activeStackLabel} Status
+                            {t('calendar.sections.status', { name: activeStackLabel })}
                         </h2>
                         {renderStatusCard(activeStackLabel, activeInstanceData)}
                     </div>
 
                     <DashboardPanel
-                        title={`${activeStackLabel} History`}
+                        title={t('calendar.sections.history', { name: activeStackLabel })}
                         className="flex-grow flex flex-col"
                     >
                         <div className="flex flex-col gap-3 flex-grow justify-start">
                             {!activeStackConfigured ? (
                                 <div className="text-center py-12 bg-background/30 rounded-xl border border-white/5 text-muted text-sm flex-grow flex flex-col justify-center items-center">
-                                    <p>{activeStackLabel} is not configured.</p>
+                                    <p>{t('calendar.empty.notConfigured', { name: activeStackLabel })}</p>
                                 </div>
                             ) : activeHistory.length === 0 ? (
                                 <div className="text-center py-12 bg-background/30 rounded-xl border border-white/5 text-muted text-sm flex-grow flex flex-col justify-center items-center">
-                                    No recent {isTvInstance ? 'TV' : 'movie'} history
+                                    {t('calendar.empty.noRecentHistory', { type: isTvInstance ? t('mediaType.tv') : t('mediaType.movie') })}
                                 </div>
                             ) : (
                                 activeHistory.map((item: any) => (
