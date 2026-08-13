@@ -2256,7 +2256,7 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
 const DOWNLOADS_STATUS_FILTER_KEY = 'portal-downloads-status-filter';
 const DOWNLOADS_CLIENT_FILTER_KEY = 'portal-downloads-client-filter';
 
-const downloadClientTypeLabel = (type: string) => ({
+const downloadClientTypeLabel = (type: string, fallback = 'Download Client') => ({
     qbittorrent: 'qBittorrent',
     rdtclient: 'Real-Debrid Client',
     transmission: 'Transmission',
@@ -2264,7 +2264,7 @@ const downloadClientTypeLabel = (type: string) => ({
     deluge: 'Deluge',
     sabnzbd: 'SABnzbd',
     nzbget: 'NZBGet',
-}[String(type || '').toLowerCase()] || 'Download Client');
+}[String(type || '').toLowerCase()] || fallback);
 
 const readStoredDownloadFilter = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
     try {
@@ -2276,6 +2276,7 @@ const readStoredDownloadFilter = <T extends string>(key: string, allowed: readon
 };
 
 export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = false }) => {
+    const { t } = useDiscoverI18n();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -2307,11 +2308,11 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
             setError('');
         } catch (e: any) {
             if (gen !== loadGenRef.current) return;
-            setError(e.message || 'Failed to load downloads');
+            setError(e.message || t('downloads.errors.loadFailed'));
         } finally {
             if (gen === loadGenRef.current) setLoading(false);
         }
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         void load();
@@ -2360,13 +2361,13 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
     const clientSelectOptions = useMemo(() => {
         const clients = Array.isArray(data?.clients) ? data.clients : [];
         return [
-            { label: 'All clients', value: 'all' },
+            { label: t('downloads.filters.allClients'), value: 'all' },
             ...clients.map((entry: any) => ({
-                label: entry?.client?.name || downloadClientTypeLabel(entry?.client?.type),
+                label: entry?.client?.name || downloadClientTypeLabel(entry?.client?.type, t('downloads.labels.downloadClient')),
                 value: String(entry?.client?.id || ''),
             })).filter((option: { value: string }) => option.value),
         ];
-    }, [data]);
+    }, [data, t]);
 
     useEffect(() => {
         if (clientFilter === 'all') return;
@@ -2391,7 +2392,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
         return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`;
     };
 
-    const sourceLabel = (source: string) => ({ sonarr: 'Sonarr', radarr: 'Radarr', lidarr: 'Lidarr', unknown: 'Other' }[source] || 'Other');
+    const sourceLabel = (source: string) => ({ sonarr: 'Sonarr', radarr: 'Radarr', lidarr: 'Lidarr', unknown: t('downloads.filters.other') }[source] || t('downloads.filters.other'));
     const uploadCategoryOptions = useMemo(() => {
         const seen = new Set(['']);
         const arrOptions = (Array.isArray(data?.downloadCategoryOptions) ? data.downloadCategoryOptions : [])
@@ -2404,14 +2405,14 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                 seen.add(option.value);
                 return true;
             });
-        return [{ label: 'No category', value: '' }, ...arrOptions];
-    }, [data]);
+        return [{ label: t('downloads.upload.noCategory'), value: '' }, ...arrOptions];
+    }, [data, t]);
     useEffect(() => {
         if (uploadCategory && !uploadCategoryOptions.some((option) => String(option.value) === uploadCategory)) {
             setUploadCategory('');
         }
     }, [uploadCategory, uploadCategoryOptions]);
-    const downloadClientLabel = downloadClientTypeLabel;
+    const downloadClientLabel = (type: string) => downloadClientTypeLabel(type, t('downloads.labels.downloadClient'));
     const downloadClientIcon = (type: string) => {
         const normalized = String(type || '').toLowerCase();
         if (normalized === 'bittorrent') return 'https://cdn.simpleicons.org/bittorrent';
@@ -2423,6 +2424,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
         const state = String(item?.state || '').toLowerCase();
         return state.includes('pause') || state.includes('stop') || state === 'queued';
     };
+    const downloadActionLabel = (action: 'pause' | 'resume' | 'remove') => t(`downloads.actions.${action}`);
     const sendDownloadControl = async (item: any, action: 'pause' | 'resume' | 'remove') => {
         const key = `${item.clientId}-${item.id}-${action}`;
         setBusyAction(key);
@@ -2437,7 +2439,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
             });
             await load();
         } catch (e: any) {
-            setError(e.message || `Failed to ${action} download`);
+            setError(e.message || t('downloads.errors.actionFailed', { action: downloadActionLabel(action) }));
         } finally {
             setBusyAction('');
         }
@@ -2445,7 +2447,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
     const controlDownload = (item: any, action: 'pause' | 'resume' | 'remove') => {
         if (action === 'remove') {
             appConfirm(
-                `Remove "${item.name}" from ${item.clientName}? Downloaded files will be left in place where the client supports it.`,
+                t('downloads.confirm.remove', { name: item.name, client: item.clientName }),
                 () => { sendDownloadControl(item, action); },
             );
             return;
@@ -2455,11 +2457,11 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
     const uploadTorrent = async () => {
         const targetClientId = String(uploadClientId || '').trim();
         if (!targetClientId) {
-            setError('Choose a download client first.');
+            setError(t('downloads.errors.chooseClient'));
             return;
         }
         if (!torrentFile && !torrentUrl.trim()) {
-            setError('Add a torrent URL, magnet link, or torrent file.');
+            setError(t('downloads.errors.missingSource'));
             return;
         }
         setUploadBusy(true);
@@ -2488,7 +2490,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
             setError('');
             await load();
         } catch (e: any) {
-            setError(e.message || 'Failed to add torrent');
+            setError(e.message || t('downloads.errors.addFailed'));
         } finally {
             setUploadBusy(false);
         }
@@ -2503,20 +2505,20 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
     }
 
     const sourceFilterMeta: Record<'all' | 'sonarr' | 'radarr' | 'lidarr' | 'unknown', { label: string; icon: React.ReactNode; glow: string }> = {
-        all: { label: 'All', icon: <DownloadCloud className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('plex') },
+        all: { label: t('downloads.filters.all'), icon: <DownloadCloud className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('plex') },
         sonarr: { label: 'Sonarr', icon: <Tv className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('sky') },
         radarr: { label: 'Radarr', icon: <Film className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('violet') },
         lidarr: { label: 'Lidarr', icon: <Music className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('emerald') },
-        unknown: { label: 'Other', icon: <HardDrive className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('muted') },
+        unknown: { label: t('downloads.filters.other'), icon: <HardDrive className="h-4 w-4 text-muted" />, glow: dashboardGlowClass('muted') },
     };
 
     return (
         <DashboardPageShell>
             <DashboardHero
                 accent="sky"
-                eyebrow="Downloads"
-                title="Download Status"
-                description="All configured download clients, grouped by Sonarr, Radarr, and Lidarr."
+                eyebrow={t('downloads.page.eyebrow')}
+                title={t('downloads.page.title')}
+                description={t('downloads.page.description')}
                 icon={<DownloadCloud className="h-3.5 w-3.5" />}
                 secondaryBlob
                 actions={(
@@ -2526,7 +2528,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                         className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5"
                     >
                         <RefreshCw className="h-4 w-4" />
-                        Refresh
+                        {t('downloads.actions.refresh')}
                     </button>
                 )}
             />
@@ -2534,10 +2536,10 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
             {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-200 px-4 py-3 text-sm">{error}</div>}
 
             {isAdmin && (
-                <DashboardPanel title="Add torrent" subtitle="Send a URL, magnet, or file to a configured client">
+                <DashboardPanel title={t('downloads.upload.title')} subtitle={t('downloads.upload.subtitle')}>
                     <div className="flex flex-col lg:flex-row lg:items-end gap-3">
                         <div className="lg:w-56">
-                            <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">Client</label>
+                            <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.upload.client')}</label>
                             <CustomSelect
                                 value={uploadClientId}
                                 onChange={setUploadClientId}
@@ -2548,7 +2550,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                             />
                         </div>
                         <div className="lg:w-48">
-                            <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">Category</label>
+                            <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.upload.category')}</label>
                             <CustomSelect
                                 value={uploadCategory}
                                 onChange={setUploadCategory}
@@ -2556,7 +2558,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                             />
                         </div>
                         <div className="flex-1 min-w-0">
-                            <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">Torrent URL or Magnet</label>
+                            <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.upload.torrentUrl')}</label>
                             <input
                                 value={torrentUrl}
                                 onChange={(e) => { setTorrentUrl(e.target.value); if (e.target.value.trim()) setTorrentFile(null); }}
@@ -2566,7 +2568,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                         </div>
                         <label className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-border bg-white/[0.04] text-sm font-bold text-text hover:bg-white/10 cursor-pointer transition-colors">
                             <Upload className="w-4 h-4 text-plex" />
-                            {torrentFile ? torrentFile.name : 'Torrent File'}
+                            {torrentFile ? torrentFile.name : t('downloads.upload.torrentFile')}
                             <input
                                 type="file"
                                 accept=".torrent,application/x-bittorrent"
@@ -2584,7 +2586,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                             disabled={uploadBusy || !uploadClientId || (!torrentFile && !torrentUrl.trim())}
                             className="px-5 py-3 rounded-lg bg-plex text-background text-sm font-black hover:bg-plex-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
-                            {uploadBusy ? 'Sending...' : 'Add Torrent'}
+                            {uploadBusy ? t('downloads.upload.sending') : t('downloads.upload.add')}
                         </button>
                     </div>
                 </DashboardPanel>
@@ -2602,7 +2604,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                             className={`rounded-2xl text-left transition ${active ? 'ring-2 ring-plex/40 ring-offset-2 ring-offset-background' : 'opacity-90 hover:opacity-100'}`}
                         >
                             <DashboardStatCard
-                                label={key === 'all' ? 'All' : sourceLabel(key)}
+                                label={key === 'all' ? t('downloads.filters.all') : sourceLabel(key)}
                                 value={key === 'all' ? sourceCounts.total : sourceCounts[key]}
                                 icon={meta.icon}
                                 glow={active ? meta.glow : dashboardGlowClass('muted')}
@@ -2615,7 +2617,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
             <div className="sticky top-0 z-20 -mx-1 px-1 py-2 bg-background/90 backdrop-blur-md border-b border-white/5 lg:static lg:border-0 lg:bg-transparent lg:backdrop-blur-none lg:py-0">
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-end rounded-2xl border border-white/10 bg-background/50 p-3 lg:p-4">
                     <div className="flex-1 min-w-0 sm:max-w-xs">
-                        <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">Client</label>
+                        <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.filters.client')}</label>
                         <CustomSelect
                             value={clientFilter}
                             onChange={setClientFilter}
@@ -2623,11 +2625,11 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                         />
                     </div>
                     <div className="sm:w-auto">
-                        <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5">Show</p>
+                        <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5">{t('downloads.filters.show')}</p>
                         <div className="inline-flex rounded-xl border border-white/10 bg-black/20 p-1">
                             {([
-                                { id: 'active', label: 'Active only' },
-                                { id: 'all', label: 'All' },
+                                { id: 'active', label: t('downloads.filters.activeOnly') },
+                                { id: 'all', label: t('downloads.filters.all') },
                             ] as const).map((option) => {
                                 const selected = statusFilter === option.id;
                                 return (
@@ -2644,17 +2646,17 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                         </div>
                     </div>
                     <p className="text-xs text-muted sm:ml-auto sm:pb-2">
-                        {downloads.length} shown
-                        {statusFilter === 'active' ? ' · hiding completed/seeding' : ''}
+                        {t('downloads.filters.shown', { count: downloads.length })}
+                        {statusFilter === 'active' ? ` · ${t('downloads.filters.hidingCompleted')}` : ''}
                     </p>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <DashboardPanel title="Clients" className="order-1 lg:order-2">
+                <DashboardPanel title={t('downloads.labels.clients')} className="order-1 lg:order-2">
                     <div className="space-y-3">
                         {(data?.clients || []).length === 0 ? (
-                            <p className="text-sm text-muted">No download clients configured in Settings.</p>
+                            <p className="text-sm text-muted">{t('downloads.empty.noClients')}</p>
                         ) : data.clients.map((client: any) => {
                             const activeClientFilter = clientFilter === String(client.client.id);
                             const clientItems = allDownloads.filter((item: any) => String(item.clientId) === String(client.client.id));
@@ -2675,7 +2677,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                                         </span>
                                         <div className="min-w-0">
                                             <p className="font-bold text-text truncate">{client.client.name || downloadClientLabel(client.client.type)}</p>
-                                            <p className="text-[11px] text-muted">{downloadClientLabel(client.client.type)} · {visibleCount} download{visibleCount === 1 ? '' : 's'}</p>
+                                            <p className="text-[11px] text-muted">{downloadClientLabel(client.client.type)} · {t('downloads.labels.downloadCount', { count: visibleCount })}</p>
                                         </div>
                                     </div>
                                     <span className={`w-2.5 h-2.5 rounded-full ${client.online ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -2686,17 +2688,17 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                     </div>
                     {clientFilter !== 'all' && (
                         <button type="button" onClick={() => setClientFilter('all')} className="mt-3 text-xs font-bold text-plex hover:underline">
-                            Clear client filter
+                            {t('downloads.actions.clearClientFilter')}
                         </button>
                     )}
                 </DashboardPanel>
                 <DashboardPanel
-                    title={statusFilter === 'active' ? 'Active Downloads' : 'Downloads'}
+                    title={statusFilter === 'active' ? t('downloads.status.activeDownloads') : t('downloads.status.downloads')}
                     className="lg:col-span-2 order-2 lg:order-1"
                 >
                     <div className="space-y-3">
                         {downloads.length === 0 ? (
-                            <div className="text-center py-12 text-muted bg-background/30 rounded-xl border border-white/5">No downloads for this filter.</div>
+                            <div className="text-center py-12 text-muted bg-background/30 rounded-xl border border-white/5">{t('downloads.empty.noFilterResults')}</div>
                         ) : downloads.map((item: any) => {
                             const paused = isPausedDownload(item);
                             const actionKey = `${item.clientId}-${item.id}`;
@@ -2712,7 +2714,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                                             {item.clientName} · {sourceLabel(item.source)}
                                             {item.arrInstanceName ? ` · ${item.arrInstanceName}` : ''}
                                             {' · '}
-                                            {item.state || 'Unknown'}
+                                            {item.state || t('downloads.status.unknown')}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
@@ -2723,7 +2725,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                                                     type="button"
                                                     onClick={() => controlDownload(item, paused ? 'resume' : 'pause')}
                                                     disabled={busyAction.startsWith(actionKey)}
-                                                    title={paused ? 'Resume download' : 'Pause download'}
+                                                    title={paused ? t('downloads.actions.resume') : t('downloads.actions.pause')}
                                                     className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-text hover:border-plex/40 hover:text-plex disabled:opacity-50 transition-colors"
                                                 >
                                                     {paused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
@@ -2732,7 +2734,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                                                     type="button"
                                                     onClick={() => controlDownload(item, 'remove')}
                                                     disabled={busyAction.startsWith(actionKey)}
-                                                    title="Remove download"
+                                                    title={t('downloads.actions.remove')}
                                                     className="w-8 h-8 inline-flex items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-200 hover:bg-red-500/20 disabled:opacity-50 transition-colors"
                                                 >
                                                     <X className="w-4 h-4" />
@@ -2746,10 +2748,10 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                                 </div>
                                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted mt-2">
                                     <span>{formatBytes(item.downloaded)} / {formatBytes(item.size)}</span>
-                                    <span>Down {formatBytes(item.downloadSpeed)}/s</span>
-                                    <span>Up {formatBytes(item.uploadSpeed)}/s</span>
+                                    <span>{t('downloads.labels.downSpeed', { value: `${formatBytes(item.downloadSpeed)}/s` })}</span>
+                                    <span>{t('downloads.labels.upSpeed', { value: `${formatBytes(item.uploadSpeed)}/s` })}</span>
                                     {item.category && <span>{item.category}</span>}
-                                    {item.sourceReason === 'arr_queue' && <span>Matched from Arr queue</span>}
+                                    {item.sourceReason === 'arr_queue' && <span>{t('downloads.labels.matchedFromArrQueue')}</span>}
                                 </div>
                             </div>
                         );})}

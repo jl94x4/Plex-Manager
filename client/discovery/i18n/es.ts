@@ -402,6 +402,17 @@ export const es: DeepPartial<EnCatalog> = {
         genreArtists: 'Top artistas de {name}',
         genreAlbums: 'Top álbumes de {name}',
     },
+    downloads: {
+        page: { eyebrow: 'Descargas', title: 'Estado de descargas', description: 'Todos los clientes de descarga configurados, agrupados por Sonarr, Radarr y Lidarr.' },
+        actions: { refresh: 'Actualizar', clearClientFilter: 'Borrar filtro de cliente', pause: 'Pausar', resume: 'Reanudar', remove: 'Eliminar' },
+        filters: { client: 'Cliente', show: 'Mostrar', activeOnly: 'Solo activas', all: 'Todas', allClients: 'Todos los clientes', other: 'Otros', shown: '{count} mostradas', hidingCompleted: 'ocultando completadas/en siembra' },
+        labels: { clients: 'Clientes', downloadClient: 'Cliente de descarga', downloadCount: '{count} descarga', downloadCount_plural: '{count} descargas', downSpeed: 'Descarga {value}/s', upSpeed: 'Subida {value}/s', matchedFromArrQueue: 'Coincide con la cola de Arr' },
+        status: { activeDownloads: 'Descargas activas', downloads: 'Descargas', unknown: 'Desconocido' },
+        empty: { noClients: 'No hay clientes de descarga configurados en Ajustes.', noFilterResults: 'No hay descargas para este filtro.' },
+        upload: { title: 'Añadir torrent', subtitle: 'Enviar una URL, magnet o archivo a un cliente configurado', client: 'Cliente', category: 'Categoría', torrentUrl: 'URL del torrent o Magnet', torrentFile: 'Archivo torrent', noCategory: 'Sin categoría', sending: 'Enviando…', add: 'Añadir torrent' },
+        errors: { loadFailed: 'No se pudieron cargar las descargas', actionFailed: 'No se pudo {action} la descarga', chooseClient: 'Elige primero un cliente de descarga.', missingSource: 'Añade una URL de torrent, enlace magnet o archivo torrent.', addFailed: 'No se pudo añadir el torrent' },
+        confirm: { remove: '¿Eliminar «{name}» de {client}? Los archivos descargados se conservarán cuando el cliente lo permita.' },
+    },
     person: {
         back: 'Volver a Discover',
         biography: 'Biografía',

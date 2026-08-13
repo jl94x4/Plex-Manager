@@ -31,6 +31,7 @@ This table describes broad UI i18n wiring and known remaining work. It does not 
 | Invites settings | i18n-enabled |
 | Settings navigation / tabs | i18n-enabled |
 | Overlays dashboard | i18n-enabled |
+| Downloads page | i18n-enabled |
 | Wider Settings | Partial |
 | Scanner | Partial |
 | ColleXions | Partial |

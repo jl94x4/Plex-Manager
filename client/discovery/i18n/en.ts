@@ -1583,6 +1583,17 @@ export const en = {
         toasts: { configureWelcome: 'Welcome! Please configure your media server settings to begin.', settingsSaved: 'Settings saved successfully!', syncedUsers: 'Synced {count} users from {mediaServerLabel}.', joinDatesUpdated: 'Updated {updated} join date(s) from watch history ({processed} checked).', noJoinDatesUpdated: 'No join dates updated — {missing} user(s) had no first-play history.', noJoinDatesNeeded: 'No join dates needed updating.', accessRevoked: 'Plex access revoked successfully.', viewingAs: 'Now viewing portal as {username}.', savedLibraryWarning: 'User saved, but Plex library access was not updated.', userUpdated: 'User updated successfully!', userRemoved: 'User removed from manager.', bulkUpdated: 'Successfully updated {count} users.', saved: 'Saved.', plexShareFailures: '{count} Plex share update(s) failed.', librariesUpdated: 'Updated libraries for {count} users.' },
         dialogs: { deleteUser: 'Are you sure you want to delete this user? This will revoke {mediaServerLabel} access first where supported.', shareAllLibraries: 'Share ALL libraries with {count} selected user(s)?', shareSelectedLibraries: 'Share {libraries} selected librar(ies) with {count} user(s)?', livePlexAccess: 'This updates their live Plex access.' },
     },
+    downloads: {
+        page: { eyebrow: 'Downloads', title: 'Download Status', description: 'All configured download clients, grouped by Sonarr, Radarr, and Lidarr.' },
+        actions: { refresh: 'Refresh', clearClientFilter: 'Clear client filter', pause: 'Pause', resume: 'Resume', remove: 'Remove' },
+        filters: { client: 'Client', show: 'Show', activeOnly: 'Active only', all: 'All', allClients: 'All clients', other: 'Other', shown: '{count} shown', hidingCompleted: 'hiding completed/seeding' },
+        labels: { clients: 'Clients', downloadClient: 'Download Client', downloadCount: '{count} download', downloadCount_plural: '{count} downloads', downSpeed: 'Down {value}/s', upSpeed: 'Up {value}/s', matchedFromArrQueue: 'Matched from Arr queue' },
+        status: { activeDownloads: 'Active Downloads', downloads: 'Downloads', unknown: 'Unknown' },
+        empty: { noClients: 'No download clients configured in Settings.', noFilterResults: 'No downloads for this filter.' },
+        upload: { title: 'Add torrent', subtitle: 'Send a URL, magnet, or file to a configured client', client: 'Client', category: 'Category', torrentUrl: 'Torrent URL or Magnet', torrentFile: 'Torrent File', noCategory: 'No category', sending: 'Sending...', add: 'Add Torrent' },
+        errors: { loadFailed: 'Failed to load downloads', actionFailed: 'Failed to {action} download', chooseClient: 'Choose a download client first.', missingSource: 'Add a torrent URL, magnet link, or torrent file.', addFailed: 'Failed to add torrent' },
+        confirm: { remove: 'Remove "{name}" from {client}? Downloaded files will be left in place where the client supports it.' },
+    },
     person: {
         back: 'Back to Discovery',
         biography: 'Biography',
