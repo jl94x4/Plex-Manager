@@ -863,7 +863,7 @@ export const OverlaysDashboard: React.FC = () => {
         try {
             const up = await overlaysApi.uploadPreset('collection', newCollectionRuleFile);
             const imageId = String(up?.preset?.id || '').trim();
-            if (!imageId) throw new Error('Upload failed');
+            if (!imageId) throw new Error(t('overlays.jobs.collections.uploadFailed'));
             const sectionMeta = libraryPickerOptions.find(
                 (o) => o.value.toLowerCase() === library.toLowerCase(),
             );
@@ -897,7 +897,7 @@ export const OverlaysDashboard: React.FC = () => {
             await refresh();
             toast(t('overlays.jobs.collections.ruleAdded', { name: rule.name }));
         } catch (e: any) {
-            toast(e?.message || 'Upload failed', 'error');
+            toast(e?.message || t('overlays.jobs.collections.uploadFailed'), 'error');
         }
     }, [
         newCollectionRuleLibrary,

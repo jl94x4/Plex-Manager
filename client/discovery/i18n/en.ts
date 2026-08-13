@@ -637,6 +637,7 @@ export const en = {
                 ruleAdded: 'Saved “{name}” — ready for Preview / Run.',
                 ruleRemoved: 'Collection overlay removed',
                 ruleRemoveFailed: 'Could not remove collection overlay',
+                uploadFailed: 'Upload failed',
                 ruleName: 'Name',
                 ruleLibrary: 'Library',
                 pickLibrary: 'Select a library…',

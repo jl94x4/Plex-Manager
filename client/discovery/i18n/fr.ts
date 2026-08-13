@@ -628,7 +628,7 @@ export const fr: DeepPartial<EnCatalog> = {
                 },
             },
             collections: {
-                title: 'Custom Collection Overlays',
+                title: 'Overlays de collections personnalisées',
                 hint: 'Appliquez un PNG personnalisé à chaque titre d’une collection Plex (ex. Tendances).',
                 enabledOn: 'Activé · {count} règle(s)',
                 enabledOff: 'Désactivé',
@@ -639,6 +639,7 @@ export const fr: DeepPartial<EnCatalog> = {
                 ruleAdded: '« {name} » enregistré — prêt pour Aperçu / Exécuter.',
                 ruleRemoved: 'Overlay de collection supprimé',
                 ruleRemoveFailed: 'Impossible de supprimer l’overlay de collection',
+                uploadFailed: 'Échec de l’envoi',
                 ruleName: 'Nom',
                 ruleLibrary: 'Bibliothèque',
                 pickLibrary: 'Choisir une bibliothèque…',
@@ -701,7 +702,7 @@ export const fr: DeepPartial<EnCatalog> = {
             revertSectionTitle: 'Rétablir cette section ?',
             expandSection: 'Développer',
             collapseSection: 'Réduire',
-            sectionEmpty: 'Aucun titre tamponné pour cette collection. Lancez Aperçu/Exécuter sur Custom Collection Overlays.',
+            sectionEmpty: 'Aucun titre marqué pour cette collection. Lancez Aperçu/Exécuter dans Overlays de collections personnalisées.',
         },
         overview: {
             loggedOverlays: 'Séries journalisées',
