@@ -35,6 +35,18 @@ export const fr: DeepPartial<EnCatalog> = {
         person: 'Personne',
         music: 'Musique',
     },
+    calendar: {
+        page: { tvDescription: 'Sorties de séries TV, téléchargements et activité dans votre écosystème multimédia.', movieDescription: 'Sorties de films, téléchargements et activité dans votre écosystème multimédia.' },
+        actions: { refresh: 'Actualiser', configureInSettings: 'Configurer dans les paramètres →' },
+        sections: { upcomingReleases: 'Prochaines sorties', downloads: 'Téléchargements de {name}', history: 'Historique de {name}', status: 'État de {name}' },
+        relative: { today: 'Aujourd’hui', tomorrow: 'Demain', atTime: ' à {time}', nextMonthNotice: 'Affichage du prochain mois avec les sorties {type} ({month}).', noNextReleases: 'Aucune sortie {type} trouvée dans les 6 prochains mois.' },
+        status: { unconfigured: 'Non configuré', online: 'En ligne', ready: 'Prêt', monitored: 'Surveillé', freeStorage: 'Espace libre', freeGb: '{value} Go libres', usedPercent: '{value} % utilisés', totalGb: '{value} Go au total' },
+        labels: { requestedNotAired: 'Demandé — pas encore diffusé', requestedNotReleased: 'Demandé — pas encore sorti', unableToFetch: 'Impossible de récupérer les données de {name}. Vérifiez l’URL, la clé API et l’accès au réseau local.', subtitleAutomation: 'Gestion et automatisation des sous-titres', musicAutomation: 'Automatisation de la bibliothèque musicale', active: '{count} actif(s)' },
+        empty: { notConfigured: '{name} n’est pas encore configuré.', configurationHint: 'Ajoutez l’URL et la clé API dans Paramètres → Intégrations.', noUpcoming: 'Aucune sortie {type} prévue ce mois-ci', noPoster: 'Aucune affiche', noActiveDownloads: 'Aucun téléchargement {type} actif', noRecentHistory: 'Aucun historique {type} récent', unknownTime: 'Heure inconnue' },
+        errors: { loadFailed: 'Échec du chargement des données de Media Stack.' },
+        fallback: { unknownSeries: 'Série inconnue', unknownTvShow: 'Série TV inconnue', unknownMovie: 'Film inconnu', movieRelease: 'Sortie de film' },
+        events: { grabbed: 'Récupéré', imported: 'Importé', failed: 'Échec', deleted: 'Supprimé' },
+    },
     navigation: {
         home: 'Accueil',
         users: 'Utilisateurs',

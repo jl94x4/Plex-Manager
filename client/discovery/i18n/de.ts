@@ -408,6 +408,18 @@ export const de: DeepPartial<EnCatalog> = {
         noBiography: 'Keine Biografie für {name}.',
         knownFor: 'Bekannt für',
     },
+    calendar: {
+        page: { tvDescription: 'Serienstarts, Downloads und Aktivitäten in deinem Medien-Stack.', movieDescription: 'Filmstarts, Downloads und Aktivitäten in deinem Medien-Stack.' },
+        actions: { refresh: 'Aktualisieren', configureInSettings: 'In den Einstellungen konfigurieren →' },
+        sections: { upcomingReleases: 'Kommende Veröffentlichungen', downloads: 'Downloads von {name}', history: 'Verlauf von {name}', status: 'Status von {name}' },
+        relative: { today: 'Heute', tomorrow: 'Morgen', atTime: ' um {time}', nextMonthNotice: 'Der nächste Monat mit {type}-Veröffentlichungen wird angezeigt ({month}).', noNextReleases: 'In den nächsten 6 Monaten wurden keine {type}-Veröffentlichungen gefunden.' },
+        status: { unconfigured: 'Nicht konfiguriert', online: 'Online', ready: 'Bereit', monitored: 'Überwacht', freeStorage: 'Freier Speicher', freeGb: '{value} GB frei', usedPercent: '{value}% belegt', totalGb: '{value} GB gesamt' },
+        labels: { requestedNotAired: 'Angefordert — noch nicht ausgestrahlt', requestedNotReleased: 'Angefordert — noch nicht veröffentlicht', unableToFetch: 'Daten von {name} konnten nicht abgerufen werden. URL/API-Schlüssel und lokale Netzwerkerreichbarkeit prüfen.', subtitleAutomation: 'Untertitelverwaltung und Automatisierung', musicAutomation: 'Automatisierung der Musikbibliothek', active: '{count} aktiv' },
+        empty: { notConfigured: '{name} ist noch nicht konfiguriert.', configurationHint: 'URL und API-Schlüssel unter Einstellungen → Integrationen hinzufügen.', noUpcoming: 'Keine {type}-Veröffentlichungen für diesen Monat', noPoster: 'Kein Poster', noActiveDownloads: 'Keine aktiven {type}-Downloads', noRecentHistory: 'Kein aktueller {type}-Verlauf', unknownTime: 'Unbekannte Zeit' },
+        fallback: { unknownSeries: 'Unbekannte Serie', unknownTvShow: 'Unbekannte TV-Serie', unknownMovie: 'Unbekannter Film', movieRelease: 'Filmveröffentlichung' },
+        events: { grabbed: 'Abgerufen', imported: 'Importiert', failed: 'Fehlgeschlagen', deleted: 'Gelöscht' },
+        errors: { loadFailed: 'Media-Stack-Daten konnten nicht geladen werden.' },
+    },
 };
 
 type DeepPartial<T> = {

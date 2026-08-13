@@ -408,6 +408,18 @@ export const es: DeepPartial<EnCatalog> = {
         noBiography: 'No hay biografía para {name}.',
         knownFor: 'Conocido por',
     },
+    calendar: {
+        page: { tvDescription: 'Estrenos de series, descargas y actividad en tu ecosistema multimedia.', movieDescription: 'Estrenos de películas, descargas y actividad en tu ecosistema multimedia.' },
+        actions: { refresh: 'Actualizar', configureInSettings: 'Configurar en Ajustes →' },
+        sections: { upcomingReleases: 'Próximos estrenos', downloads: 'Descargas de {name}', history: 'Historial de {name}', status: 'Estado de {name}' },
+        relative: { today: 'Hoy', tomorrow: 'Mañana', atTime: ' a las {time}', nextMonthNotice: 'Mostrando el próximo mes con estrenos de {type} ({month}).', noNextReleases: 'No se encontraron estrenos de {type} en los próximos 6 meses.' },
+        status: { unconfigured: 'Sin configurar', online: 'En línea', ready: 'Listo', monitored: 'Monitorizado', freeStorage: 'Almacenamiento libre', freeGb: '{value} GB libres', usedPercent: '{value}% usado', totalGb: '{value} GB en total' },
+        labels: { requestedNotAired: 'Solicitado — aún no emitido', requestedNotReleased: 'Solicitado — aún no estrenado', unableToFetch: 'No se pudieron obtener datos de {name}. Comprueba la URL, la clave API y la red local.', subtitleAutomation: 'Gestión y automatización de subtítulos', musicAutomation: 'Automatización de la biblioteca musical', active: '{count} activos' },
+        empty: { notConfigured: '{name} aún no está configurado.', configurationHint: 'Añade la URL y la clave API en Ajustes → Integraciones.', noUpcoming: 'No hay estrenos de {type} este mes', noPoster: 'Sin póster', noActiveDownloads: 'No hay descargas activas de {type}', noRecentHistory: 'No hay historial reciente de {type}', unknownTime: 'Hora desconocida' },
+        fallback: { unknownSeries: 'Serie desconocida', unknownTvShow: 'Serie de TV desconocida', unknownMovie: 'Película desconocida', movieRelease: 'Estreno de película' },
+        events: { grabbed: 'Obtenido', imported: 'Importado', failed: 'Fallido', deleted: 'Eliminado' },
+        errors: { loadFailed: 'No se pudieron cargar los datos de Media Stack.' },
+    },
 };
 
 type DeepPartial<T> = {
