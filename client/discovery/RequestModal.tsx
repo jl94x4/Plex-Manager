@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle, ChevronDown, ChevronUp, Film, Loader2, Tv, X } from 'lucide-react';
+import { Bell, CheckCircle, ChevronDown, ChevronUp, Film, Loader2, Tv, X } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { ModalPortal } from '../shared/ModalPortal';
 import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
@@ -23,8 +23,9 @@ type Props = {
     posterPath?: string | null;
     overview?: string | null;
     onClose: () => void;
-    onSuccess: (message: string) => void;
+    onSuccess: (message: string, meta?: { notify?: boolean }) => void;
     onError: (message: string) => void;
+    onNotifyChange?: (watching: boolean) => void;
 };
 
 type QualityKey = 'hd' | '4k';
@@ -85,6 +86,7 @@ export const RequestModal: React.FC<Props> = ({
     onClose,
     onSuccess,
     onError,
+    onNotifyChange,
 }) => {
     const { t } = useDiscoverI18n();
     const [loading, setLoading] = useState(true);
@@ -676,6 +678,31 @@ export const RequestModal: React.FC<Props> = ({
         }
     };
 
+    const handleNotifyToggle = async () => {
+        if (!options?.canNotify && !options?.isWatching) return;
+        try {
+            setSubmitting(true);
+            const res = await apiFetch('/api/discovery/request/notify', {
+                method: 'POST',
+                body: JSON.stringify({
+                    mediaType,
+                    mediaId,
+                    subscribe: !options.isWatching,
+                }),
+            });
+            if (res?.error) throw new Error(res.error);
+            const watching = !!res?.isWatching;
+            setOptions((prev) => (prev ? { ...prev, isWatching: watching, canNotify: true } : prev));
+            onNotifyChange?.(watching);
+            onSuccessRef.current(watching ? t('request.notifySaved') : t('request.notifyRemoved'), { notify: true });
+            if (watching) onCloseRef.current();
+        } catch (e: any) {
+            onErrorRef.current(e?.message || t('request.notifyFailed'));
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     if (!open) return null;
 
     const displayTitle = options?.title || fallbackTitle || t('request.requestMedia');
@@ -858,6 +885,9 @@ export const RequestModal: React.FC<Props> = ({
                             {options.blockReason && !options.canRequest && (
                                 <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                                     {options.blockReason}
+                                    {options.canNotify ? (
+                                        <p className="mt-2 text-[13px] text-amber-100/80">{t('request.notifyMeHint')}</p>
+                                    ) : null}
                                 </div>
                             )}
 
@@ -1199,13 +1229,25 @@ export const RequestModal: React.FC<Props> = ({
                         {t('common.cancel')}
                     </button>
                     {!options?.canRequest && !loading ? (
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors"
-                        >
-                            {t('common.close')}
-                        </button>
+                        options?.canNotify || options?.isWatching ? (
+                            <button
+                                type="button"
+                                onClick={handleNotifyToggle}
+                                disabled={submitting}
+                                className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+                                {options.isWatching ? t('request.stopNotify') : t('request.notifyMe')}
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors"
+                            >
+                                {t('common.close')}
+                            </button>
+                        )
                     ) : (
                         <button
                             type="button"

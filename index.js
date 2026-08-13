@@ -1372,6 +1372,7 @@ import {
     normalizeStatusNotifyDownAfterMinutes,
 } from './lib/notifications/opsNotify.js';
 import { enrichInAppNotificationItems } from './lib/notifications/mediaMeta.js';
+import { watcherTitleKey, setWatchingTitle } from './lib/notifications/requestWatchers.js';
 import { normalizeReleaseDatePreference, isFutureReleaseDate } from './lib/notifications/releaseDates.js';
 import {
     isDiscoverNowPlayingEnabled,
@@ -9123,6 +9124,70 @@ app.get('/api/discovery/request-options', requireAuth, requireMember, async (req
     } catch (e) {
         log(`Discovery request-options error: ${e.message}`);
         res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/discovery/request/notify', requireAuth, requireMember, async (req, res) => {
+    if (blockIfImpersonating(req, res)) return;
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const rawType = String(req.body?.mediaType || '').toLowerCase();
+        const mediaType = rawType === 'tv' ? 'tv' : (rawType === 'music' ? 'music' : 'movie');
+        const mediaId = mediaType === 'music'
+            ? String(req.body?.mediaId || req.body?.mbid || '').trim()
+            : Number(req.body?.mediaId || req.body?.tmdbId);
+        const albumMbid = mediaType === 'music' ? (String(req.body?.albumMbid || '').trim() || null) : null;
+        const subscribe = req.body?.subscribe !== false;
+        if (mediaType === 'music') {
+            if (!mediaId) return res.status(400).json({ error: 'Missing media details' });
+        } else if (!Number.isFinite(mediaId) || mediaId <= 0) {
+            return res.status(400).json({ error: 'Missing media details' });
+        }
+        if (mediaType === 'music' && getRequestEngine(config) !== 'portal') {
+            return res.status(400).json({ error: 'Music requests require the portal request engine.' });
+        }
+
+        const users = await loadFile(USERS_PATH, []);
+        const sessionKey = String(req.user?.id || req.user?.plexId || '');
+        const portalUser = users.find((u) => String(u?.id) === sessionKey || String(u?.plexId) === sessionKey) || req.user;
+        const viewerId = String(portalUser?.id || req.user?.id || '').trim();
+        if (!viewerId) return res.status(404).json({ error: 'User not found' });
+
+        const options = getRequestEngine(config) === 'portal'
+            ? await getPortalRequestService(config).getMemberRequestOptions(req.user, {
+                mediaType,
+                mediaId,
+                albumMbid,
+            })
+            : await requestAppService.getMemberRequestOptions(config, req.user, {
+                mediaType,
+                mediaId,
+            });
+
+        if (subscribe && !options?.canNotify && !options?.isWatching) {
+            return res.status(409).json({
+                error: options?.blockReason || 'You can only follow a title someone else already requested.',
+                canNotify: false,
+                isWatching: false,
+            });
+        }
+
+        const key = watcherTitleKey({
+            mediaType,
+            tmdbId: mediaType === 'music' ? null : mediaId,
+            mediaId,
+            mbid: mediaType === 'music' ? mediaId : null,
+            albumMbid,
+        });
+        const result = await setWatchingTitle(key, viewerId, subscribe);
+        res.json({
+            success: true,
+            canNotify: true,
+            isWatching: !!result.isWatching,
+        });
+    } catch (e) {
+        log(`Discovery request notify error: ${e.message}`);
+        res.status(500).json({ error: e.message || 'Failed to update notify preference' });
     }
 });
 

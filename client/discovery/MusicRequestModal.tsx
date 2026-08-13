@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, Music, X } from 'lucide-react';
+import { Bell, Loader2, Music, X } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { ModalPortal } from '../shared/ModalPortal';
 import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
@@ -23,8 +23,9 @@ type Props = {
     /** When set, the request is scoped to this album instead of the whole artist. */
     album?: AlbumTarget | null;
     onClose: () => void;
-    onSuccess: (message: string) => void;
+    onSuccess: (message: string, meta?: { notify?: boolean }) => void;
     onError: (message: string) => void;
+    onNotifyChange?: (watching: boolean) => void;
 };
 
 type ServiceOptions = {
@@ -53,6 +54,7 @@ export const MusicRequestModal: React.FC<Props> = ({
     onClose,
     onSuccess,
     onError,
+    onNotifyChange,
 }) => {
     const { t } = useDiscoverI18n();
     const [loading, setLoading] = useState(true);
@@ -146,6 +148,32 @@ export const MusicRequestModal: React.FC<Props> = ({
         }
     };
 
+    const handleNotifyToggle = async () => {
+        if (!options?.canNotify && !options?.isWatching) return;
+        setSubmitting(true);
+        try {
+            const res = await apiFetch('/api/discovery/request/notify', {
+                method: 'POST',
+                body: JSON.stringify({
+                    mediaType: 'music',
+                    mediaId: mbid,
+                    albumMbid: album?.mbid || null,
+                    subscribe: !options.isWatching,
+                }),
+            });
+            if (res?.error) throw new Error(res.error);
+            const watching = !!res?.isWatching;
+            setOptions((prev: any) => (prev ? { ...prev, isWatching: watching, canNotify: true } : prev));
+            onNotifyChange?.(watching);
+            onSuccess(watching ? t('request.notifySaved') : t('request.notifyRemoved'), { notify: true });
+            if (watching) onClose();
+        } catch (e: any) {
+            onError(e?.message || t('request.notifyFailed'));
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     if (!open) return null;
 
     const title = options?.title
@@ -196,6 +224,9 @@ export const MusicRequestModal: React.FC<Props> = ({
                                 {options.blockReason && (
                                     <p className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                                         {options.blockReason}
+                                        {options.canNotify ? (
+                                            <span className="block mt-1 text-amber-100/80">{t('request.notifyMeHint')}</span>
+                                        ) : null}
                                     </p>
                                 )}
                                 {quotaHint && (
@@ -253,15 +284,27 @@ export const MusicRequestModal: React.FC<Props> = ({
                                         )}
                                     </div>
                                 )}
-                                <button
-                                    type="button"
-                                    disabled={!options.canRequest || submitting}
-                                    onClick={submit}
-                                    className="w-full py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
-                                >
-                                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                                    {submitting ? t('request.submitting') : t('request.submit')}
-                                </button>
+                                {(options.canNotify || options.isWatching) && !options.canRequest ? (
+                                    <button
+                                        type="button"
+                                        disabled={submitting}
+                                        onClick={handleNotifyToggle}
+                                        className="w-full py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                                    >
+                                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+                                        {options.isWatching ? t('request.stopNotify') : t('request.notifyMe')}
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        disabled={!options.canRequest || submitting}
+                                        onClick={submit}
+                                        className="w-full py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+                                    >
+                                        {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                                        {submitting ? t('request.submitting') : t('request.submit')}
+                                    </button>
+                                )}
                             </>
                         )}
                     </div>

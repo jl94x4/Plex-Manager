@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, Clock, Disc3, Loader2, Music } from 'lucide-react';
+import { ArrowLeft, Bell, Check, Clock, Disc3, Loader2, Music } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { resolvePortalAssetUrl } from '../shared/basePath';
 import { MusicRequestModal } from './MusicRequestModal';
@@ -79,6 +79,7 @@ export const MusicArtistPage: React.FC<{
     const [albumTarget, setAlbumTarget] = useState<ArtistAlbum | null>(null);
     const [requestedAlbumMbids, setRequestedAlbumMbids] = useState<Set<string>>(new Set());
     const [artistRequested, setArtistRequested] = useState(false);
+    const [artistNotify, setArtistNotify] = useState<{ canNotify?: boolean; isWatching?: boolean } | null>(null);
 
     const loadArtist = useCallback(async () => {
         setLoading(true);
@@ -99,6 +100,13 @@ export const MusicArtistPage: React.FC<{
                 forArtist.map((row: any) => String(row?.albumMbid || '')).filter(Boolean),
             ));
             setArtistRequested(forArtist.some((row: any) => !row?.albumMbid));
+            const opts = await apiFetch(
+                `/api/discovery/request-options?mediaType=music&mediaId=${encodeURIComponent(mbid)}`,
+            ).catch(() => null);
+            setArtistNotify({
+                canNotify: !!opts?.canNotify,
+                isWatching: !!opts?.isWatching,
+            });
         } catch (e: any) {
             setArtist(null);
             setError(e?.message || t('music.loadFailed'));
@@ -144,8 +152,11 @@ export const MusicArtistPage: React.FC<{
         && availability.kind !== 'requested'
         && availability.kind !== 'pending'
         && !artistRequested;
+    const canNotifyArtist = !!(artistNotify?.canNotify || artistNotify?.isWatching) && !canRequest && !artistRequested;
 
     const requestButtonLabel = (() => {
+        if (artistNotify?.isWatching) return t('request.watching');
+        if (canNotifyArtist) return t('request.notifyMe');
         if (artistRequested) return t('music.requested');
         if (availability.kind === 'available') return t('music.inLibrary');
         if (availability.kind === 'processing') return t('music.processing');
@@ -242,9 +253,10 @@ export const MusicArtistPage: React.FC<{
                         <button
                             type="button"
                             onClick={() => { setAlbumTarget(null); setRequestOpen(true); }}
-                            disabled={!canRequest}
-                            className="mt-5 px-5 py-2.5 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={!canRequest && !canNotifyArtist}
+                            className="mt-5 px-5 py-2.5 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
                         >
+                            {canNotifyArtist ? <Bell className="w-4 h-4" /> : null}
                             {requestButtonLabel}
                         </button>
                     </div>
@@ -309,8 +321,9 @@ export const MusicArtistPage: React.FC<{
                     year: albumTarget.year || null,
                 } : null}
                 onClose={() => { setRequestOpen(false); setAlbumTarget(null); }}
-                onSuccess={(msg) => {
+                onSuccess={(msg, meta) => {
                     toast(msg, 'success');
+                    if (meta?.notify) return;
                     if (albumTarget?.mbid) {
                         setRequestedAlbumMbids((prev) => new Set([...prev, albumTarget.mbid]));
                     } else {
@@ -319,6 +332,9 @@ export const MusicArtistPage: React.FC<{
                     setAlbumTarget(null);
                 }}
                 onError={(msg) => toast(msg, 'error')}
+                onNotifyChange={(watching) => {
+                    if (!albumTarget) setArtistNotify({ canNotify: true, isWatching: watching });
+                }}
             />
         </div>
     );

@@ -86,6 +86,8 @@ export const translateDiscoverStatus = (t: DiscoverTranslate, label?: string | n
         'Request Series': 'request.requestSeries',
         'Request Seasons': 'request.requestSeasons',
         'All Seasons Requested': 'request.allSeasonsRequested',
+        'Notify me': 'request.notifyMe',
+        Watching: 'request.watching',
     };
     const key = map[raw];
     return key ? t(key) : raw;

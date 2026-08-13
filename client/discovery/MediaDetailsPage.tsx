@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { PlusCircle, CheckCircle, Clock, ArrowLeft, Star, Calendar, Globe, Film, Tv, Loader2, Users, Ticket, Cloud, Disc, AlertTriangle } from 'lucide-react';
+import { PlusCircle, CheckCircle, Clock, ArrowLeft, Star, Calendar, Globe, Film, Tv, Loader2, Users, Ticket, Cloud, Disc, AlertTriangle, Bell } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { DiscoverPosterCard } from '../screens';
@@ -86,6 +86,7 @@ export const MediaDetailsPage: React.FC<{
     const [radarrReleases, setRadarrReleases] = useState<RadarrReleaseDates | null>(null);
     const [ratings, setRatings] = useState<CombinedRatings | null>(null);
     const [requestModalOpen, setRequestModalOpen] = useState(false);
+    const [requestNotify, setRequestNotify] = useState<{ canNotify?: boolean; isWatching?: boolean } | null>(null);
     const [issueModalOpen, setIssueModalOpen] = useState(false);
     const [episodesSeason, setEpisodesSeason] = useState<{
         seasonNumber: number;
@@ -107,6 +108,7 @@ export const MediaDetailsPage: React.FC<{
         setRecommendations([]);
         setRadarrReleases(null);
         setRatings(null);
+        setRequestNotify(null);
 
         const fetchDetails = async () => {
             try {
@@ -162,6 +164,23 @@ export const MediaDetailsPage: React.FC<{
             cancelled = true;
         };
     }, [mediaId, mediaType, locale]);
+
+    useEffect(() => {
+        if (loading || !details) return undefined;
+        let cancelled = false;
+        apiFetch(`/api/discovery/request-options?mediaType=${mediaType}&mediaId=${mediaId}`)
+            .then((data) => {
+                if (cancelled || data?.error) return;
+                setRequestNotify({
+                    canNotify: !!data?.canNotify,
+                    isWatching: !!data?.isWatching,
+                });
+            })
+            .catch(() => undefined);
+        return () => {
+            cancelled = true;
+        };
+    }, [loading, details, mediaId, mediaType]);
 
     useEffect(() => {
         if (loading || !details) return undefined;
@@ -360,7 +379,11 @@ export const MediaDetailsPage: React.FC<{
         }
     };
 
-    const handleRequestSuccess = (message: string) => {
+    const handleRequestSuccess = (message: string, meta?: { notify?: boolean }) => {
+        if (meta?.notify) {
+            pushToast?.(message, 'success');
+            return;
+        }
         pushToast?.(message, 'success');
         // Optimistic stamp so the button flips immediately (auto-approve used to leave it as Request).
         setDetails((prev) => {
@@ -512,7 +535,16 @@ export const MediaDetailsPage: React.FC<{
     const year = (details.releaseDate || details.firstAirDate || '').substring(0, 4);
     const mediaStatus = details.mediaInfo?.status ?? null;
     const requestButton = getRequestButtonState(mediaType, mediaStatus, seasonRows, details.mediaInfo, details);
-    const requestButtonLabel = translateDiscoverStatus(t, requestButton.label);
+    const notifyCta = requestNotify?.canNotify || requestNotify?.isWatching
+        ? {
+            label: requestNotify.isWatching ? 'Watching' : 'Notify me',
+            disabled: false,
+            variant: requestNotify.isWatching ? 'pending' as const : 'action' as const,
+            hide: false,
+        }
+        : null;
+    const visibleRequestButton = notifyCta || requestButton;
+    const requestButtonLabel = translateDiscoverStatus(t, visibleRequestButton.label);
     const mediaTypeLabel = mediaType === 'movie' ? t('mediaType.movie') : t('mediaType.tv');
     const seerrMediaId = Number(details.mediaInfo?.id);
     const tmdbId = Number(details.tmdbId ?? details.id);
@@ -689,25 +721,27 @@ export const MediaDetailsPage: React.FC<{
                         </div>
                     </div>
 
-                    <div className={`grid gap-2.5 w-full ${canReportIssue && !requestButton.hide ? 'grid-cols-2 md:grid-cols-1' : 'grid-cols-1'}`}>
-                    {!requestButton.hide && (
+                    <div className={`grid gap-2.5 w-full ${canReportIssue && !visibleRequestButton.hide ? 'grid-cols-2 md:grid-cols-1' : 'grid-cols-1'}`}>
+                    {!visibleRequestButton.hide && (
                     <button
                         type="button"
                         onClick={() => setRequestModalOpen(true)}
-                        disabled={requestButton.disabled}
+                        disabled={visibleRequestButton.disabled}
                         className={`w-full py-3 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 sm:gap-2 transition-colors shadow-lg ${
-                            requestButton.variant === 'available'
+                            visibleRequestButton.variant === 'available'
                                 ? 'bg-green-500/20 text-green-500 border border-green-500/30 cursor-default'
-                                : requestButton.variant === 'pending'
+                                : visibleRequestButton.variant === 'pending' && !notifyCta
                                     ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30 cursor-default'
-                                    : requestButton.variant === 'blocked'
+                                    : visibleRequestButton.variant === 'blocked'
                                         ? 'bg-red-500/15 text-red-400 border border-red-500/25 cursor-default'
                                         : 'bg-plex hover:bg-plex-hover text-white disabled:opacity-50 disabled:cursor-not-allowed'
                         }`}
                     >
-                        {requestButton.variant === 'available' ? (
+                        {visibleRequestButton.variant === 'available' ? (
                             <><CheckCircle className="w-4 h-4" /> {requestButtonLabel}</>
-                        ) : requestButton.variant === 'pending' ? (
+                        ) : notifyCta ? (
+                            <><Bell className="w-4 h-4" /> {requestButtonLabel}</>
+                        ) : visibleRequestButton.variant === 'pending' ? (
                             <><Clock className="w-4 h-4" /> {requestButtonLabel}</>
                         ) : (
                             <><PlusCircle className="w-4 h-4" /> {requestButtonLabel}</>
@@ -1052,6 +1086,7 @@ export const MediaDetailsPage: React.FC<{
             overview={details.overview}
             onClose={() => setRequestModalOpen(false)}
             onSuccess={handleRequestSuccess}
+            onNotifyChange={(watching) => setRequestNotify({ canNotify: true, isWatching: watching })}
             onError={(msg) => pushToast?.(msg, 'error')}
         />
         {mediaType === 'tv' && episodesSeason ? (

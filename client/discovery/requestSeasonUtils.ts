@@ -556,6 +556,8 @@ export type RequestOptionsPayload = {
     blockReason?: string | null;
     posterPath?: string | null;
     engine?: string;
+    canNotify?: boolean;
+    isWatching?: boolean;
 };
 
 export const formatQuotaHint = (
