@@ -17,7 +17,7 @@ The supported UI locale set is `en`, `fr`, `de`, `es`, `pt-BR`, `it`, `ja`, `pl`
 
 ## Current i18n Coverage
 
-This table describes broad UI i18n wiring and known remaining work. It does not claim backend messages, user data, external metadata, configured values, or provider content are localized.
+This table describes broad UI i18n wiring and known remaining work. It does not claim backend messages, user data, external metadata, configured values, or provider content are localized. The Maintenance/Cleaner rules workflow is covered in a focused batch; the wider dashboard remains Partial.
 
 | Area | State |
 | --- | --- |
