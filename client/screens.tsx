@@ -698,6 +698,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
 
 
 const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: string | null, days: string, onClose: () => void }> = ({ userId, username, thumb, days, onClose }) => {
+    const { t } = useDiscoverI18n();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
@@ -745,14 +746,14 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
             .catch((e: any) => {
                 if (!cancelled) {
                     setXpAudit(null);
-                    setXpAuditError(e?.message || 'No achievements snapshot for this user.');
+                    setXpAuditError(e?.message || t('userAnalytics.xp.noSnapshot'));
                 }
             })
             .finally(() => {
                 if (!cancelled) setXpAuditLoading(false);
             });
         return () => { cancelled = true; };
-    }, [userId, activeTab]);
+    }, [userId, activeTab, t]);
 
     useEffect(() => {
         if (activeTab !== 'history') return;
@@ -803,8 +804,8 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
 
     const historyWatchedLabel = (status?: number | null) => {
         if (status == null) return null;
-        if (status === 1) return 'Watched';
-        if (status === 0) return 'Partial';
+        if (status === 1) return t('userAnalytics.history.watched');
+        if (status === 0) return t('userAnalytics.history.partial');
         return `Status ${status}`;
     };
 
@@ -817,7 +818,15 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
         return `E${String(e!).padStart(2, '0')}`;
     };
 
-    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const daysOfWeek = [
+        t('userAnalytics.charts.weekdays.sunday'),
+        t('userAnalytics.charts.weekdays.monday'),
+        t('userAnalytics.charts.weekdays.tuesday'),
+        t('userAnalytics.charts.weekdays.wednesday'),
+        t('userAnalytics.charts.weekdays.thursday'),
+        t('userAnalytics.charts.weekdays.friday'),
+        t('userAnalytics.charts.weekdays.saturday'),
+    ];
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
@@ -830,17 +839,17 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                         </div>
                         <div>
                             <h2 className="text-2xl font-bold text-text">{username}</h2>
-                            <p className="text-muted text-sm">{loading ? 'Loading stats...' : `${data?.totalPlays || 0} total plays (${days === 'all' ? 'All Time' : `Last ${days} Days`})`}</p>
+                            <p className="text-muted text-sm">{loading ? t('userAnalytics.page.loadingStats') : `${t('userAnalytics.page.totalPlays', { count: data?.totalPlays || 0 })} (${days === 'all' ? t('wrapUp.allTime') : t('wrapUp.lastNDays', { days })})`}</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-muted hover:text-white transition-colors bg-white/5 p-2 rounded-full"><X className="w-6 h-6" /></button>
+                    <button onClick={onClose} aria-label={t('common.close')} className="text-muted hover:text-white transition-colors bg-white/5 p-2 rounded-full"><X className="w-6 h-6" /></button>
                 </div>
 
                 {/* Tabs */}
                 <div className="flex border-b border-border bg-black/40 px-6 gap-6">
                     {(['overview', 'history', 'graphs', 'xp'] as const).map(tab => (
                         <button key={tab} onClick={() => setActiveTab(tab)} className={`py-3 px-2 font-bold text-sm uppercase tracking-wider transition-colors border-b-2 ${activeTab === tab ? 'border-plex text-text' : 'border-transparent text-muted hover:text-white'}`}>
-                            {tab === 'xp' ? 'XP audit' : tab}
+                            {t(`userAnalytics.tabs.${tab}` as 'userAnalytics.tabs.overview' | 'userAnalytics.tabs.history' | 'userAnalytics.tabs.graphs' | 'userAnalytics.tabs.xp')}
                         </button>
                     ))}
                 </div>
@@ -851,10 +860,10 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                         <div className="flex flex-col gap-5 min-h-[320px]">
                             <div>
                                 <h3 className="text-lg font-bold text-text uppercase tracking-wider flex items-center gap-2">
-                                    <Trophy className="text-plex w-4 h-4" /> Achievements XP audit
+                                    <Trophy className="text-plex w-4 h-4" /> {t('userAnalytics.xp.title')}
                                 </h3>
                                 <p className="text-xs text-muted mt-1">
-                                    Snapshot totals and weighted source breakdown that explain this member’s XP.
+                                    {t('userAnalytics.xp.description')}
                                 </p>
                             </div>
                             {xpAuditLoading ? (
@@ -862,16 +871,16 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                             ) : xpAuditError || !xpAudit ? (
                                 <div className="flex flex-col items-center justify-center h-40 text-center gap-2">
                                     <AlertCircle className="w-8 h-8 text-amber-400" />
-                                    <p className="text-muted text-sm">{xpAuditError || 'No achievements data for this user.'}</p>
+                                    <p className="text-muted text-sm">{xpAuditError || t('userAnalytics.xp.noData')}</p>
                                 </div>
                             ) : (
                                 <>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         {[
                                             { label: 'XP', value: Number(xpAudit.xp || 0).toLocaleString() },
-                                            { label: 'Level', value: String(xpAudit.level || 1) },
-                                            { label: 'Badges', value: `${xpAudit.earnedCount || 0}/${xpAudit.totalBadges || 0}` },
-                                            { label: 'Source', value: String(xpAudit.watchHistorySource || 'plex') },
+                                            { label: t('common.level'), value: String(xpAudit.level || 1) },
+                                            { label: t('common.badges'), value: `${xpAudit.earnedCount || 0}/${xpAudit.totalBadges || 0}` },
+                                            { label: t('userAnalytics.xp.source'), value: String(xpAudit.watchHistorySource || 'plex') },
                                         ].map((card) => (
                                             <div key={card.label} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
                                                 <p className="text-[10px] uppercase tracking-widest text-muted font-bold">{card.label}</p>
@@ -880,15 +889,15 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                         ))}
                                     </div>
                                     <div className="text-[11px] text-muted flex flex-wrap gap-x-4 gap-y-1">
-                                        {xpAudit.updatedAt && <span>Updated {new Date(xpAudit.updatedAt).toLocaleString()}</span>}
-                                        {xpAudit.leaderboardOptOut ? <span className="text-amber-300">Hidden from leaderboard</span> : null}
-                                        {xpAudit.muteUnlockToasts ? <span>Unlock toasts muted</span> : null}
+                                        {xpAudit.updatedAt && <span>{t('userAnalytics.xp.updated')} {new Date(xpAudit.updatedAt).toLocaleString()}</span>}
+                                        {xpAudit.leaderboardOptOut ? <span className="text-amber-300">{t('userAnalytics.xp.hiddenLeaderboard')}</span> : null}
+                                        {xpAudit.muteUnlockToasts ? <span>{t('userAnalytics.xp.unlockToastsMuted')}</span> : null}
                                         {Array.isArray(xpAudit.pinnedBadgeIds) && xpAudit.pinnedBadgeIds.length > 0 && (
-                                            <span>Pinned: {xpAudit.pinnedBadgeIds.join(', ')}</span>
+                                            <span>{t('userAnalytics.xp.pinned')} {xpAudit.pinnedBadgeIds.join(', ')}</span>
                                         )}
                                     </div>
                                     <div>
-                                        <h4 className="text-sm font-bold text-text mb-2">XP breakdown</h4>
+                                        <h4 className="text-sm font-bold text-text mb-2">{t('userAnalytics.xp.breakdown')}</h4>
                                         <div className="space-y-1.5">
                                             {(Array.isArray(xpAudit.breakdown) ? xpAudit.breakdown : Object.entries(xpAudit.breakdown || {}).map(([key, xp]) => ({ key, xp })))
                                                 .map((row: any) => {
@@ -903,13 +912,13 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                     );
                                                 })}
                                             {!(Array.isArray(xpAudit.breakdown) ? xpAudit.breakdown.length : Object.keys(xpAudit.breakdown || {}).length) && (
-                                                <p className="text-sm text-muted">No breakdown parts stored.</p>
+                                                <p className="text-sm text-muted">{t('userAnalytics.xp.noBreakdown')}</p>
                                             )}
                                         </div>
                                     </div>
                                     {Array.isArray(xpAudit.recentBadges) && xpAudit.recentBadges.length > 0 && (
                                         <div>
-                                            <h4 className="text-sm font-bold text-text mb-2">Recent badges</h4>
+                                            <h4 className="text-sm font-bold text-text mb-2">{t('userAnalytics.xp.recentBadges')}</h4>
                                             <div className="flex flex-wrap gap-2">
                                                 {xpAudit.recentBadges.map((b: any) => (
                                                     <span key={b.id} className="text-[11px] rounded-lg border border-white/10 bg-black/25 px-2.5 py-1 font-mono text-muted">
@@ -921,7 +930,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                     )}
                                     {xpAudit.stats && (
                                         <details className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
-                                            <summary className="cursor-pointer text-xs font-semibold text-muted hover:text-text">Raw stats</summary>
+                                            <summary className="cursor-pointer text-xs font-semibold text-muted hover:text-text">{t('userAnalytics.xp.rawStats')}</summary>
                                             <pre className="mt-2 text-[10px] text-muted overflow-x-auto whitespace-pre-wrap font-mono">
                                                 {JSON.stringify(xpAudit.stats, null, 2)}
                                             </pre>
@@ -935,18 +944,18 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                     ) : (error || !data) ? (
                         <div className="flex flex-col items-center justify-center h-40 text-center gap-2">
                             <AlertCircle className="w-8 h-8 text-red-500" />
-                            <p className="text-muted text-sm">Failed to load analytics for this user.</p>
+                            <p className="text-muted text-sm">{t('userAnalytics.page.loadError')}</p>
                         </div>
                     ) : activeTab === 'overview' ? (
                         <>
                             {/* Top row */}
                             <div>
-                                <h3 className="text-lg font-bold text-text mb-4 uppercase tracking-wider flex items-center gap-2"><PlaySquare className="text-plex w-4 h-4" /> Favorite Libraries</h3>
+                                <h3 className="text-lg font-bold text-text mb-4 uppercase tracking-wider flex items-center gap-2"><PlaySquare className="text-plex w-4 h-4" /> {t('userAnalytics.overview.favoriteLibraries')}</h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-                                    {(data.topLibraries ?? []).length === 0 ? <p className="text-muted text-sm col-span-full">No library data.</p> : data.topLibraries.map((lib: any, i: number) => (
+                                    {(data.topLibraries ?? []).length === 0 ? <p className="text-muted text-sm col-span-full">{t('userAnalytics.overview.noLibraryData')}</p> : data.topLibraries.map((lib: any, i: number) => (
                                         <div key={lib.id} className="flex justify-between items-center bg-black/20 p-2 rounded border border-white/5">
                                             <span className="font-bold text-sm text-text"><span className="text-muted mr-2">#{i + 1}</span>{lib.title}</span>
-                                            <span className="text-plex text-xs font-mono">{lib.plays} plays</span>
+                                            <span className="text-plex text-xs font-mono">{t('userAnalytics.overview.plays', { count: lib.plays })}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -954,7 +963,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
 
                             {data.topMovies && data.topMovies.length > 0 && (
                                 <div>
-                                    <h3 className="text-lg font-bold text-text mb-4 uppercase tracking-wider flex items-center gap-2"><Film className="text-plex w-4 h-4" /> Top Watched Movies</h3>
+                                    <h3 className="text-lg font-bold text-text mb-4 uppercase tracking-wider flex items-center gap-2"><Film className="text-plex w-4 h-4" /> {t('userAnalytics.overview.topMovies')}</h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
                                         {data.topMovies.slice(0, 15).map((c: any, i: number) => (
                                             <a key={c.key} href={c.plexUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 bg-black/20 p-2 rounded border border-white/5 hover:bg-white/10 transition-colors">
@@ -968,7 +977,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                     <span className="font-bold text-sm text-text truncate">{c.title}</span>
                                                     <span className="text-muted text-[10px] uppercase tracking-wider">{c.type}</span>
                                                 </div>
-                                                <span className="text-plex text-xs font-mono whitespace-nowrap">{c.plays} plays</span>
+                                                <span className="text-plex text-xs font-mono whitespace-nowrap">{t('userAnalytics.overview.plays', { count: c.plays })}</span>
                                             </a>
                                         ))}
                                     </div>
@@ -977,7 +986,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
 
                             {data.topShows && data.topShows.length > 0 && (
                                 <div>
-                                    <h3 className="text-lg font-bold text-text mb-4 uppercase tracking-wider flex items-center gap-2"><TrendingUp className="text-plex w-4 h-4" /> Top Watched TV Shows</h3>
+                                    <h3 className="text-lg font-bold text-text mb-4 uppercase tracking-wider flex items-center gap-2"><TrendingUp className="text-plex w-4 h-4" /> {t('userAnalytics.overview.topShows')}</h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
                                         {data.topShows.slice(0, 15).map((c: any, i: number) => (
                                             <a key={c.key} href={c.plexUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 bg-black/20 p-2 rounded border border-white/5 hover:bg-white/10 transition-colors">
@@ -991,7 +1000,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                     <span className="font-bold text-sm text-text truncate">{c.title}</span>
                                                     <span className="text-muted text-[10px] uppercase tracking-wider">{c.type}</span>
                                                 </div>
-                                                <span className="text-plex text-xs font-mono whitespace-nowrap">{c.plays} plays</span>
+                                                <span className="text-plex text-xs font-mono whitespace-nowrap">{t('userAnalytics.overview.plays', { count: c.plays })}</span>
                                             </a>
                                         ))}
                                     </div>
@@ -1002,18 +1011,18 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                         <div className="flex flex-col gap-4 h-full min-h-[400px]">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div>
-                                    <h3 className="text-lg font-bold text-text uppercase tracking-wider flex items-center gap-2"><Activity className="text-plex w-4 h-4" /> Full Watch History</h3>
+                                <h3 className="text-lg font-bold text-text uppercase tracking-wider flex items-center gap-2"><Activity className="text-plex w-4 h-4" /> {t('userAnalytics.history.title')}</h3>
                                     {historySource === 'plex' ? (
-                                        <p className="mt-1 text-[11px] text-muted">Pause time needs Tautulli configured — showing Plex history only. Click a row for details.</p>
+                                        <p className="mt-1 text-[11px] text-muted">{t('userAnalytics.history.plexHint')}</p>
                                     ) : historySource === 'tautulli' ? (
-                                        <p className="mt-1 text-[11px] text-muted">Click a row for session details (paused time, player, stream). Powered by Tautulli.</p>
+                                        <p className="mt-1 text-[11px] text-muted">{t('userAnalytics.history.tautulliHint')}</p>
                                     ) : null}
                                 </div>
                                 <div className="relative w-full sm:w-64">
                                     <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted" />
                                     <input
                                         type="text"
-                                        placeholder="Search history..."
+                                        placeholder={t('userAnalytics.history.searchPlaceholder')}
                                         value={historySearch}
                                         onChange={handleSearch}
                                         className="w-full bg-black/40 border border-border text-white text-sm rounded-lg focus:ring-plex focus:border-plex block pl-10 p-2 transition-colors"
@@ -1025,7 +1034,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                 {historyLoading ? (
                                     <div className="flex justify-center items-center h-40"><Loader isLoading={true} /></div>
                                 ) : historyData.length === 0 ? (
-                                    <div className="flex justify-center items-center h-40 text-muted">No history found.</div>
+                                    <div className="flex justify-center items-center h-40 text-muted">{t('userAnalytics.history.empty')}</div>
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                         {historyData.map((h: any, i: number) => {
@@ -1041,22 +1050,22 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                             const stoppedLabel = formatHistoryTimestamp(h.stoppedAt);
                                             const watchedLabel = historyWatchedLabel(h.watchedStatus);
                                             const detailRows: Array<{ label: string; value: string }> = [
-                                                startedLabel ? { label: 'Started', value: startedLabel } : null,
-                                                stoppedLabel ? { label: 'Stopped', value: stoppedLabel } : null,
-                                                playDurationLabel ? { label: 'Watched for', value: playDurationLabel } : null,
-                                                durationLabel ? { label: 'Media length', value: durationLabel } : null,
-                                                h.percentComplete != null ? { label: 'Progress', value: `${h.percentComplete}%` } : null,
-                                                historySource === 'tautulli' ? { label: 'Paused for', value: pausedLabel || 'None' } : null,
-                                                seasonEpisode ? { label: 'Episode', value: seasonEpisode } : null,
-                                                watchedLabel ? { label: 'Status', value: watchedLabel } : null,
-                                                h.player ? { label: 'Player', value: String(h.player) } : null,
-                                                h.platform ? { label: 'Platform', value: String(h.platform) } : null,
-                                                h.product ? { label: 'Product', value: String(h.product) } : null,
-                                                h.transcodeDecision ? { label: 'Stream', value: String(h.transcodeDecision) } : null,
-                                                h.ipAddress ? { label: 'IP', value: String(h.ipAddress) } : null,
-                                                h.location ? { label: 'Location', value: String(h.location) } : null,
-                                                h.year ? { label: 'Year', value: String(h.year) } : null,
-                                                h.type ? { label: 'Type', value: String(h.type) } : null,
+                                                startedLabel ? { label: t('userAnalytics.history.started'), value: startedLabel } : null,
+                                                stoppedLabel ? { label: t('userAnalytics.history.stopped'), value: stoppedLabel } : null,
+                                                playDurationLabel ? { label: t('userAnalytics.history.watchedFor'), value: playDurationLabel } : null,
+                                                durationLabel ? { label: t('userAnalytics.history.mediaLength'), value: durationLabel } : null,
+                                                h.percentComplete != null ? { label: t('userAnalytics.history.progress'), value: `${h.percentComplete}%` } : null,
+                                                historySource === 'tautulli' ? { label: t('userAnalytics.history.pausedFor'), value: pausedLabel || t('userAnalytics.history.none') } : null,
+                                                seasonEpisode ? { label: t('userAnalytics.history.episode'), value: seasonEpisode } : null,
+                                                watchedLabel ? { label: t('userAnalytics.history.status'), value: watchedLabel } : null,
+                                                h.player ? { label: t('userAnalytics.history.player'), value: String(h.player) } : null,
+                                                h.platform ? { label: t('userAnalytics.history.platform'), value: String(h.platform) } : null,
+                                                h.product ? { label: t('userAnalytics.history.product'), value: String(h.product) } : null,
+                                                h.transcodeDecision ? { label: t('userAnalytics.history.stream'), value: String(h.transcodeDecision) } : null,
+                                                h.ipAddress ? { label: t('userAnalytics.history.ip'), value: String(h.ipAddress) } : null,
+                                                h.location ? { label: t('userAnalytics.history.location'), value: String(h.location) } : null,
+                                                h.year ? { label: t('userAnalytics.history.year'), value: String(h.year) } : null,
+                                                h.type ? { label: t('userAnalytics.history.type'), value: String(h.type) } : null,
                                             ].filter(Boolean) as Array<{ label: string; value: string }>;
                                             return (
                                             <div
@@ -1087,7 +1096,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                         )}
                                                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
                                                             <span className="text-plex font-mono text-[10px]">
-                                                                {h.viewedAt ? (h.viewedAt > 9999999999 ? new Date(h.viewedAt).toLocaleString() : new Date(h.viewedAt * 1000).toLocaleString()) : 'Unknown Date'}
+                                                                {h.viewedAt ? (h.viewedAt > 9999999999 ? new Date(h.viewedAt).toLocaleString() : new Date(h.viewedAt * 1000).toLocaleString()) : t('userAnalytics.history.unknownDate')}
                                                             </span>
                                                             {durationLabel ? (
                                                                 <span className="text-muted font-mono text-[10px]">{durationLabel}</span>
@@ -1096,7 +1105,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                                 <span className="text-yellow-500 font-mono text-[10px]">{h.percentComplete}%</span>
                                                             )}
                                                             {pausedLabel ? (
-                                                                <span className="inline-flex items-center gap-0.5 text-amber-300 font-mono text-[10px]" title={`Paused for ${pausedLabel}`}>
+                                                                <span className="inline-flex items-center gap-0.5 text-amber-300 font-mono text-[10px]" title={`${t('userAnalytics.history.pausedFor')} ${pausedLabel}`}>
                                                                     <Pause className="w-3 h-3" /> {pausedLabel}
                                                                 </span>
                                                             ) : null}
@@ -1121,11 +1130,11 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                         </div>
                                                         {historySource === 'tautulli' ? (
                                                             <p className="mt-3 text-[10px] text-muted">
-                                                                Tautulli&apos;s pause value is time spent paused (seconds), not how many times they hit pause.
+                                                                {t('userAnalytics.history.tautulliPauseHint')}
                                                             </p>
                                                         ) : (
                                                             <p className="mt-3 text-[10px] text-muted">
-                                                                Session detail (paused time, player, stream) needs Tautulli.
+                                                                {t('userAnalytics.history.plexSessionHint')}
                                                             </p>
                                                         )}
                                                     </div>
@@ -1140,10 +1149,10 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                             {/* Pagination */}
                             {historyTotal > 15 && (
                                 <div className="flex justify-between items-center pt-2 border-t border-border mt-2 flex-shrink-0">
-                                    <span className="text-sm text-muted">Showing {Math.min((historyPage - 1) * 15 + 1, historyTotal)} to {Math.min(historyPage * 15, historyTotal)} of {historyTotal} plays</span>
+                                    <span className="text-sm text-muted">{t('userAnalytics.history.showing', { from: Math.min((historyPage - 1) * 15 + 1, historyTotal), to: Math.min(historyPage * 15, historyTotal), total: historyTotal })}</span>
                                     <div className="flex gap-2">
-                                        <button type="button" disabled={historyPage === 1} onClick={() => setHistoryPage(p => p - 1)} className="bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 px-3 py-1.5 rounded-lg text-sm text-white font-bold transition-colors">Prev</button>
-                                        <button type="button" disabled={historyPage * 15 >= historyTotal} onClick={() => setHistoryPage(p => p + 1)} className="bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 px-3 py-1.5 rounded-lg text-sm text-white font-bold transition-colors">Next</button>
+                                        <button type="button" disabled={historyPage === 1} onClick={() => setHistoryPage(p => p - 1)} className="bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 px-3 py-1.5 rounded-lg text-sm text-white font-bold transition-colors">{t('userAnalytics.history.prev')}</button>
+                                        <button type="button" disabled={historyPage * 15 >= historyTotal} onClick={() => setHistoryPage(p => p + 1)} className="bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-white/10 px-3 py-1.5 rounded-lg text-sm text-white font-bold transition-colors">{t('userAnalytics.history.next')}</button>
                                     </div>
                                 </div>
                             )}
@@ -1152,7 +1161,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                         <div className="flex flex-col gap-6 h-full min-h-[400px]">
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 <div className="glass-card-sm p-4 bg-black/20">
-                                    <h3 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">Plays by Hour of Day</h3>
+                                    <h3 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">{t('userAnalytics.charts.playsByHour')}</h3>
                                     <div className="h-64">
                                         {data.hourDistribution ? (
                                             <ResponsiveContainer width="100%" height="100%">
@@ -1164,15 +1173,15 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                         contentStyle={{ backgroundColor: 'rgba(20,20,20,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px' }}
                                                         itemStyle={{ color: '#E5A00D' }}
                                                     />
-                                                    <Line type="monotone" dataKey="plays" name="Plays" stroke="#E5A00D" strokeWidth={3} dot={{ fill: '#E5A00D', strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
+                                                    <Line type="monotone" dataKey="plays" name={t('userAnalytics.charts.plays')} stroke="#E5A00D" strokeWidth={3} dot={{ fill: '#E5A00D', strokeWidth: 2, r: 4 }} activeDot={{ r: 6 }} />
                                                 </LineChart>
                                             </ResponsiveContainer>
-                                        ) : <p className="text-muted text-sm">No data.</p>}
+                                        ) : <p className="text-muted text-sm">{t('userAnalytics.charts.noData')}</p>}
                                     </div>
                                 </div>
 
                                 <div className="glass-card-sm p-4 bg-black/20">
-                                    <h3 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">Plays by Day of Week</h3>
+                                    <h3 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">{t('userAnalytics.charts.playsByDay')}</h3>
                                     <div className="h-64">
                                         {data.dayOfWeekCounts ? (
                                             <ResponsiveContainer width="100%" height="100%">
@@ -1185,17 +1194,17 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                         itemStyle={{ color: '#E5A00D' }}
                                                         cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                                                     />
-                                                    <Bar dataKey="plays" name="Plays" fill="#E5A00D" radius={[4, 4, 0, 0]} />
+                                                    <Bar dataKey="plays" name={t('userAnalytics.charts.plays')} fill="#E5A00D" radius={[4, 4, 0, 0]} />
                                                 </BarChart>
                                             </ResponsiveContainer>
-                                        ) : <p className="text-muted text-sm">No data.</p>}
+                                        ) : <p className="text-muted text-sm">{t('userAnalytics.charts.noData')}</p>}
                                     </div>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
                                 <div className="glass-card-sm p-4 bg-black/20">
-                                    <h3 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">Plays by Library</h3>
+                                    <h3 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">{t('userAnalytics.charts.playsByLibrary')}</h3>
                                     <div className="h-64">
                                         {data.topLibraries && data.topLibraries.length > 0 ? (
                                             <ResponsiveContainer width="100%" height="100%">
@@ -1222,12 +1231,12 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                     />
                                                 </RechartsPieChart>
                                             </ResponsiveContainer>
-                                        ) : <p className="text-muted text-sm">No data.</p>}
+                                        ) : <p className="text-muted text-sm">{t('userAnalytics.charts.noData')}</p>}
                                     </div>
                                 </div>
 
                                 <div className="glass-card-sm p-4 bg-black/20">
-                                    <h3 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">Top Watched Shows</h3>
+                                    <h3 className="text-sm font-bold text-text mb-4 uppercase tracking-wider">{t('userAnalytics.charts.topShows')}</h3>
                                     <div className="h-64">
                                         {data.topShows && data.topShows.length > 0 ? (
                                             <ResponsiveContainer width="100%" height="100%">
@@ -1240,10 +1249,10 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                         itemStyle={{ color: '#E5A00D' }}
                                                         cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                                                     />
-                                                    <Bar dataKey="plays" name="Plays" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+                                                    <Bar dataKey="plays" name={t('userAnalytics.charts.plays')} fill="#3B82F6" radius={[0, 4, 4, 0]} />
                                                 </BarChart>
                                             </ResponsiveContainer>
-                                        ) : <p className="text-muted text-sm">No data.</p>}
+                                        ) : <p className="text-muted text-sm">{t('userAnalytics.charts.noData')}</p>}
                                     </div>
                                 </div>
                             </div>
