@@ -1243,7 +1243,7 @@ import {
 import { leanRadarrMovieList, leanSonarrSeriesList } from './lib/portal-request/leanArrCatalog.js';
 import { getSonarrTrashCatalog, getSonarrTrashCustomFormat } from './lib/trash-guides-catalog.js';
 import { createRequestAppService, getRequestAppGate, mapSeerrClientError } from './lib/request-app-service.js';
-import { mapSeerrRequestToLifecycleRecord } from './lib/seerr-user-session.js';
+import { mapSeerrRequestToLifecycleRecord, mergeSeerrLifecycleSource } from './lib/seerr-user-session.js';
 import {
     applyDiscoveryQueryParams,
     ensureSeerrDiscoverySettings,
@@ -2236,10 +2236,24 @@ const findLocalUserForSession = (users, sessionUser) => {
  * imports shared friends — not the owner. Create a stable portal user row so
  * in-app / push notifications have a real userId to attach to.
  */
+const stampPortalAdminFlag = (user) => {
+    if (!user || user.isAdmin === true) return false;
+    user.isAdmin = true;
+    return true;
+};
+
 const ensurePortalUserForNotifications = async (sessionUser, { config: configArg = null } = {}) => {
     const users = await loadFile(USERS_PATH, []);
     let localUser = findLocalUserForSession(users, sessionUser);
-    if (localUser?.id) return { users, localUser, created: false };
+    if (localUser?.id) {
+        const config = configArg || await loadFile(CONFIG_PATH, {});
+        const actor = getSessionActor(sessionUser);
+        const isAdmin = isServerOwnerUser(localUser, config) || await resolveCurrentAdmin(actor, config);
+        if (isAdmin && stampPortalAdminFlag(localUser)) {
+            await saveFile(USERS_PATH, users);
+        }
+        return { users, localUser, created: false };
+    }
 
     const config = configArg || await loadFile(CONFIG_PATH, {});
     const actor = getSessionActor(sessionUser);
@@ -2262,7 +2276,7 @@ const ensurePortalUserForNotifications = async (sessionUser, { config: configArg
         || (sessionUser.username && String(user?.username || '').toLowerCase() === String(sessionUser.username).toLowerCase())
     )) || null;
     if (localUser?.id) {
-        let changed = false;
+        let changed = stampPortalAdminFlag(localUser);
         if (plexId && !localUser.plexId) { localUser.plexId = plexId; changed = true; }
         if (jellyfinId && !localUser.jellyfinId) { localUser.jellyfinId = jellyfinId; changed = true; }
         if (changed) await saveFile(USERS_PATH, users);
@@ -2280,6 +2294,7 @@ const ensurePortalUserForNotifications = async (sessionUser, { config: configArg
         expiryDate: null,
         plexAccessStatus: 'active',
         isTrial: false,
+        isAdmin: true,
         notifyRequestAvailableEmail: true,
         notifyRequestAvailableInApp: true,
         notifyRequestAvailableWebPush: true,
@@ -10650,9 +10665,10 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
         });
         const seerrStatus = Number(data?.status);
         const users = await loadFile(USERS_PATH, []);
+        const titleFromBody = String(req.body?.title || '').trim();
         const lifecycleRecord = mapSeerrRequestToLifecycleRecord({
             ...data,
-            title: data?.media?.title || data?.media?.name || req.body?.title || 'New request',
+            title: data?.media?.title || data?.media?.name || titleFromBody || undefined,
             type,
             tmdbId,
             posterPath: data?.posterPath || data?.media?.posterPath || data?.media?.poster
@@ -10665,7 +10681,9 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
                 plexId: req.user?.plexId,
             },
         }, users);
-        if (!lifecycleRecord.title) lifecycleRecord.title = req.body?.title || 'New request';
+        if (!lifecycleRecord.title || /^your request$/i.test(lifecycleRecord.title)) {
+            if (titleFromBody) lifecycleRecord.title = titleFromBody;
+        }
         lifecycleRecord.mediaType = type;
         lifecycleRecord.tmdbId = tmdbId;
         if (!lifecycleRecord.posterPath) {
@@ -11663,12 +11681,13 @@ app.post('/api/requests/:id/approve', requireAdmin, async (req, res) => {
             : await requestAppService.approveRequest(config, requestId);
         const users = await loadFile(USERS_PATH, []);
         const lifecycleRecord = mapSeerrRequestToLifecycleRecord(
-            (result?.requestedBy || result?.media) ? result : existing,
+            mergeSeerrLifecycleSource(result, existing),
             users,
         );
         const title = lifecycleRecord.title
             || result?.media?.title
             || result?.media?.name
+            || existing?.title
             || req.body?.title
             || `Request #${requestId}`;
         lifecycleRecord.title = title;
@@ -11736,12 +11755,13 @@ app.post('/api/requests/:id/decline', requireAdmin, async (req, res) => {
         const result = await requestAppService.declineRequest(config, requestId, reason);
         const users = await loadFile(USERS_PATH, []);
         const lifecycleRecord = mapSeerrRequestToLifecycleRecord(
-            (result?.requestedBy || result?.media) ? result : existing,
+            mergeSeerrLifecycleSource(result, existing),
             users,
         );
         const title = lifecycleRecord.title
             || result?.media?.title
             || result?.media?.name
+            || existing?.title
             || req.body?.title
             || `Request #${requestId}`;
         lifecycleRecord.title = title;
@@ -11913,6 +11933,7 @@ app.get('/api/users', requireAdmin, async (req, res) => {
     const healed = withLastLogin.map((user) => {
         if (!isServerOwnerUser(user, config)) return user;
         const next = { ...user, isAdmin: true };
+        if (user.isAdmin !== true) changed = true;
         if (next.plexAccessStatus === 'revoked' || next.plexAccessStatus === 'unknown' || !next.plexAccessStatus) {
             next.plexAccessStatus = 'active';
             changed = true;
