@@ -402,6 +402,17 @@ export const de: DeepPartial<EnCatalog> = {
         genreArtists: 'Top-Künstler: {name}',
         genreAlbums: 'Top-Alben: {name}',
     },
+    downloads: {
+        page: { eyebrow: 'Downloads', title: 'Downloadstatus', description: 'Alle konfigurierten Download-Clients, gruppiert nach Sonarr, Radarr und Lidarr.' },
+        actions: { refresh: 'Aktualisieren', clearClientFilter: 'Client-Filter löschen', pause: 'Pausieren', resume: 'Fortsetzen', remove: 'Entfernen' },
+        filters: { client: 'Client', show: 'Anzeigen', activeOnly: 'Nur aktive', all: 'Alle', allClients: 'Alle Clients', other: 'Andere', shown: '{count} angezeigt', hidingCompleted: 'abgeschlossene/teilende ausgeblendet' },
+        labels: { clients: 'Clients', downloadClient: 'Download-Client', downloadCount: '{count} Download', downloadCount_plural: '{count} Downloads', downSpeed: 'Download {value}/s', upSpeed: 'Upload {value}/s', matchedFromArrQueue: 'Aus der Arr-Warteschlange zugeordnet' },
+        status: { activeDownloads: 'Aktive Downloads', downloads: 'Downloads', unknown: 'Unbekannt' },
+        empty: { noClients: 'Keine Download-Clients in den Einstellungen konfiguriert.', noFilterResults: 'Keine Downloads für diesen Filter.' },
+        upload: { title: 'Torrent hinzufügen', subtitle: 'URL, Magnet-Link oder Datei an einen konfigurierten Client senden', client: 'Client', category: 'Kategorie', torrentUrl: 'Torrent-URL oder Magnet-Link', torrentFile: 'Torrent-Datei', noCategory: 'Keine Kategorie', sending: 'Wird gesendet…', add: 'Torrent hinzufügen' },
+        errors: { loadFailed: 'Downloads konnten nicht geladen werden', actionFailed: 'Download konnte nicht {action} werden', chooseClient: 'Zuerst einen Download-Client auswählen.', missingSource: 'Torrent-URL, Magnet-Link oder Torrent-Datei hinzufügen.', addFailed: 'Torrent konnte nicht hinzugefügt werden' },
+        confirm: { remove: '„{name}“ aus {client} entfernen? Heruntergeladene Dateien bleiben erhalten, sofern der Client dies unterstützt.' },
+    },
     person: {
         back: 'Zurück zu Discover',
         biography: 'Biografie',
