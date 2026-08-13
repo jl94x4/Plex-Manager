@@ -70,6 +70,7 @@ import {
 import { ANALYTICS_PERIOD_OPTIONS, persistAnalyticsDays, readPersistedAnalyticsDays } from './shared/analyticsPeriodOptions';
 import { UserDashboardLayout } from './home/UserDashboardLayout';
 import { createBazarrToolsSectionRenderer, createMainGridWidgetRenderer, createMediaAutomationSectionRenderer, createPendingRequestsSectionRenderer, createRecentlyAddedWidgetRenderer, createScannerSectionRenderer } from './home/userDashboardWidgetRenderers';
+import { useDiscoverI18n } from './discovery/i18n';
 import {
     DEFAULT_DASHBOARD_LAYOUT,
     DASHBOARD_SECTION_LABELS,
@@ -217,10 +218,11 @@ const UserCard: React.FC<{
     onSelect: (id: string) => void;
     providerLabel?: string;
 }> = ({ user, onEdit, onDelete, onRevoke, onViewAs, onViewAnalytics, isConfigured, isSelected, onSelect, providerLabel = 'Plex' }) => {
+    const { t } = useDiscoverI18n();
     const { status, statusText, daysRemainingText, pillClass, borderClass, glowClass } = useMemo(() => {
         const days = getDaysUntilExpiry(user.expiryDate);
         let status: UserStatus = 'active';
-        let statusText = 'Active';
+        let statusText = t('usersAdmin.status.active');
         let daysRemainingText = '';
         let pillClass = 'bg-green-500/10 text-green-400 border border-green-500/20';
         let borderClass = 'border-green-500/30';
@@ -228,28 +230,28 @@ const UserCard: React.FC<{
 
         if (days === null) {
             status = 'active';
-            statusText = 'Active';
-            daysRemainingText = 'Access never expires.';
+            statusText = t('usersAdmin.status.active');
+            daysRemainingText = t('usersAdmin.card.neverExpires');
         } else if (days < 0) {
             status = 'expired';
-            statusText = 'Expired';
-            daysRemainingText = `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago.`;
+            statusText = t('usersAdmin.status.expired');
+            daysRemainingText = t('usersAdmin.card.expiredDaysAgo', { count: Math.abs(days) });
             pillClass = 'bg-red-500/10 text-red-400 border border-red-500/20';
             borderClass = 'border-red-500/30';
             glowClass = 'hover:border-red-500/50 hover:shadow-[0_0_15px_rgba(239,68,68,0.12)]';
         } else if (days <= 30) {
             status = 'expiring';
-            statusText = 'Expiring Soon';
-            daysRemainingText = days === 0 ? 'Expires today.' : `Expires in ${days} day${days === 1 ? '' : 's'}.`;
+            statusText = t('usersAdmin.status.expiring');
+            daysRemainingText = days === 0 ? t('usersAdmin.card.expiresToday') : t('usersAdmin.card.expiresInDays', { count: days });
             pillClass = 'bg-orange-500/10 text-orange-400 border border-orange-500/20';
             borderClass = 'border-orange-500/30';
             glowClass = 'hover:border-orange-500/50 hover:shadow-[0_0_15px_rgba(249,115,22,0.12)]';
         } else {
-            daysRemainingText = `Expires in ${days} day${days === 1 ? '' : 's'}.`;
+            daysRemainingText = t('usersAdmin.card.expiresInDays', { count: days });
         }
 
         return { status, statusText, daysRemainingText, pillClass, borderClass, glowClass };
-    }, [user.expiryDate]);
+    }, [user.expiryDate, t]);
 
     const handleCardClick = () => {
         onSelect(user.id);
@@ -282,11 +284,11 @@ const UserCard: React.FC<{
             </div>
             <div className="relative flex flex-col gap-2 mt-3 flex-grow">
                 <div className="flex justify-between items-center text-xs pb-1.5 border-b border-white/5 last:border-0 last:pb-0">
-                    <span className="text-muted text-[10px] uppercase tracking-wider font-bold">Joined</span>
+                    <span className="text-muted text-[10px] uppercase tracking-wider font-bold">{t('usersAdmin.card.joined')}</span>
                     <span className="text-text font-medium">{formatDate(user.joiningDate)}</span>
                 </div>
                 <div className="flex justify-between items-start text-xs pb-1.5 border-b border-white/5 last:border-0 last:pb-0 gap-2">
-                    <span className="text-muted text-[10px] uppercase tracking-wider font-bold flex-shrink-0 pt-0.5">Expires</span>
+                    <span className="text-muted text-[10px] uppercase tracking-wider font-bold flex-shrink-0 pt-0.5">{t('usersAdmin.card.expires')}</span>
                     <span className="text-text font-medium flex flex-col items-end text-right">
                         <span className="whitespace-nowrap font-bold">{formatDate(user.expiryDate)}</span> 
                         <span className="text-[9px] text-muted mt-0.5">{daysRemainingText}</span>
@@ -299,7 +301,7 @@ const UserCard: React.FC<{
                             const accessStatus = (user.isServerOwner || user.isAdmin)
                                 ? 'active'
                                 : (user.plexAccessStatus || 'unknown');
-                            const label = accessStatus.charAt(0).toUpperCase() + accessStatus.slice(1);
+                            const label = t(`usersAdmin.status.${accessStatus}` as any);
                             return (
                                 <>
                                     <span className={`plex-status-dot ${accessStatus}`}></span>
@@ -310,8 +312,8 @@ const UserCard: React.FC<{
                     </span>
                 </div>
                 <div className="flex justify-between items-center text-xs pb-1.5 border-b border-white/5 last:border-0 last:pb-0">
-                    <span className="text-muted text-[10px] uppercase tracking-wider font-bold">Last Login</span>
-                    <span className="text-text font-medium">{user.lastLogin ? formatDate(user.lastLogin) : 'Never'}</span>
+                    <span className="text-muted text-[10px] uppercase tracking-wider font-bold">{t('usersAdmin.card.lastLogin')}</span>
+                    <span className="text-text font-medium">{user.lastLogin ? formatDate(user.lastLogin) : t('usersAdmin.card.never')}</span>
                 </div>
             </div>
             <div className="relative flex flex-wrap gap-2 mt-auto pt-4" onClick={e => e.stopPropagation()}>
@@ -319,22 +321,22 @@ const UserCard: React.FC<{
                     <button
                         className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5"
                         onClick={onViewAnalytics}
-                        title="Open user analytics"
+                        title={t('usersAdmin.actions.openAnalytics')}
                     >
                         <BarChart3 className="w-3.5 h-3.5" />
-                        Analytics
+                        {t('navigation.analytics')}
                     </button>
                 )}
                 {onViewAs && (
-                    <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onViewAs} title="View portal as this user">
+                    <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onViewAs} title={t('usersAdmin.actions.viewAsTitle')}>
                         <Eye className="w-3.5 h-3.5" />
-                        View as
+                        {t('usersAdmin.actions.viewAs')}
                     </button>
                 )}
-                <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onEdit}>Edit</button>
-                <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onDelete}>Delete</button>
+                <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onEdit}>{t('usersAdmin.actions.edit')}</button>
+                <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onDelete}>{t('common.delete')}</button>
                 {status === 'expired' && user.plexAccessStatus !== 'revoked' && (
-                    <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onRevoke} disabled={!isConfigured}>Revoke</button>
+                    <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onRevoke} disabled={!isConfigured}>{t('usersAdmin.actions.revoke')}</button>
                 )}
             </div>
         </div>
@@ -342,6 +344,7 @@ const UserCard: React.FC<{
 };
 
 const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user: User) => void; user: User | null }> = ({ isOpen, onClose, onSave, user }) => {
+    const { t } = useDiscoverI18n();
     const [username, setUsername] = useState('');
     const [joiningDate, setJoiningDate] = useState(formatDate(new Date().toISOString()));
     const [expiryDate, setExpiryDate] = useState<string | null>(formatDate(addMonths(new Date(), 1).toISOString()));
@@ -530,9 +533,9 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                 value={value}
                 onChange={(val) => onChange((val as 'default' | 'on' | 'off') || 'default')}
                 options={[
-                    { value: 'default', label: 'Use global default' },
-                    { value: 'on', label: 'Allow' },
-                    { value: 'off', label: 'Deny' },
+                    { value: 'default', label: t('usersAdmin.modal.useGlobalDefault') },
+                    { value: 'on', label: t('usersAdmin.modal.allow') },
+                    { value: 'off', label: t('usersAdmin.modal.deny') },
                 ]}
             />
         </div>
@@ -541,33 +544,33 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex justify-center items-center z-[1000] p-3 sm:p-6" onClick={onClose}>
             <div className="bg-card p-4 md:p-6 lg:p-8 rounded-2xl w-full max-w-lg md:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-border" onClick={(e) => e.stopPropagation()}>
-                <h2 className="text-2xl font-bold text-text mb-4">Edit User</h2>
+                <h2 className="text-2xl font-bold text-text mb-4">{t('usersAdmin.modal.editUser')}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
-                        <label>Plex Username</label>
+                        <label>{t('usersAdmin.modal.plexUsername')}</label>
                         <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" type="text" value={username} disabled />
                     </div>
                     <div>
-                        <label>Joining Date</label>
+                        <label>{t('usersAdmin.modal.joiningDate')}</label>
                         <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" type="date" value={joiningDate} disabled />
                     </div>
                 </div>
                 <div className="mb-4">
-                    <label htmlFor="expiryDate">Expiry Date</label>
+                    <label htmlFor="expiryDate">{t('usersAdmin.modal.expiryDate')}</label>
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
                         <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="expiryDate" type="date" value={expiryDate ?? ''} onChange={(e) => setExpiryDate(e.target.value)} />
                         <div className="grid grid-cols-3 gap-2 md:w-[240px]">
-                            <button type="button" className="w-full h-11 px-3 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center text-sm whitespace-nowrap" onClick={() => handleQuickAction('addMonth')}>+1M</button>
-                            <button type="button" className="w-full h-11 px-3 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center text-sm whitespace-nowrap" onClick={() => handleQuickAction('addYear')}>+1Y</button>
-                            <button type="button" className="w-full h-11 px-3 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center text-sm whitespace-nowrap" onClick={() => handleQuickAction('unlimited')}>Unlimited</button>
+                            <button type="button" className="w-full h-11 px-3 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center text-sm whitespace-nowrap" onClick={() => handleQuickAction('addMonth')}>{t('usersAdmin.actions.addMonthShort')}</button>
+                            <button type="button" className="w-full h-11 px-3 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center text-sm whitespace-nowrap" onClick={() => handleQuickAction('addYear')}>{t('usersAdmin.actions.addYearShort')}</button>
+                            <button type="button" className="w-full h-11 px-3 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center text-sm whitespace-nowrap" onClick={() => handleQuickAction('unlimited')}>{t('usersAdmin.modal.unlimited')}</button>
                         </div>
                     </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                     <div className="flex items-center justify-between bg-black/10 p-4 rounded-lg border border-border gap-3">
                         <div className="min-w-0">
-                            <label className="font-bold block mb-1">Exempt from Cleanup</label>
-                            <span className="text-xs text-muted block">Prevent automated inactive user removal</span>
+                            <label className="font-bold block mb-1">{t('usersAdmin.modal.exemptCleanup')}</label>
+                            <span className="text-xs text-muted block">{t('usersAdmin.modal.exemptCleanupHint')}</span>
                         </div>
                         <button
                             type="button"
@@ -579,8 +582,8 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                     </div>
                     <div className="flex items-center justify-between bg-black/10 p-4 rounded-lg border border-border gap-3">
                         <div className="min-w-0">
-                            <label className="font-bold block mb-1">Disable Newsletter</label>
-                            <span className="text-xs text-muted block">Stop automated emails for this user</span>
+                            <label className="font-bold block mb-1">{t('usersAdmin.modal.disableNewsletter')}</label>
+                            <span className="text-xs text-muted block">{t('usersAdmin.modal.disableNewsletterHint')}</span>
                         </div>
                         <button
                             type="button"
@@ -593,23 +596,23 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                 </div>
 
                 <div className="mb-4 pt-4 border-t border-border">
-                    <h3 className="text-lg font-bold text-text mb-1">Library Access</h3>
+                    <h3 className="text-lg font-bold text-text mb-1">{t('usersAdmin.modal.libraryAccess')}</h3>
                     <p className="text-xs text-muted mb-3">
-                        Checkboxes reflect this user&apos;s live Plex share. Uncheck libraries to remove access, then Save.
+                        {t('usersAdmin.modal.libraryAccessHint')}
                     </p>
                     {libraryShareSource === 'no-share' ? (
                         <p className="mb-3 text-xs text-amber-300">
-                            No Plex friend share found for this user. Expiry and portal settings save normally; library changes here only apply when you check libraries and Save.
+                            {t('usersAdmin.modal.noPlexShare')}
                         </p>
                     ) : libraryShareSource === 'plex-all' ? (
-                        <p className="mb-3 text-xs text-muted">Plex reports all libraries shared with this user.</p>
+                        <p className="mb-3 text-xs text-muted">{t('usersAdmin.modal.allLibrariesShared')}</p>
                     ) : libraryShareSource === 'plex' ? (
-                        <p className="mb-3 text-xs text-muted">Loaded from live Plex sharing settings.</p>
+                        <p className="mb-3 text-xs text-muted">{t('usersAdmin.modal.liveSharingLoaded')}</p>
                     ) : null}
                     {librariesLoading ? (
-                        <div className="text-sm text-muted py-2">Loading libraries…</div>
+                        <div className="text-sm text-muted py-2">{t('usersAdmin.modal.loadingLibraries')}</div>
                     ) : libraries.length === 0 ? (
-                        <div className="text-sm text-muted py-2">No libraries found. Check Plex connection in Settings.</div>
+                        <div className="text-sm text-muted py-2">{t('usersAdmin.modal.noLibraries')}</div>
                     ) : (
                         <div className="flex flex-wrap gap-2">
                             {libraries.map((lib) => (
@@ -632,23 +635,23 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                 </div>
 
                 <div className="mt-2 pt-4 border-t border-border">
-                    <h3 className="text-lg font-bold text-text mb-1">Requests</h3>
-                    <p className="text-xs text-muted mb-4">Defaults come from Settings → Request Discovery. Override only what this user needs.</p>
+                    <h3 className="text-lg font-bold text-text mb-1">{t('navigation.requests')}</h3>
+                    <p className="text-xs text-muted mb-4">{t('usersAdmin.modal.requestDefaultsHint')}</p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                         <div className="p-3 rounded-lg border border-border bg-black/10 space-y-2">
                             <label className="inline-flex items-center gap-2 text-sm font-semibold">
                                 <input type="checkbox" checked={overrideMovieQuota} onChange={(e) => setOverrideMovieQuota(e.target.checked)} />
-                                Override movie quota
+                                {t('usersAdmin.modal.overrideMovieQuota')}
                             </label>
                             {overrideMovieQuota && (
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
-                                        <label className="text-xs text-muted">Limit (0 = unlimited)</label>
+                                        <label className="text-xs text-muted">{t('usersAdmin.modal.limitUnlimited')}</label>
                                         <input type="number" min={0} className="w-full p-2 rounded-lg border border-border bg-background text-sm" value={movieQuotaLimit} onChange={(e) => setMovieQuotaLimit(Math.max(0, Number(e.target.value) || 0))} />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted">Days</label>
+                                        <label className="text-xs text-muted">{t('usersAdmin.modal.days')}</label>
                                         <input type="number" min={1} className="w-full p-2 rounded-lg border border-border bg-background text-sm" value={movieQuotaDays} onChange={(e) => setMovieQuotaDays(Math.max(1, Number(e.target.value) || 7))} />
                                     </div>
                                 </div>
@@ -658,16 +661,16 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                         <div className="p-3 rounded-lg border border-border bg-black/10 space-y-2">
                             <label className="inline-flex items-center gap-2 text-sm font-semibold">
                                 <input type="checkbox" checked={overrideTvQuota} onChange={(e) => setOverrideTvQuota(e.target.checked)} />
-                                Override series quota
+                                {t('usersAdmin.modal.overrideSeriesQuota')}
                             </label>
                             {overrideTvQuota && (
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
-                                        <label className="text-xs text-muted">Limit (0 = unlimited)</label>
+                                        <label className="text-xs text-muted">{t('usersAdmin.modal.limitUnlimited')}</label>
                                         <input type="number" min={0} className="w-full p-2 rounded-lg border border-border bg-background text-sm" value={tvQuotaLimit} onChange={(e) => setTvQuotaLimit(Math.max(0, Number(e.target.value) || 0))} />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-muted">Days</label>
+                                        <label className="text-xs text-muted">{t('usersAdmin.modal.days')}</label>
                                         <input type="number" min={1} className="w-full p-2 rounded-lg border border-border bg-background text-sm" value={tvQuotaDays} onChange={(e) => setTvQuotaDays(Math.max(1, Number(e.target.value) || 7))} />
                                     </div>
                                 </div>
@@ -676,16 +679,16 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {permSelect('Request movies', allowRequestMovies, setAllowRequestMovies)}
-                        {permSelect('Request series', allowRequestTv, setAllowRequestTv)}
-                        {permSelect('Request 4K movies', allowRequest4kMovies, setAllowRequest4kMovies)}
-                        {permSelect('Request 4K series', allowRequest4kTv, setAllowRequest4kTv)}
-                        {permSelect('Allow advanced request options', allowAdvancedRequests, setAllowAdvancedRequests)}
+                        {permSelect(t('usersAdmin.modal.requestMovies'), allowRequestMovies, setAllowRequestMovies)}
+                        {permSelect(t('usersAdmin.modal.requestSeries'), allowRequestTv, setAllowRequestTv)}
+                        {permSelect(t('usersAdmin.modal.request4kMovies'), allowRequest4kMovies, setAllowRequest4kMovies)}
+                        {permSelect(t('usersAdmin.modal.request4kSeries'), allowRequest4kTv, setAllowRequest4kTv)}
+                        {permSelect(t('usersAdmin.modal.allowAdvanced'), allowAdvancedRequests, setAllowAdvancedRequests)}
                     </div>
                 </div>
 
                 <div className="flex justify-end gap-4 mt-6 pt-4 border-t border-border">
-                    <button type="button" className="px-6 py-3 bg-plex text-background rounded-md font-bold hover:bg-plex-hover transition-colors flex items-center justify-center gap-2" onClick={handleSave}>Save</button>
+                    <button type="button" className="px-6 py-3 bg-plex text-background rounded-md font-bold hover:bg-plex-hover transition-colors flex items-center justify-center gap-2" onClick={handleSave}>{t('usersAdmin.actions.save')}</button>
                 </div>
             </div>
         </div>
@@ -4917,6 +4920,7 @@ export const AboutDashboard: React.FC<{ appVersion?: string; mediaServerType?: s
 // --- Admin Dashboard Component ---
 
 export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: () => void, onViewStatus: () => void, onViewDashboard: () => void, onViewAsUser: (userId: string) => Promise<void> }> = ({ onLogout, onViewUserPortal, onViewStatus, onViewDashboard, onViewAsUser }) => {
+    const { t } = useDiscoverI18n();
     const [users, setUsers] = useState<User[]>([]);
     const [isConfigured, setConfigured] = useState(false);
     const [configSettings, setConfigSettings] = useState<AppSettings>({ checkIntervalMinutes: 60 });
@@ -4950,9 +4954,9 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             const usersData = await apiFetch('/api/users');
             setUsers(usersData);
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Failed to fetch users.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.fetchUsers'), 'error');
         }
-    }, [addToast]);
+    }, [addToast, t]);
 
     const fetchSecurityData = useCallback(async () => {
         try {
@@ -4963,9 +4967,9 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             setDeletedUsers(deletedUsersData);
             setAuditEntries(auditLogData);
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Failed to fetch security data.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.fetchSecurity'), 'error');
         }
-    }, [addToast]);
+    }, [addToast, t]);
 
     useEffect(() => {
         const checkConfigAndFetchData = async () => {
@@ -4979,11 +4983,11 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                     await fetchUsers();
                     await fetchSecurityData();
                 } else {
-                    addToast('Welcome! Please configure your media server settings to begin.', 'success');
+                    addToast(t('usersAdmin.toasts.configureWelcome'), 'success');
                     setSettingsModalOpen(true);
                 }
             } catch (error) {
-                addToast(error instanceof Error ? error.message : 'Could not connect to backend.', 'error');
+                addToast(error instanceof Error ? error.message : t('usersAdmin.errors.backendConnection'), 'error');
             } finally {
                 setLoading(false);
             }
@@ -5016,10 +5020,10 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 publicDomain: config.publicDomain
             });
             setSettingsModalOpen(false);
-            addToast('Settings saved successfully!');
+            addToast(t('usersAdmin.toasts.settingsSaved'));
             await fetchUsers();
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Failed to save config.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.saveConfig'), 'error');
         } finally {
             setLoading(false);
         }
@@ -5027,17 +5031,17 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
 
     const handleImportUsers = async () => {
         if (!isConfigured) {
-            addToast(`Please configure ${mediaServerLabel} settings first.`, 'error');
+            addToast(t('usersAdmin.errors.configureMediaServer', { mediaServerLabel }), 'error');
             return;
         }
         setLoading(true);
         try {
             const result = await apiFetch('/api/sync', { method: 'POST' });
-            addToast(result.message || `Synced ${result.count} users from ${mediaServerLabel}.`);
+            addToast(result.message || t('usersAdmin.toasts.syncedUsers', { count: result.count || 0, mediaServerLabel }));
             await fetchUsers(); // Refresh user list
             await fetchSecurityData();
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'An unknown error occurred during sync.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.sync'), 'error');
         } finally {
             setLoading(false);
         }
@@ -5045,7 +5049,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
 
     const handleBackfillJoiningDates = async () => {
         if (!isConfigured) {
-            addToast(`Please configure ${mediaServerLabel} settings first.`, 'error');
+            addToast(t('usersAdmin.errors.configureMediaServer', { mediaServerLabel }), 'error');
             return;
         }
         setLoading(true);
@@ -5058,17 +5062,17 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             const processed = Number(result?.processed) || 0;
             const missing = Number(result?.missing) || 0;
             if (updated > 0) {
-                addToast(`Updated ${updated} join date${updated === 1 ? '' : 's'} from watch history (${processed} checked).`);
+                addToast(t('usersAdmin.toasts.joinDatesUpdated', { updated, processed }));
             } else {
                 addToast(
                     missing > 0
-                        ? `No join dates updated — ${missing} user${missing === 1 ? '' : 's'} had no first-play history.`
-                        : 'No join dates needed updating.',
+                        ? t('usersAdmin.toasts.noJoinDatesUpdated', { missing })
+                        : t('usersAdmin.toasts.noJoinDatesNeeded'),
                 );
             }
             await fetchUsers();
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Failed to backfill join dates.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.backfillJoinDates'), 'error');
         } finally {
             setLoading(false);
         }
@@ -5079,10 +5083,10 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
         try {
             const updatedUser = await apiFetch(`/api/users/${userId}/revoke`, { method: 'POST' });
             setUsers(currentUsers => currentUsers.map(u => u.id === userId ? updatedUser : u));
-            addToast('Plex access revoked successfully.');
+            addToast(t('usersAdmin.toasts.accessRevoked'));
             await fetchSecurityData();
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Failed to revoke access.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.revokeAccess'), 'error');
         } finally {
             setLoading(false);
         }
@@ -5092,9 +5096,9 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
         setLoading(true);
         try {
             await onViewAsUser(user.id);
-            addToast(`Now viewing portal as ${user.username}.`);
+            addToast(t('usersAdmin.toasts.viewingAs', { username: user.username }));
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Failed to view as user.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.viewAs'), 'error');
         } finally {
             setLoading(false);
         }
@@ -5131,28 +5135,28 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             if (updatedUser.warning) {
                 addToast(updatedUser.warning, 'error');
             } else if (updatedUser.plexShareUpdated === false) {
-                addToast('User saved, but Plex library access was not updated.', 'error');
+                addToast(t('usersAdmin.toasts.savedLibraryWarning'), 'error');
             } else {
-                addToast('User updated successfully!');
+                addToast(t('usersAdmin.toasts.userUpdated'));
             }
             await fetchSecurityData();
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Failed to save user.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.saveUser'), 'error');
         } finally {
             setLoading(false);
         }
     };
 
     const handleDeleteUser = async (userId: string) => {
-        appConfirm(`Are you sure you want to delete this user? This will revoke ${mediaServerLabel} access first where supported.`, async () => {
+        appConfirm(t('usersAdmin.dialogs.deleteUser', { mediaServerLabel }), async () => {
             setLoading(true);
             try {
                 await apiFetch(`/api/users/${userId}`, { method: 'DELETE' });
                 setUsers(users.filter(u => u.id !== userId));
-                addToast('User removed from manager.');
+                addToast(t('usersAdmin.toasts.userRemoved'));
                 await fetchSecurityData();
             } catch (error) {
-                addToast(error instanceof Error ? error.message : 'Failed to delete user.', 'error');
+                addToast(error instanceof Error ? error.message : t('usersAdmin.errors.deleteUser'), 'error');
             } finally {
                 setLoading(false);
             }
@@ -5174,14 +5178,14 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 method: 'POST',
                 body: JSON.stringify({ userIds: selectedUserIds, action, customDate })
             });
-            addToast(`Successfully updated ${selectedUserIds.length} users.`);
+            addToast(t('usersAdmin.toasts.bulkUpdated', { count: selectedUserIds.length }));
             setSelectedUserIds([]);
             setBulkCustomDate('');
             setBulkLibrariesOpen(false);
             await fetchUsers();
             await fetchSecurityData();
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Bulk update failed.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.bulkUpdate'), 'error');
         } finally {
             setLoading(false);
         }
@@ -5203,7 +5207,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             setBulkLibraries(mapped);
             setBulkSelectedLibraries(mapped.map((l) => l.id));
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Failed to load libraries.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.loadLibraries'), 'error');
             setBulkLibrariesOpen(false);
         } finally {
             setBulkLibrariesLoading(false);
@@ -5219,9 +5223,9 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             allIds.every((id) => bulkSelectedLibraries.includes(id));
         const libraryIds = allSelected || bulkSelectedLibraries.length === 0 ? [] : bulkSelectedLibraries;
         const label = libraryIds.length === 0
-            ? `Share ALL libraries with ${count} selected user${count === 1 ? '' : 's'}?`
-            : `Share ${libraryIds.length} selected librar${libraryIds.length === 1 ? 'y' : 'ies'} with ${count} user${count === 1 ? '' : 's'}?`;
-        appConfirm(`${label} This updates their live Plex access.`, async () => {
+            ? t('usersAdmin.dialogs.shareAllLibraries', { count })
+            : t('usersAdmin.dialogs.shareSelectedLibraries', { libraries: libraryIds.length, count });
+        appConfirm(`${label} ${t('usersAdmin.dialogs.livePlexAccess')}`, async () => {
             setLoading(true);
             try {
                 const result = await apiFetch('/api/users/bulk-libraries', {
@@ -5233,9 +5237,9 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 });
                 const failed = Number(result?.plexFailedCount) || 0;
                 if (failed > 0) {
-                    addToast(`${result.message || 'Saved.'} ${failed} Plex share update${failed === 1 ? '' : 's'} failed.`, 'error');
+                    addToast(`${result.message || t('usersAdmin.toasts.saved')} ${t('usersAdmin.toasts.plexShareFailures', { count: failed })}`, 'error');
                 } else {
-                    addToast(result.message || `Updated libraries for ${count} users.`);
+                    addToast(result.message || t('usersAdmin.toasts.librariesUpdated', { count }));
                 }
                 setSelectedUserIds([]);
                 setBulkSelectedLibraries([]);
@@ -5243,7 +5247,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 await fetchUsers();
                 await fetchSecurityData();
             } catch (error) {
-                addToast(error instanceof Error ? error.message : 'Bulk library update failed.', 'error');
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.bulkLibraryUpdate'), 'error');
             } finally {
                 setLoading(false);
             }
@@ -5355,14 +5359,14 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
 
             <DashboardHero
                 accent="plex"
-                eyebrow="User Management"
-                title="Users"
+                eyebrow={t('usersAdmin.page.eyebrow')}
+                title={t('navigation.users')}
                 description={isConfigured ? (
                     <>
-                        {userStats.total} portal users · {userStats.active} active · {filteredAndSortedUsers.length} shown
+                        {t('usersAdmin.page.summary', { total: userStats.total, active: userStats.active, shown: filteredAndSortedUsers.length })}
                     </>
                 ) : (
-                    <>Configure your media server to manage portal access.</>
+                    <>{t('usersAdmin.page.configureHint')}</>
                 )}
                 icon={<Users className="h-3.5 w-3.5" />}
                 secondaryBlob
@@ -5375,17 +5379,17 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                             disabled={isLoading}
                         >
                             <RefreshCw className="h-4 w-4" />
-                            Sync {mediaServerLabel} Users
+                            {t('usersAdmin.actions.syncUsers', { mediaServerLabel })}
                         </button>
                         <button
                             type="button"
                             className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-bold text-text transition-colors hover:bg-white/5 disabled:opacity-50"
                             onClick={handleBackfillJoiningDates}
                             disabled={isLoading}
-                            title="Set Joined from each user's earliest play on this server (only moves dates earlier)"
+                            title={t('usersAdmin.actions.backfillTitle')}
                         >
                             <Calendar className="h-4 w-4" />
-                            Backfill Join Dates
+                            {t('usersAdmin.actions.backfillJoinDates')}
                         </button>
                     </div>
                 ) : undefined}
@@ -5395,40 +5399,40 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 {isConfigured && (
                     <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 xl:gap-4">
                         <DashboardStatCard
-                            label="Total Users"
+                            label={t('usersAdmin.stats.total')}
                             value={userStats.total}
                             icon={<Users className="h-4 w-4 text-plex" />}
                             glow={dashboardGlowClass('plex')}
                         />
                         <DashboardStatCard
-                            label="Active"
+                            label={t('usersAdmin.stats.active')}
                             value={userStats.active}
                             icon={<CheckCircle className="h-4 w-4 text-emerald-300" />}
                             glow={dashboardGlowClass('emerald')}
                             valueClassName="text-status-active"
                         />
                         <DashboardStatCard
-                            label="Expiring"
+                            label={t('usersAdmin.stats.expiring')}
                             value={userStats.expiring}
                             icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
                             glow={dashboardGlowClass('amber')}
                             valueClassName="text-status-expiring"
                         />
                         <DashboardStatCard
-                            label="Expired"
+                            label={t('usersAdmin.stats.expired')}
                             value={userStats.expired}
                             icon={<AlertCircle className="h-4 w-4 text-rose-300" />}
                             glow={dashboardGlowClass('rose')}
                             valueClassName="text-status-expired"
                         />
                         <DashboardStatCard
-                            label="Trial"
+                            label={t('usersAdmin.stats.trial')}
                             value={userStats.trial}
                             icon={<Sparkles className="h-4 w-4 text-violet-300" />}
                             glow={dashboardGlowClass('violet')}
                         />
                         <DashboardStatCard
-                            label="Revoked"
+                            label={t('usersAdmin.stats.revoked')}
                             value={userStats.revoked}
                             icon={<Shield className="h-4 w-4 text-muted" />}
                             glow={dashboardGlowClass('muted')}
@@ -5438,8 +5442,8 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
 
                 {isConfigured && (
                     <DashboardPanel
-                        title="Search & filter"
-                        subtitle="Find users by name or email, then narrow by access status."
+                        title={t('usersAdmin.filters.title')}
+                        subtitle={t('usersAdmin.filters.subtitle')}
                         className="mb-6"
                         controls={(
                             <CustomSelect
@@ -5448,11 +5452,11 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                 onChange={(val) => setSortBy(val as any)}
                                 className="w-full sm:w-[200px]"
                                 options={[
-                                    { label: 'Username (A-Z)', value: 'username-asc' },
-                                    { label: 'Username (Z-A)', value: 'username-desc' },
-                                    { label: 'Expiry (Soonest)', value: 'expiry-asc' },
-                                    { label: 'Expiry (Furthest)', value: 'expiry-desc' },
-                                    { label: 'Joined Date (Newest)', value: 'joined-desc' },
+                                    { label: t('usersAdmin.filters.usernameAsc'), value: 'username-asc' },
+                                    { label: t('usersAdmin.filters.usernameDesc'), value: 'username-desc' },
+                                    { label: t('usersAdmin.filters.expiryAsc'), value: 'expiry-asc' },
+                                    { label: t('usersAdmin.filters.expiryDesc'), value: 'expiry-desc' },
+                                    { label: t('usersAdmin.filters.joinedDesc'), value: 'joined-desc' },
                                 ]}
                             />
                         )}
@@ -5462,7 +5466,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                 <input
                                     type="text"
-                                    placeholder="Search by username or email..."
+                                    placeholder={t('usersAdmin.filters.searchPlaceholder')}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pr-10 pl-10 text-sm text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
@@ -5480,7 +5484,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                         className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors border-none outline-none cursor-pointer sm:text-sm ${dashboardSubnavLinkClass(statusFilter === status)}`}
                                         onClick={() => setStatusFilter(status)}
                                     >
-                                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                                        {status === 'all' ? t('usersAdmin.filters.all') : t(`usersAdmin.status.${status}` as any)}
                                     </button>
                                 ))}
                             </div>
@@ -5490,31 +5494,31 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
 
                 {selectedUserIds.length > 0 && (
                     <DashboardPanel
-                        title="Bulk actions"
-                        subtitle={`${selectedUserIds.length} user${selectedUserIds.length === 1 ? '' : 's'} selected`}
+                        title={t('usersAdmin.bulk.title')}
+                        subtitle={t('usersAdmin.bulk.selectedSummary', { count: selectedUserIds.length })}
                         className="mb-6"
                         badge={(
                             <span className="rounded-full border border-plex/30 bg-plex/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-plex">
-                                {selectedUserIds.length} selected
+                                {t('usersAdmin.bulk.selected', { count: selectedUserIds.length })}
                             </span>
                         )}
                     >
                         <div className="space-y-4">
                             <div className="flex flex-wrap items-center gap-4 text-sm font-medium">
                                 {allFilteredSelected ? (
-                                    <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => setSelectedUserIds(prev => prev.filter(id => !filteredUserIds.includes(id)))}>Unselect Filtered</button>
+                                    <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => setSelectedUserIds(prev => prev.filter(id => !filteredUserIds.includes(id)))}>{t('usersAdmin.bulk.unselectFiltered')}</button>
                                 ) : (
-                                    <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => setSelectedUserIds(prev => Array.from(new Set([...prev, ...filteredUserIds])))}>Select Filtered ({filteredAndSortedUsers.length})</button>
+                                    <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => setSelectedUserIds(prev => Array.from(new Set([...prev, ...filteredUserIds])))}>{t('usersAdmin.bulk.selectFiltered', { count: filteredAndSortedUsers.length })}</button>
                                 )}
                                 {selectedUserIds.length < users.length && (
-                                    <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => setSelectedUserIds(users.map(user => user.id))}>Select All ({users.length})</button>
+                                    <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => setSelectedUserIds(users.map(user => user.id))}>{t('usersAdmin.bulk.selectAll', { count: users.length })}</button>
                                 )}
-                                <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => { setSelectedUserIds([]); setBulkLibrariesOpen(false); }}>Unselect All</button>
+                                <button type="button" className="text-muted underline transition-colors hover:text-text" onClick={() => { setSelectedUserIds([]); setBulkLibrariesOpen(false); }}>{t('usersAdmin.bulk.unselectAll')}</button>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkUpdate('addMonth')}>+1 Month</button>
-                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkUpdate('addYear')}>+1 Year</button>
-                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkUpdate('unlimited')}>Unlimited</button>
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkUpdate('addMonth')}>{t('usersAdmin.bulk.addMonth')}</button>
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkUpdate('addYear')}>{t('usersAdmin.bulk.addYear')}</button>
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkUpdate('unlimited')}>{t('usersAdmin.modal.unlimited')}</button>
                                 <div className="flex items-center gap-2">
                                     <input
                                         type="date"
@@ -5527,13 +5531,13 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                         className="rounded-xl bg-plex px-4 py-2 text-sm font-medium text-background transition-colors hover:bg-plex-hover"
                                         onClick={() => {
                                             if (!bulkCustomDate) {
-                                                addToast('Please select a custom expiry date.', 'error');
+                                                addToast(t('usersAdmin.errors.selectCustomDate'), 'error');
                                                 return;
                                             }
                                             handleBulkUpdate('custom', bulkCustomDate);
                                         }}
                                     >
-                                        Set Custom Date
+                                        {t('usersAdmin.bulk.setCustomDate')}
                                     </button>
                                 </div>
                                 <button
@@ -5544,18 +5548,18 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                         else openBulkLibraries();
                                     }}
                                 >
-                                    Libraries
+                                    {t('usersAdmin.bulk.libraries')}
                                 </button>
                             </div>
                             {bulkLibrariesOpen && (
                                 <div className="border-t border-white/10 pt-4">
                                     <p className="mb-3 text-xs text-muted">
-                                        Set library access for {selectedUserIds.length} selected user{selectedUserIds.length === 1 ? '' : 's'}. All start checked — uncheck any to remove.
+                                        {t('usersAdmin.bulk.libraryHint', { count: selectedUserIds.length })}
                                     </p>
                                     {bulkLibrariesLoading ? (
-                                        <div className="py-2 text-sm text-muted">Loading libraries…</div>
+                                        <div className="py-2 text-sm text-muted">{t('usersAdmin.modal.loadingLibraries')}</div>
                                     ) : bulkLibraries.length === 0 ? (
-                                        <div className="py-2 text-sm text-muted">No libraries found. Check Plex connection in Settings.</div>
+                                        <div className="py-2 text-sm text-muted">{t('usersAdmin.modal.noLibraries')}</div>
                                     ) : (
                                         <div className="mb-3 flex flex-wrap gap-2">
                                             {bulkLibraries.map((lib) => (
@@ -5581,14 +5585,14 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                             disabled={bulkLibrariesLoading || bulkLibraries.length === 0}
                                             onClick={handleBulkLibraries}
                                         >
-                                            Apply Libraries
+                                            {t('usersAdmin.bulk.applyLibraries')}
                                         </button>
                                         <button
                                             type="button"
                                             className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5"
                                             onClick={() => setBulkSelectedLibraries(bulkLibraries.map((l) => l.id))}
                                         >
-                                            Select All
+                                            {t('usersAdmin.bulk.selectAllPlain')}
                                         </button>
                                     </div>
                                 </div>
@@ -5598,15 +5602,15 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 )}
 
                 {isConfigured && filteredAndSortedUsers.length === 0 && !isLoading && (
-                    <DashboardPanel title="No users found" subtitle="Try syncing from Plex or widening your filters.">
-                        <p className="text-center text-sm text-muted">No users match the current search and status filters.</p>
+                    <DashboardPanel title={t('usersAdmin.empty.title')} subtitle={t('usersAdmin.empty.subtitle')}>
+                        <p className="text-center text-sm text-muted">{t('usersAdmin.empty.body')}</p>
                     </DashboardPanel>
                 )}
 
                 {isConfigured && filteredAndSortedUsers.length > 0 && (
                     <DashboardPanel
-                        title="Portal users"
-                        subtitle={`Showing ${filteredAndSortedUsers.length} of ${users.length}`}
+                        title={t('usersAdmin.page.portalUsers')}
+                        subtitle={t('usersAdmin.page.showing', { shown: filteredAndSortedUsers.length, total: users.length })}
                         className="mb-6"
                     >
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
