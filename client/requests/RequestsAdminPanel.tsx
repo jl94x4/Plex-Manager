@@ -17,6 +17,7 @@ import {
     type RequestListFilters,
 } from './requestFilterUtils';
 import type { PortalRequestItem, PortalRequestUser } from './types';
+import { useDiscoverI18n } from '../discovery/i18n';
 
 export type { PortalRequestItem } from './types';
 
@@ -26,25 +27,25 @@ type Props = {
     initialReviewId?: number | null;
 };
 
-const formatRelativeTime = (value?: string | null) => {
-    if (!value) return 'Unknown time';
+const formatRelativeTime = (value: string | null | undefined, t: ReturnType<typeof useDiscoverI18n>['t']) => {
+    if (!value) return t('common.unknownTime');
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return formatDateTime(value);
     const diffMs = Date.now() - date.getTime();
     const minutes = Math.floor(diffMs / 60000);
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
+    if (minutes < 1) return t('common.justNow');
+    if (minutes < 60) return t('common.minutesAgo', { count: minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return t('common.hoursAgo', { count: hours });
     const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
+    if (days < 7) return t('common.daysAgo', { count: days });
     return formatDateTime(value);
 };
 
-const RequestTypeBadge: React.FC<{ type: string; is4k: boolean }> = ({ type, is4k }) => (
+const RequestTypeBadge: React.FC<{ type: string; is4k: boolean; t: ReturnType<typeof useDiscoverI18n>['t'] }> = ({ type, is4k, t }) => (
     <span className="inline-flex items-center gap-1.5">
         <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
-            {type === 'tv' ? 'TV' : 'Movie'}
+            {type === 'tv' ? t('mediaType.tv') : t('mediaType.movie')}
         </span>
         {is4k && (
             <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-200">
@@ -55,6 +56,7 @@ const RequestTypeBadge: React.FC<{ type: string; is4k: boolean }> = ({ type, is4
 );
 
 export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded = false, initialReviewId = null }) => {
+    const { t } = useDiscoverI18n();
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [filter, setFilter] = useState<AdminRequestFilter>('pending');
     const [listFilters, setListFilters] = useState(defaultRequestListFilters);
@@ -116,7 +118,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
             }
             if (!nextCounts.supported || !nextCounts.connected) {
                 setRequests([]);
-                setError(countData?.error || 'Cannot connect to your request app');
+                setError(countData?.error || t('requestsAdmin.errors.cannotConnect'));
                 return;
             }
 
@@ -126,20 +128,20 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
             ]);
             if (listData?.connected === false) {
                 setRequests([]);
-                setError(listData?.error || 'Cannot connect to your request app');
+                setError(listData?.error || t('requestsAdmin.errors.cannotConnect'));
                 return;
             }
             setRequests(Array.isArray(listData?.results) ? listData.results : []);
             setUsers(Array.isArray(usersData?.users) ? usersData.users : []);
             setSelectedIds(new Set());
         } catch (e: any) {
-            setError(e?.message || 'Failed to load requests');
+            setError(e?.message || t('requestsAdmin.errors.loadRequests'));
             setRequests([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [filter]);
+    }, [filter, t]);
 
     useEffect(() => {
         loadData();
@@ -164,18 +166,18 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
     );
 
     const requesterOptions = useMemo(
-        () => [{ value: '', label: 'All requesters' }, ...buildRequesterOptions(users, requests)],
-        [users, requests],
+        () => [{ value: '', label: t('requestsAdmin.filters.allRequesters') }, ...buildRequesterOptions(users, requests)],
+        [users, requests, t],
     );
 
     const filterTabs = useMemo(() => ([
-        { id: 'pending' as const, label: 'Pending', count: counts.pending },
-        { id: 'processing' as const, label: 'Processing', count: counts.processing },
-        { id: 'available' as const, label: 'Available', count: counts.available },
-        { id: 'failed' as const, label: 'Failed', count: counts.failed },
-        { id: 'approved' as const, label: 'Approved', count: counts.approved },
-        { id: 'declined' as const, label: 'Declined', count: counts.declined },
-    ]), [counts]);
+        { id: 'pending' as const, label: t('requestsAdmin.filters.pending'), count: counts.pending },
+        { id: 'processing' as const, label: t('requestsAdmin.filters.processing'), count: counts.processing },
+        { id: 'available' as const, label: t('requestsAdmin.filters.available'), count: counts.available },
+        { id: 'failed' as const, label: t('requestsAdmin.filters.failed'), count: counts.failed },
+        { id: 'approved' as const, label: t('requestsAdmin.filters.approved'), count: counts.approved },
+        { id: 'declined' as const, label: t('requestsAdmin.filters.declined'), count: counts.declined },
+    ]), [counts, t]);
 
     const allVisibleSelected = filteredRequests.length > 0
         && filteredRequests.every((item) => selectedIds.has(item.id));
@@ -214,7 +216,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                 // continue with remaining
             }
         }
-        addToast(ok === ids.length ? `Approved ${ok} request${ok === 1 ? '' : 's'}` : `Approved ${ok} of ${ids.length} requests`);
+        addToast(ok === ids.length ? t('requestsAdmin.toasts.approvedCount', { count: ok }) : t('requestsAdmin.toasts.approvedPartial', { approved: ok, total: ids.length }));
         setSelectedIds(new Set());
         await loadData({ silent: true });
         onCountsChange?.();
@@ -241,7 +243,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                 // continue with remaining
             }
         }
-        addToast(ok === ids.length ? `Declined ${ok} request${ok === 1 ? '' : 's'}` : `Declined ${ok} of ${ids.length} requests`);
+        addToast(ok === ids.length ? t('requestsAdmin.toasts.declinedCount', { count: ok }) : t('requestsAdmin.toasts.declinedPartial', { declined: ok, total: ids.length }));
         setBulkDeclineOpen(false);
         setBulkDeclineReason('');
         setSelectedIds(new Set());
@@ -257,11 +259,11 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                 method: 'POST',
                 body: JSON.stringify({ title: item.title }),
             });
-            addToast(`Approved "${item.title}"`);
+            addToast(t('requestsAdmin.toasts.approvedTitle', { title: item.title }));
             await loadData({ silent: true });
             onCountsChange?.();
         } catch (e: any) {
-            addToast(e?.message || 'Failed to approve request', 'error');
+            addToast(e?.message || t('requestsAdmin.errors.approve'), 'error');
         } finally {
             setActionId(null);
         }
@@ -283,8 +285,8 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
             });
             addToast(
                 declineAndBlocklist
-                    ? `Declined and blocklisted "${declineTarget.title}"`
-                    : `Declined "${declineTarget.title}"`,
+                    ? t('requestsAdmin.toasts.declinedAndBlocklisted', { title: declineTarget.title })
+                    : t('requestsAdmin.toasts.declinedTitle', { title: declineTarget.title }),
             );
             setDeclineTarget(null);
             setDeclineReason('');
@@ -292,7 +294,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
             await loadData({ silent: true });
             onCountsChange?.();
         } catch (e: any) {
-            addToast(e?.message || 'Failed to decline request', 'error');
+            addToast(e?.message || t('requestsAdmin.errors.decline'), 'error');
         } finally {
             setActionId(null);
         }
@@ -305,11 +307,11 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                 method: 'POST',
                 body: JSON.stringify({ title: item.title }),
             });
-            addToast(`Retried "${item.title}"`);
+            addToast(t('requestsAdmin.toasts.retriedTitle', { title: item.title }));
             await loadData({ silent: true });
             onCountsChange?.();
         } catch (e: any) {
-            addToast(e?.message || 'Failed to retry request', 'error');
+            addToast(e?.message || t('requestsAdmin.errors.retry'), 'error');
         } finally {
             setActionId(null);
         }
@@ -323,12 +325,12 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                 method: 'DELETE',
                 body: JSON.stringify({ title: deleteTarget.title }),
             });
-            addToast(`Deleted "${deleteTarget.title}"`);
+            addToast(t('requestsAdmin.toasts.deletedTitle', { title: deleteTarget.title }));
             setDeleteTarget(null);
             await loadData({ silent: true });
             onCountsChange?.();
         } catch (e: any) {
-            addToast(e?.message || 'Failed to delete request', 'error');
+            addToast(e?.message || t('requestsAdmin.errors.delete'), 'error');
         } finally {
             setActionId(null);
         }
@@ -345,13 +347,13 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
             {!embedded && (
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-bold text-plex">Requests</h1>
+                    <h1 className="text-2xl md:text-3xl font-bold text-plex">{t('navigation.requests')}</h1>
                     <p className="text-sm text-muted mt-1">
                         {counts.configured && counts.connected
-                            ? `${counts.pending} pending · full Seerr-style review with profiles, folders, tags & seasons`
+                            ? t('requestsAdmin.page.pendingSummary', { count: counts.pending })
                             : counts.configured
-                                ? 'Request app is configured — connection failed (see below)'
-                                : 'Connect Seerr, Overseerr, or Jellyseerr in Settings → Integrations to manage requests here.'}
+                            ? t('requestsAdmin.page.configuredConnectionFailed')
+                                : t('requestsAdmin.page.connectHint')}
                     </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -362,7 +364,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                             rel="noreferrer"
                             className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium text-muted hover:text-text hover:bg-white/5 transition-colors"
                         >
-                            Open Seerr <ExternalLink className="w-4 h-4" />
+                            {t('requestsAdmin.actions.openSeerr')} <ExternalLink className="w-4 h-4" />
                         </a>
                     )}
                     <button
@@ -372,7 +374,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                         className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-border text-text text-sm font-semibold hover:bg-opacity-80 transition-colors disabled:opacity-50"
                     >
                         <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-                        Refresh
+                        {t('requestsAdmin.actions.refresh')}
                     </button>
                 </div>
             </div>
@@ -404,7 +406,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                             type="search"
                             value={listFilters.search}
                             onChange={(e) => setListFilters((prev) => ({ ...prev, search: e.target.value }))}
-                            placeholder="Search title or requester..."
+                            placeholder={t('requestsAdmin.filters.search')}
                             className="w-full pl-10 pr-3 py-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex transition-colors"
                         />
                     </div>
@@ -417,27 +419,27 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                         value={listFilters.mediaType}
                         onChange={(val) => setListFilters((prev) => ({ ...prev, mediaType: val as RequestListFilters['mediaType'] }))}
                         options={[
-                            { value: 'all', label: 'All types' },
-                            { value: 'movie', label: 'Movies' },
-                            { value: 'tv', label: 'TV' },
+                            { value: 'all', label: t('requestsAdmin.filters.allTypes') },
+                            { value: 'movie', label: t('mediaType.movies') },
+                            { value: 'tv', label: t('mediaType.tv') },
                         ]}
                     />
                     <CustomSelect
                         value={listFilters.quality}
                         onChange={(val) => setListFilters((prev) => ({ ...prev, quality: val as RequestListFilters['quality'] }))}
                         options={[
-                            { value: 'all', label: 'All quality' },
-                            { value: 'hd', label: 'HD only' },
-                            { value: '4k', label: '4K only' },
+                            { value: 'all', label: t('requestsAdmin.filters.allQuality') },
+                            { value: 'hd', label: t('requestsAdmin.filters.hdOnly') },
+                            { value: '4k', label: t('requestsAdmin.filters.4kOnly') },
                         ]}
                     />
                     <CustomSelect
                         value={listFilters.dateRange}
                         onChange={(val) => setListFilters((prev) => ({ ...prev, dateRange: val as RequestListFilters['dateRange'] }))}
                         options={[
-                            { value: 'all', label: 'All dates' },
-                            { value: '7d', label: 'Last 7 days' },
-                            { value: '30d', label: 'Last 30 days' },
+                            { value: 'all', label: t('requestsAdmin.filters.allDates') },
+                            { value: '7d', label: t('requestsAdmin.filters.last7Days') },
+                            { value: '30d', label: t('requestsAdmin.filters.last30Days') },
                         ]}
                     />
                 </div>
@@ -451,11 +453,11 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                 onChange={toggleSelectAll}
                                 className="h-4 w-4 rounded border-border bg-background text-plex focus:ring-plex"
                             />
-                            Select all ({filteredRequests.length})
+                            {t('requestsAdmin.actions.selectAll', { count: filteredRequests.length })}
                         </label>
                         {selectedIds.size > 0 && (
                             <>
-                                <span className="text-xs text-muted">{selectedIds.size} selected</span>
+                                <span className="text-xs text-muted">{t('requestsAdmin.actions.selected', { count: selectedIds.size })}</span>
                                 <button
                                     type="button"
                                     disabled={!!bulkAction}
@@ -463,7 +465,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-plex text-black text-xs font-bold hover:bg-plex-hover transition-colors disabled:opacity-50"
                                 >
                                     {bulkAction === 'approve' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                    Bulk approve
+                                    {t('requestsAdmin.actions.bulkApprove')}
                                 </button>
                                 <button
                                     type="button"
@@ -472,7 +474,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/40 text-red-200 text-xs font-bold hover:bg-red-500/10 transition-colors disabled:opacity-50"
                                 >
                                     <X className="w-3.5 h-3.5" />
-                                    Bulk decline
+                                    {t('requestsAdmin.actions.bulkDecline')}
                                 </button>
                             </>
                         )}
@@ -485,7 +487,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                         {counts.configured && (
                             <p className="text-xs text-red-200/80">
                                 If you use a public reverse-proxy URL, the portal container may not reach it. Add an
-                                {' '}<strong>Internal fetch URL</strong> under Settings → Integrations
+                                {' '}<strong>{t('requestsAdmin.labels.internalFetchUrl')}</strong> under Settings → Integrations
                                 (docker service name or LAN IP, e.g. <code className="text-red-100">http://jellyseerr:5055</code>).
                             </p>
                         )}
@@ -494,7 +496,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
 
                 {!counts.configured && !loading && !error && (
                     <div className="py-12 text-center text-muted">
-                        <p className="font-medium text-text mb-2">Request app not configured</p>
+                        <p className="font-medium text-text mb-2">{t('requestsAdmin.page.notConfigured')}</p>
                         <p className="text-sm max-w-md mx-auto">
                             Set Request App Type, URL, and API key under Settings → Integrations. Ombi is not supported for in-portal approval yet.
                         </p>
@@ -503,7 +505,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
 
                 {counts.configured && !counts.supported && !loading && (
                     <div className="py-12 text-center text-muted">
-                        <p className="font-medium text-text mb-2">Request app type not supported</p>
+                        <p className="font-medium text-text mb-2">{t('requestsAdmin.page.notSupported')}</p>
                         <p className="text-sm max-w-md mx-auto">
                             In-portal approval works with Seerr, Overseerr, and Jellyseerr. Ombi requires the external request UI.
                         </p>
@@ -513,9 +515,9 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                 {counts.configured && counts.supported && !loading && filteredRequests.length === 0 && !error && (
                     <div className="py-12 text-center text-muted">
                         <p className="font-medium text-text mb-1">
-                            {requests.length === 0 ? `No ${filter} requests` : 'No requests match your filters'}
+                            {requests.length === 0 ? t('requestsAdmin.empty.noStatusRequests', { status: t(`requestsAdmin.filters.${filter}` as any) }) : t('requestsAdmin.empty.noFilteredRequests')}
                         </p>
-                        <p className="text-sm">You&apos;re all caught up.</p>
+                        <p className="text-sm">{t('requestsAdmin.empty.allCaughtUp')}</p>
                     </div>
                 )}
 
@@ -563,14 +565,14 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                                 {item.title}
                                                 {item.year ? <span className="text-muted font-medium"> ({item.year})</span> : null}
                                             </h3>
-                                            <RequestTypeBadge type={item.type} is4k={item.is4k} />
+                                            <RequestTypeBadge type={item.type} is4k={item.is4k} t={t} />
                                         </div>
                                         <p className="text-sm text-muted mb-1">
-                                            Requested by <span className="text-text font-medium">{item.requestedBy.displayName}</span>
+                                            {t('requestsAdmin.labels.requestedBy')} <span className="text-text font-medium">{item.requestedBy.displayName}</span>
                                             {' · '}
-                                            {formatRelativeTime(item.createdAt)}
+                                            {formatRelativeTime(item.createdAt, t)}
                                             {item.updatedAt && item.updatedAt !== item.createdAt
-                                                ? ` · Updated ${formatRelativeTime(item.updatedAt)}`
+                                                ? ` · ${t('requestsAdmin.labels.updated')} ${formatRelativeTime(item.updatedAt, t)}`
                                                 : ''}
                                         </p>
                                         <RequestMetaChips
@@ -580,7 +582,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                         />
                                         {item.modifiedBy && (
                                             <p className="text-xs text-muted mb-1">
-                                                Last action by {item.modifiedBy.displayName}
+                                                {t('requestsAdmin.labels.lastActionBy')} {item.modifiedBy.displayName}
                                             </p>
                                         )}
                                         {filter === 'declined' && item.declineReason && (
@@ -593,7 +595,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                         )}
                                         {item.type === 'tv' && item.seasons && item.seasons.length > 0 && (
                                             <p className="text-xs text-muted mb-2">
-                                                Seasons: {item.seasons.map((s) => s.seasonNumber).join(', ')}
+                                                {t('requestsAdmin.labels.seasons')}: {item.seasons.map((s) => s.seasonNumber).join(', ')}
                                             </p>
                                         )}
                                         {item.overview && (
@@ -612,7 +614,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                                 className={`${requestCardActionBtnClass} border border-plex/50 bg-background/80 text-plex font-bold hover:bg-plex/15`}
                                             >
                                                 <Pencil className="w-3.5 h-3.5" />
-                                                Review
+                                                {t('requestsAdmin.actions.review')}
                                             </button>
                                             <button
                                                 type="button"
@@ -621,7 +623,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                                 className={`${requestCardActionBtnClass} bg-plex text-background font-bold hover:bg-plex-hover shadow-sm shadow-black/20`}
                                             >
                                                 {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                                Quick Approve
+                                                {t('requestsAdmin.actions.quickApprove')}
                                             </button>
                                             <button
                                                 type="button"
@@ -634,7 +636,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                                 className={`${requestCardActionBtnClass} border border-red-500/50 bg-background/80 text-red-200 hover:bg-red-500/15`}
                                             >
                                                 <X className="w-3.5 h-3.5" />
-                                                Decline
+                                                {t('requestsAdmin.actions.decline')}
                                             </button>
                                         </>
                                     )}
@@ -646,7 +648,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                             className={`${requestCardActionBtnClass} border border-amber-500/50 bg-background/80 text-amber-200 hover:bg-amber-500/15`}
                                         >
                                             <RotateCcw className="w-3.5 h-3.5" />
-                                            Retry
+                                            {t('common.retry')}
                                         </button>
                                     )}
                                     {!showPendingActions && (
@@ -657,7 +659,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                             className={`${requestCardActionBtnClass} border border-white/15 bg-background/80 text-text hover:bg-white/10`}
                                         >
                                             <Pencil className="w-3.5 h-3.5" />
-                                            Edit
+                                            {t('requestsAdmin.actions.edit')}
                                         </button>
                                     )}
                                     <OpenInArrButton
@@ -676,7 +678,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                         className={`${requestCardActionBtnClass} border border-border bg-background/80 text-muted hover:text-red-200 hover:border-red-500/40 hover:bg-red-500/10`}
                                     >
                                         <Trash2 className="w-3.5 h-3.5" />
-                                        Delete
+                                        {t('common.delete')}
                                     </button>
                                 </RequestCardActions>
                             </div>
@@ -705,16 +707,16 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
             {declineTarget && (
                 <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
                     <div className="w-full max-w-md glass-card p-5 shadow-2xl border border-border">
-                        <h3 className="text-lg font-bold text-text mb-1">Decline request</h3>
+                        <h3 className="text-lg font-bold text-text mb-1">{t('requestsAdmin.modal.declineRequest')}</h3>
                         <p className="text-sm text-muted mb-4">
-                            Decline <span className="text-text font-medium">{declineTarget.title}</span>?
+                            {t('requestsAdmin.modal.declineTarget', { title: declineTarget.title })}
                         </p>
-                        <label className="block text-sm font-medium text-text mb-2">Reason (optional)</label>
+                        <label className="block text-sm font-medium text-text mb-2">{t('requestsAdmin.modal.reasonOptional')}</label>
                         <textarea
                             className="w-full min-h-[100px] p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex transition-colors mb-4"
                             value={declineReason}
                             onChange={(e) => setDeclineReason(e.target.value)}
-                            placeholder="Let the requester know why this was declined..."
+                            placeholder={t('requestsAdmin.modal.declinePlaceholder')}
                         />
                         {declineTarget.tmdbId && (
                             <label className="flex items-start gap-3 mb-4 cursor-pointer">
@@ -725,7 +727,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                     className="mt-1 h-4 w-4 rounded border-border bg-background text-plex focus:ring-plex"
                                 />
                                 <span className="text-sm text-muted">
-                                    Also add <span className="text-text font-medium">{declineTarget.title}</span> to the blocklist so it cannot be requested again.
+                                    {t('requestsAdmin.modal.blocklistTarget', { title: declineTarget.title })}
                                 </span>
                             </label>
                         )}
@@ -739,7 +741,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                 }}
                                 className="px-4 py-2 rounded-lg border border-border text-muted hover:text-text transition-colors"
                             >
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button
                                 type="button"
@@ -748,8 +750,8 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                 className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-500 transition-colors disabled:opacity-50"
                             >
                                 {actionId === declineTarget.id
-                                    ? (declineAndBlocklist ? 'Declining & blocking...' : 'Declining...')
-                                    : (declineAndBlocklist ? 'Decline & blocklist' : 'Decline request')}
+                                    ? (declineAndBlocklist ? t('requestsAdmin.modal.decliningBlocking') : t('requestsAdmin.modal.declining'))
+                                    : (declineAndBlocklist ? t('requestsAdmin.modal.declineBlocklist') : t('requestsAdmin.modal.declineRequest'))}
                             </button>
                         </div>
                     </div>
@@ -759,15 +761,15 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
             {bulkDeclineOpen && (
                 <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
                     <div className="w-full max-w-md glass-card p-5 shadow-2xl border border-border">
-                        <h3 className="text-lg font-bold text-text mb-1">Decline {selectedIds.size} requests</h3>
+                        <h3 className="text-lg font-bold text-text mb-1">{t('requestsAdmin.modal.declineCount', { count: selectedIds.size })}</h3>
                         <p className="text-sm text-muted mb-4">
-                            Optional reason will be sent to each requester.
+                            {t('requestsAdmin.modal.optionalReasonBulk')}
                         </p>
                         <textarea
                             className="w-full min-h-[100px] p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex transition-colors mb-4"
                             value={bulkDeclineReason}
                             onChange={(e) => setBulkDeclineReason(e.target.value)}
-                            placeholder="Reason for declining these requests..."
+                            placeholder={t('requestsAdmin.modal.bulkReasonPlaceholder')}
                         />
                         <div className="flex justify-end gap-2">
                             <button
@@ -778,7 +780,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                 }}
                                 className="px-4 py-2 rounded-lg border border-border text-muted hover:text-text transition-colors"
                             >
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button
                                 type="button"
@@ -786,7 +788,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                 disabled={bulkAction === 'decline'}
                                 className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-500 transition-colors disabled:opacity-50"
                             >
-                                {bulkAction === 'decline' ? 'Declining...' : `Decline ${selectedIds.size} requests`}
+                                {bulkAction === 'decline' ? t('requestsAdmin.modal.declining') : t('requestsAdmin.modal.declineCount', { count: selectedIds.size })}
                             </button>
                         </div>
                     </div>
@@ -796,9 +798,9 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
             {deleteTarget && (
                 <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
                     <div className="w-full max-w-md glass-card p-5 shadow-2xl border border-border">
-                        <h3 className="text-lg font-bold text-text mb-1">Delete request</h3>
+                        <h3 className="text-lg font-bold text-text mb-1">{t('requestsAdmin.modal.deleteRequest')}</h3>
                         <p className="text-sm text-muted mb-4">
-                            Permanently delete <span className="text-text font-medium">{deleteTarget.title}</span> from your request app?
+                            {t('requestsAdmin.modal.permanentlyDelete', { title: deleteTarget.title })}
                         </p>
                         <div className="flex justify-end gap-2">
                             <button
@@ -806,7 +808,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                 onClick={() => setDeleteTarget(null)}
                                 className="px-4 py-2 rounded-lg border border-border text-muted hover:text-text transition-colors"
                             >
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button
                                 type="button"
@@ -814,7 +816,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                 disabled={actionId === deleteTarget.id}
                                 className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-500 transition-colors disabled:opacity-50"
                             >
-                                {actionId === deleteTarget.id ? 'Deleting...' : 'Delete request'}
+                                {actionId === deleteTarget.id ? t('requestsAdmin.modal.deleting') : t('requestsAdmin.modal.deleteTarget')}
                             </button>
                         </div>
                     </div>

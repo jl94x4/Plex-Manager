@@ -9,6 +9,7 @@ import {
 import { RequestsAdminPanel } from './RequestsAdminPanel';
 import { IssuesAdminPanel } from './IssuesAdminPanel';
 import { BlocklistAdminPanel } from './BlocklistAdminPanel';
+import { useDiscoverI18n } from '../discovery/i18n';
 
 type QueueTab = 'requests' | 'issues' | 'blocklist';
 
@@ -25,6 +26,7 @@ const readReviewIdFromUrl = (): number | null => {
 };
 
 export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIssueCount = 0 }) => {
+    const { t } = useDiscoverI18n();
     const [tab, setTab] = useState<QueueTab>('requests');
     const [reviewRequestId, setReviewRequestId] = useState<number | null>(() => readReviewIdFromUrl());
 
@@ -52,9 +54,9 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
         <DashboardPageShell>
             <DashboardHero
                 accent="amber"
-                eyebrow="Requests"
-                title="Review queue"
-                description="Approve or decline portal requests, triage issues, and manage the blocklist."
+                eyebrow={t('navigation.requests')}
+                title={t('requestsAdmin.page.reviewQueue')}
+                description={t('requestsAdmin.page.description')}
                 icon={<ClipboardList className="h-3.5 w-3.5" />}
                 secondaryBlob
             />
@@ -66,7 +68,7 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
                     className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(tab === 'requests')}`}
                 >
                     <ClipboardList className="h-4 w-4" />
-                    Requests
+                    {t('navigation.requests')}
                 </button>
                 <button
                     type="button"
@@ -74,7 +76,7 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
                     className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(tab === 'issues')}`}
                 >
                     <AlertTriangle className="h-4 w-4" />
-                    Issues
+                    {t('requestsAdmin.page.issues')}
                     {openIssueCount > 0 && (
                         <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-black text-black">
                             {openIssueCount > 99 ? '99+' : openIssueCount}
@@ -87,7 +89,7 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
                     className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(tab === 'blocklist')}`}
                 >
                     <Ban className="h-4 w-4" />
-                    Blocklist
+                    {t('requestsAdmin.page.blocklist')}
                 </button>
             </DashboardSubnav>
 
