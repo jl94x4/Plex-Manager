@@ -3824,11 +3824,12 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             }
         }
         if (uiLocale !== undefined) {
-            const normalizedLocale = String(uiLocale || '').trim().toLowerCase();
-            if (!['en', 'fr', 'de', 'es'].includes(normalizedLocale)) {
+            const normalizedLocale = String(uiLocale || '').trim().toLowerCase().replace(/_/g, '-');
+            const persistedLocale = normalizedLocale === 'pt-br' ? 'pt-BR' : normalizedLocale;
+            if (!['en', 'fr', 'de', 'es', 'pt-BR', 'it', 'ja', 'pl', 'nl', 'ru'].includes(persistedLocale)) {
                 return res.status(400).json({ error: 'Unsupported locale' });
             }
-            users[userIndex].uiLocale = normalizedLocale;
+            users[userIndex].uiLocale = persistedLocale;
         }
         const boolPrefs = {
             notifyRequestAvailableEmail,
