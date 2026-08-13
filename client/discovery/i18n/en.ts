@@ -33,6 +33,18 @@ export const en = {
         person: 'Person',
         music: 'Music',
     },
+    calendar: {
+        page: { tvDescription: 'TV series releases, downloads, and activity across your media stack.', movieDescription: 'Movie releases, downloads, and activity across your media stack.' },
+        actions: { refresh: 'Refresh', configureInSettings: 'Configure in Settings →' },
+        sections: { upcomingReleases: 'Upcoming Releases', downloads: '{name} Downloads', history: '{name} History', status: '{name} Status' },
+        relative: { today: 'Today', tomorrow: 'Tomorrow', atTime: ' at {time}', nextMonthNotice: 'Showing the next month with {type} releases ({month}).', noNextReleases: 'No {type} releases found in the next 6 months.' },
+        status: { unconfigured: 'Unconfigured', online: 'Online', ready: 'Ready', monitored: 'Monitored', freeStorage: 'Free Storage', freeGb: '{value} GB free', usedPercent: '{value}% Used', totalGb: '{value} GB Total' },
+        labels: { requestedNotAired: 'Requested — not aired yet', requestedNotReleased: 'Requested — not released yet', unableToFetch: 'Unable to fetch data from {name}. Check URL/API key and local network reachability.', subtitleAutomation: 'Subtitle management and automation', musicAutomation: 'Music library automation', active: '{count} active' },
+        empty: { notConfigured: '{name} is not configured yet.', configurationHint: 'Add the URL and API key in Settings → Integrations.', noUpcoming: 'No upcoming {type} releases for this month', noPoster: 'No Poster', noActiveDownloads: 'No active {type} downloads', noRecentHistory: 'No recent {type} history', unknownTime: 'Unknown time' },
+        errors: { loadFailed: 'Failed to load Media Stack data.' },
+        fallback: { unknownSeries: 'Unknown Series', unknownTvShow: 'Unknown TV Show', unknownMovie: 'Unknown Movie', movieRelease: 'Movie Release' },
+        events: { grabbed: 'Grabbed', imported: 'Imported', failed: 'Failed', deleted: 'Deleted' },
+    },
     navigation: {
         home: 'Home',
         users: 'Users',
