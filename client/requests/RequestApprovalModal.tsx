@@ -11,6 +11,7 @@ import type {
     PortalServiceOptions,
     PortalServiceServer,
 } from './types';
+import { useDiscoverI18n } from '../discovery/i18n';
 
 type Props = {
     requestId: number;
@@ -21,21 +22,21 @@ type Props = {
     onError: (message: string) => void;
 };
 
-const formatBytes = (bytes?: number | null) => {
+const formatBytes = (bytes: number | null | undefined, freeLabel: string) => {
     const n = Number(bytes);
     if (!Number.isFinite(n) || n <= 0) return '';
     const k = 1024;
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
     const i = Math.min(sizes.length - 1, Math.max(0, Math.floor(Math.log(n) / Math.log(k))));
-    return `${parseFloat((n / Math.pow(k, i)).toFixed(1))} ${sizes[i]} free`;
+    return `${parseFloat((n / Math.pow(k, i)).toFixed(1))} ${sizes[i]} ${freeLabel}`;
 };
 
-const seasonStatusLabel = (status: number | null | undefined, selected: boolean) => {
-    if (!selected) return 'Not selected';
-    if (status === 1) return 'Pending';
-    if (status === 2) return 'Approved';
-    if (status === 3) return 'Declined';
-    return 'Not requested';
+const seasonStatusLabel = (status: number | null | undefined, selected: boolean, t: ReturnType<typeof useDiscoverI18n>['t']) => {
+    if (!selected) return t('requestsAdmin.modal.notSelected');
+    if (status === 1) return t('requestsAdmin.filters.pending');
+    if (status === 2) return t('requestsAdmin.filters.approved');
+    if (status === 3) return t('requestsAdmin.filters.declined');
+    return t('requestsAdmin.modal.notRequested');
 };
 
 /** Match Request As dropdown value to the real requester (id / plexId / email / name). */
@@ -74,6 +75,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
     onComplete,
     onError,
 }) => {
+    const { t } = useDiscoverI18n();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [detail, setDetail] = useState<PortalRequestDetail | null>(null);
@@ -103,12 +105,12 @@ export const RequestApprovalModal: React.FC<Props> = ({
             const data = await apiFetch(`/api/requests/services/${segment}/${nextServerId}`);
             setServiceOptions(data);
         } catch (e: any) {
-            onErrorRef.current(e?.message || 'Failed to load service options');
+            onErrorRef.current(e?.message || t('requestsAdmin.errors.loadServiceOptions'));
             setServiceOptions(null);
         } finally {
             setOptionsLoading(false);
         }
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         let cancelled = false;
@@ -179,13 +181,13 @@ export const RequestApprovalModal: React.FC<Props> = ({
                         : []
                 );
             } catch (e: any) {
-                if (!cancelled) onErrorRef.current(e?.message || 'Failed to load request');
+                if (!cancelled) onErrorRef.current(e?.message || t('requestsAdmin.errors.loadRequest'));
             } finally {
                 if (!cancelled) setLoading(false);
             }
         })();
         return () => { cancelled = true; };
-    }, [requestId]);
+    }, [requestId, t]);
 
     useEffect(() => {
         if (!detail || serverId == null) return;
@@ -269,7 +271,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
     const handleSave = async (andApprove: boolean) => {
         if (!detail) return;
         if (detail.type === 'tv' && selectedSeasons.length === 0) {
-            onErrorRef.current('Select at least one season to approve');
+            onErrorRef.current(t('requestsAdmin.errors.selectSeason'));
             return;
         }
         setSaving(true);
@@ -279,17 +281,17 @@ export const RequestApprovalModal: React.FC<Props> = ({
                     method: 'POST',
                     body: JSON.stringify({ title: detail.title, overrides }),
                 });
-                onCompleteRef.current(`Approved "${detail.title}"`);
+                onCompleteRef.current(t('requestsAdmin.toasts.approvedTitle', { title: detail.title }));
             } else {
                 await apiFetch(`/api/requests/${requestId}`, {
                     method: 'PUT',
                     body: JSON.stringify({ title: detail.title, overrides }),
                 });
-                onCompleteRef.current(`Updated "${detail.title}"`);
+                onCompleteRef.current(t('requestsAdmin.toasts.updatedTitle', { title: detail.title }));
             }
             onClose();
         } catch (e: any) {
-            onErrorRef.current(e?.message || (andApprove ? 'Failed to approve request' : 'Failed to update request'));
+            onErrorRef.current(e?.message || (andApprove ? t('requestsAdmin.errors.approve') : t('requestsAdmin.errors.update')));
         } finally {
             setSaving(false);
         }
@@ -310,30 +312,30 @@ export const RequestApprovalModal: React.FC<Props> = ({
                 <div className="flex items-start justify-between gap-4 mb-4">
                     <div className="min-w-0">
                         <p className="text-muted text-xs uppercase tracking-widest font-semibold">
-                            {mode === 'approve' ? 'Review & Approve' : 'Edit Request'}
+                            {mode === 'approve' ? t('requestsAdmin.modal.reviewApprove') : t('requestsAdmin.modal.editRequest')}
                         </p>
                         <h3 className="text-xl font-bold text-text truncate">{title}</h3>
                         {detail && (
                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                                <span>Status: <span className="text-text font-medium capitalize">{detail.statusLabel}</span></span>
-                                <span>Requested by <span className="text-text font-medium">{detail.requestedBy.displayName}</span></span>
+                                <span>{t('requestsAdmin.labels.status')}: <span className="text-text font-medium capitalize">{detail.statusLabel}</span></span>
+                                <span>{t('requestsAdmin.labels.requestedBy')} <span className="text-text font-medium">{detail.requestedBy.displayName}</span></span>
                                 {detail.createdAt && (
-                                    <span>Created {formatDateTime(detail.createdAt)}</span>
+                                    <span>{t('requestsAdmin.labels.created')} {formatDateTime(detail.createdAt)}</span>
                                 )}
                                 {detail.updatedAt && detail.updatedAt !== detail.createdAt && (
-                                    <span>Updated {formatDateTime(detail.updatedAt)}</span>
+                                    <span>{t('requestsAdmin.labels.updated')} {formatDateTime(detail.updatedAt)}</span>
                                 )}
                                 {detail.modifiedBy && (
-                                    <span>Last action by {detail.modifiedBy.displayName}</span>
+                                    <span>{t('requestsAdmin.labels.lastActionBy')} {detail.modifiedBy.displayName}</span>
                                 )}
                                 {detail.declineReason && (
-                                    <span className="text-red-200">Reason: {detail.declineReason}</span>
+                                    <span className="text-red-200">{t('requestsAdmin.labels.reason')}: {detail.declineReason}</span>
                                 )}
                             </div>
                         )}
                         {detail?.requestedBy?.displayName && (
                             <p className="text-sm text-muted mt-1">
-                                Requested by <span className="text-text font-medium">{detail.requestedBy.displayName}</span>
+                                {t('requestsAdmin.labels.requestedBy')} <span className="text-text font-medium">{detail.requestedBy.displayName}</span>
                                 {detail.is4k ? ' · 4K' : ''}
                                 {detail.isAnime ? ' · Anime' : ''}
                             </p>
@@ -354,10 +356,10 @@ export const RequestApprovalModal: React.FC<Props> = ({
                 {loading ? (
                     <div className="flex items-center gap-3 py-16 justify-center text-muted">
                         <Loader2 className="w-5 h-5 animate-spin text-plex" />
-                        Loading request details...
+                        {t('requestsAdmin.modal.loadingDetails')}
                     </div>
                 ) : !detail ? (
-                    <p className="text-sm text-red-200 py-8 text-center">Could not load this request.</p>
+                    <p className="text-sm text-red-200 py-8 text-center">{t('requestsAdmin.modal.loadFailed')}</p>
                 ) : (
                     <>
                         <div className="flex gap-4 mb-5">
@@ -377,15 +379,15 @@ export const RequestApprovalModal: React.FC<Props> = ({
 
                         {detail.type === 'tv' && tvSeasonRows.length > 0 && (
                             <div className="mb-5">
-                                <p className="text-sm font-semibold text-text mb-2">Seasons</p>
+                                <p className="text-sm font-semibold text-text mb-2">{t('requestsAdmin.modal.seasons')}</p>
                                 <div className="rounded-xl border border-border/60 overflow-hidden">
                                     <table className="w-full text-sm">
                                         <thead className="bg-background/60 text-muted text-xs uppercase tracking-wider">
                                             <tr>
-                                                <th className="px-3 py-2 text-left w-12">On</th>
-                                                <th className="px-3 py-2 text-left">Season</th>
-                                                <th className="px-3 py-2 text-right">Episodes</th>
-                                                <th className="px-3 py-2 text-right">Status</th>
+                                                <th className="px-3 py-2 text-left w-12">{t('requestsAdmin.modal.on')}</th>
+                                                <th className="px-3 py-2 text-left">{t('requestsAdmin.modal.season')}</th>
+                                                <th className="px-3 py-2 text-right">{t('requestsAdmin.modal.episodes')}</th>
+                                                <th className="px-3 py-2 text-right">{t('requestsAdmin.labels.status')}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -402,7 +404,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                                     <td className="px-3 py-2 text-right text-muted">{row.episodeCount || '—'}</td>
                                                     <td className="px-3 py-2 text-right">
                                                         <span className="text-xs font-semibold text-muted">
-                                                            {seasonStatusLabel(row.requestStatus, row.selected)}
+                                                            {seasonStatusLabel(row.requestStatus, row.selected, t)}
                                                         </span>
                                                     </td>
                                                 </tr>
@@ -414,16 +416,16 @@ export const RequestApprovalModal: React.FC<Props> = ({
                         )}
                         {detail.type === 'tv' && tvSeasonRows.length === 0 && (
                             <p className="mb-5 text-sm text-amber-200/90">
-                                No season list loaded for this series. Check TMDB API key / network, then reopen this request.
+                                {t('requestsAdmin.modal.noSeasonList')}
                             </p>
                         )}
 
                         <div className="mb-4">
-                            <p className="text-sm font-semibold text-text mb-3">Advanced</p>
+                            <p className="text-sm font-semibold text-text mb-3">{t('requestsAdmin.modal.advanced')}</p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {servers.length > 1 && (
                                     <div>
-                                        <label className="block text-xs font-semibold text-muted mb-1.5">Destination Server</label>
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('requestsAdmin.modal.destinationServer')}</label>
                                         <CustomSelect
                                             value={String(serverId ?? '')}
                                             onChange={(val) => {
@@ -441,7 +443,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                     </div>
                                 )}
                                 <div>
-                                    <label className="block text-xs font-semibold text-muted mb-1.5">Quality Profile</label>
+                                    <label className="block text-xs font-semibold text-muted mb-1.5">{t('requestsAdmin.modal.qualityProfile')}</label>
                                     <CustomSelect
                                         value={String(profileId ?? '')}
                                         onChange={(val) => setProfileId(Number(val))}
@@ -452,14 +454,14 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                     />
                                 </div>
                                 <div className="sm:col-span-2">
-                                    <label className="block text-xs font-semibold text-muted mb-1.5">Root Folder</label>
+                                    <label className="block text-xs font-semibold text-muted mb-1.5">{t('requestsAdmin.modal.rootFolder')}</label>
                                     <CustomSelect
                                         value={rootFolder}
                                         onChange={setRootFolder}
                                         options={(serviceOptions?.rootFolders || []).map((f) => ({
                                             value: f.path,
                                             label: (() => {
-                                                const free = formatBytes(f.freeSpace);
+                                                const free = formatBytes(f.freeSpace, t('requestsAdmin.modal.free'));
                                                 return free ? `${f.path} (${free})` : f.path;
                                             })(),
                                         }))}
@@ -467,7 +469,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                 </div>
                                 {requestAsOptions.length > 1 && (
                                     <div className="sm:col-span-2">
-                                        <label className="block text-xs font-semibold text-muted mb-1.5">Request As</label>
+                                        <label className="block text-xs font-semibold text-muted mb-1.5">{t('requestsAdmin.modal.requestAs')}</label>
                                         <CustomSelect
                                             value={String(userId ?? '')}
                                             onChange={(val) => setUserId(String(val))}
@@ -479,7 +481,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
 
                             {(serviceOptions?.tags?.length ?? 0) > 0 && (
                                 <div className="mt-3">
-                                    <label className="block text-xs font-semibold text-muted mb-2">Tags</label>
+                                    <label className="block text-xs font-semibold text-muted mb-2">{t('requestsAdmin.modal.tags')}</label>
                                     <div className="flex flex-wrap gap-2">
                                         {serviceOptions!.tags.map((tag) => {
                                             const active = selectedTags.includes(tag.id);
@@ -504,7 +506,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
 
                             {optionsLoading && (
                                 <p className="text-xs text-muted mt-2 flex items-center gap-2">
-                                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading service options...
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('requestsAdmin.modal.loadingOptions')}
                                 </p>
                             )}
                         </div>
@@ -516,7 +518,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                 disabled={saving}
                                 className="px-4 py-2.5 rounded-lg border border-border text-muted hover:text-text transition-colors disabled:opacity-50"
                             >
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button
                                 type="button"
@@ -524,7 +526,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                 disabled={saving}
                                 className="px-4 py-2.5 rounded-lg border border-white/10 text-text font-semibold hover:bg-white/5 transition-colors disabled:opacity-50"
                             >
-                                Save changes
+                                {t('requestsAdmin.modal.saveChanges')}
                             </button>
                             <button
                                 type="button"
@@ -533,7 +535,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                 className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-plex text-background font-bold hover:bg-plex-hover transition-colors disabled:opacity-50"
                             >
                                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                                {mode === 'approve' ? 'Save & Approve' : 'Save & Approve'}
+                                {t('requestsAdmin.modal.saveApprove')}
                             </button>
                         </div>
                     </>
