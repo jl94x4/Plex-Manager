@@ -41,6 +41,12 @@ export type PosterSetsConfig = {
     tpdbCacheRefreshHour?: number;
     /** Repeat every N hours after that (0 = once daily). */
     tpdbCacheRefreshIntervalHours?: number;
+    /** Library cache build media filter. */
+    tpdbCacheWarmMedia?: 'all' | 'movie' | 'show';
+    /** Library cache build source filter. */
+    tpdbCacheWarmSource?: 'full' | 'recent';
+    /** Skip titles that already have a TPDB set list on disk. */
+    tpdbCacheSkipCached?: boolean;
 };
 
 export type PosterSetsWatch = {
@@ -429,4 +435,7 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     tpdbCacheMaxBytes: 2 * 1024 * 1024 * 1024,
     tpdbCacheRefreshHour: 3,
     tpdbCacheRefreshIntervalHours: 0,
+    tpdbCacheWarmMedia: 'all',
+    tpdbCacheWarmSource: 'full',
+    tpdbCacheSkipCached: true,
 };

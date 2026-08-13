@@ -360,21 +360,40 @@ export const PosterSetsSettingsView: React.FC = () => {
         source: 'full' | 'recent';
         skipCached: boolean;
         followedPrefetchOnly: boolean;
-    }>({
-        media: 'all',
-        source: 'full',
-        skipCached: true,
-        // Mirror the persisted prioritize setting so this switch survives Save / remount.
+    }>(() => ({
+        media: configDraft.tpdbCacheWarmMedia === 'movie' || configDraft.tpdbCacheWarmMedia === 'show'
+            ? configDraft.tpdbCacheWarmMedia
+            : 'all',
+        source: configDraft.tpdbCacheWarmSource === 'recent' ? 'recent' : 'full',
+        skipCached: configDraft.tpdbCacheSkipCached !== false,
         followedPrefetchOnly: configDraft.tpdbPrioritizeFollowedCreators !== false,
-    });
+    }));
     const [activityFilter, setActivityFilter] = useState<'all' | 'cache' | 'prefetch' | 'error' | 'followed'>('all');
 
     useEffect(() => {
         setWarmScope((prev) => {
-            const next = configDraft.tpdbPrioritizeFollowedCreators !== false;
-            return prev.followedPrefetchOnly === next ? prev : { ...prev, followedPrefetchOnly: next };
+            const media = configDraft.tpdbCacheWarmMedia === 'movie' || configDraft.tpdbCacheWarmMedia === 'show'
+                ? configDraft.tpdbCacheWarmMedia
+                : 'all';
+            const source = configDraft.tpdbCacheWarmSource === 'recent' ? 'recent' : 'full';
+            const skipCached = configDraft.tpdbCacheSkipCached !== false;
+            const followedPrefetchOnly = configDraft.tpdbPrioritizeFollowedCreators !== false;
+            if (
+                prev.media === media
+                && prev.source === source
+                && prev.skipCached === skipCached
+                && prev.followedPrefetchOnly === followedPrefetchOnly
+            ) {
+                return prev;
+            }
+            return { media, source, skipCached, followedPrefetchOnly };
         });
-    }, [configDraft.tpdbPrioritizeFollowedCreators]);
+    }, [
+        configDraft.tpdbCacheWarmMedia,
+        configDraft.tpdbCacheWarmSource,
+        configDraft.tpdbCacheSkipCached,
+        configDraft.tpdbPrioritizeFollowedCreators,
+    ]);
 
     useEffect(() => {
         if (tab !== 'settings') return undefined;
@@ -791,6 +810,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 <div className="overflow-hidden rounded-lg border border-white/10 bg-black/25">
                                     <div className="border-b border-white/10 px-3 py-2 sm:px-4">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Build scope</p>
+                                        <p className="mt-0.5 text-[11px] text-muted">Save settings to keep Media, library source, and skip-cached for later builds.</p>
                                     </div>
                                     <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-white/10">
                                         <div className="grid gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4">
@@ -799,10 +819,11 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 <div className="mt-1.5">
                                                     <CustomSelect
                                                         value={warmScope.media}
-                                                        onChange={(value) => setWarmScope((prev) => ({
-                                                            ...prev,
-                                                            media: (value === 'movie' || value === 'show' ? value : 'all') as 'all' | 'movie' | 'show',
-                                                        }))}
+                                                        onChange={(value) => {
+                                                            const media = (value === 'movie' || value === 'show' ? value : 'all') as 'all' | 'movie' | 'show';
+                                                            setWarmScope((prev) => ({ ...prev, media }));
+                                                            setConfigDraft((prev) => ({ ...prev, tpdbCacheWarmMedia: media }));
+                                                        }}
                                                         options={[
                                                             { value: 'all', label: 'Movies + TV' },
                                                             { value: 'movie', label: 'Movies only' },
@@ -817,10 +838,11 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 <div className="mt-1.5">
                                                     <CustomSelect
                                                         value={warmScope.source}
-                                                        onChange={(value) => setWarmScope((prev) => ({
-                                                            ...prev,
-                                                            source: value === 'recent' ? 'recent' : 'full',
-                                                        }))}
+                                                        onChange={(value) => {
+                                                            const source = value === 'recent' ? 'recent' : 'full';
+                                                            setWarmScope((prev) => ({ ...prev, source }));
+                                                            setConfigDraft((prev) => ({ ...prev, tpdbCacheWarmSource: source }));
+                                                        }}
                                                         options={[
                                                             { value: 'full', label: 'Recent + full library' },
                                                             { value: 'recent', label: 'Recently added only' },
@@ -835,7 +857,10 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 title="Skip already cached titles"
                                                 description="Only queue titles that do not already have a TPDB set list on disk (resume-friendly)."
                                                 checked={warmScope.skipCached}
-                                                onChange={(next) => setWarmScope((prev) => ({ ...prev, skipCached: next }))}
+                                                onChange={(next) => {
+                                                    setWarmScope((prev) => ({ ...prev, skipCached: next }));
+                                                    setConfigDraft((prev) => ({ ...prev, tpdbCacheSkipCached: next }));
+                                                }}
                                                 border
                                                 className="!py-2.5"
                                             />
