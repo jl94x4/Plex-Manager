@@ -251,6 +251,40 @@ const getUploadedBrandingImagePath = (file: File, assetName: 'logo' | 'backgroun
     return `/static/${assetName}.${extension}`;
 };
 
+const SETTINGS_GROUP_TRANSLATION_KEYS: Record<string, string> = {
+    Portal: 'settings.navigation.groups.portal',
+    'Media Stack': 'settings.navigation.groups.mediaStack',
+    Comms: 'settings.navigation.groups.comms',
+    Automation: 'settings.navigation.groups.automation',
+};
+
+const SETTINGS_TAB_TRANSLATION_KEYS: Record<string, string> = {
+    branding: 'settings.navigation.tabs.branding',
+    contact: 'settings.navigation.tabs.contact',
+    layout: 'settings.navigation.tabs.layout',
+    achievements: 'settings.navigation.tabs.achievements',
+    plex: 'settings.navigation.tabs.plex',
+    mediastack: 'settings.navigation.tabs.mediastack',
+    request: 'settings.navigation.tabs.request',
+    status: 'settings.navigation.tabs.status',
+    notifications: 'settings.navigation.tabs.notifications',
+    newsletter: 'settings.navigation.tabs.newsletter',
+    broadcast: 'settings.navigation.tabs.broadcast',
+    invites: 'settings.navigation.tabs.invites',
+    cleanup: 'settings.navigation.tabs.cleanup',
+    'stream-rules': 'settings.navigation.tabs.streamRules',
+    tasks: 'settings.navigation.tabs.tasks',
+    upgrader: 'settings.navigation.tabs.upgrader',
+    collexions: 'settings.navigation.tabs.collexions',
+    scanner: 'settings.navigation.tabs.scanner',
+    'media-automation': 'settings.navigation.tabs.mediaAutomation',
+    'poster-sets': 'settings.navigation.tabs.posterSets',
+    overlays: 'settings.navigation.tabs.overlays',
+    editions: 'settings.navigation.tabs.editions',
+    system: 'settings.navigation.tabs.system',
+    logs: 'settings.navigation.tabs.logs',
+};
+
 export const SettingsDashboard: React.FC = () => {
     const { t } = useDiscoverI18n();
     const [statusDraft, setStatusDraft] = useState<any>(null);
@@ -1981,9 +2015,9 @@ export const SettingsDashboard: React.FC = () => {
                 <div className="w-full md:grid md:grid-cols-[18rem_minmax(0,1fr)] md:gap-8 xl:gap-10 md:items-start">
                     {/* Mobile Dropdown Category Select */}
                     <div className="block md:hidden mb-6 space-y-4">
-                        <h1 className="text-xl font-bold text-plex">Settings</h1>
+                        <h1 className="text-xl font-bold text-plex">{t('navigation.settings')}</h1>
                         <div>
-                        <label htmlFor="settings-tab-select" className="text-muted text-xs uppercase tracking-wider font-bold mb-2 block">Settings Category</label>
+                        <label htmlFor="settings-tab-select" className="text-muted text-xs uppercase tracking-wider font-bold mb-2 block">{t('settings.navigation.category')}</label>
                         <CustomSelect
                             id="settings-tab-select"
                             value={activeTab}
@@ -1992,9 +2026,9 @@ export const SettingsDashboard: React.FC = () => {
                                 if (entry) navigateToSetting(entry);
                             }}
                             options={visibleTabGroups.flatMap((group) => [
-                                { label: group.title, value: `__group_${group.title}`, isGroup: true as const },
+                                { label: t(SETTINGS_GROUP_TRANSLATION_KEYS[group.title] || group.title), value: `__group_${group.title}`, isGroup: true as const },
                                 ...group.tabs.map((tab) => ({
-                                    label: tab.label,
+                                    label: t(SETTINGS_TAB_TRANSLATION_KEYS[tab.id] || tab.label),
                                     value: tab.id,
                                     icon: <SettingsTabIcon id={tab.id} />,
                                 })),
@@ -2007,12 +2041,12 @@ export const SettingsDashboard: React.FC = () => {
                     <aside className="hidden md:flex md:flex-col w-72 shrink-0 sticky top-0 self-start glass-card nav-shell p-4 shadow-2xl z-10">
                         <div>
                         {visibleTabGroups.length === 0 ? (
-                            <p className="text-xs text-muted px-2 py-2">No settings sections found.</p>
+                            <p className="text-xs text-muted px-2 py-2">{t('settings.navigation.noSections')}</p>
                         ) : (
                             <div className="space-y-2">
                                 {visibleTabGroups.map(group => (
                                     <div key={group.title}>
-                                        <p className="text-[10px] uppercase tracking-wider font-bold text-plex px-2 mb-0.5">{group.title}</p>
+                                        <p className="text-[10px] uppercase tracking-wider font-bold text-plex px-2 mb-0.5">{t(SETTINGS_GROUP_TRANSLATION_KEYS[group.title] || group.title)}</p>
                                         <div className="space-y-0.5">
                                             {group.tabs.map(tab => (
                                                 <button
@@ -2024,7 +2058,7 @@ export const SettingsDashboard: React.FC = () => {
                                                         }`}
                                                 >
                                                     <SettingsTabIcon id={tab.id} />
-                                                    {tab.label}
+                                                    {t(SETTINGS_TAB_TRANSLATION_KEYS[tab.id] || tab.label)}
                                                 </button>
                                             ))}
                                         </div>

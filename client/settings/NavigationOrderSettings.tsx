@@ -8,6 +8,7 @@ import {
     normalizeMemberNavHiddenKeys,
     normalizeNavHiddenKeys,
 } from '../shared/nav';
+import { useDiscoverI18n } from '../discovery/i18n';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 
@@ -39,17 +40,28 @@ type Props = {
     featureStatus?: NavFeatureStatus;
 };
 
-const FEATURE_OFF_HINT: Record<string, string> = {
-    upgrader: 'Feature off — enable under Settings → Library Upgrader',
-    collexions: 'Feature off — enable under Settings → ColleXions',
-    scanner: 'Feature off — enable under Settings → Scanner',
-    'media-automation': 'Feature off — enable under Settings → Media Automation',
-    'poster-sets': 'Feature off — enable under Settings → Poster Sets',
-    overlays: 'Feature off — enable under Settings → Overlays',
-    editions: 'Feature off — enable under Settings → Editions',
-    achievements: 'Feature off — enable under Settings → Achievements',
-    support: 'Feature off — enable under Settings → System',
-    maintenance: 'Feature off — enable under Settings → Cleanup',
+const FEATURE_OFF_SECTIONS: Record<string, string> = {
+    upgrader: 'settings.navigation.tabs.upgrader',
+    collexions: 'settings.navigation.tabs.collexions',
+    scanner: 'settings.navigation.tabs.scanner',
+    'media-automation': 'settings.navigation.tabs.mediaAutomation',
+    'poster-sets': 'settings.navigation.tabs.posterSets',
+    overlays: 'settings.navigation.tabs.overlays',
+    editions: 'settings.navigation.tabs.editions',
+    achievements: 'settings.navigation.tabs.achievements',
+    support: 'settings.navigation.tabs.system',
+    maintenance: 'settings.navigation.tabs.cleanup',
+};
+
+const NAV_ITEM_TRANSLATION_KEYS: Record<string, string> = {
+    home: 'navigation.home', discover: 'navigation.dashboard', request: 'navigation.request',
+    analytics: 'navigation.analytics', achievements: 'navigation.achievements', support: 'navigation.support',
+    users: 'navigation.users', downloads: 'navigation.downloads', upgrader: 'navigation.upgrader',
+    collexions: 'navigation.collexions', scanner: 'navigation.scanner', 'media-automation': 'navigation.mediaAutomation',
+    'poster-sets': 'navigation.posterSets', overlays: 'navigation.overlays', editions: 'navigation.editions',
+    mediastack: 'navigation.calendar', requests: 'navigation.requests', status: 'navigation.status',
+    maintenance: 'navigation.cleaner', about: 'navigation.about', preferences: 'navigation.preferences',
+    settings: 'navigation.settings', logs: 'navigation.logs', logout: 'navigation.logout',
 };
 
 const reorder = (items: string[], from: number, to: number): string[] => {
@@ -88,6 +100,8 @@ type ColumnProps = {
     showAdminSuffix: boolean;
     featureStatus?: NavFeatureStatus;
     downloadsMembersNote?: string | null;
+    translate: (key: string, vars?: Record<string, unknown>) => string;
+    labelForKey: (key: string, options?: { adminSuffix?: boolean; downloadsMembersVisible?: boolean }) => string;
 };
 
 const NavOrderColumn: React.FC<ColumnProps> = ({
@@ -105,6 +119,8 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
     showAdminSuffix,
     featureStatus,
     downloadsMembersNote,
+    translate,
+    labelForKey,
 }) => {
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -238,17 +254,18 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                     const isAlwaysVisible = alwaysVisibleKeys.has(key);
                     const isHidden = hiddenSet.has(key);
                     const featureOffHint = (() => {
-                        if (key === 'upgrader' && featureStatus?.upgrader === false) return FEATURE_OFF_HINT.upgrader;
-                        if (key === 'collexions' && featureStatus?.collexions === false) return FEATURE_OFF_HINT.collexions;
-                        if (key === 'scanner' && featureStatus?.scanner === false) return FEATURE_OFF_HINT.scanner;
-                        if (key === 'media-automation' && featureStatus?.mediaAutomation === false) return FEATURE_OFF_HINT['media-automation'];
-                        if (key === 'poster-sets' && featureStatus?.posterSets === false) return FEATURE_OFF_HINT['poster-sets'];
-                        if (key === 'overlays' && featureStatus?.overlays === false) return FEATURE_OFF_HINT.overlays;
-                        if (key === 'editions' && featureStatus?.editions === false) return FEATURE_OFF_HINT.editions;
-                        if (key === 'achievements' && featureStatus?.achievements === false) return FEATURE_OFF_HINT.achievements;
-                        if (key === 'support' && featureStatus?.support === false) return FEATURE_OFF_HINT.support;
-                        if (key === 'maintenance' && featureStatus?.maintenance === false) return FEATURE_OFF_HINT.maintenance;
-                        return null;
+                        let sectionKey: string | null = null;
+                        if (key === 'upgrader' && featureStatus?.upgrader === false) sectionKey = FEATURE_OFF_SECTIONS.upgrader;
+                        if (key === 'collexions' && featureStatus?.collexions === false) sectionKey = FEATURE_OFF_SECTIONS.collexions;
+                        if (key === 'scanner' && featureStatus?.scanner === false) sectionKey = FEATURE_OFF_SECTIONS.scanner;
+                        if (key === 'media-automation' && featureStatus?.mediaAutomation === false) sectionKey = FEATURE_OFF_SECTIONS['media-automation'];
+                        if (key === 'poster-sets' && featureStatus?.posterSets === false) sectionKey = FEATURE_OFF_SECTIONS['poster-sets'];
+                        if (key === 'overlays' && featureStatus?.overlays === false) sectionKey = FEATURE_OFF_SECTIONS.overlays;
+                        if (key === 'editions' && featureStatus?.editions === false) sectionKey = FEATURE_OFF_SECTIONS.editions;
+                        if (key === 'achievements' && featureStatus?.achievements === false) sectionKey = FEATURE_OFF_SECTIONS.achievements;
+                        if (key === 'support' && featureStatus?.support === false) sectionKey = FEATURE_OFF_SECTIONS.support;
+                        if (key === 'maintenance' && featureStatus?.maintenance === false) sectionKey = FEATURE_OFF_SECTIONS.maintenance;
+                        return sectionKey ? translate('settings.navigation.order.featureOff', { section: translate(sectionKey) }) : null;
                     })();
 
                     const isDragging = dragIndex === index;
@@ -263,7 +280,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                                     <div className="h-px flex-1 bg-border/70" />
                                     <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
                                         <MoreHorizontal className="h-3.5 w-3.5" />
-                                        Mobile More menu
+                                        {translate('settings.navigation.order.mobileMoreMenu')}
                                     </span>
                                     <div className="h-px flex-1 bg-border/70" />
                                 </div>
@@ -288,7 +305,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
 
                                 <button
                                     type="button"
-                                    aria-label={`Drag to reorder ${getNavItemLabel(key)}`}
+                                    aria-label={translate('settings.navigation.order.dragToReorder', { label: labelForKey(key) })}
                                     onPointerDown={(e) => handlePointerDown(e, index)}
                                     onPointerMove={handlePointerMove}
                                     onPointerUp={handlePointerUp}
@@ -301,42 +318,46 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
 
                                 <div className="min-w-0 flex-1">
                                     <div className="font-medium text-text">
-                                        {getNavItemLabel(key, {
+                                        {labelForKey(key, {
                                             adminSuffix: showAdminSuffix,
                                             downloadsMembersVisible: downloadsVisibleToMembers,
                                         })}
                                     </div>
                                     {isHidden ? (
-                                        <p className="mt-0.5 text-[11px] text-yellow-300/90">Hidden from navigation</p>
+                                        <p className="mt-0.5 text-[11px] text-yellow-300/90">{translate('settings.navigation.order.hidden')}</p>
                                     ) : featureOffHint ? (
                                         <p className="mt-0.5 text-[11px] text-yellow-300/90">{featureOffHint}</p>
                                     ) : !isMobileNavKey(key) ? (
-                                        <p className="mt-0.5 text-[11px] text-muted">Not shown in the mobile bottom bar</p>
+                                        <p className="mt-0.5 text-[11px] text-muted">{translate('settings.navigation.order.notInMobileBar')}</p>
                                     ) : null}
                                 </div>
 
                                 <div className="flex shrink-0 items-center gap-1">
                                     {inMobileBar && moreStartsAtMobileIndex !== null && !isHidden && (
                                         <span className="hidden rounded-md border border-plex/25 bg-plex/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-plex/90 lg:inline">
-                                            Mobile bar
+                                            {translate('settings.navigation.order.mobileBar')}
                                         </span>
                                     )}
                                     {inMoreMenu && !isHidden && (
                                         <span className="hidden rounded-md border border-border/60 bg-white/5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted lg:inline">
-                                            More
+                                            {translate('settings.navigation.order.more')}
                                         </span>
                                     )}
                                     <button
                                         type="button"
                                         aria-label={
                                             isAlwaysVisible
-                                                ? `${getNavItemLabel(key)} cannot be hidden`
-                                                : (isHidden ? `Show ${getNavItemLabel(key)}` : `Hide ${getNavItemLabel(key)}`)
+                                                ? translate('settings.navigation.order.cannotHide', { label: labelForKey(key) })
+                                                : (isHidden
+                                                    ? translate('settings.navigation.order.showItem', { label: labelForKey(key) })
+                                                    : translate('settings.navigation.order.hideItem', { label: labelForKey(key) }))
                                         }
                                         title={
                                             isAlwaysVisible
-                                                ? 'Always visible'
-                                                : (isHidden ? 'Show in navigation' : 'Hide from navigation')
+                                                ? translate('settings.navigation.order.alwaysVisible')
+                                                : (isHidden
+                                                    ? translate('settings.navigation.order.showInNavigation')
+                                                    : translate('settings.navigation.order.hideFromNavigation'))
                                         }
                                         disabled={isAlwaysVisible}
                                         onClick={() => toggleHidden(key)}
@@ -351,7 +372,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                                     </button>
                                     <button
                                         type="button"
-                                        aria-label={`Move ${getNavItemLabel(key)} up`}
+                                        aria-label={translate('settings.navigation.order.moveUp', { label: labelForKey(key) })}
                                         disabled={index === 0}
                                         onClick={() => commitReorder(index, index - 1, { haptic: true })}
                                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-white/[0.03] text-muted transition-transform hover:border-plex/40 hover:text-text active:scale-90 active:bg-plex/15 disabled:pointer-events-none disabled:opacity-30"
@@ -360,7 +381,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                                     </button>
                                     <button
                                         type="button"
-                                        aria-label={`Move ${getNavItemLabel(key)} down`}
+                                        aria-label={translate('settings.navigation.order.moveDown', { label: labelForKey(key) })}
                                         disabled={index === navOrder.length - 1}
                                         onClick={() => commitReorder(index, index + 1, { haptic: true })}
                                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-white/[0.03] text-muted transition-transform hover:border-plex/40 hover:text-text active:scale-90 active:bg-plex/15 disabled:pointer-events-none disabled:opacity-30"
@@ -382,7 +403,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                         <div className="flex items-center gap-3">
                             <GripVertical className="h-5 w-5 shrink-0 text-plex" />
                             <p className="truncate text-sm font-bold text-text">
-                                {getNavItemLabel(draggingKey, {
+                                {labelForKey(draggingKey, {
                                     adminSuffix: showAdminSuffix,
                                     downloadsMembersVisible: downloadsVisibleToMembers,
                                 })}
@@ -394,11 +415,11 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
 
             {moreStartsAtMobileIndex === null ? (
                 <p className="mt-4 text-xs text-muted">
-                    All mobile-visible items currently fit in the bottom bar — no More menu yet.
+                    {translate('settings.navigation.order.allFit')}
                 </p>
             ) : (
                 <p className="mt-4 text-xs text-muted">
-                    Items below the divider open from the mobile More button.
+                    {translate('settings.navigation.order.itemsInMore')}
                 </p>
             )}
         </div>
@@ -417,24 +438,33 @@ export const NavigationOrderSettings: React.FC<Props> = ({
     downloadsVisibleToMembers,
     onDownloadsVisibleToMembersChange,
     featureStatus,
-}) => (
+}) => {
+    const { t } = useDiscoverI18n();
+    const labelForKey = (key: string, options?: { adminSuffix?: boolean; downloadsMembersVisible?: boolean }) => {
+        const baseKey = NAV_ITEM_TRANSLATION_KEYS[key];
+        const base = baseKey ? t(baseKey) : getNavItemLabel(key);
+        return getNavItemLabel(key, options) !== getNavItemLabel(key)
+            ? t('settings.navigation.order.adminOnlyLabel', { label: base })
+            : base;
+    };
+
+    return (
     <div className="mb-8 animate-fade-in">
-        <h3 className="mb-4 border-b border-border pb-2 text-xl font-bold text-plex">Navigation Order</h3>
+        <h3 className="mb-4 border-b border-border pb-2 text-xl font-bold text-plex">{t('settings.navigation.order.title')}</h3>
         <p className="mb-2 max-w-3xl text-sm text-muted">
-            Set separate layouts for admins and members. Drag the handle to reorder, or use the arrows.
-            The first {MOBILE_NAV_PRIMARY_SLOTS} items stay in the mobile bottom bar; the rest move into More.
+            {t('settings.navigation.order.description')}{' '}
+            {t('settings.navigation.order.mobileSlots', { count: MOBILE_NAV_PRIMARY_SLOTS })}
         </p>
         <p className="mb-4 max-w-3xl text-xs text-muted">
-            Use the eye icon to hide items from that audience. Home stays visible for everyone; Settings and Logout stay visible for admins.
-            Feature-gated items also need their Settings toggles turned on before they appear.
+            {t('settings.navigation.order.audienceHint')}
         </p>
 
         <div className="mb-6 max-w-xl rounded-xl border border-border/70 bg-background/30 p-4">
             <SettingsToggleRow
-                title="Show Downloads to members"
+                title={t('settings.navigation.order.showDownloads')}
                 hint={(
                     <SettingHint>
-                        When off, Downloads stays available in the admin layout only. Members will not see the tab or the download status page — even if it is enabled in the Users column.
+                        {t('settings.navigation.order.downloadsHint')}
                     </SettingHint>
                 )}
                 checked={downloadsVisibleToMembers}
@@ -442,14 +472,16 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                 border={false}
             />
             <p className={`mt-2 text-xs font-semibold ${downloadsVisibleToMembers ? 'text-green-300' : 'text-yellow-300'}`}>
-                Members: {downloadsVisibleToMembers ? 'can see Downloads' : 'Downloads hidden'}
+                {downloadsVisibleToMembers
+                    ? t('settings.navigation.order.membersCanSeeDownloads')
+                    : t('settings.navigation.order.membersDownloadsHidden')}
             </p>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
             <NavOrderColumn
-                title="Admins"
-                subtitle="Full portal nav — admin-only tools stay here."
+                title={t('settings.navigation.order.admins')}
+                subtitle={t('settings.navigation.order.adminsSubtitle')}
                 icon={<Shield className="h-4 w-4 text-plex" />}
                 accentClass="border-plex/35 bg-plex/10 text-plex"
                 navOrder={navOrder}
@@ -461,10 +493,12 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                 downloadsVisibleToMembers={downloadsVisibleToMembers}
                 showAdminSuffix
                 featureStatus={featureStatus}
+                translate={t}
+                labelForKey={labelForKey}
             />
             <NavOrderColumn
-                title="Users"
-                subtitle="What non-admins see in the sidebar and mobile bar."
+                title={t('settings.navigation.order.members')}
+                subtitle={t('settings.navigation.order.membersSubtitle')}
                 icon={<Users className="h-4 w-4 text-sky-300" />}
                 accentClass="border-sky-500/35 bg-sky-500/10 text-sky-200"
                 navOrder={memberNavOrder}
@@ -477,10 +511,13 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                 showAdminSuffix={false}
                 downloadsMembersNote={
                     !downloadsVisibleToMembers
-                        ? 'Downloads is forced off for members by the toggle above.'
+                        ? t('settings.navigation.order.downloadsForcedOff')
                         : null
                 }
+                translate={t}
+                labelForKey={labelForKey}
             />
         </div>
     </div>
-);
+    );
+};
