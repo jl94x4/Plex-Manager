@@ -567,7 +567,9 @@ export const EditionsDashboard: React.FC = () => {
                     <div className="mt-3 rounded-lg border border-border bg-background/40 p-3">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted mb-1">Plex webhook URL</p>
                         <code className="text-xs break-all text-plex">{webhookUrl}</code>
-                        <p className="text-[11px] text-muted mt-2">Health: <code>{webhookUrl.replace(/\/webhook$/, '/webhook/healthz')}</code></p>
+                        <p className="text-[11px] text-muted mt-2">
+                            Paste this into Plex Settings → Network → Webhooks (Plex Pass). Plex POSTs <code>library.new</code> here with a thumbnail, so opening the URL in a browser only returns a health check — it does not stamp a movie.
+                        </p>
                     </div>
                     <div className="mt-4">
                         <p className="text-xs font-bold uppercase tracking-wider text-muted mb-2">Scheduled full run</p>
