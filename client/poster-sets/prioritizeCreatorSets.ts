@@ -56,6 +56,21 @@ export const collapseNearDuplicateSets = <T extends {
     return { sets: out, collapsed };
 };
 
+export const excludeBlockedCreators = <T extends { user?: string | null }>(
+    sets: T[],
+    blocked?: string[] | null,
+): T[] => {
+    const list = Array.isArray(sets) ? sets : [];
+    const keys = new Set(
+        (Array.isArray(blocked) ? blocked : []).map((name) => normalizeCreatorHandle(name)).filter(Boolean),
+    );
+    if (!keys.size) return list;
+    return list.filter((set) => {
+        const user = normalizeCreatorHandle(set?.user);
+        return !user || !keys.has(user);
+    });
+};
+
 export const prioritizeSetsByFollowedCreators = <T extends { user?: string | null }>(
     sets: T[],
     creators?: string[] | null,

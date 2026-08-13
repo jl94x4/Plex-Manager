@@ -5,7 +5,7 @@ import {
     pickAutoMatchedTitle,
 } from './autoMatchTitle';
 import type { LibraryRecentItem } from './libraryRecent';
-import { collapseNearDuplicateSets, prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
+import { collapseNearDuplicateSets, excludeBlockedCreators, prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import type { PosterSetsSearchResult, PosterSetsSearchSet, PosterSetsSearchTitle } from './types';
 
 export type FetchPosterSetsOptions = {
@@ -14,6 +14,8 @@ export type FetchPosterSetsOptions = {
     libraryItem?: Pick<LibraryRecentItem, 'title' | 'year' | 'mediaType'>;
     /** Followed creators — title search floats these sets first. */
     preferredCreators?: string[] | null;
+    /** Blocked creators — hidden and never image-cached. */
+    blockedCreators?: string[] | null;
     /** When false, skip long TPDB waits — public search cannot match many TV titles. */
     tpdbConfigured?: boolean;
     /** Called with merged sets as either provider lands (TPDB preferred in order). */
@@ -149,6 +151,7 @@ const mergeSetsForDisplay = (
     parts: PosterSetsSearchResult[],
     dupePreference: 'mediux' | 'posterdb',
     preferredCreators?: string[] | null,
+    blockedCreators?: string[] | null,
 ): PosterSetsSearchSet[] => {
     const preferMediux = dupePreference === 'mediux';
     const buckets: { mediux: PosterSetsSearchSet[]; posterdb: PosterSetsSearchSet[] } = {
@@ -173,7 +176,10 @@ const mergeSetsForDisplay = (
         }
     }
     const near = collapseNearDuplicateSets(out);
-    return prioritizeSetsByFollowedCreators(near.sets, preferredCreators);
+    return excludeBlockedCreators(
+        prioritizeSetsByFollowedCreators(near.sets, preferredCreators),
+        blockedCreators,
+    );
 };
 
 async function fetchBothSetsProgressive(
@@ -181,6 +187,7 @@ async function fetchBothSetsProgressive(
     options: {
         dupePreference: 'mediux' | 'posterdb';
         preferredCreators?: string[] | null;
+        blockedCreators?: string[] | null;
         fallbackMedia: 'show' | 'movie';
         titleHint: string;
         yearHint: number | null;
@@ -200,9 +207,12 @@ async function fetchBothSetsProgressive(
     const tpdbHardMs = options.tpdbConfigured ? TPDB_HARD_MS : TPDB_PUBLIC_MS;
     const tpdbSoftWaitMs = options.tpdbConfigured ? TPDB_SOFT_WAIT_MS : Math.min(TPDB_PUBLIC_MS, 20_000);
 
-    const preferSets = (sets: PosterSetsSearchSet[]) => prioritizeSetsByFollowedCreators(
-        collapseNearDuplicateSets(sets || []).sets,
-        options.preferredCreators,
+    const preferSets = (sets: PosterSetsSearchSet[]) => excludeBlockedCreators(
+        prioritizeSetsByFollowedCreators(
+            collapseNearDuplicateSets(sets || []).sets,
+            options.preferredCreators,
+        ),
+        options.blockedCreators,
     );
 
     // Progressive library loads put ThePosterDB first visually (user preference),
@@ -218,6 +228,7 @@ async function fetchBothSetsProgressive(
             [mediuxResult, posterdbResult],
             paintOrder,
             options.preferredCreators,
+            options.blockedCreators,
         );
         if (!sets.length) return;
         options.onPartial?.({
@@ -390,6 +401,7 @@ async function fetchBothSetsProgressive(
         [mediuxResult, posterdbResult],
         paintOrder,
         options.preferredCreators,
+        options.blockedCreators,
     );
     if ((posterdbResult.sets?.length || 0) === 0 && (mediuxResult.sets?.length || 0) > 0) {
         const tpdbFailedSoftly = partialErrors.some((msg) => msg.includes('ThePosterDB'));
@@ -687,7 +699,10 @@ export async function fetchPosterSetsForTitle(
         const filtered = filterResultForWork(result, titleHint || title.title);
         return {
             ...filtered,
-            sets: prioritizeSetsByFollowedCreators(filtered.sets || [], options.preferredCreators),
+            sets: excludeBlockedCreators(
+                prioritizeSetsByFollowedCreators(filtered.sets || [], options.preferredCreators),
+                options.blockedCreators,
+            ),
         };
     };
 
@@ -701,6 +716,7 @@ export async function fetchPosterSetsForTitle(
         return await fetchBothSetsProgressive(linkedTmdbId, {
             dupePreference,
             preferredCreators: options.preferredCreators,
+            blockedCreators: options.blockedCreators,
             fallbackMedia,
             titleHint: titleHint || title.title,
             yearHint,

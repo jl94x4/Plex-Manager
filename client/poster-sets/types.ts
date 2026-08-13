@@ -17,6 +17,8 @@ export type PosterSetsConfig = {
     arrWatchHookEnabled?: boolean;
     /** Creator usernames shown on Browse → Following (MediUX / ThePosterDB). */
     creatorWhitelist?: string[];
+    /** Creator usernames whose sets are hidden and never image-cached. */
+    creatorBlocklist?: string[];
     /** Where artwork is written after apply: plex, local, plex_local, jellyfin, or emby. */
     applyDestination?: 'plex' | 'local' | 'plex_local' | 'jellyfin' | 'emby';
     /** Optional ThePosterDB login for advanced title search (canonical /posters/ pages). */
@@ -426,6 +428,7 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     notifyOnWatcherDigest: true,
     arrWatchHookEnabled: true,
     creatorWhitelist: [],
+    creatorBlocklist: [],
     applyDestination: 'plex',
     tpdbLocalCacheEnabled: false,
     tpdbAggressivePrefetch: false,

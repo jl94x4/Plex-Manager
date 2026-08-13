@@ -6,6 +6,7 @@ import {
     History,
     Image as ImageIcon,
     Loader2,
+    Ban,
     PanelRight,
     RotateCcw,
     Square,
@@ -17,7 +18,7 @@ import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem, catalogTitleMatchesLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
-import { collapseNearDuplicateSets, prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
+import { collapseNearDuplicateSets, excludeBlockedCreators, prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import { classifyPreviewAsset, previewAssetEpisodeLabel } from './previewGroups';
 import { libraryItemPosterSrc, type LibraryRecentItem } from './libraryRecent';
 import { SetInspector, SetInspectorThumbStrip } from './SetInspector';
@@ -138,6 +139,9 @@ export type LibraryTitleDetailPanelProps = {
     dupePreference: 'mediux' | 'posterdb';
     /** Followed creators — their sets appear first in title search. */
     preferredCreators?: string[];
+    /** Blocked creators — hidden from this title's set grid. */
+    blockedCreators?: string[];
+    onBlockCreator?: (handle: string) => Promise<void> | void;
     queuePaused: boolean;
     watches: PosterSetsWatch[];
     serverType?: string;
@@ -157,6 +161,8 @@ export function LibraryTitleDetailPanel({
     onClose,
     dupePreference,
     preferredCreators = [],
+    blockedCreators = [],
+    onBlockCreator,
     queuePaused,
     watches,
     toast,
@@ -267,6 +273,7 @@ export function LibraryTitleDetailPanel({
                 mediaType: libraryItem?.mediaType,
                 libraryItem: libraryItem || undefined,
                 preferredCreators,
+                blockedCreators,
                 tpdbConfigured,
                 onPartial: (partial) => {
                     if (!stillCurrent()) return;
@@ -357,7 +364,7 @@ export function LibraryTitleDetailPanel({
             setBusy((current) => (current === 'search' ? null : current));
             setLoadingMoreSets(false);
         }
-    }, [dupePreference, preferredCreators, toast, tpdbConfigured]);
+    }, [blockedCreators, dupePreference, preferredCreators, toast, tpdbConfigured]);
 
     const runSearch = useCallback(async (libraryItem: LibraryRecentItem) => {
         const generation = ++loadGenRef.current;
@@ -859,13 +866,16 @@ export function LibraryTitleDetailPanel({
 
     const setsByCategory = useMemo(
         () => partitionSetsByCategory(
-            prioritizeSetsByFollowedCreators(
-                collapseNearDuplicateSets(searchSets).sets,
-                preferredCreators,
+            excludeBlockedCreators(
+                prioritizeSetsByFollowedCreators(
+                    collapseNearDuplicateSets(searchSets).sets,
+                    preferredCreators,
+                ),
+                blockedCreators,
             ),
             { mediaType: item?.mediaType },
         ),
-        [searchSets, preferredCreators, item?.mediaType],
+        [searchSets, preferredCreators, blockedCreators, item?.mediaType],
     );
     const setsPageSize = layoutMode === 'modal' ? SETS_PAGE_SIZE_MODAL : SETS_PAGE_SIZE_DRAWER;
     const setsPageCount = Math.max(1, Math.ceil(setsByCategory.posters.length / setsPageSize));
@@ -1246,6 +1256,17 @@ export function LibraryTitleDetailPanel({
                                                                 >
                                                                     <Eye className="h-3.5 w-3.5" />
                                                                 </button>
+                                                                {creator && onBlockCreator ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        className={buttonClass}
+                                                                        disabled={interactionLocked || busy === 'save'}
+                                                                        title={`Hide @${creator} sets and skip caching them`}
+                                                                        onClick={() => void onBlockCreator(creator)}
+                                                                    >
+                                                                        <Ban className="h-3.5 w-3.5" />
+                                                                    </button>
+                                                                ) : null}
                                                             </div>
                                                         </div>
                                                     );

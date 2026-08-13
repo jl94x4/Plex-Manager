@@ -68,6 +68,7 @@ export const PosterSetsShell: React.FC = () => {
         queuePaused,
         watches,
         toast,
+        blockCreator,
         loadQueue,
         loadHistory,
         loadWatches,
@@ -289,6 +290,8 @@ export const PosterSetsShell: React.FC = () => {
                     onClose={() => setLibraryDetailItem(null)}
                     dupePreference={configDraft.dupePreference === 'mediux' ? 'mediux' : 'posterdb'}
                     preferredCreators={configDraft.creatorWhitelist || []}
+                    blockedCreators={configDraft.creatorBlocklist || []}
+                    onBlockCreator={blockCreator}
                     queuePaused={queuePaused}
                     watches={watches}
                     serverType={status?.mediaServerLabel?.toLowerCase() === 'jellyfin' ? 'jellyfin' : 'plex'}

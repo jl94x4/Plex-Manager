@@ -150,6 +150,8 @@ export const PosterSetsSettingsView: React.FC = () => {
         setMovieText,
         whitelistText,
         setWhitelistText,
+        blocklistText,
+        setBlocklistText,
         url,
         setUrl,
         titleCardsOnly,
@@ -1225,6 +1227,18 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 One MediUX / ThePosterDB username per line (no @ needed). Browse adds a &quot;Creators you follow&quot; row with only their sets.
                                 With local cache Prefetch + Prioritize Creators you follow, their sets hydrate first during cache builds.
                                 Click any @username to open their full catalog.
+                            </span>
+                        </label>
+                        <label className="block sm:col-span-2">
+                            <span className="text-xs font-bold uppercase tracking-wide text-muted">Blocked creators</span>
+                            <textarea
+                                className={`${fieldClass} mt-2 min-h-24`}
+                                placeholder={'muikman2000'}
+                                value={blocklistText}
+                                onChange={(event) => setBlocklistText(event.target.value)}
+                            />
+                            <span className="mt-1 block text-[11px] text-muted">
+                                One username per line. Their sets are hidden on titles/Browse and skipped during TPDB image cache. Save settings to apply.
                             </span>
                         </label>
                     </div>

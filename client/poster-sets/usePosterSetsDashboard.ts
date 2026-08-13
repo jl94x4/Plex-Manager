@@ -38,7 +38,7 @@ import {
 } from './types';
 import { groupPosterSetsWatchesByCategory } from './watchGroups';
 import type { RecentSetCategory } from './shared/posterSetsRecent';
-import { prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
+import { excludeBlockedCreators, prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
 import { classifyPreviewAsset, groupPreviewAssets } from './previewGroups';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
@@ -126,6 +126,7 @@ export function usePosterSetsDashboardState() {
     const [tvText, setTvText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.tv_library));
     const [movieText, setMovieText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.movie_library));
     const [whitelistText, setWhitelistText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.creatorWhitelist));
+    const [blocklistText, setBlocklistText] = useState(listToText(DEFAULT_POSTER_SETS_CONFIG.creatorBlocklist || []));
     const [url, setUrl] = useState(initialLocation.setUrl || '');
     const [titleCardsOnly, setTitleCardsOnly] = useState(Boolean(initialLocation.titleCardsOnly));
     const [bulkText, setBulkText] = useState('');
@@ -525,6 +526,7 @@ export function usePosterSetsDashboardState() {
             setTvText(listToText(cfg.tv_library));
             setMovieText(listToText(cfg.movie_library));
             setWhitelistText(listToText(cfg.creatorWhitelist));
+            setBlocklistText(listToText(cfg.creatorBlocklist));
             await loadHistory();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to load Poster Sets', 'error');
@@ -664,6 +666,11 @@ export function usePosterSetsDashboardState() {
                 : null;
             const creatorWhitelist = fromPartial
                 || textToList(whitelistText).map((item) => item.replace(/^@+/, ''));
+            const fromPartialBlock = Array.isArray(partial.creatorBlocklist)
+                ? partial.creatorBlocklist.map((item) => String(item || '').trim().replace(/^@+/, '')).filter(Boolean)
+                : null;
+            const creatorBlocklist = fromPartialBlock
+                || textToList(blocklistText).map((item) => item.replace(/^@+/, ''));
             const response = await posterSetsApi.saveConfig({
                 ...configDraft,
                 tv_library: textToList(tvText),
@@ -672,6 +679,7 @@ export function usePosterSetsDashboardState() {
                 tpdb_password: configDraft.tpdb_password === '********' ? undefined : configDraft.tpdb_password,
                 ...partial,
                 creatorWhitelist,
+                creatorBlocklist,
             });
             setConfigDraft({
                 ...response.config,
@@ -679,6 +687,7 @@ export function usePosterSetsDashboardState() {
                 tpdb_password: response.config.hasTpdbPassword ? '********' : '',
             });
             setWhitelistText(listToText(response.config.creatorWhitelist));
+            setBlocklistText(listToText(response.config.creatorBlocklist));
             void loadBrowse({ refresh: true, silent: true });
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to save creators', 'error');
@@ -686,6 +695,22 @@ export function usePosterSetsDashboardState() {
         } finally {
             setBusy(null);
         }
+    };
+
+    const blockCreator = async (handle: string) => {
+        const name = String(handle || '').trim().replace(/^@+/, '');
+        if (!name) return;
+        const follow = (configDraft.creatorWhitelist || [])
+            .map((item) => String(item || '').trim().replace(/^@+/, ''))
+            .filter((item) => item && item.toLowerCase() !== name.toLowerCase());
+        const blocked = [
+            ...(configDraft.creatorBlocklist || [])
+                .map((item) => String(item || '').trim().replace(/^@+/, ''))
+                .filter((item) => item && item.toLowerCase() !== name.toLowerCase()),
+            name,
+        ];
+        await saveCreatorsConfig({ creatorWhitelist: follow, creatorBlocklist: blocked });
+        toast(`Blocked @${name} — their sets are hidden and will not be cached.`);
     };
 
     const saveSettings = async () => {
@@ -700,6 +725,7 @@ export function usePosterSetsDashboardState() {
                 tv_library: textToList(tvText),
                 movie_library: textToList(movieText),
                 creatorWhitelist: textToList(whitelistText).map((item) => item.replace(/^@+/, '')),
+                creatorBlocklist: textToList(blocklistText).map((item) => item.replace(/^@+/, '')),
                 token: configDraft.token === '********' ? undefined : configDraft.token,
                 tpdb_password: configDraft.tpdb_password === '********' ? undefined : configDraft.tpdb_password,
             };
@@ -716,6 +742,7 @@ export function usePosterSetsDashboardState() {
             setTvText(listToText(response.config.tv_library));
             setMovieText(listToText(response.config.movie_library));
             setWhitelistText(listToText(response.config.creatorWhitelist));
+            setBlocklistText(listToText(response.config.creatorBlocklist));
             toast('Poster Sets settings saved.');
             await load();
             // Only hard-refresh Browse when followed creators changed; otherwise keep durable cache.
@@ -745,6 +772,7 @@ export function usePosterSetsDashboardState() {
             setTvText(listToText(cfg.tv_library));
             setMovieText(listToText(cfg.movie_library));
             setWhitelistText(listToText(cfg.creatorWhitelist));
+            setBlocklistText(listToText(cfg.creatorBlocklist));
             const tvCount = response.imported?.tv_library?.length || 0;
             const movieCount = response.imported?.movie_library?.length || 0;
             toast(`Imported from Media Player (${tvCount} TV, ${movieCount} movie libraries).`);
@@ -1737,6 +1765,7 @@ export function usePosterSetsDashboardState() {
                 mediaType: libraryItem?.mediaType,
                 libraryItem,
                 preferredCreators: configDraft.creatorWhitelist,
+                blockedCreators: configDraft.creatorBlocklist,
                 tpdbConfigured,
                 onPartial: (partial) => {
                     if ((partial.sets?.length || 0) > 0) {
@@ -1925,8 +1954,11 @@ export function usePosterSetsDashboardState() {
 
     const searchSetsPageCount = Math.max(1, Math.ceil(searchSets.length / SEARCH_SETS_PAGE_SIZE));
     const rankedSearchSets = useMemo(
-        () => prioritizeSetsByFollowedCreators(searchSets, configDraft.creatorWhitelist),
-        [searchSets, configDraft.creatorWhitelist],
+        () => excludeBlockedCreators(
+            prioritizeSetsByFollowedCreators(searchSets, configDraft.creatorWhitelist),
+            configDraft.creatorBlocklist,
+        ),
+        [searchSets, configDraft.creatorWhitelist, configDraft.creatorBlocklist],
     );
     const pagedSearchSets = useMemo(() => {
         const page = Math.min(Math.max(1, searchSetsPage), searchSetsPageCount);
@@ -2237,6 +2269,7 @@ export function usePosterSetsDashboardState() {
         tvText, setTvText,
         movieText, setMovieText,
         whitelistText, setWhitelistText,
+        blocklistText, setBlocklistText,
         url, setUrl,
         titleCardsOnly, setTitleCardsOnly,
         bulkText, setBulkText,
@@ -2325,6 +2358,7 @@ export function usePosterSetsDashboardState() {
         openHistoryJob,
         openQueueJob,
         saveCreatorsConfig,
+        blockCreator,
         saveSettings,
         importFromPortal,
         runTest,
