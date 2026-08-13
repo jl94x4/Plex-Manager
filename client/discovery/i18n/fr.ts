@@ -1585,6 +1585,32 @@ export const fr: DeepPartial<EnCatalog> = {
         toasts: { configureWelcome: 'Bienvenue ! Configurez les réglages de votre serveur multimédia pour commencer.', settingsSaved: 'Réglages enregistrés !', syncedUsers: '{count} utilisateur(s) synchronisé(s) depuis {mediaServerLabel}.', joinDatesUpdated: '{updated} date(s) d’inscription mise(s) à jour depuis l’historique de lecture ({processed} vérifié(s)).', noJoinDatesUpdated: 'Aucune date mise à jour — {missing} utilisateur(s) sans historique de première lecture.', noJoinDatesNeeded: 'Aucune date d’inscription ne nécessite de mise à jour.', accessRevoked: 'Accès Plex révoqué avec succès.', viewingAs: 'Affichage du portail en tant que {username}.', savedLibraryWarning: 'Utilisateur enregistré, mais l’accès aux bibliothèques Plex n’a pas été mis à jour.', userUpdated: 'Utilisateur mis à jour !', userRemoved: 'Utilisateur retiré du gestionnaire.', bulkUpdated: '{count} utilisateur(s) mis à jour avec succès.', saved: 'Enregistré.', plexShareFailures: '{count} mise(s) à jour du partage Plex ont échoué.', librariesUpdated: 'Bibliothèques mises à jour pour {count} utilisateur(s).' },
         dialogs: { deleteUser: 'Voulez-vous vraiment supprimer cet utilisateur ? L’accès {mediaServerLabel} sera d’abord révoqué si possible.', shareAllLibraries: 'Partager TOUTES les bibliothèques avec {count} utilisateur(s) sélectionné(s) ?', shareSelectedLibraries: 'Partager {libraries} bibliothèque(s) sélectionnée(s) avec {count} utilisateur(s) ?', livePlexAccess: 'Cela met à jour leur accès Plex actuel.' },
     },
+    issuesAdmin: {
+        page: {
+            title: 'Signalements',
+            openSummary: '{count} signalement(s) de lecture ouvert(s) signalé(s) par les utilisateurs',
+            connectHint: 'Connectez Seerr dans Réglages → Intégrations pour gérer les signalements ici.',
+        },
+        filters: { open: 'Ouverts', resolved: 'Résolus' },
+        actions: {
+            openSeerr: 'Ouvrir Seerr', refresh: 'Actualiser', sendReply: 'Envoyer la réponse', deleting: 'Suppression…', deleteIssue: 'Supprimer le signalement',
+        },
+        labels: { updated: 'Mis à jour', reportedBy: 'Signalé par' },
+        empty: {
+            noIssues: 'Aucun signalement {filter}',
+            reportHint: 'Les utilisateurs peuvent signaler un problème de lecture depuis les titres disponibles dans Discover.',
+        },
+        errors: {
+            cannotConnect: 'Impossible de se connecter à votre application de demandes', loadIssues: 'Échec du chargement des signalements', update: 'Échec de la mise à jour du signalement',
+            addComment: 'Échec de l’ajout du commentaire', delete: 'Échec de la suppression du signalement',
+        },
+        toasts: {
+            resolvedTitle: '« {title} » résolu', reopenedTitle: '« {title} » rouvert', commentAddedTitle: 'Commentaire ajouté à « {title} »', deletedTitle: 'Signalement supprimé pour « {title} »',
+        },
+        dialogs: {
+            replyTitle: 'Répondre au signalement', replyPlaceholder: 'Répondre à l’utilisateur…', deleteBody: 'Supprimer définitivement le signalement pour {title} ?',
+        },
+    },
     person: {
         back: 'Retour à Discover',
         biography: 'Biographie',

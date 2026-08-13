@@ -1583,6 +1583,32 @@ export const en = {
         toasts: { configureWelcome: 'Welcome! Please configure your media server settings to begin.', settingsSaved: 'Settings saved successfully!', syncedUsers: 'Synced {count} users from {mediaServerLabel}.', joinDatesUpdated: 'Updated {updated} join date(s) from watch history ({processed} checked).', noJoinDatesUpdated: 'No join dates updated — {missing} user(s) had no first-play history.', noJoinDatesNeeded: 'No join dates needed updating.', accessRevoked: 'Plex access revoked successfully.', viewingAs: 'Now viewing portal as {username}.', savedLibraryWarning: 'User saved, but Plex library access was not updated.', userUpdated: 'User updated successfully!', userRemoved: 'User removed from manager.', bulkUpdated: 'Successfully updated {count} users.', saved: 'Saved.', plexShareFailures: '{count} Plex share update(s) failed.', librariesUpdated: 'Updated libraries for {count} users.' },
         dialogs: { deleteUser: 'Are you sure you want to delete this user? This will revoke {mediaServerLabel} access first where supported.', shareAllLibraries: 'Share ALL libraries with {count} selected user(s)?', shareSelectedLibraries: 'Share {libraries} selected librar(ies) with {count} user(s)?', livePlexAccess: 'This updates their live Plex access.' },
     },
+    issuesAdmin: {
+        page: {
+            title: 'Issues',
+            openSummary: '{count} open playback issues reported by users',
+            connectHint: 'Connect Seerr in Settings → Integrations to manage issues here.',
+        },
+        filters: { open: 'Open', resolved: 'Resolved' },
+        actions: {
+            openSeerr: 'Open Seerr', refresh: 'Refresh', sendReply: 'Send Reply', deleting: 'Deleting…', deleteIssue: 'Delete Issue',
+        },
+        labels: { updated: 'Updated', reportedBy: 'Reported by' },
+        empty: {
+            noIssues: 'No {filter} issues',
+            reportHint: 'Users can report playback problems from available titles in Discover.',
+        },
+        errors: {
+            cannotConnect: 'Cannot connect to your request app', loadIssues: 'Failed to load issues', update: 'Failed to update issue',
+            addComment: 'Failed to add comment', delete: 'Failed to delete issue',
+        },
+        toasts: {
+            resolvedTitle: 'Resolved "{title}"', reopenedTitle: 'Reopened "{title}"', commentAddedTitle: 'Comment added to "{title}"', deletedTitle: 'Deleted issue for "{title}"',
+        },
+        dialogs: {
+            replyTitle: 'Reply to issue', replyPlaceholder: 'Reply to the user…', deleteBody: 'Permanently delete the issue for {title}?',
+        },
+    },
     person: {
         back: 'Back to Discovery',
         biography: 'Biography',
