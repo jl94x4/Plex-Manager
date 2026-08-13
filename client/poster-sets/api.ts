@@ -325,6 +325,7 @@ export const posterSetsApi = {
         sets?: number;
         images?: number;
         imageBytes?: number;
+        diskScanning?: boolean;
         rootDir?: string;
         relativeRoot?: string;
         folders?: { titles?: string; sets?: string; images?: string };

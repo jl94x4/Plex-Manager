@@ -405,13 +405,19 @@ export const PosterSetsSettingsView: React.FC = () => {
     useEffect(() => {
         if (tab !== 'settings') return undefined;
         let cancelled = false;
+        let inFlight = false;
         const refresh = () => {
+            if (inFlight) return;
+            inFlight = true;
             void posterSetsApi.tpdbCacheStatus()
                 .then((status) => {
                     if (!cancelled) setTpdbCacheStatus(status);
                 })
                 .catch(() => {
-                    if (!cancelled) setTpdbCacheStatus(null);
+                    // Keep the last snapshot so the live panel does not blank out.
+                })
+                .finally(() => {
+                    inFlight = false;
                 });
         };
         refresh();
@@ -545,7 +551,12 @@ export const PosterSetsSettingsView: React.FC = () => {
                                             ? ` · ${tpdbCacheStatus.titles} titles`
                                             : ''}
                                     </p>
-                                ) : null}
+                                ) : (
+                                    <p className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-semibold text-muted">
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        Connecting…
+                                    </p>
+                                )}
                             </div>
 
                             <div className="grid gap-4 lg:grid-cols-12 lg:gap-5">
@@ -721,11 +732,13 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 Cache on disk
                                             </p>
                                             <p className="text-[11px] text-muted">
-                                                {(tpdbCacheStatus?.hydrate?.warmActive || 0) > 0
+                                                {tpdbCacheStatus.diskScanning
+                                                    ? 'Counting files on disk…'
+                                                    : (tpdbCacheStatus?.hydrate?.warmActive || 0) > 0
                                                     || (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
                                                     || (tpdbCacheStatus?.hydrate?.active || 0) > 0
-                                                    ? 'Live · refreshes every 2s'
-                                                    : 'Refreshes every 2s'}
+                                                        ? 'Live · refreshes every 2s'
+                                                        : 'Refreshes every 2s'}
                                             </p>
                                         </div>
                                         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -761,8 +774,9 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         </p>
                                     </div>
                                 ) : (
-                                    <div className="rounded-lg border border-dashed border-white/10 px-3 py-3 text-[11px] text-muted lg:col-span-8">
-                                        Cache usage appears here once status loads.
+                                    <div className="flex items-center gap-2 rounded-lg border border-dashed border-white/10 px-3 py-3 text-[11px] text-muted lg:col-span-8">
+                                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                        Loading live cache status…
                                     </div>
                                 )}
                             </div>
