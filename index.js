@@ -12714,6 +12714,39 @@ const sendCircularPwaIcon = async (res, buffer, size = 192) => {
     }
 };
 
+/** Tab favicon: fill the canvas (no PWA launcher padding) so corners stay transparent. */
+const FAVICON_SIZE = 180;
+
+const sendCircularFaviconPng = async (res, buffer) => {
+    const png = makeCircularPwaIconPng(buffer, FAVICON_SIZE, { badgeScale: 1 });
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.send(png);
+};
+
+const sendCircularStaticLogoFallback = async (res) => {
+    try {
+        const logoPath = path.join(process.cwd(), 'static', 'logo.png');
+        const buffer = await fs.readFile(logoPath);
+        return sendCircularFaviconPng(res, buffer);
+    } catch (e) {
+        log(`Circular static logo failed: ${e.message}`);
+        return sendStaticLogoFallback(res);
+    }
+};
+
+const sendCircularFavicon = async (res, buffer) => {
+    try {
+        if (!detectRasterImageType(buffer)) {
+            return sendCircularStaticLogoFallback(res);
+        }
+        return sendCircularFaviconPng(res, buffer);
+    } catch (e) {
+        log(`Circular favicon failed: ${e.message}`);
+        return sendCircularStaticLogoFallback(res);
+    }
+};
+
 const sendBrandingImageBuffer = async (res, buffer, contentTypeHint = '', pwaSize = 0) => {
     if (pwaSize) {
         return sendCircularPwaIcon(res, buffer, pwaSize);
@@ -12838,7 +12871,7 @@ app.get('/api/public/branding-icon', publicReadRateLimit, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
         if (normalizePwaIconSource(config.pwaIconSource) === 'application') {
-            return sendStaticLogoFallback(res);
+            return sendCircularStaticLogoFallback(res);
         }
         const profile = await getAdminProfile(config);
         const custom = String(config.customLogoUrl || '').trim();
@@ -12852,7 +12885,7 @@ app.get('/api/public/branding-icon', publicReadRateLimit, async (req, res) => {
                         if (response?.ok) {
                             const buffer = Buffer.from(await response.arrayBuffer());
                             if (buffer.length) {
-                                return sendBrandingImageBuffer(res, buffer, response.headers.get('content-type') || '');
+                                return sendCircularFavicon(res, buffer);
                             }
                         }
                     }
@@ -12863,21 +12896,35 @@ app.get('/api/public/branding-icon', publicReadRateLimit, async (req, res) => {
                 const localPath = stripBasePathFromUrl(custom.startsWith('/') ? custom : `/${custom}`).split('?')[0];
                 if (localPath.startsWith('/static/')) {
                     const fileName = path.basename(localPath);
-                    if (!fileName || fileName.includes('..')) return sendStaticLogoFallback(res);
+                    if (!fileName || fileName.includes('..')) return sendCircularStaticLogoFallback(res);
                     const assetPath = path.join(process.cwd(), 'static', fileName);
                     try {
                         await fs.access(assetPath);
                         const buffer = await fs.readFile(assetPath);
-                        return sendBrandingImageBuffer(res, buffer);
+                        return sendCircularFavicon(res, buffer);
                     } catch {
-                        return sendStaticLogoFallback(res);
+                        return sendCircularStaticLogoFallback(res);
                     }
                 }
             }
         }
 
         if (String(config.mediaServerType || '').toLowerCase() === 'jellyfin' && isJellyfinConfigured(config)) {
-            return proxyJellyfinBrandingAsset(res, ['/web/icon-transparent.png', '/web/assets/img/icon-transparent.png'], 'image/png');
+            try {
+                const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
+                for (const assetPath of ['/web/icon-transparent.png', '/web/assets/img/icon-transparent.png']) {
+                    const response = await fetchWithTimeout(`${baseUrl}${assetPath}`, {
+                        headers: jellyfinHeaders(config.jellyfinApiKey, { Accept: 'image/*,*/*;q=0.8' }),
+                    }, 15000).catch(() => null);
+                    if (!response?.ok) continue;
+                    const buffer = Buffer.from(await response.arrayBuffer());
+                    if (buffer.length) {
+                        return sendCircularFavicon(res, buffer);
+                    }
+                }
+            } catch {
+                // fall through
+            }
         }
 
         const thumb = String(profile.thumb || '').trim();
@@ -12889,7 +12936,7 @@ app.get('/api/public/branding-icon', publicReadRateLimit, async (req, res) => {
                     if (response?.ok) {
                         const buffer = Buffer.from(await response.arrayBuffer());
                         if (buffer.length) {
-                            return sendBrandingImageBuffer(res, buffer, response.headers.get('content-type') || '');
+                            return sendCircularFavicon(res, buffer);
                         }
                     }
                 }
@@ -12906,16 +12953,16 @@ app.get('/api/public/branding-icon', publicReadRateLimit, async (req, res) => {
                 if (response?.ok) {
                     const buffer = Buffer.from(await response.arrayBuffer());
                     if (buffer.length) {
-                        return sendBrandingImageBuffer(res, buffer, response.headers.get('content-type') || 'image/jpeg');
+                        return sendCircularFavicon(res, buffer);
                     }
                 }
             }
         }
 
-        return sendStaticLogoFallback(res);
+        return sendCircularStaticLogoFallback(res);
     } catch (e) {
         log(`Branding icon failed: ${e.message}`);
-        return sendStaticLogoFallback(res);
+        return sendCircularStaticLogoFallback(res);
     }
 });
 
@@ -16974,7 +17021,7 @@ const resolvePublicAssetHref = (url = '/static/logo.png') => {
 
 const resolvePortalBrandingIconHref = (config = {}, profile = {}) => {
     const href = resolvePublicAssetHref('/api/public/branding-icon');
-    return `${href}?v=${getPortalBrandingIconCacheKey(config, profile)}`;
+    return `${href}?v=${getPortalBrandingIconCacheKey(config, profile)}&round=1`;
 };
 
 const injectAppIconLinks = (html, iconHref) => {

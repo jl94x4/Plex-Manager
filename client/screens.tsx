@@ -184,16 +184,10 @@ export const updateFavicon = (thumbUrl: string | null | undefined) => {
         appleLink.setAttribute('sizes', '180x180');
         document.head.appendChild(appleLink);
     }
-    let href = logoUrl();
-    if (thumbUrl) {
-        if (thumbUrl.startsWith('http://') || thumbUrl.startsWith('https://')) {
-            href = thumbUrl;
-        } else if (thumbUrl.startsWith('/api/') || thumbUrl.startsWith('/static/')) {
-            href = resolvePortalAssetUrl(thumbUrl);
-        } else {
-            href = portalUrl(`/api/plex/image?path=${encodeURIComponent(thumbUrl)}&width=180&height=180`);
-        }
-    }
+    // Always use the circular branding-icon — raw custom logos are square PNGs
+    // (the hero/nav clip them with CSS; favicons cannot).
+    const version = encodeURIComponent(String(thumbUrl || 'default').slice(-64));
+    const href = portalUrl(`/api/public/branding-icon?v=${version}&round=1`);
     link.href = href;
     appleLink.href = href;
 };
