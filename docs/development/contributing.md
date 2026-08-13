@@ -36,14 +36,22 @@ The app builds before it starts. During frontend work, rerun `npm run build` aft
 
 ## Translations
 
-UI chrome for Discover, Request, and Home Wrap-Up is translated via TypeScript catalogs under `client/discovery/i18n/`. The header language menu stores the choice in `localStorage` (`discoverUiLocale`). Missing keys fall back to English, so a half-translated locale still works — unfinished screens stay in English until strings are added.
+UI chrome for Discover, Request, and Home Wrap-Up is translated via TypeScript catalogs under `client/discovery/i18n/`. The language selector stores the choice in the user's preferences when available and keeps `localStorage` (`discoverUiLocale`) as a compatibility fallback. Missing keys fall back to English, so a partially translated locale still works — unfinished screens stay in English until strings are added.
 
-**Current locales:** English (`en`), French (`fr`), German (`de`), Spanish (`es`).
+**Current locales:** English (`en`), French (`fr`), German (`de`), Spanish (`es`), Brazilian Portuguese (`pt-BR`), Italian (`it`), Japanese (`ja`), Polish (`pl`), Dutch (`nl`), and Russian (`ru`).
 
 | File | Role |
 | --- | --- |
 | `client/discovery/i18n/en.ts` | Source catalog (complete English strings) |
-| `client/discovery/i18n/fr.ts` / `de.ts` / `es.ts` | Locale overlays (`DeepPartial` of English) |
+| `client/discovery/i18n/fr.ts` | French (`fr`) locale overlay (`DeepPartial` of English) |
+| `client/discovery/i18n/de.ts` | German (`de`) locale overlay (`DeepPartial` of English) |
+| `client/discovery/i18n/es.ts` | Spanish (`es`) locale overlay (`DeepPartial` of English) |
+| `client/discovery/i18n/pt-BR.ts` | Brazilian Portuguese (`pt-BR`) locale overlay (`DeepPartial` of English) |
+| `client/discovery/i18n/it.ts` | Italian (`it`) locale overlay (`DeepPartial` of English) |
+| `client/discovery/i18n/ja.ts` | Japanese (`ja`) locale overlay (`DeepPartial` of English) |
+| `client/discovery/i18n/pl.ts` | Polish (`pl`) locale overlay (`DeepPartial` of English) |
+| `client/discovery/i18n/nl.ts` | Dutch (`nl`) locale overlay (`DeepPartial` of English) |
+| `client/discovery/i18n/ru.ts` | Russian (`ru`) locale overlay (`DeepPartial` of English) |
 | `client/discovery/i18n/types.ts` | `DISCOVER_LOCALES` list for the language menu |
 | `client/discovery/i18n/index.tsx` | Catalog registry + `t('dot.path')` helper |
 
@@ -65,7 +73,7 @@ For the full localization workflow and current project coverage, see the [Locali
 
 ### Add a new language
 
-1. Copy `fr.ts` to e.g. `it.ts` and translate the strings (or start from a minimal subset — English fills gaps).
+1. Add a locale overlay such as `it.ts` under `client/discovery/i18n/` and translate the strings (you may copy an existing overlay or start from a minimal subset — English fills gaps).
 2. Register the locale code in `DISCOVER_LOCALES` inside `types.ts` (`code`, `label`, `nativeLabel`).
 3. Import the catalog in `index.tsx` and add it to the `catalogs` map.
 4. Build and verify the new option appears in the language menu and Discover metadata requests send the right locale header.
