@@ -362,6 +362,7 @@ export const PosterSetsSettingsView: React.FC = () => {
         source: 'full' | 'recent';
         skipCached: boolean;
         followedPrefetchOnly: boolean;
+        followedCreatorsOnly: boolean;
     }>(() => ({
         media: configDraft.tpdbCacheWarmMedia === 'movie' || configDraft.tpdbCacheWarmMedia === 'show'
             ? configDraft.tpdbCacheWarmMedia
@@ -369,6 +370,7 @@ export const PosterSetsSettingsView: React.FC = () => {
         source: configDraft.tpdbCacheWarmSource === 'recent' ? 'recent' : 'full',
         skipCached: configDraft.tpdbCacheSkipCached !== false,
         followedPrefetchOnly: configDraft.tpdbPrioritizeFollowedCreators !== false,
+        followedCreatorsOnly: configDraft.tpdbCacheFollowedCreatorsOnly === true,
     }));
     const [activityFilter, setActivityFilter] = useState<'all' | 'cache' | 'prefetch' | 'error' | 'followed'>('all');
 
@@ -380,21 +382,24 @@ export const PosterSetsSettingsView: React.FC = () => {
             const source = configDraft.tpdbCacheWarmSource === 'recent' ? 'recent' : 'full';
             const skipCached = configDraft.tpdbCacheSkipCached !== false;
             const followedPrefetchOnly = configDraft.tpdbPrioritizeFollowedCreators !== false;
+            const followedCreatorsOnly = configDraft.tpdbCacheFollowedCreatorsOnly === true;
             if (
                 prev.media === media
                 && prev.source === source
                 && prev.skipCached === skipCached
                 && prev.followedPrefetchOnly === followedPrefetchOnly
+                && prev.followedCreatorsOnly === followedCreatorsOnly
             ) {
                 return prev;
             }
-            return { media, source, skipCached, followedPrefetchOnly };
+            return { media, source, skipCached, followedPrefetchOnly, followedCreatorsOnly };
         });
     }, [
         configDraft.tpdbCacheWarmMedia,
         configDraft.tpdbCacheWarmSource,
         configDraft.tpdbCacheSkipCached,
         configDraft.tpdbPrioritizeFollowedCreators,
+        configDraft.tpdbCacheFollowedCreatorsOnly,
     ]);
 
     useEffect(() => {
@@ -649,6 +654,24 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         className="!py-3"
                                     />
                                     <SettingsToggleRow
+                                        title="Only cache followed creators"
+                                        description="Skip downloading set pages and images from creators you do not follow. Library titles still resolve; only Creators you follow fill the image cache. Add people under Creators you follow first."
+                                        checked={
+                                            configDraft.tpdbLocalCacheEnabled === true
+                                            && configDraft.tpdbCacheFollowedCreatorsOnly === true
+                                        }
+                                        onChange={(next) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            tpdbCacheFollowedCreatorsOnly: next,
+                                            ...(next ? {
+                                                tpdbLocalCacheEnabled: true,
+                                                tpdbPrioritizeFollowedCreators: true,
+                                            } : {}),
+                                        }))}
+                                        disabled={configDraft.tpdbLocalCacheEnabled !== true}
+                                        className="!py-3"
+                                    />
+                                    <SettingsToggleRow
                                         title="Parallel cache workers (experimental)"
                                         description="Run 5 cache workers with separate TPDB sessions (~5× title resolve). Turn off if you hit rate limits or Cloudflare blocks."
                                         checked={configDraft.tpdbLocalCacheEnabled === true && configDraft.tpdbWarmParallelWorkers === true}
@@ -812,7 +835,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 <div className="overflow-hidden rounded-lg border border-white/10 bg-black/25">
                                     <div className="border-b border-white/10 px-3 py-2 sm:px-4">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Build scope</p>
-                                        <p className="mt-0.5 text-[11px] text-muted">Save settings to keep Media, library source, and skip-cached for later builds.</p>
+                                        <p className="mt-0.5 text-[11px] text-muted">Save settings to keep Media, library source, skip-cached, and followed-only for later builds.</p>
                                     </div>
                                     <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-white/10">
                                         <div className="grid gap-3 p-3 sm:grid-cols-2 sm:gap-4 sm:p-4">
@@ -899,6 +922,21 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                             );
                                                         });
                                                 }}
+                                                border
+                                                className="!py-2.5"
+                                            />
+                                            <SettingsToggleRow
+                                                title="Only cache followed creators"
+                                                description="Do not prefetch set pages or images from creators outside Creators you follow. Save settings to keep this for catch-up builds."
+                                                checked={warmScope.followedCreatorsOnly}
+                                                onChange={(next) => {
+                                                    setWarmScope((prev) => ({ ...prev, followedCreatorsOnly: next }));
+                                                    setConfigDraft((prev) => ({
+                                                        ...prev,
+                                                        tpdbCacheFollowedCreatorsOnly: next,
+                                                        ...(next ? { tpdbPrioritizeFollowedCreators: true } : {}),
+                                                    }));
+                                                }}
                                                 border={false}
                                                 className="!py-2.5"
                                             />
@@ -913,10 +951,21 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         onClick={async () => {
                                             setBusy('tpdb-cache');
                                             try {
+                                                if (
+                                                    warmScope.followedCreatorsOnly
+                                                    && !(configDraft.creatorWhitelist || []).length
+                                                ) {
+                                                    toast(
+                                                        'Only cache followed creators is on, but Creators you follow is empty. Add creators first, or turn the option off.',
+                                                        'error',
+                                                    );
+                                                    return;
+                                                }
                                                 const result = await posterSetsApi.warmTpdbLibraryCache([], {
                                                     skipCached: warmScope.skipCached,
                                                     force: !warmScope.skipCached,
                                                     followedPrefetchOnly: warmScope.followedPrefetchOnly,
+                                                    followedCreatorsOnly: warmScope.followedCreatorsOnly,
                                                     fromLibrary: true,
                                                     media: warmScope.media,
                                                     source: warmScope.source,

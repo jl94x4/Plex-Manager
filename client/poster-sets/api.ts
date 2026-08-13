@@ -412,6 +412,7 @@ export const posterSetsApi = {
         force?: boolean;
         skipCached?: boolean;
         followedPrefetchOnly?: boolean;
+        followedCreatorsOnly?: boolean;
         fromLibrary?: boolean;
         media?: 'all' | 'movie' | 'show';
         source?: 'full' | 'recent';
@@ -425,6 +426,8 @@ export const posterSetsApi = {
         const payloadExtra = {
             ...(options.force === true || options.skipCached === false ? { force: true } : {}),
             ...(options.followedPrefetchOnly === true ? { followedPrefetchOnly: true } : {}),
+            ...(options.followedCreatorsOnly === true ? { followedCreatorsOnly: true } : {}),
+            ...(options.followedCreatorsOnly === false ? { followedCreatorsOnly: false } : {}),
             ...(options.fromLibrary === true ? {
                 fromLibrary: true,
                 media: options.media || 'all',

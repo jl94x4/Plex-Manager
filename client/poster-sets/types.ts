@@ -35,6 +35,8 @@ export type PosterSetsConfig = {
     tpdbWarmParallelWorkers?: boolean;
     /** Prefetch followed creators' sets before other creators when caching. */
     tpdbPrioritizeFollowedCreators?: boolean;
+    /** Only prefetch/cache set pages and images from Creators you follow. */
+    tpdbCacheFollowedCreatorsOnly?: boolean;
     /** Attempt TPDB login for advanced id search. Off = public title search only. */
     tpdbUseLogin?: boolean;
     /** Soft disk budget for tpdb-image-cache (bytes). */
@@ -434,6 +436,7 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     tpdbAggressivePrefetch: false,
     tpdbWarmParallelWorkers: false,
     tpdbPrioritizeFollowedCreators: true,
+    tpdbCacheFollowedCreatorsOnly: false,
     tpdbUseLogin: true,
     tpdbCacheMaxBytes: 2 * 1024 * 1024 * 1024,
     tpdbCacheRefreshHour: 3,
