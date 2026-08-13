@@ -9,6 +9,12 @@ const EVENT_LABELS: Record<string, string> = {
     episode: 'New episode',
     admin_pending: 'Admin — new pending request',
     not_released: 'Not released yet',
+    collexions_failed: 'Admin — ColleXions failed',
+    scanner_failed: 'Admin — Scanner failed',
+    status_down: 'Admin — Status check down',
+    status_up: 'Admin — Status check recovered',
+    media_job_failed: 'Admin — Media Automation job failed',
+    media_job_completed: 'Admin — Media Automation job finished',
 };
 
 const FIELD_LABELS: Record<string, string> = {

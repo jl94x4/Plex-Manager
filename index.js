@@ -30,6 +30,7 @@ import {
     listLog,
     processOne,
     startScannerWorker,
+    setScannerFailureNotify,
     createBasicAuthMiddleware,
     pathsFromSonarrEvent,
     pathsFromRadarrEvent,
@@ -1196,9 +1197,14 @@ import {
     applyCollexionsBundledDefaults,
     getCollexionsEmbeddedStatus,
     isCollexionsBundledAvailable,
+    setCollexionsUnexpectedExitHandler,
     syncCollexionsEmbeddedWorker,
     COLLEXIONS_LONG_PROXY_MS,
 } from './lib/collexions-embedded.js';
+import {
+    startCollexionsStatusWatcher,
+    setCollexionsFailureNotify,
+} from './lib/collexions-status-watch.js';
 import {
     normalizeArrConfig,
     migrateArrConfig,
@@ -1359,6 +1365,11 @@ import {
     shouldSendRequestAvailableEmail,
 } from './lib/notifications/requestAvailable.js';
 import { notifyRequestNotReleasedYet } from './lib/notifications/requestNotReleased.js';
+import {
+    notifyOpsAdmins,
+    applyStatusHealthNotifyState,
+    normalizeStatusNotifyDownAfterMinutes,
+} from './lib/notifications/opsNotify.js';
 import { normalizeReleaseDatePreference, isFutureReleaseDate } from './lib/notifications/releaseDates.js';
 import {
     isDiscoverNowPlayingEnabled,
@@ -2022,6 +2033,26 @@ const loadFile = async (path, defaultContent) => {
         throw error;
     } finally {
         unlock();
+    }
+};
+
+const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs } = {}) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        return await notifyOpsAdmins({
+            event,
+            config,
+            title,
+            body,
+            href,
+            dedupeKey,
+            cooldownMs,
+            loadUsers: () => loadFile(USERS_PATH, []),
+            log,
+        });
+    } catch (error) {
+        log(`[ops-notify] ${event} failed: ${error?.message || error}`);
+        return { notified: false };
     }
 };
 
@@ -3803,6 +3834,12 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyNewEpisodeEmail,
             notifyNewEpisodeInApp,
             notifyNewEpisodeWebPush,
+            notifyCollexionsFailed,
+            notifyScannerFailed,
+            notifyStatusDown,
+            notifyStatusUp,
+            notifyMediaJobFailed,
+            notifyMediaJobCompleted,
             notifyWebPush,
             showDiscoverNowPlaying,
             uiLocale,
@@ -3847,6 +3884,12 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyNewEpisodeEmail,
             notifyNewEpisodeInApp,
             notifyNewEpisodeWebPush,
+            notifyCollexionsFailed,
+            notifyScannerFailed,
+            notifyStatusDown,
+            notifyStatusUp,
+            notifyMediaJobFailed,
+            notifyMediaJobCompleted,
             notifyWebPush,
             showDiscoverNowPlaying,
         };
@@ -13177,8 +13220,11 @@ app.post('/api/status/config', requireAuth, requireAdmin, async (req, res) => {
         statusConfig = {
             services: sanitizedServices,
             groups,
-            announcement: announcement || null,
+            announcement: announcement !== undefined ? (announcement || null) : (statusConfig.announcement || null),
             suppressedManagedIds: [...previousSuppressed],
+            notifyDownAfterMinutes: normalizeStatusNotifyDownAfterMinutes(
+                req.body?.notifyDownAfterMinutes ?? statusConfig.notifyDownAfterMinutes,
+            ),
         };
         await saveFile(STATUS_CONFIG_PATH, statusConfig);
         res.json({ success: true, message: 'Status configuration updated successfully.' });
@@ -17855,6 +17901,7 @@ async function loadStatusState() {
     } catch (e) {
         healthData = {};
     }
+    statusConfig.notifyDownAfterMinutes = normalizeStatusNotifyDownAfterMinutes(statusConfig.notifyDownAfterMinutes);
 }
 
 async function saveHealthData() {
@@ -18182,6 +18229,21 @@ async function runMonitorCycle() {
         }
 
         recordStatusIncident(record, previousStatus, result.status, now);
+        const delayMs = normalizeStatusNotifyDownAfterMinutes(statusConfig.notifyDownAfterMinutes) * 60 * 1000;
+        const statusEvents = applyStatusHealthNotifyState({
+            record,
+            previousStatus,
+            nextStatus: result.status,
+            now,
+            delayMs,
+        });
+        for (const event of statusEvents) {
+            const name = service.name || service.id || 'Service';
+            void notifyOps(event, {
+                title: name,
+                dedupeKey: `${event}:${service.id}:${event === 'status_down' ? (record.unhealthySince || now) : now}`,
+            });
+        }
         pruneHealthRecord(record, now);
 
         let totalUp = 0;
@@ -23751,6 +23813,10 @@ mediaAutomationService = createMediaAutomation({
                         8,
                     );
                 }
+                await notifyOps('media_job_failed', {
+                    title: `${entry.message || 'Job failed'}${entry.jobId ? ` (Job #${entry.jobId})` : ''}`,
+                    dedupeKey: `media-job-failed:${entry.jobId || entry.message || Date.now()}`,
+                });
                 if (config.mediaAutomation?.notifyOnFailBurst) {
                     const now = Date.now();
                     if (!globalThis.__maFailBurst) {
@@ -23790,6 +23856,16 @@ mediaAutomationService = createMediaAutomation({
                 }
             } catch (error) {
                 log(`[media-automation] Gotify scan notify failed: ${error.message}`);
+            }
+        }
+        if (entry.type === 'job.completed') {
+            try {
+                await notifyOps('media_job_completed', {
+                    title: `${entry.message || 'Job completed'}${entry.jobId ? ` (Job #${entry.jobId})` : ''}`,
+                    dedupeKey: `media-job-completed:${entry.jobId || Date.now()}`,
+                });
+            } catch (error) {
+                log(`[media-automation] job complete notify failed: ${error.message}`);
             }
         }
         // Scanner / Plex refresh is handled only by onMediaCommitted (gated by
@@ -26859,6 +26935,33 @@ app.listen(PORT, BIND_HOST, async () => {
     startSeerrAvailableNotifyBackgroundTask();
     startDiscoveryAvailabilityCacheBackgroundTask();
     startScannerWorker(async () => scannerPortalConfig(await loadFile(CONFIG_PATH, {})));
+    setScannerFailureNotify((payload) => {
+        const folder = payload?.folder || 'unknown path';
+        const error = payload?.error || 'Scanner failed';
+        const label = payload?.title ? `${payload.title}: ${error}` : `${folder}: ${error}`;
+        const noTargets = payload?.kind === 'no-targets';
+        return notifyOps('scanner_failed', {
+            title: label,
+            body: error,
+            dedupeKey: noTargets ? 'scanner:no-targets' : `scanner:${folder}`,
+            cooldownMs: noTargets ? 6 * 60 * 60 * 1000 : undefined,
+        });
+    });
+    setCollexionsFailureNotify((payload) => notifyOps('collexions_failed', {
+        title: payload?.message || 'ColleXions failed',
+        dedupeKey: `collexions:${payload?.signature || payload?.message || 'failed'}`,
+    }));
+    setCollexionsUnexpectedExitHandler(({ code, signal }) => notifyOps('collexions_failed', {
+        title: `Embedded worker exited (code=${code}, signal=${signal || 'none'})`,
+        dedupeKey: `collexions:exit:${code}:${signal || 'none'}`,
+    }));
+    startCollexionsStatusWatcher({
+        configDir: CONFIG_DIR,
+        getEnabled: async () => {
+            const cfg = await loadFile(CONFIG_PATH, {});
+            return !!cfg.collexionsEnabled;
+        },
+    });
     void refreshScannerAuthCache();
     try {
         setPosterSetsNotifyDigest(async ({ title, message }) => {

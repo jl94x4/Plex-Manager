@@ -577,12 +577,16 @@ export const SettingsDashboard: React.FC = () => {
     const [ntfyPriority, setNtfyPriority] = useState(3);
     const [ntfyEvents, setNtfyEvents] = useState<Record<string, boolean>>({
         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
+        collexions_failed: true, scanner_failed: true, status_down: true, status_up: true,
+        media_job_failed: true, media_job_completed: false,
     });
     const [webhookEnabled, setWebhookEnabled] = useState(false);
     const [webhookUrl, setWebhookUrl] = useState('');
     const [webhookHeadersJson, setWebhookHeadersJson] = useState('');
     const [webhookEvents, setWebhookEvents] = useState<Record<string, boolean>>({
         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
+        collexions_failed: false, scanner_failed: false, status_down: false, status_up: false,
+        media_job_failed: false, media_job_completed: false,
     });
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
     const [tautulliConfigured, setTautulliConfigured] = useState(false);
@@ -1369,10 +1373,14 @@ export const SettingsDashboard: React.FC = () => {
                 initialSettings.ntfyEvents && typeof initialSettings.ntfyEvents === 'object'
                     ? {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
+                        collexions_failed: true, scanner_failed: true, status_down: true, status_up: true,
+                        media_job_failed: true, media_job_completed: false,
                         ...initialSettings.ntfyEvents,
                     }
                     : {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
+                        collexions_failed: true, scanner_failed: true, status_down: true, status_up: true,
+                        media_job_failed: true, media_job_completed: false,
                     },
             );
             setWebhookEnabled(!!initialSettings.webhookEnabled);
@@ -1382,10 +1390,14 @@ export const SettingsDashboard: React.FC = () => {
                 initialSettings.webhookEvents && typeof initialSettings.webhookEvents === 'object'
                     ? {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
+                        collexions_failed: false, scanner_failed: false, status_down: false, status_up: false,
+                        media_job_failed: false, media_job_completed: false,
                         ...initialSettings.webhookEvents,
                     }
                     : {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
+                        collexions_failed: false, scanner_failed: false, status_down: false, status_up: false,
+                        media_job_failed: false, media_job_completed: false,
                     },
             );
             if (initialSettings.watchHistorySource !== undefined) {

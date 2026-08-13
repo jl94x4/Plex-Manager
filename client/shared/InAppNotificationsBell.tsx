@@ -11,6 +11,10 @@ import {
     ClipboardList,
     Inbox,
     LifeBuoy,
+    Radar,
+    Layers,
+    AlertTriangle,
+    Cpu,
     Sparkles,
     Trash2,
     Tv,
@@ -70,6 +74,18 @@ const typeVisual = (type?: string) => {
             return { Icon: Bell, tone: 'text-plex bg-plex/15 border-plex/30' };
         case 'support_ticket':
             return { Icon: LifeBuoy, tone: 'text-plex bg-plex/15 border-plex/30' };
+        case 'collexions_failed':
+            return { Icon: Layers, tone: 'text-rose-400 bg-rose-500/15 border-rose-500/30' };
+        case 'scanner_failed':
+            return { Icon: Radar, tone: 'text-amber-300 bg-amber-500/15 border-amber-500/30' };
+        case 'status_down':
+            return { Icon: AlertTriangle, tone: 'text-rose-400 bg-rose-500/15 border-rose-500/30' };
+        case 'status_up':
+            return { Icon: CircleCheck, tone: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' };
+        case 'media_job_failed':
+            return { Icon: CircleX, tone: 'text-rose-400 bg-rose-500/15 border-rose-500/30' };
+        case 'media_job_completed':
+            return { Icon: Cpu, tone: 'text-plex bg-plex/15 border-plex/30' };
         default:
             return { Icon: Inbox, tone: 'text-plex bg-plex/15 border-plex/30' };
     }
@@ -293,6 +309,10 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         }
         if (dest.kind === 'support') {
             onNavigate?.('support', { path: dest.path });
+            return;
+        }
+        if (dest.kind === 'route') {
+            onNavigate?.(dest.route);
             return;
         }
         if (dest.kind === 'external' && dest.href.startsWith('/')) {

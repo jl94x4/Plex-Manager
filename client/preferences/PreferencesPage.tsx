@@ -43,6 +43,7 @@ const PrefToggle: React.FC<{
 export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }) => {
     const { t } = useDiscoverI18n();
     const user = sessionInfo?.account;
+    const isAdmin = !!(sessionInfo?.session?.isAdmin || user?.isAdmin);
     const [toast, setToast] = useState<ToastMessage | null>(null);
     const [busy, setBusy] = useState(false);
 
@@ -71,6 +72,12 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
         || user?.notifyNewEpisodeInApp === true
         || user?.notifyNewEpisodeWebPush === true,
     );
+    const [notifyCollexionsFailed, setNotifyCollexionsFailed] = useState(user?.notifyCollexionsFailed !== false);
+    const [notifyScannerFailed, setNotifyScannerFailed] = useState(user?.notifyScannerFailed !== false);
+    const [notifyStatusDown, setNotifyStatusDown] = useState(user?.notifyStatusDown !== false);
+    const [notifyStatusUp, setNotifyStatusUp] = useState(user?.notifyStatusUp !== false);
+    const [notifyMediaJobFailed, setNotifyMediaJobFailed] = useState(user?.notifyMediaJobFailed !== false);
+    const [notifyMediaJobCompleted, setNotifyMediaJobCompleted] = useState(user?.notifyMediaJobCompleted === true);
     const [notifyWebPush, setNotifyWebPush] = useState(user?.notifyWebPush !== false);
     const [browserPushReady, setBrowserPushReady] = useState(false);
     const browserPushSupportedFlag = webPushSupported();
@@ -101,6 +108,12 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
             || user?.notifyNewEpisodeInApp === true
             || user?.notifyNewEpisodeWebPush === true,
         );
+        setNotifyCollexionsFailed(user?.notifyCollexionsFailed !== false);
+        setNotifyScannerFailed(user?.notifyScannerFailed !== false);
+        setNotifyStatusDown(user?.notifyStatusDown !== false);
+        setNotifyStatusUp(user?.notifyStatusUp !== false);
+        setNotifyMediaJobFailed(user?.notifyMediaJobFailed !== false);
+        setNotifyMediaJobCompleted(user?.notifyMediaJobCompleted === true);
         setNotifyWebPush(user?.notifyWebPush !== false);
         setOptOutNewsletter(!!user?.optOutNewsletter);
     }, [
@@ -120,6 +133,12 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
         user?.notifyNewEpisodeEmail,
         user?.notifyNewEpisodeInApp,
         user?.notifyNewEpisodeWebPush,
+        user?.notifyCollexionsFailed,
+        user?.notifyScannerFailed,
+        user?.notifyStatusDown,
+        user?.notifyStatusUp,
+        user?.notifyMediaJobFailed,
+        user?.notifyMediaJobCompleted,
         user?.notifyWebPush,
         user?.optOutNewsletter,
     ]);
@@ -403,6 +422,102 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
                             )}
                         </div>
                     </DashboardPanel>
+                    {isAdmin && (
+                        <DashboardPanel title={t('preferencesPage.adminNotificationsTitle')} subtitle={t('preferencesPage.adminNotificationsSubtitle')}>
+                            <div className="flex flex-col gap-5">
+                                <PrefToggle
+                                    title={t('homeDashboard.collexionsFailedAlerts')}
+                                    hint={t('homeDashboard.collexionsFailedAlertsHint')}
+                                    on={notifyCollexionsFailed}
+                                    onToggle={() => {
+                                        const next = !notifyCollexionsFailed;
+                                        void savePref(
+                                            { notifyCollexionsFailed: next },
+                                            () => setNotifyCollexionsFailed(next),
+                                            t('preferencesPage.notificationsUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('homeDashboard.toggleCollexionsFailedAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.scannerFailedAlerts')}
+                                    hint={t('homeDashboard.scannerFailedAlertsHint')}
+                                    on={notifyScannerFailed}
+                                    onToggle={() => {
+                                        const next = !notifyScannerFailed;
+                                        void savePref(
+                                            { notifyScannerFailed: next },
+                                            () => setNotifyScannerFailed(next),
+                                            t('preferencesPage.notificationsUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('homeDashboard.toggleScannerFailedAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.statusDownAlerts')}
+                                    hint={t('homeDashboard.statusDownAlertsHint')}
+                                    on={notifyStatusDown}
+                                    onToggle={() => {
+                                        const next = !notifyStatusDown;
+                                        void savePref(
+                                            { notifyStatusDown: next },
+                                            () => setNotifyStatusDown(next),
+                                            t('preferencesPage.notificationsUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('homeDashboard.toggleStatusDownAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.statusUpAlerts')}
+                                    hint={t('homeDashboard.statusUpAlertsHint')}
+                                    on={notifyStatusUp}
+                                    onToggle={() => {
+                                        const next = !notifyStatusUp;
+                                        void savePref(
+                                            { notifyStatusUp: next },
+                                            () => setNotifyStatusUp(next),
+                                            t('preferencesPage.notificationsUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('homeDashboard.toggleStatusUpAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.mediaJobFailedAlerts')}
+                                    hint={t('homeDashboard.mediaJobFailedAlertsHint')}
+                                    on={notifyMediaJobFailed}
+                                    onToggle={() => {
+                                        const next = !notifyMediaJobFailed;
+                                        void savePref(
+                                            { notifyMediaJobFailed: next },
+                                            () => setNotifyMediaJobFailed(next),
+                                            t('preferencesPage.notificationsUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('homeDashboard.toggleMediaJobFailedAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.mediaJobCompletedAlerts')}
+                                    hint={t('homeDashboard.mediaJobCompletedAlertsHint')}
+                                    on={notifyMediaJobCompleted}
+                                    onToggle={() => {
+                                        const next = !notifyMediaJobCompleted;
+                                        void savePref(
+                                            { notifyMediaJobCompleted: next },
+                                            () => setNotifyMediaJobCompleted(next),
+                                            t('preferencesPage.notificationsUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('homeDashboard.toggleMediaJobCompletedAria')}
+                                    disabled={busy}
+                                />
+                            </div>
+                        </DashboardPanel>
+                    )}
                 </div>
             )}
         </DashboardPageShell>

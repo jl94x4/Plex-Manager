@@ -9,6 +9,7 @@ export type NotificationDestination =
     | { kind: 'home'; labelKey: string }
     | { kind: 'settings'; labelKey: string }
     | { kind: 'support'; path: string; labelKey: string }
+    | { kind: 'route'; route: string; labelKey: string }
     | { kind: 'external'; href: string; labelKey: string };
 
 export type NotificationLike = {
@@ -82,6 +83,19 @@ export const resolveNotificationDestination = (item: NotificationLike): Notifica
 
     if (href.startsWith('/settings')) {
         return { kind: 'settings', labelKey: 'notifications.openSettings' };
+    }
+
+    if (href.startsWith('/collexions') || type === 'collexions_failed') {
+        return { kind: 'route', route: 'collexions', labelKey: 'notifications.openCollexions' };
+    }
+    if (href.startsWith('/scanner') || type === 'scanner_failed') {
+        return { kind: 'route', route: 'scanner', labelKey: 'notifications.openScanner' };
+    }
+    if (href.startsWith('/status') || type === 'status_down' || type === 'status_up') {
+        return { kind: 'route', route: 'status', labelKey: 'notifications.openStatus' };
+    }
+    if (href.startsWith('/media-automation') || type === 'media_job_failed' || type === 'media_job_completed') {
+        return { kind: 'route', route: 'media-automation', labelKey: 'notifications.openMediaAutomation' };
     }
 
     if (href && isInternalPath(href) && !href.startsWith('//')) {

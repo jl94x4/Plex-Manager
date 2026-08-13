@@ -313,6 +313,12 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
         season: 'Season',
         episode: 'New episode',
         admin_pending: 'Admin pending',
+        collexions_failed: 'ColleXions failed',
+        scanner_failed: 'Scanner failed',
+        status_down: 'Status down',
+        status_up: 'Status recovered',
+        media_job_failed: 'Media job failed',
+        media_job_completed: 'Media job finished',
     };
 
     const refresh = useCallback(async () => {

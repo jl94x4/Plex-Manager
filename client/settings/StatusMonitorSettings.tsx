@@ -14,7 +14,8 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
         if (config) {
             setLocalConfig({
                 groups: config.groups || [],
-                services: config.services || []
+                services: config.services || [],
+                notifyDownAfterMinutes: Math.max(1, Math.min(1440, Math.round(Number(config.notifyDownAfterMinutes) || 5))),
             });
         }
     }, [config]);
@@ -100,6 +101,23 @@ export const StatusMonitorSettings: React.FC<{ config: any; onChange: (cfg: any)
 
     return (
         <div className="flex flex-col gap-8 w-full">
+            <div>
+                <h4 className="font-bold text-xl text-text mb-2">{t('settings.statusMonitor.notifyDownAfterMinutes')}</h4>
+                <p className="text-muted text-sm mb-3 max-w-2xl">{t('settings.statusMonitor.notifyDownAfterHint')}</p>
+                <input
+                    type="number"
+                    min={1}
+                    max={1440}
+                    value={localConfig.notifyDownAfterMinutes ?? 5}
+                    onChange={(e) => {
+                        const notifyDownAfterMinutes = Math.max(1, Math.min(1440, Math.round(Number(e.target.value) || 5)));
+                        const newConfig = { ...localConfig, notifyDownAfterMinutes };
+                        setLocalConfig(newConfig);
+                        onChange(newConfig);
+                    }}
+                    className="w-28 p-3 rounded-lg bg-background border border-border focus:border-plex outline-none text-sm"
+                />
+            </div>
             <div>
                 <div className="flex justify-between items-center mb-4 border-b border-border pb-3">
                     <h4 className="font-bold text-xl text-text">{t('settings.statusMonitor.serviceGroups')}</h4>

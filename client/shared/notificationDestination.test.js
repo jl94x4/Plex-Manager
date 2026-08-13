@@ -54,6 +54,18 @@ const resolveNotificationDestination = (item = {}) => {
     if (href.startsWith('/settings')) {
         return { kind: 'settings', labelKey: 'notifications.openSettings' };
     }
+    if (href.startsWith('/collexions') || type === 'collexions_failed') {
+        return { kind: 'route', route: 'collexions', labelKey: 'notifications.openCollexions' };
+    }
+    if (href.startsWith('/scanner') || type === 'scanner_failed') {
+        return { kind: 'route', route: 'scanner', labelKey: 'notifications.openScanner' };
+    }
+    if (href.startsWith('/status') || type === 'status_down' || type === 'status_up') {
+        return { kind: 'route', route: 'status', labelKey: 'notifications.openStatus' };
+    }
+    if (href.startsWith('/media-automation') || type === 'media_job_failed' || type === 'media_job_completed') {
+        return { kind: 'route', route: 'media-automation', labelKey: 'notifications.openMediaAutomation' };
+    }
     if (href && href.startsWith('/') && !href.startsWith('//')) {
         return { kind: 'external', href, labelKey: 'notifications.openLink' };
     }
@@ -115,4 +127,13 @@ test('support ticket href opens support inbox', () => {
     });
     assert.equal(dest.kind, 'support');
     assert.equal(dest.path, '/support?ticket=12');
+});
+
+test('ops alerts deep-link to the matching admin page', () => {
+    assert.deepEqual(resolveNotificationDestination({ type: 'collexions_failed', href: '/collexions' }), {
+        kind: 'route', route: 'collexions', labelKey: 'notifications.openCollexions',
+    });
+    assert.equal(resolveNotificationDestination({ type: 'scanner_failed' }).route, 'scanner');
+    assert.equal(resolveNotificationDestination({ type: 'status_down' }).route, 'status');
+    assert.equal(resolveNotificationDestination({ type: 'media_job_completed' }).route, 'media-automation');
 });
