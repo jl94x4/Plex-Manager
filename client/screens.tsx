@@ -8553,12 +8553,20 @@ const ServiceCustomSelect = ({ value, onChange, options }: { value: string, onCh
 };
 
 export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, isPublic?: boolean }> = ({ onBack, isAdmin, isPublic }) => {
+    const { t } = useDiscoverI18n();
     const [statusData, setStatusData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [hasError, setHasError] = useState(false);
     const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'analytics'>('overview');
     const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
     const [period, setPeriod] = useState<StatusPeriod>('90d');
+
+    const displayStatus = (value: string) => ({
+        online: t('statusPage.status.online'),
+        degraded: t('statusPage.status.degraded'),
+        offline: t('statusPage.status.offline'),
+        unknown: t('statusPage.status.unknown'),
+    }[value] || t('statusPage.status.unknown'));
 
     const fetchStatus = useCallback(async () => {
         try {
@@ -8593,9 +8601,9 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
             <DashboardPageShell>
                 <DashboardHero
                     accent="emerald"
-                    eyebrow="Status Monitor"
-                    title="Server Status"
-                    description="Live health checks and uptime history for your stack."
+                    eyebrow={t('statusPage.page.eyebrow')}
+                    title={t('statusPage.page.title')}
+                    description={t('statusPage.page.description')}
                     icon={<Activity className="h-3.5 w-3.5" />}
                     actions={isPublic ? (
                         <button
@@ -8603,15 +8611,15 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                             onClick={onBack}
                             className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-white/5 hover:text-text"
                         >
-                            <ChevronLeft className="h-4 w-4" /> Back
+                            <ChevronLeft className="h-4 w-4" /> {t('common.back')}
                         </button>
                     ) : undefined}
                 />
                 {hasError ? (
                     <div className="rounded-2xl border border-white/10 bg-black/25 p-8 text-center">
-                        <p className="text-status-expired mb-4">Failed to load status data.</p>
+                        <p className="text-status-expired mb-4">{t('statusPage.errors.loadFailed')}</p>
                         <button type="button" onClick={() => void fetchStatus()} className="rounded-xl bg-plex px-4 py-2 font-bold text-background">
-                            Retry
+                            {t('common.retry')}
                         </button>
                     </div>
                 ) : (
@@ -8647,7 +8655,7 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
     const overviewGroups = [
         ...(Array.isArray(groups) ? groups : []),
         ...(ungroupedServices.length
-            ? [{ id: '__ungrouped__', name: 'Ungrouped', order: 9999 }]
+            ? [{ id: '__ungrouped__', name: t('statusPage.labels.ungrouped'), order: 9999 }]
             : []),
     ];
 
@@ -8666,24 +8674,24 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
     };
 
     const statusTabs = [
-        { id: 'overview' as const, label: 'Overview', icon: Monitor },
-        { id: 'history' as const, label: 'Detailed History', icon: Clock },
-        { id: 'analytics' as const, label: 'Analytics', icon: LucideLineChart },
+        { id: 'overview' as const, label: t('statusPage.tabs.overview'), icon: Monitor },
+        { id: 'history' as const, label: t('statusPage.tabs.history'), icon: Clock },
+        { id: 'analytics' as const, label: t('statusPage.tabs.analytics'), icon: LucideLineChart },
     ];
 
     return (
         <DashboardPageShell>
             <DashboardHero
                 accent="emerald"
-                eyebrow="Status Monitor"
-                title="Server Status"
+                eyebrow={t('statusPage.page.eyebrow')}
+                title={t('statusPage.page.title')}
                 description={(
                     <>
-                        {statusCounts.online} of {statusCounts.total} services online
+                        {t('statusPage.summary.online', { online: statusCounts.online, total: statusCounts.total })}
                         {statusCounts.offline > 0 ? (
-                            <span className="text-status-expired"> · {statusCounts.offline} offline</span>
+                            <span className="text-status-expired"> · {t('statusPage.summary.offline', { count: statusCounts.offline })}</span>
                         ) : null}
-                        {' · '}{periodLabel} fleet uptime {fleetPct.toFixed(1)}%
+                        {' · '}{t('statusPage.summary.fleetUptime', { period: periodLabel, value: fleetPct.toFixed(1) })}
                     </>
                 )}
                 icon={<Activity className="h-3.5 w-3.5" />}
@@ -8696,7 +8704,7 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                 onClick={onBack}
                                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-white/5 hover:text-text"
                             >
-                                <ChevronLeft className="h-4 w-4" /> Back
+                                <ChevronLeft className="h-4 w-4" /> {t('statusPage.actions.back')}
                             </button>
                         ) : null}
                         <div className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
@@ -8718,7 +8726,7 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                             onClick={() => void fetchStatus()}
                             className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-white/5 hover:text-text"
                         >
-                            <RefreshCw className="h-4 w-4" /> Refresh
+                            <RefreshCw className="h-4 w-4" /> {t('statusPage.actions.refresh')}
                         </button>
                     </>
                 )}
@@ -8726,7 +8734,7 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
 
             <div className="md:hidden">
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-muted">
-                    Status section
+                    {t('statusPage.labels.section')}
                 </label>
                 <CustomSelect
                     id="status-section-select"
@@ -8765,34 +8773,34 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                     <>
                         <div className="mb-6 grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-5">
                             <DashboardStatCard
-                                label="Services"
+                                label={t('statusPage.labels.services')}
                                 value={statusCounts.total}
                                 icon={<Monitor className="h-4 w-4 text-sky-300" />}
                                 glow={dashboardGlowClass('sky')}
                             />
                             <DashboardStatCard
-                                label="Online"
+                                label={t('statusPage.status.online')}
                                 value={statusCounts.online}
                                 icon={<CheckCircle className="h-4 w-4 text-emerald-300" />}
                                 glow={dashboardGlowClass('emerald')}
                                 valueClassName="text-status-active"
                             />
                             <DashboardStatCard
-                                label="Degraded"
+                                label={t('statusPage.status.degraded')}
                                 value={statusCounts.degraded}
                                 icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
                                 glow={dashboardGlowClass('amber')}
                                 valueClassName="text-status-expiring"
                             />
                             <DashboardStatCard
-                                label="Offline"
+                                label={t('statusPage.status.offline')}
                                 value={statusCounts.offline}
                                 icon={<AlertCircle className="h-4 w-4 text-rose-300" />}
                                 glow={dashboardGlowClass('rose')}
                                 valueClassName="text-status-expired"
                             />
                             <DashboardStatCard
-                                label={`${periodLabel} uptime`}
+                                label={t('statusPage.labels.periodUptime', { period: periodLabel })}
                                 value={`${fleetPct.toFixed(1)}%`}
                                 icon={<TrendingUp className="h-4 w-4 text-plex" />}
                                 glow={dashboardGlowClass('plex')}
@@ -8809,18 +8817,18 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                         )}
 
                         {groups.length === 0 && (
-                            <DashboardPanel title="No services monitored" subtitle="Add monitors in Settings to populate this page.">
+                            <DashboardPanel title={t('statusPage.empty.noServicesTitle')} subtitle={t('statusPage.empty.noServicesSubtitle')}>
                                 <div className="flex flex-col items-center justify-center p-8 text-center">
                                     <Activity className="mb-4 h-12 w-12 text-muted opacity-50" />
                                     <p className="max-w-md text-muted">
-                                        The status page is currently blank because no services have been configured yet.
+                                        {t('statusPage.empty.blank')}
                                         {isAdmin ? (
                                             <>
-                                                {' '}You can add status monitors in <strong className="text-text">Settings &gt; Status Page</strong>.
+                                                {' '}{t('statusPage.empty.adminHint')}
                                             </>
                                         ) : (
                                             <>
-                                                {' '}The server administrator hasn&apos;t added any services to monitor yet. Check back later!
+                                                {' '}{t('statusPage.empty.memberHint')}
                                             </>
                                         )}
                                     </p>
@@ -8837,7 +8845,7 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                 <DashboardPanel
                                     key={group.id}
                                     title={group.name}
-                                    subtitle={`${groupServices.length} service${groupServices.length === 1 ? '' : 's'} · ${periodLabel}`}
+                                    subtitle={t('statusPage.labels.groupSummary', { count: groupServices.length, period: periodLabel })}
                                     className="mb-6"
                                 >
                                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -8847,7 +8855,13 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                             const bars = barsForPeriod(health, period);
                                             const latency = health.lastLatency;
                                             const avgLatency = periodStats(health, period).latency.avg;
-                                            const rangeLeft = period === '24h' ? '24h ago' : period === '7d' ? '7 days ago' : period === '30d' ? '30 days ago' : '90 days ago';
+                                            const rangeLeft = period === '24h'
+                                                ? t('statusPage.relative.hoursAgo', { count: 24 })
+                                                : period === '7d'
+                                                    ? t('statusPage.relative.daysAgo', { count: 7 })
+                                                    : period === '30d'
+                                                        ? t('statusPage.relative.daysAgo', { count: 30 })
+                                                        : t('statusPage.relative.daysAgo', { count: 90 });
                                             return (
                                                 <div key={service.id} className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5 flex flex-col gap-4 animate-fade-in transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/25 hover:shadow-lg hover:shadow-emerald-500/5" style={{ animationFillMode: 'both', animationDelay: `${index * 75}ms` }}>
                                                     <div className="flex justify-between items-start mb-2 gap-4">
@@ -8857,8 +8871,8 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                                                 <div className="flex items-center gap-2 min-w-0">
                                                                     <h4 className="font-bold text-text text-lg truncate">{service.name}</h4>
                                                                     {isAdmin && service.visibleToUsers === false ? (
-                                                                        <span className="shrink-0 rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted" title="Hidden from members and the public Status page">
-                                                                            Admin only
+                                                                        <span className="shrink-0 rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted" title={t('statusPage.labels.adminOnlyHint')}>
+                                                                            {t('statusPage.labels.adminOnly')}
                                                                         </span>
                                                                     ) : null}
                                                                 </div>
@@ -8869,21 +8883,21 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                                             {health.currentStatus === 'online' && <span className="w-1.5 h-1.5 rounded-full bg-status-active animate-pulse shadow-[0_0_5px_rgba(35,134,54,0.8)]" />}
                                                             {health.currentStatus === 'offline' && <span className="w-1.5 h-1.5 rounded-full bg-[#D32F2F] animate-ping" />}
                                                             {health.currentStatus === 'degraded' && <span className="w-1.5 h-1.5 rounded-full bg-status-expiring animate-pulse shadow-[0_0_5px_rgba(210,153,34,0.8)]" />}
-                                                            {(health.currentStatus || 'unknown').toUpperCase()}
+                                                            {displayStatus(health.currentStatus || 'unknown')}
                                                         </span>
                                                     </div>
                                                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted font-medium">
-                                                        <span>{periodLabel} uptime: <span className="text-text font-bold tabular-nums">{uptime.pct.toFixed(1)}%</span></span>
-                                                        <span>Latency: <span className="text-text font-bold tabular-nums">{formatLatencyMs(latency)}</span>
-                                                            {avgLatency != null && <span className="text-muted font-normal"> avg {formatLatencyMs(avgLatency)}</span>}
+                                                        <span>{t('statusPage.labels.uptimeValue', { period: periodLabel, value: uptime.pct.toFixed(1) })}</span>
+                                                        <span>{t('statusPage.labels.latencyValue', { value: formatLatencyMs(latency) })}
+                                                            {avgLatency != null && <span className="text-muted font-normal"> {t('statusPage.labels.average', { value: formatLatencyMs(avgLatency) })}</span>}
                                                         </span>
                                                     </div>
                                                     <div className="flex gap-[2px] h-12 mt-auto items-end pt-4 group/bars relative">
                                                         {bars.map((bar, i) => {
                                                             const tone = statusToneFromPct(bar.pct);
                                                             const title = bar.pct == null
-                                                                ? `${bar.label}: No data`
-                                                                : `${bar.label}: ${bar.pct.toFixed(1)}% uptime${bar.avgLatency != null ? ` · ${formatLatencyMs(bar.avgLatency)} avg` : ''}`;
+                                                                ? `${bar.label}: ${t('statusPage.empty.noData')}`
+                                                                : `${bar.label}: ${bar.pct.toFixed(1)}% ${t('statusPage.analytics.uptime')}${bar.avgLatency != null ? ` · ${formatLatencyMs(bar.avgLatency)} ${t('statusPage.labels.average')}` : ''}`;
                                                             return (
                                                                 <div
                                                                     key={bar.key}
@@ -8919,12 +8933,12 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                 <DashboardPanel
                                     key={service.id}
                                     title={service.name}
-                                    subtitle={`${periodLabel} history`}
+                                    subtitle={t('statusPage.history.subtitle', { period: periodLabel })}
                                     badge={(
                                         <div className="flex items-center gap-2">
                                             {isAdmin && service.visibleToUsers === false ? (
-                                                <span className="rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted" title="Hidden from members and the public Status page">
-                                                    Admin only
+                                                <span className="rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted" title={t('statusPage.labels.adminOnlyHint')}>
+                                                    {t('statusPage.labels.adminOnly')}
                                                 </span>
                                             ) : null}
                                             <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-muted">
@@ -8937,20 +8951,20 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                         <table className="w-full text-left border-collapse">
                                             <thead className="bg-black/40 border-b border-border text-muted text-xs uppercase tracking-wider">
                                                 <tr>
-                                                    <th className="px-6 py-4 font-bold whitespace-nowrap">{period === '24h' || period === '7d' ? 'Hour (UTC)' : 'Date'}</th>
-                                                    <th className="px-6 py-4 font-bold whitespace-nowrap">Uptime %</th>
-                                                    <th className="px-6 py-4 font-bold whitespace-nowrap">Checks (Up / Total)</th>
+                                                    <th className="px-6 py-4 font-bold whitespace-nowrap">{period === '24h' || period === '7d' ? t('statusPage.history.hourUtc') : t('statusPage.history.date')}</th>
+                                                    <th className="px-6 py-4 font-bold whitespace-nowrap">{t('statusPage.history.uptimePercent')}</th>
+                                                    <th className="px-6 py-4 font-bold whitespace-nowrap">{t('statusPage.history.checks')}</th>
                                                     {(period === '24h' || period === '7d') && (
-                                                        <th className="px-6 py-4 font-bold whitespace-nowrap">Avg latency</th>
+                                                        <th className="px-6 py-4 font-bold whitespace-nowrap">{t('statusPage.history.averageLatency')}</th>
                                                     )}
-                                                    <th className="px-6 py-4 font-bold text-right whitespace-nowrap">Status</th>
+                                                    <th className="px-6 py-4 font-bold text-right whitespace-nowrap">{t('statusPage.history.status')}</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border/50">
                                                 {rows.length === 0 ? (
                                                     <tr>
                                                         <td colSpan={period === '24h' || period === '7d' ? 5 : 4} className="px-6 py-8 text-center text-muted text-sm">
-                                                            No history for this period yet. Data builds as probes run.
+                                                            {t('statusPage.empty.noHistory')}
                                                         </td>
                                                     </tr>
                                                 ) : rows.map((row) => {
@@ -8965,7 +8979,7 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                                             )}
                                                             <td className="px-6 py-4 text-right whitespace-nowrap">
                                                                 <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest border ${tone === 'online' ? 'bg-status-active/10 text-status-active border-status-active/30' : tone === 'degraded' ? 'bg-status-expiring/10 text-status-expiring border-status-expiring/30' : tone === 'offline' ? 'bg-status-expired/10 text-status-expired border-status-expired/30' : 'bg-white/5 text-muted border-border'}`}>
-                                                                    {tone === 'online' ? 'Healthy' : tone === 'degraded' ? 'Degraded' : tone === 'offline' ? 'Outage' : 'Unknown'}
+                                                                    {tone === 'online' ? t('statusPage.status.healthy') : tone === 'degraded' ? t('statusPage.status.degraded') : tone === 'offline' ? t('statusPage.status.outage') : t('statusPage.status.unknown')}
                                                                 </span>
                                                             </td>
                                                         </tr>
@@ -8975,18 +8989,18 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                         </table>
                                     </div>
                                     <div className="border-t border-border/50 p-4 bg-black/10">
-                                        <h4 className="text-xs font-bold uppercase tracking-widest text-muted mb-3">Incidents ({periodLabel})</h4>
+                                        <h4 className="text-xs font-bold uppercase tracking-widest text-muted mb-3">{t('statusPage.incidents.title', { period: periodLabel })}</h4>
                                         {incidents.length === 0 ? (
-                                            <p className="text-sm text-muted">No incidents in this window.</p>
+                                            <p className="text-sm text-muted">{t('statusPage.empty.noIncidents')}</p>
                                         ) : (
                                             <div className="overflow-x-auto">
                                                 <table className="w-full text-left border-collapse text-sm">
                                                     <thead className="text-muted text-[10px] uppercase tracking-wider">
                                                         <tr>
-                                                            <th className="pb-2 pr-4 font-bold">Started</th>
-                                                            <th className="pb-2 pr-4 font-bold">Ended</th>
-                                                            <th className="pb-2 pr-4 font-bold">Duration</th>
-                                                            <th className="pb-2 font-bold text-right">Severity</th>
+                                                            <th className="pb-2 pr-4 font-bold">{t('statusPage.incidents.started')}</th>
+                                                            <th className="pb-2 pr-4 font-bold">{t('statusPage.incidents.ended')}</th>
+                                                            <th className="pb-2 pr-4 font-bold">{t('statusPage.incidents.duration')}</th>
+                                                            <th className="pb-2 font-bold text-right">{t('statusPage.incidents.severity')}</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-border/40">
@@ -8994,14 +9008,15 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                                             const duration = incident.endedAt != null
                                                                 ? (incident.durationMs ?? Math.max(0, incident.endedAt - incident.startedAt))
                                                                 : Math.max(0, Date.now() - incident.startedAt);
-                                                            const severity = incident.to === 'offline' ? 'Offline' : 'Degraded';
+                                                            const severityTone = incident.to === 'offline' ? 'offline' : 'degraded';
+                                                            const severity = severityTone === 'offline' ? t('statusPage.status.offline') : t('statusPage.status.degraded');
                                                             return (
                                                                 <tr key={incident.id}>
                                                                     <td className="py-2.5 pr-4 text-text whitespace-nowrap">{formatDateTime(new Date(incident.startedAt).toISOString())}</td>
-                                                                    <td className="py-2.5 pr-4 text-muted whitespace-nowrap">{incident.endedAt != null ? formatDateTime(new Date(incident.endedAt).toISOString()) : 'Ongoing'}</td>
+                                                                    <td className="py-2.5 pr-4 text-muted whitespace-nowrap">{incident.endedAt != null ? formatDateTime(new Date(incident.endedAt).toISOString()) : t('statusPage.incidents.ongoing')}</td>
                                                                     <td className="py-2.5 pr-4 text-muted tabular-nums">{formatDurationShort(duration)}</td>
                                                                     <td className="py-2.5 text-right">
-                                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest border ${severity === 'Offline' ? 'bg-status-expired/10 text-status-expired border-status-expired/30' : 'bg-status-expiring/10 text-status-expiring border-status-expiring/30'}`}>
+                                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase font-bold tracking-widest border ${severityTone === 'offline' ? 'bg-status-expired/10 text-status-expired border-status-expired/30' : 'bg-status-expiring/10 text-status-expiring border-status-expiring/30'}`}>
                                                                             {severity}
                                                                         </span>
                                                                     </td>
@@ -9043,19 +9058,19 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                         {selectedService && (
                             <>
                                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
-                                    <DashboardStatCard label="Uptime" value={`${selectedStats.pct.toFixed(2)}%`} icon={<TrendingUp className="h-4 w-4 text-emerald-300" />} glow={dashboardGlowClass('emerald')} />
-                                    <DashboardStatCard label="Checks" value={selectedStats.total.toLocaleString()} icon={<Activity className="h-4 w-4 text-sky-300" />} glow={dashboardGlowClass('sky')} />
-                                    <DashboardStatCard label="Avg latency" value={formatLatencyMs(selectedStats.latency.avg)} icon={<Clock className="h-4 w-4 text-plex" />} glow={dashboardGlowClass('plex')} />
-                                    <DashboardStatCard label="p95 latency" value={formatLatencyMs(selectedStats.latency.p95)} icon={<Clock className="h-4 w-4 text-violet-300" />} glow={dashboardGlowClass('violet')} />
-                                    <DashboardStatCard label="Incidents" value={String(selectedStats.incidentCount)} icon={<AlertTriangle className="h-4 w-4 text-amber-300" />} glow={dashboardGlowClass('amber')} />
-                                    <DashboardStatCard label="Longest outage" value={formatDurationShort(selectedStats.longestOutageMs)} icon={<AlertCircle className="h-4 w-4 text-rose-300" />} glow={dashboardGlowClass('rose')} />
-                                    <DashboardStatCard label="Healthy streak" value={selectedStats.currentStreakHours ? `${selectedStats.currentStreakHours}h` : '—'} icon={<CheckCircle className="h-4 w-4 text-emerald-300" />} glow={dashboardGlowClass('emerald')} />
-                                    <DashboardStatCard label="Worst day" value={selectedStats.worstDay ? `${selectedStats.worstDay.pct.toFixed(1)}%` : '—'} icon={<Calendar className="h-4 w-4 text-muted" />} glow={dashboardGlowClass('muted')} />
+                                    <DashboardStatCard label={t('statusPage.analytics.uptime')} value={`${selectedStats.pct.toFixed(2)}%`} icon={<TrendingUp className="h-4 w-4 text-emerald-300" />} glow={dashboardGlowClass('emerald')} />
+                                    <DashboardStatCard label={t('statusPage.analytics.checks')} value={selectedStats.total.toLocaleString()} icon={<Activity className="h-4 w-4 text-sky-300" />} glow={dashboardGlowClass('sky')} />
+                                    <DashboardStatCard label={t('statusPage.analytics.averageLatency')} value={formatLatencyMs(selectedStats.latency.avg)} icon={<Clock className="h-4 w-4 text-plex" />} glow={dashboardGlowClass('plex')} />
+                                    <DashboardStatCard label={t('statusPage.analytics.p95Latency')} value={formatLatencyMs(selectedStats.latency.p95)} icon={<Clock className="h-4 w-4 text-violet-300" />} glow={dashboardGlowClass('violet')} />
+                                    <DashboardStatCard label={t('statusPage.analytics.incidents')} value={String(selectedStats.incidentCount)} icon={<AlertTriangle className="h-4 w-4 text-amber-300" />} glow={dashboardGlowClass('amber')} />
+                                    <DashboardStatCard label={t('statusPage.analytics.longestOutage')} value={formatDurationShort(selectedStats.longestOutageMs)} icon={<AlertCircle className="h-4 w-4 text-rose-300" />} glow={dashboardGlowClass('rose')} />
+                                    <DashboardStatCard label={t('statusPage.analytics.healthyStreak')} value={selectedStats.currentStreakHours ? `${selectedStats.currentStreakHours}h` : '—'} icon={<CheckCircle className="h-4 w-4 text-emerald-300" />} glow={dashboardGlowClass('emerald')} />
+                                    <DashboardStatCard label={t('statusPage.analytics.worstDay')} value={selectedStats.worstDay ? `${selectedStats.worstDay.pct.toFixed(1)}%` : '—'} icon={<Calendar className="h-4 w-4 text-muted" />} glow={dashboardGlowClass('muted')} />
                                 </div>
 
                                 <DashboardPanel
-                                    title={`${selectedService.name} — uptime trend`}
-                                    subtitle={`${periodLabel} rolling uptime by bucket`}
+                                    title={t('statusPage.analytics.uptimeTrend', { name: selectedService.name })}
+                                    subtitle={t('statusPage.analytics.rollingUptime', { period: periodLabel })}
                                 >
                                     <div className="relative h-64 md:h-80 flex items-end gap-1 w-full pl-12 pr-4 md:pr-8">
                                         <div className="absolute inset-0 pl-12 pr-4 md:pr-8 flex flex-col justify-between pointer-events-none pb-8">
@@ -9079,9 +9094,9 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                                         />
                                                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 p-3 bg-card border border-border shadow-2xl text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover/chart:opacity-100 pointer-events-none transition-opacity z-50 flex flex-col items-center">
                                                             <strong className="text-plex mb-1 tracking-wider uppercase text-[10px]">{bar.label}</strong>
-                                                            <span className="text-lg font-mono font-bold">{hasData ? `${pct.toFixed(2)}%` : 'No data'}</span>
+                                                            <span className="text-lg font-mono font-bold">{hasData ? `${pct.toFixed(2)}%` : t('statusPage.empty.noData')}</span>
                                                             {bar.avgLatency != null && (
-                                                                <span className="text-muted mt-0.5">{formatLatencyMs(bar.avgLatency)} avg</span>
+                                                                <span className="text-muted mt-0.5">{t('statusPage.labels.average', { value: formatLatencyMs(bar.avgLatency) })}</span>
                                                             )}
                                                         </div>
                                                     </div>
@@ -9090,14 +9105,14 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                         </div>
                                     </div>
                                     <div className="flex justify-between px-12 text-[10px] font-bold uppercase tracking-widest text-muted mt-2">
-                                        <span>{period === '24h' ? '24h ago' : `${periodLabel} ago`}</span>
-                                        <span>Now</span>
+                                        <span>{period === '24h' ? t('statusPage.relative.hoursAgo', { count: 24 }) : t('statusPage.relative.periodAgo', { period: periodLabel })}</span>
+                                        <span>{t('statusPage.relative.now')}</span>
                                     </div>
                                 </DashboardPanel>
 
                                 <DashboardPanel
-                                    title={`${selectedService.name} — latency`}
-                                    subtitle={`${periodLabel} average response time`}
+                                    title={t('statusPage.analytics.latencyTitle', { name: selectedService.name })}
+                                    subtitle={t('statusPage.analytics.averageResponseTime', { period: periodLabel })}
                                 >
                                     {selectedLatencySeries.some((p) => p.avg != null) ? (
                                         <div className="h-56 md:h-72 w-full">
@@ -9109,7 +9124,7 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                                     <RechartsTooltip
                                                         contentStyle={{ background: 'var(--card, #1a1a1a)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
                                                         labelStyle={{ color: '#e5a00d' }}
-                                                        formatter={(value: any) => [formatLatencyMs(Number(value)), 'Avg latency']}
+                                                        formatter={(value: any) => [formatLatencyMs(Number(value)), t('statusPage.analytics.averageLatency')]}
                                                     />
                                                     <Area type="monotone" dataKey="avg" stroke="#e5a00d" fill="rgba(229,160,13,0.2)" strokeWidth={2} />
                                                 </AreaChart>
@@ -9117,13 +9132,13 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                         </div>
                                     ) : (
                                         <p className="text-center text-muted text-sm py-12">
-                                            Latency history will appear after probes collect response times for this period.
+                                            {t('statusPage.empty.latencyHistory')}
                                         </p>
                                     )}
                                     {selectedStats.bestDay && selectedStats.worstDay && period !== '24h' && (
                                         <div className="mt-6 flex flex-wrap justify-center gap-6 text-sm text-muted">
-                                            <span>Best: <strong className="text-status-active">{selectedStats.bestDay.key}</strong> ({selectedStats.bestDay.pct.toFixed(1)}%)</span>
-                                            <span>Worst: <strong className="text-status-expired">{selectedStats.worstDay.key}</strong> ({selectedStats.worstDay.pct.toFixed(1)}%)</span>
+                                            <span>{t('statusPage.analytics.best', { value: selectedStats.bestDay.key, pct: selectedStats.bestDay.pct.toFixed(1) })}</span>
+                                            <span>{t('statusPage.analytics.worst', { value: selectedStats.worstDay.key, pct: selectedStats.worstDay.pct.toFixed(1) })}</span>
                                         </div>
                                     )}
                                 </DashboardPanel>
