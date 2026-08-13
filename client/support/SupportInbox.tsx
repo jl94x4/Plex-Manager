@@ -7,6 +7,7 @@ import { portalUrl } from '../shared/basePath';
 import { DashboardHero, DashboardPageShell } from '../shared/dashboard/DashboardChrome';
 import { formatDateTime } from '../shared/format';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
+import { CustomSelect } from '../shared/ui';
 import { issueStatusBadgeClass } from '../discovery/issueUtils';
 
 type TicketFilter = 'open' | 'resolved' | 'closed' | 'all';
@@ -387,18 +388,17 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                         className="relative w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl border border-white/10 bg-[#12141a] p-5 space-y-3"
                     >
                         <h2 className="text-lg font-black text-text">New support ticket</h2>
-                        <label className="block text-xs font-bold text-muted uppercase tracking-wide">
-                            Category
-                            <select
+                        <div>
+                            <label className="block text-xs font-bold text-muted uppercase tracking-wide mb-1">
+                                Category
+                            </label>
+                            <CustomSelect
                                 value={category}
-                                onChange={(e) => setCategory(e.target.value)}
-                                className="mt-1 w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-text"
-                            >
-                                {categories.map((item) => (
-                                    <option key={item.id} value={item.id}>{item.label}</option>
-                                ))}
-                            </select>
-                        </label>
+                                onChange={setCategory}
+                                compact
+                                options={categories.map((item) => ({ label: item.label, value: item.id }))}
+                            />
+                        </div>
                         <label className="block text-xs font-bold text-muted uppercase tracking-wide">
                             Subject
                             <input
