@@ -10060,6 +10060,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
 };
 
 export const MaintenanceDashboard: React.FC = () => {
+    const { t } = useDiscoverI18n();
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [maintenanceFeatureEnabled, setMaintenanceFeatureEnabled] = useState(false);
     const [overview, setOverview] = useState<any>(null);
@@ -10121,16 +10122,16 @@ export const MaintenanceDashboard: React.FC = () => {
     }, []);
 
     const sections = [
-        { id: 'overview', label: 'Overview' },
-        { id: 'exclusions', label: 'Exclusions' },
-        { id: 'rules', label: 'Rules' },
-        { id: 'collections', label: 'Collections' },
-        { id: 'candidates', label: 'Candidates' },
-        { id: 'calendar', label: 'Calendar' },
-        { id: 'storage', label: 'Storage Metrics' },
-        { id: 'library', label: 'Rule Library' },
-        { id: 'settings', label: 'Cleaner Settings' },
-        { id: 'runs', label: 'Logs' }
+        { id: 'overview', label: t('maintenance.sections.overview') },
+        { id: 'exclusions', label: t('maintenance.sections.exclusions') },
+        { id: 'rules', label: t('maintenance.sections.rules') },
+        { id: 'collections', label: t('maintenance.sections.collections') },
+        { id: 'candidates', label: t('maintenance.sections.candidates') },
+        { id: 'calendar', label: t('maintenance.sections.calendar') },
+        { id: 'storage', label: t('maintenance.sections.storage') },
+        { id: 'library', label: t('maintenance.sections.library') },
+        { id: 'settings', label: t('maintenance.sections.settings') },
+        { id: 'runs', label: t('maintenance.sections.logs') }
     ];
 
     useEffect(() => {
@@ -10181,14 +10182,14 @@ export const MaintenanceDashboard: React.FC = () => {
                     if (ratingKey && !uniqueItems.has(ratingKey)) uniqueItems.set(ratingKey, item);
                     const size = Number(item?.sizeGB || 0);
                     ruleReclaim += size;
-                    const libraryTitle = item?.libraryTitle || 'Unknown Library';
+                    const libraryTitle = item?.libraryTitle || t('maintenance.labels.unknownLibrary');
                     if (!libraryMap[libraryTitle]) libraryMap[libraryTitle] = { libraryTitle, count: 0, reclaimGB: 0 };
                     libraryMap[libraryTitle].count += 1;
                     libraryMap[libraryTitle].reclaimGB += size;
                 });
                 return {
                     ruleId: String(preview?.ruleId || ''),
-                    ruleName: preview?.ruleName || 'Unnamed Rule',
+                    ruleName: preview?.ruleName || t('maintenance.labels.unnamedRule'),
                     totalMatches: Number(preview?.totalMatches || sample.length || 0),
                     reclaimGB: ruleReclaim
                 };
@@ -10208,11 +10209,11 @@ export const MaintenanceDashboard: React.FC = () => {
                 setMaintenanceFeatureEnabled(false);
                 return;
             }
-            addToast(e.message || 'Failed to load cleaner overview', 'error');
+            addToast(e.message || t('maintenance.errors.loadOverview'), 'error');
         } finally {
             if (!silent) setLoading(false);
         }
-    }, [addToast, isMaintenanceDisabledError]);
+    }, [addToast, isMaintenanceDisabledError, t]);
 
     useEffect(() => {
         loadOverview();
@@ -10256,11 +10257,11 @@ export const MaintenanceDashboard: React.FC = () => {
                 setMaintenanceFeatureEnabled(false);
                 return;
             }
-            addToast(e.message || 'Failed to load candidates', 'error');
+            addToast(e.message || t('maintenance.errors.loadCandidates'), 'error');
         } finally {
             setIsLoadingCandidates(false);
         }
-    }, [addToast, isMaintenanceDisabledError, maintenanceFeatureEnabled]);
+    }, [addToast, isMaintenanceDisabledError, maintenanceFeatureEnabled, t]);
 
     useEffect(() => {
         if (maintenanceFeatureEnabled && (activeSection === 'candidates' || activeSection === 'storage' || activeSection === 'calendar')) {
@@ -10292,9 +10293,9 @@ export const MaintenanceDashboard: React.FC = () => {
                 setMaintenanceFeatureEnabled(false);
                 return;
             }
-            addToast(e.message || 'Failed to load exclusions summary.', 'error');
+            addToast(e.message || t('maintenance.errors.loadExclusions'), 'error');
         }
-    }, [addToast, isMaintenanceDisabledError, maintenanceFeatureEnabled]);
+    }, [addToast, isMaintenanceDisabledError, maintenanceFeatureEnabled, t]);
 
     const refreshExclusionsSummaryQuietly = useCallback(() => {
         loadExclusionsSummary().catch(() => { });
@@ -10329,11 +10330,11 @@ export const MaintenanceDashboard: React.FC = () => {
                 setMaintenanceFeatureEnabled(false);
                 return;
             }
-            addToast(e.message || 'Failed to load library posters.', 'error');
+            addToast(e.message || t('maintenance.errors.loadLibrary'), 'error');
         } finally {
             setLibraryBrowseLoading(false);
         }
-    }, [addToast, isMaintenanceDisabledError, libraryBrowseId, libraryBrowseLimit, libraryBrowsePage, libraryBrowseSearch, maintenanceFeatureEnabled]);
+    }, [addToast, isMaintenanceDisabledError, libraryBrowseId, libraryBrowseLimit, libraryBrowsePage, libraryBrowseSearch, maintenanceFeatureEnabled, t]);
 
     const loadStorageSummary = useCallback(async (ruleId?: string) => {
         if (!maintenanceFeatureEnabled) return;
@@ -10347,11 +10348,11 @@ export const MaintenanceDashboard: React.FC = () => {
                 setMaintenanceFeatureEnabled(false);
                 return;
             }
-            addToast(e.message || 'Failed to load storage summary.', 'error');
+            addToast(e.message || t('maintenance.errors.loadStorage'), 'error');
         } finally {
             setStorageSummaryLoading(false);
         }
-    }, [addToast, isMaintenanceDisabledError, maintenanceFeatureEnabled]);
+    }, [addToast, isMaintenanceDisabledError, maintenanceFeatureEnabled, t]);
 
     useEffect(() => {
         if (maintenanceFeatureEnabled && activeSection === 'exclusions') {
@@ -10402,13 +10403,13 @@ export const MaintenanceDashboard: React.FC = () => {
         const watchDays = Number(item?.daysSinceLastWatch);
         const addedDays = Number(item?.daysSinceAdded);
         const base = daysUntilEligible > 0
-            ? `Not eligible yet. Rule grace has ${daysUntilEligible} day(s) remaining.`
-            : 'Eligible now for this rule.';
+            ? t('maintenance.calendar.notEligibleYet', { count: daysUntilEligible })
+            : t('maintenance.calendar.eligibilityNowTooltip');
         if (Number.isFinite(watchDays) && watchDays >= 0) {
-            return `${base} Last watched ${watchDays} day(s) ago.`;
+            return `${base} ${t('maintenance.calendar.lastWatched', { count: watchDays })}`;
         }
         if (Number.isFinite(addedDays) && addedDays >= 0) {
-            return `${base} Added ${addedDays} day(s) ago.`;
+            return `${base} ${t('maintenance.calendar.addedDaysAgo', { count: addedDays })}`;
         }
         return base;
     };
@@ -10460,7 +10461,7 @@ export const MaintenanceDashboard: React.FC = () => {
             const items = calendarEligibility.eligibleNow;
             return {
                 date: ELIGIBLE_NOW_KEY,
-                title: 'Eligible Now',
+                title: t('maintenance.calendar.eligibleNow'),
                 items,
                 count: items.length,
                 reclaimGB: items.reduce((sum: number, item: any) => sum + Number(item.sizeGB || 0), 0)
@@ -10472,7 +10473,7 @@ export const MaintenanceDashboard: React.FC = () => {
             ...day,
             title: new Date(`${day.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
         };
-    }, [calendarEligibility, selectedCalendarDate]);
+    }, [calendarEligibility, selectedCalendarDate, t]);
 
     const renderScaffoldPage = (title: string, description: string, bullets: string[]) => (
         <div className="glass-card-sm p-5">
@@ -10493,11 +10494,11 @@ export const MaintenanceDashboard: React.FC = () => {
             <Loader isLoading={loading} />
             <ToastContainer toasts={toasts} setToasts={setToasts} />
             <header className="page-header">
-                <h1 className="page-title">Cleaner</h1>
+                <h1 className="page-title">{t('maintenance.page.title')}</h1>
             </header>
             <div className="w-full flex flex-col p-0 md:p-8 bg-transparent md:glass-card rounded-none md:rounded-2xl border-0 md:border shadow-none">
                 <div className="md:hidden mb-3">
-                    <label className="text-[10px] text-muted font-bold uppercase tracking-wider mb-1 block">Module Page</label>
+                    <label className="text-[10px] text-muted font-bold uppercase tracking-wider mb-1 block">{t('maintenance.labels.modulePage')}</label>
                     <CustomSelect
                         value={activeSection}
                         onChange={(value) => setActiveSection(value)}
@@ -10508,7 +10509,7 @@ export const MaintenanceDashboard: React.FC = () => {
                 </div>
                 <div className="md:grid md:grid-cols-[280px_minmax(0,1fr)] md:gap-6">
                     <aside className="hidden md:block glass-card-sm p-3 h-fit sticky top-20">
-                        <p className="text-muted text-xs uppercase tracking-wider font-bold mb-2 px-2">Module Pages</p>
+                        <p className="text-muted text-xs uppercase tracking-wider font-bold mb-2 px-2">{t('maintenance.labels.modulePages')}</p>
                         <div className="space-y-1">
                             {sections.map((section) => (
                                 <button
@@ -10525,15 +10526,15 @@ export const MaintenanceDashboard: React.FC = () => {
                     <div className="overflow-y-auto flex-grow mb-4 custom-scrollbar space-y-4 md:pr-2">
                         {!maintenanceFeatureEnabled && (
                             <div className="glass-card-sm border-yellow-500/30 p-5">
-                                <h3 className="text-xl font-bold text-plex mb-2">Cleaner Disabled</h3>
-                                <p className="text-sm text-muted mb-3">Experimental Cleaner Mode is currently OFF.</p>
-                                <p className="text-xs text-muted">Enable it in `Settings` → `System` under `Maintenance Experimental Mode`, then click Save Settings.</p>
+                                <h3 className="text-xl font-bold text-plex mb-2">{t('maintenance.page.disabledTitle')}</h3>
+                                <p className="text-sm text-muted mb-3">{t('maintenance.page.disabledDescription')}</p>
+                                <p className="text-xs text-muted">{t('maintenance.page.disabledHint')}</p>
                                 <button
                                     type="button"
                                     onClick={() => { window.location.href = portalUrl('/settings?focus=maintenance-toggle#system'); }}
                                     className="mt-3 px-3 py-1.5 bg-plex text-background rounded-md text-xs font-semibold hover:bg-plex-hover transition-colors"
                                 >
-                                    Open Settings
+                                    {t('notifications.openSettings')}
                                 </button>
                             </div>
                         )}
@@ -10542,51 +10543,51 @@ export const MaintenanceDashboard: React.FC = () => {
                                 {activeSection === 'overview' && (
                                     <div className="space-y-4">
                                         <div className="glass-card-sm p-5">
-                                            <h3 className="text-xl font-bold text-plex mb-2">Cleaner Control Center</h3>
-                                            <p className="text-sm text-muted mb-4">Dedicated module for library maintenance automation: rules, collections, candidates, execution timeline, calendar, storage, and governance.</p>
+                                            <h3 className="text-xl font-bold text-plex mb-2">{t('maintenance.page.controlCenter')}</h3>
+                                            <p className="text-sm text-muted mb-4">{t('maintenance.page.controlCenterDescription')}</p>
                                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted">Indexed Media</p>
+                                                    <p className="text-xs text-muted">{t('maintenance.labels.indexedMedia')}</p>
                                                     <p className="text-2xl font-bold text-text">{overview?.itemCount || 0}</p>
                                                 </div>
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted">Request Records</p>
+                                                    <p className="text-xs text-muted">{t('maintenance.labels.requestRecords')}</p>
                                                     <p className="text-2xl font-bold text-text">{overview?.requestItemCount || 0}</p>
                                                 </div>
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted">Rules with Matches</p>
+                                                    <p className="text-xs text-muted">{t('maintenance.overview.rulesWithMatches')}</p>
                                                     <p className="text-2xl font-bold text-text">{previewGroups.filter((p: any) => (p.totalMatches || 0) > 0).length}</p>
                                                 </div>
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted">Total Runs</p>
+                                                    <p className="text-xs text-muted">{t('maintenance.overview.totalRuns')}</p>
                                                     <p className="text-2xl font-bold text-text">{runs.length}</p>
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="glass-card-sm p-5 space-y-4">
-                                            <h4 className="font-bold text-text">Reclaim & Impact Overview</h4>
+                                            <h4 className="font-bold text-text">{t('maintenance.overview.reclaimImpact')}</h4>
                                             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted">Total Matched (Rules Combined)</p>
+                                                    <p className="text-xs text-muted">{t('maintenance.overview.totalMatched')}</p>
                                                     <p className="text-2xl font-bold text-text">{overviewInsights.totalMatches}</p>
                                                 </div>
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted">Unique Candidate Titles</p>
+                                                    <p className="text-xs text-muted">{t('maintenance.overview.uniqueCandidates')}</p>
                                                     <p className="text-2xl font-bold text-text">{overviewInsights.uniqueMatches}</p>
                                                 </div>
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted">Estimated Reclaim</p>
+                                                    <p className="text-xs text-muted">{t('maintenance.overview.estimatedReclaim')}</p>
                                                     <p className="text-2xl font-bold text-text">{formatReclaimSizeFromGB(overviewInsights.estimatedReclaimGB)}</p>
                                                 </div>
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted">Top Impact Library</p>
+                                                    <p className="text-xs text-muted">{t('maintenance.labels.topImpactLibrary')}</p>
                                                     <p className="text-sm font-bold text-text line-clamp-2">{overviewInsights.libraries[0]?.libraryTitle || '—'}</p>
-                                                    <p className="text-xs text-muted mt-1">{overviewInsights.libraries[0] ? formatReclaimSizeFromGB(overviewInsights.libraries[0].reclaimGB) : 'No data'}</p>
+                                                    <p className="text-xs text-muted mt-1">{overviewInsights.libraries[0] ? formatReclaimSizeFromGB(overviewInsights.libraries[0].reclaimGB) : t('maintenance.labels.noData')}</p>
                                                 </div>
                                             </div>
                                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted font-bold uppercase tracking-wider mb-2">Top Libraries by Reclaim</p>
+                                                    <p className="text-xs text-muted font-bold uppercase tracking-wider mb-2">{t('maintenance.overview.topLibraries')}</p>
                                                     <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-1">
                                                         {overviewInsights.libraries.slice(0, 8).map((lib) => (
                                                             <div key={`overview-lib-${lib.libraryTitle}`} className="flex items-center justify-between text-xs bg-background/30 border border-white/5 rounded px-2 py-1.5">
@@ -10594,11 +10595,11 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                 <span className="text-muted ml-2 whitespace-nowrap">{formatReclaimSizeFromGB(lib.reclaimGB)} · {lib.count}</span>
                                                             </div>
                                                         ))}
-                                                        {!overviewInsights.libraries.length && <p className="text-xs text-muted">No matching candidates yet.</p>}
+                                                        {!overviewInsights.libraries.length && <p className="text-xs text-muted">{t('maintenance.candidates.noResults')}</p>}
                                                     </div>
                                                 </div>
                                                 <div className="bg-background/30 rounded-lg p-3 border border-white/5">
-                                                    <p className="text-xs text-muted font-bold uppercase tracking-wider mb-2">Top Rules by Reclaim</p>
+                                                    <p className="text-xs text-muted font-bold uppercase tracking-wider mb-2">{t('maintenance.overview.topRules')}</p>
                                                     <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-1">
                                                         {overviewInsights.rules.slice(0, 8).map((rule) => (
                                                             <div key={`overview-rule-${rule.ruleId}`} className="flex items-center justify-between text-xs bg-background/30 border border-white/5 rounded px-2 py-1.5">
@@ -10606,7 +10607,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                 <span className="text-muted ml-2 whitespace-nowrap">{formatReclaimSizeFromGB(rule.reclaimGB)} · {rule.totalMatches}</span>
                                                             </div>
                                                         ))}
-                                                        {!overviewInsights.rules.length && <p className="text-xs text-muted">No rules with match data yet.</p>}
+                                                        {!overviewInsights.rules.length && <p className="text-xs text-muted">{t('maintenance.candidates.noRules')}</p>}
                                                     </div>
                                                 </div>
                                             </div>
@@ -10616,13 +10617,13 @@ export const MaintenanceDashboard: React.FC = () => {
                                 {activeSection === 'rules' && <LibraryMaintenancePanel addToast={addToast} onRulesUpdated={() => loadOverview(true)} />}
                                 {activeSection === 'collections' && (
                                     <div className="glass-card-sm p-5 space-y-3">
-                                        <h3 className="text-xl font-bold text-plex">Collections</h3>
-                                        <p className="text-sm text-muted">Manage collection behavior per rule. Changes save directly to each ruleset.</p>
+                                        <h3 className="text-xl font-bold text-plex">{t('maintenance.collections.title')}</h3>
+                                        <p className="text-sm text-muted">{t('maintenance.collections.description')}</p>
                                         <div className="space-y-2">
                                             {rules.map((rule: any) => (
                                                 <div key={`collection-${rule.id}`} className="bg-background/30 border border-white/5 rounded-lg p-3">
                                                     <div className="flex items-center justify-between gap-3">
-                                                        <p className="font-semibold text-text text-sm">{rule.name || 'Unnamed Rule'}</p>
+                                                        <p className="font-semibold text-text text-sm">{rule.name || t('maintenance.labels.unnamedRule')}</p>
                                                         <label className="text-xs text-muted flex items-center gap-2">
                                                             <input
                                                                 type="checkbox"
@@ -10631,10 +10632,10 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                     const next = rules.map((r: any) => r.id === rule.id ? { ...r, collection: { ...(r.collection || {}), enabled: e.target.checked } } : r);
                                                                     setRules(next);
                                                                     await saveAllRules(next);
-                                                                    addToast('Collection settings updated.');
+                                                            addToast(t('maintenance.collections.settingsUpdated'));
                                                                 }}
                                                             />
-                                                            Enabled
+                                                            {t('maintenance.collections.enabled')}
                                                         </label>
                                                     </div>
                                                     <input
@@ -10650,7 +10651,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                 : r);
                                                             setRules(next);
                                                             await saveAllRules(next);
-                                                            addToast('Collection template saved.');
+                                                            addToast(t('maintenance.collections.templateSaved'));
                                                         }}
                                                     />
                                                 </div>
@@ -10661,11 +10662,11 @@ export const MaintenanceDashboard: React.FC = () => {
                                 {activeSection === 'candidates' && (
                                     <div className="glass-card-sm p-3 md:p-5 space-y-3">
                                         <div className="flex flex-wrap items-center justify-between gap-3">
-                                            <h3 className="text-xl font-bold text-plex">Candidates</h3>
+                                            <h3 className="text-xl font-bold text-plex">{t('maintenance.candidates.title')}</h3>
                                             <div className="flex items-center gap-2">
                                                 <input
                                                     className="p-2 rounded border border-border bg-card text-text text-sm"
-                                                    placeholder="Search titles..."
+                                                    placeholder={t('maintenance.candidates.searchPlaceholder')}
                                                     value={candidateSearch}
                                                     onChange={(e) => setCandidateSearch(e.target.value)}
                                                 />
@@ -10679,17 +10680,17 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     onClick={() => setCandidateRuleId(rule.id)}
                                                     className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${candidateRuleId === rule.id ? 'bg-plex text-background border-plex' : 'bg-background/30 text-text border-white/5 hover:border-plex/40'}`}
                                                 >
-                                                    {rule.name || 'Unnamed Rule'}
+                                                    {rule.name || t('maintenance.labels.unnamedRule')}
                                                 </button>
                                             ))}
-                                            {!rules.length && <p className="text-sm text-muted">No saved rules found. Create a rule in `Rules` first.</p>}
+                                            {!rules.length && <p className="text-sm text-muted">{t('maintenance.candidates.noRules')}</p>}
                                         </div>
                                         {selectedCandidateRule && (
                                             <p className="text-xs text-muted">
-                                                Showing candidates for <span className="text-text font-semibold">{selectedCandidateRule.name || 'Unnamed Rule'}</span> only.
+                                                {t('maintenance.candidates.showing', { name: selectedCandidateRule.name || t('maintenance.labels.unnamedRule') })}
                                             </p>
                                         )}
-                                        {isLoadingCandidates ? <p className="text-sm text-muted">Loading candidates...</p> : (
+                                        {isLoadingCandidates ? <p className="text-sm text-muted">{t('maintenance.candidates.loading')}</p> : (
                                             <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-2 md:gap-3 max-h-[620px] overflow-y-auto custom-scrollbar pr-1">
                                                 {filteredCandidates.map((item: any) => (
                                                     <div key={`candidate-${item._ruleId || candidateRuleId}-${item.ratingKey}`} className="bg-background/30 border border-white/5 rounded-lg overflow-hidden">
@@ -10697,35 +10698,35 @@ export const MaintenanceDashboard: React.FC = () => {
                                                             {item.thumb ? (
                                                                 <img src={portalUrl(`/api/plex/image?path=${encodeURIComponent(item.thumb)}&width=220&height=330`)} alt={item.title} loading="lazy" className="w-full h-full object-cover" />
                                                             ) : (
-                                                                <div className="w-full h-full flex items-center justify-center text-xs text-muted">No Poster</div>
+                                                                <div className="w-full h-full flex items-center justify-center text-xs text-muted">{t('maintenance.labels.noPoster')}</div>
                                                             )}
                                                         </div>
                                                         <div className="p-2">
                                                             <p className="text-xs text-text line-clamp-2">{item.title}</p>
-                                                            <p className="text-[11px] text-muted mt-1">{item.libraryTitle || 'Unknown Library'}</p>
+                                                            <p className="text-[11px] text-muted mt-1">{item.libraryTitle || t('maintenance.labels.unknownLibrary')}</p>
                                                             <div className="flex flex-wrap gap-1 mt-1">
                                                                 {item.arrResolvable ? (
                                                                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-300">
                                                                         {item.arrInstanceName || item.arrType || 'ARR'}
                                                                     </span>
                                                                 ) : (
-                                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300">Unmapped</span>
+                                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300">{t('maintenance.labels.unmapped')}</span>
                                                                 )}
                                                                 {item.arrAmbiguous && (
-                                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">Ambiguous</span>
+                                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">{t('maintenance.labels.ambiguous')}</span>
                                                                 )}
                                                             </div>
                                                         </div>
                                                     </div>
                                                 ))}
-                                                {!filteredCandidates.length && <p className="text-sm text-muted col-span-full">No matching candidates found for this ruleset.</p>}
+                                                {!filteredCandidates.length && <p className="text-sm text-muted col-span-full">{t('maintenance.candidates.noResults')}</p>}
                                             </div>
                                         )}
                                     </div>
                                 )}
                                 {activeSection === 'runs' && (
                                     <div className="glass-card-sm p-5 space-y-3">
-                                        <h3 className="text-xl font-bold text-plex">Logs</h3>
+                                        <h3 className="text-xl font-bold text-plex">{t('maintenance.runs.title')}</h3>
                                         <div className="space-y-2 max-h-[620px] overflow-y-auto custom-scrollbar pr-1">
                                             {runs.map((run: any) => (
                                                 <details key={`run-${run.id}`} className="bg-background/30 border border-white/5 rounded-lg p-3">
@@ -10733,13 +10734,13 @@ export const MaintenanceDashboard: React.FC = () => {
                                                         <div className="flex items-center justify-between gap-3">
                                                             <div>
                                                                 <p className="text-sm font-semibold text-text">{run.ruleName}</p>
-                                                                <p className="text-xs text-muted">{new Date(run.startedAt).toLocaleString()} · {run.dryRun ? 'Dry-run' : 'Destructive'}</p>
+                                                                <p className="text-xs text-muted">{new Date(run.startedAt).toLocaleString()} · {run.dryRun ? t('maintenance.runs.dryRun') : t('maintenance.runs.destructive')}</p>
                                                             </div>
                                                             <span className="text-[11px] px-2 py-1 rounded bg-border text-muted">{run.status}</span>
                                                         </div>
                                                     </summary>
                                                     <div className="mt-3 text-xs text-muted">
-                                                        Matched {run.totals?.matched || 0} · Processed {run.totals?.processed || 0} · Deleted {run.totals?.deleted || 0} · Skipped {run.totals?.skipped || 0} · Failed {run.totals?.failed || 0}
+                                                        {t('maintenance.runs.summary', { matched: run.totals?.matched || 0, processed: run.totals?.processed || 0, deleted: run.totals?.deleted || 0, skipped: run.totals?.skipped || 0, failed: run.totals?.failed || 0 })}
                                                     </div>
                                                     {Array.isArray(run.preflight?.warnings) && run.preflight.warnings.length > 0 && (
                                                         <div className="mt-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">
@@ -10758,14 +10759,14 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     </div>
                                                 </details>
                                             ))}
-                                            {!runs.length && <p className="text-sm text-muted">No runs recorded yet.</p>}
+                                            {!runs.length && <p className="text-sm text-muted">{t('maintenance.runs.noRuns')}</p>}
                                         </div>
                                     </div>
                                 )}
                                 {activeSection === 'calendar' && (
                                     <div className="glass-card-sm p-5 space-y-3">
-                                        <h3 className="text-xl font-bold text-plex">Calendar</h3>
-                                        <p className="text-sm text-muted">Rule-based eligibility schedule. Grace days are applied from this rule's creation date.</p>
+                                        <h3 className="text-xl font-bold text-plex">{t('maintenance.calendar.title')}</h3>
+                                        <p className="text-sm text-muted">{t('maintenance.calendar.description')}</p>
                                         <div className="flex flex-wrap gap-2">
                                             {rules.map((rule: any) => (
                                                 <button
@@ -10774,13 +10775,13 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     onClick={() => setCandidateRuleId(rule.id)}
                                                     className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${candidateRuleId === rule.id ? 'bg-plex text-background border-plex' : 'bg-background/30 text-text border-white/5 hover:border-plex/40'}`}
                                                 >
-                                                    {rule.name || 'Unnamed Rule'}
+                                                    {rule.name || t('maintenance.labels.unnamedRule')}
                                                 </button>
                                             ))}
                                         </div>
                                         {selectedCandidateRule && (
                                             <p className="text-xs text-muted">
-                                                Current rule: <span className="text-text font-semibold">{selectedCandidateRule.name || 'Unnamed Rule'}</span> · Grace Days: <span className="text-text font-semibold">{calendarEligibility.graceDays}</span> · Rule Age: <span className="text-text font-semibold">{calendarEligibility.daysSinceRuleCreated}</span> day(s)
+                                                {t('maintenance.calendar.currentRule')} <span className="text-text font-semibold">{selectedCandidateRule.name || t('maintenance.labels.unnamedRule')}</span> · {t('maintenance.calendar.graceDays')}: <span className="text-text font-semibold">{calendarEligibility.graceDays}</span> · {t('maintenance.calendar.ruleAge')}: <span className="text-text font-semibold">{calendarEligibility.daysSinceRuleCreated}</span> {t('maintenance.calendar.titleCount')}
                                             </p>
                                         )}
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -10788,27 +10789,27 @@ export const MaintenanceDashboard: React.FC = () => {
                                                 type="button"
                                                 onClick={() => setSelectedCalendarDate(ELIGIBLE_NOW_KEY)}
                                                 className="text-left bg-background/30 border border-white/5 rounded-lg p-3 hover:border-plex/50 transition-colors"
-                                                title="Titles that match this rule and whose grace window has elapsed."
+                                                title={t('maintenance.calendar.eligibilityNowTooltip')}
                                             >
-                                                <p className="text-xs text-muted">Eligible Now</p>
+                                                <p className="text-xs text-muted">{t('maintenance.calendar.eligibleNow')}</p>
                                                 <p className="text-2xl font-bold text-text mt-1">{calendarEligibility.eligibleNow.length}</p>
-                                                <p className="text-[11px] text-muted mt-1">{formatReclaimSizeFromGB(calendarEligibility.eligibleNow.reduce((sum: number, item: any) => sum + Number(item.sizeGB || 0), 0))} reclaim now</p>
+                                                <p className="text-[11px] text-muted mt-1">{t('maintenance.calendar.reclaimNow', { value: formatReclaimSizeFromGB(calendarEligibility.eligibleNow.reduce((sum: number, item: any) => sum + Number(item.sizeGB || 0), 0)) })}</p>
                                             </button>
-                                            <div className="bg-background/30 border border-white/5 rounded-lg p-3" title="Number of future dates with delayed eligibility while this rule's grace period is active.">
-                                                <p className="text-xs text-muted">Eligible Later Days</p>
+                                            <div className="bg-background/30 border border-white/5 rounded-lg p-3" title={t('maintenance.calendar.futureDatesTooltip')}>
+                                                <p className="text-xs text-muted">{t('maintenance.calendar.eligibleLaterDays')}</p>
                                                 <p className="text-2xl font-bold text-text mt-1">{calendarEligibility.eligibleLaterByDay.length}</p>
                                             </div>
-                                            <div className="bg-background/30 border border-white/5 rounded-lg p-3" title="Titles currently matching this rule but still waiting for grace to expire.">
-                                                <p className="text-xs text-muted">Later Titles</p>
+                                            <div className="bg-background/30 border border-white/5 rounded-lg p-3" title={t('maintenance.calendar.waitingTooltip')}>
+                                                <p className="text-xs text-muted">{t('maintenance.calendar.laterTitles')}</p>
                                                 <p className="text-2xl font-bold text-text mt-1">{calendarEligibility.eligibleLaterByDay.reduce((sum: number, day: any) => sum + Number(day.count || 0), 0)}</p>
                                             </div>
-                                            <div className="bg-background/30 border border-white/5 rounded-lg p-3" title="Reclaim estimate from matches that are delayed by active grace days.">
-                                                <p className="text-xs text-muted">Later Reclaim</p>
+                                            <div className="bg-background/30 border border-white/5 rounded-lg p-3" title={t('maintenance.calendar.delayedReclaimTooltip')}>
+                                                <p className="text-xs text-muted">{t('maintenance.calendar.laterReclaim')}</p>
                                                 <p className="text-2xl font-bold text-text mt-1">{formatReclaimSizeFromGB(calendarEligibility.eligibleLaterByDay.reduce((sum: number, day: any) => sum + Number(day.reclaimGB || 0), 0))}</p>
                                             </div>
                                         </div>
                                         <div className="space-y-2">
-                                            <p className="text-xs uppercase tracking-wider text-muted font-bold" title="Dates when currently matched titles become eligible once this rule's grace period expires.">Eligible Later by Date</p>
+                                            <p className="text-xs uppercase tracking-wider text-muted font-bold" title={t('maintenance.calendar.datesTooltip')}>{t('maintenance.calendar.eligibleLaterByDate')}</p>
                                         </div>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[700px] overflow-y-auto custom-scrollbar pr-1">
                                             {calendarEligibility.eligibleLaterByDay.slice(0, 120).map((day) => {
@@ -10822,12 +10823,12 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     >
                                                         <div className="flex items-center justify-between gap-2">
                                                             <p className="text-sm font-semibold text-text">{dateLabel}</p>
-                                                            <span className="text-[11px] px-2 py-0.5 rounded bg-plex/20 text-plex font-semibold" title="Number of titles becoming eligible on this date.">{day.count}</span>
+                                                            <span className="text-[11px] px-2 py-0.5 rounded bg-plex/20 text-plex font-semibold" title={t('maintenance.calendar.dateTitleCount')}>{day.count}</span>
                                                         </div>
-                                                        <p className="text-[11px] text-muted mt-1">{day.minDaysUntil} day(s) until eligible · {formatReclaimSizeFromGB(day.reclaimGB)} reclaim</p>
+                                                        <p className="text-[11px] text-muted mt-1">{day.minDaysUntil} {t('maintenance.calendar.daysUntilEligible')} · {formatReclaimSizeFromGB(day.reclaimGB)} {t('maintenance.labels.reclaim')}</p>
                                                         <div className="mt-2 flex -space-x-2">
                                                             {day.preview.map((item: any, idx: number) => (
-                                                                <div key={`calendar-preview-${day.date}-${item.ratingKey}-${idx}`} className="w-8 h-8 rounded-full overflow-hidden border border-white/5 bg-black/50" title={`${item.title || 'Unknown Title'} • ${getEligibilityTooltip(item)}`}>
+                                                                <div key={`calendar-preview-${day.date}-${item.ratingKey}-${idx}`} className="w-8 h-8 rounded-full overflow-hidden border border-white/5 bg-black/50" title={`${item.title || t('maintenance.labels.unknownTitle')} • ${getEligibilityTooltip(item)}`}>
                                                                     {item.thumb ? (
                                                                         <img
                                                                             src={portalUrl(`/api/plex/image?path=${encodeURIComponent(item.thumb)}&width=64&height=64`)}
@@ -10844,7 +10845,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     </button>
                                                 );
                                             })}
-                                            {!calendarEligibility.eligibleLaterByDay.length && <p className="text-sm text-muted col-span-full">No delayed dates. Current matches are eligible now.</p>}
+                                            {!calendarEligibility.eligibleLaterByDay.length && <p className="text-sm text-muted col-span-full">{t('maintenance.calendar.noDelayedDates')}</p>}
                                         </div>
                                     </div>
                                 )}
@@ -10856,8 +10857,8 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     <h4 className="text-xl font-bold text-plex">
                                                         {selectedCalendarGroup.title || new Date(`${selectedCalendarGroup.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                                                     </h4>
-                                                    <p className="text-sm text-muted mt-1" title={selectedCalendarGroup.date === ELIGIBLE_NOW_KEY ? 'These titles currently match this rule and are eligible now.' : 'These titles match this rule but are waiting for the grace period to elapse.'}>
-                                                        {selectedCalendarGroup.count} title(s) · {formatReclaimSizeFromGB(selectedCalendarGroup.reclaimGB)} reclaim
+                                                    <p className="text-sm text-muted mt-1" title={selectedCalendarGroup.date === ELIGIBLE_NOW_KEY ? t('maintenance.calendar.nowDetail') : t('maintenance.calendar.laterDetail')}>
+                                                        {selectedCalendarGroup.count} {t('maintenance.calendar.titleCount')} · {formatReclaimSizeFromGB(selectedCalendarGroup.reclaimGB)} {t('maintenance.labels.reclaim')}
                                                     </p>
                                                 </div>
                                                 <button
@@ -10865,7 +10866,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     className="px-3 py-1.5 bg-border text-text rounded-md text-sm font-semibold hover:bg-opacity-80"
                                                     onClick={() => setSelectedCalendarDate(null)}
                                                 >
-                                                    Close
+                                                    {t('maintenance.labels.close')}
                                                 </button>
                                             </div>
                                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7 gap-3">
@@ -10880,14 +10881,14 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                     className="w-full h-full object-cover"
                                                                 />
                                                             ) : (
-                                                                <div className="w-full h-full flex items-center justify-center text-xs text-muted">No Poster</div>
+                                                                <div className="w-full h-full flex items-center justify-center text-xs text-muted">{t('maintenance.labels.noPoster')}</div>
                                                             )}
                                                         </div>
                                                         <div className="p-2">
                                                             <p className="text-xs text-text line-clamp-2">{item.title}</p>
-                                                            <p className="text-[11px] text-muted mt-1">{item.libraryTitle || 'Unknown Library'}</p>
-                                                            <p className="text-[11px] text-muted mt-1" title="Eligibility detail used by the backend.">
-                                                                Last watch: {Number.isFinite(Number(item.daysSinceLastWatch)) ? `${Number(item.daysSinceLastWatch)}d ago` : 'n/a'} · Added: {Number.isFinite(Number(item.daysSinceAdded)) ? `${Number(item.daysSinceAdded)}d ago` : 'n/a'}
+                                                            <p className="text-[11px] text-muted mt-1">{item.libraryTitle || t('maintenance.labels.unknownLibrary')}</p>
+                                                            <p className="text-[11px] text-muted mt-1" title={t('maintenance.calendar.eligibilityDetailTooltip')}>
+                                                                {t('maintenance.calendar.lastWatch')} {Number.isFinite(Number(item.daysSinceLastWatch)) ? `${Number(item.daysSinceLastWatch)}${t('maintenance.calendar.ago')}` : t('maintenance.calendar.notAvailable')} · {t('maintenance.calendar.added')} {Number.isFinite(Number(item.daysSinceAdded)) ? `${Number(item.daysSinceAdded)}${t('maintenance.calendar.ago')}` : t('maintenance.calendar.notAvailable')}
                                                             </p>
                                                         </div>
                                                     </div>
@@ -10898,45 +10899,45 @@ export const MaintenanceDashboard: React.FC = () => {
                                 )}
                                 {activeSection === 'storage' && (
                                     <div className="glass-card-sm p-5 space-y-4">
-                                        <h3 className="text-xl font-bold text-plex">Storage Metrics</h3>
-                                        <p className="text-sm text-muted">Deep storage projection per library based on indexed size and current rule matches.</p>
+                                        <h3 className="text-xl font-bold text-plex">{t('maintenance.storage.title')}</h3>
+                                        <p className="text-sm text-muted">{t('maintenance.storage.description')}</p>
                                         <div className="flex items-center gap-2">
                                             <button
                                                 type="button"
                                                 className="px-3 py-1.5 bg-border text-text rounded-md text-xs font-semibold hover:bg-opacity-80"
                                                 onClick={() => loadStorageSummary(candidateRuleId || undefined)}
                                             >
-                                                {storageSummaryLoading ? 'Refreshing...' : 'Refresh Summary'}
+                                                {storageSummaryLoading ? t('maintenance.storage.refreshing') : t('maintenance.storage.refreshSummary')}
                                             </button>
                                             {selectedCandidateRule && (
-                                                <p className="text-xs text-muted">Rule scope: <span className="text-text font-semibold">{selectedCandidateRule.name || 'Unnamed Rule'}</span></p>
+                                                <p className="text-xs text-muted">{t('maintenance.storage.ruleScope')} <span className="text-text font-semibold">{selectedCandidateRule.name || t('maintenance.labels.unnamedRule')}</span></p>
                                             )}
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
-                                                <p className="text-xs text-muted">Library Size Before</p>
+                                                <p className="text-xs text-muted">{t('maintenance.storage.librarySizeBefore')}</p>
                                                 <p className="text-2xl font-bold text-text">{formatReclaimSizeFromGB(Number(storageSummary?.totals?.beforeGB || 0))}</p>
                                             </div>
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
-                                                <p className="text-xs text-muted">Projected Reclaim</p>
+                                                <p className="text-xs text-muted">{t('maintenance.storage.projectedReclaim')}</p>
                                                 <p className="text-2xl font-bold text-text">{formatReclaimSizeFromGB(Number(storageSummary?.totals?.reclaimGB || 0))}</p>
                                             </div>
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
-                                                <p className="text-xs text-muted">Projected Size After</p>
+                                                <p className="text-xs text-muted">{t('maintenance.storage.projectedSizeAfter')}</p>
                                                 <p className="text-2xl font-bold text-text">{formatReclaimSizeFromGB(Number(storageSummary?.totals?.afterGB || 0))}</p>
                                             </div>
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
-                                                <p className="text-xs text-muted">Reclaim Percent</p>
+                                                <p className="text-xs text-muted">{t('maintenance.storage.reclaimPercent')}</p>
                                                 <p className="text-2xl font-bold text-text">{Number(storageSummary?.totals?.reclaimPercent || 0).toFixed(1)}%</p>
                                             </div>
                                         </div>
                                         <div className="bg-background/30 border border-white/5 rounded-lg p-3">
                                             <div className="grid grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1fr] gap-2 px-2 py-1 text-[11px] uppercase tracking-wider text-muted font-bold border-b border-border">
-                                                <span>Library</span>
-                                                <span className="text-right">Before</span>
-                                                <span className="text-right">Reclaim</span>
-                                                <span className="text-right">After</span>
-                                                <span className="text-right">Matched</span>
+                                                <span>{t('maintenance.labels.library')}</span>
+                                                <span className="text-right">{t('maintenance.labels.before')}</span>
+                                                <span className="text-right">{t('maintenance.labels.reclaim')}</span>
+                                                <span className="text-right">{t('maintenance.labels.after')}</span>
+                                                <span className="text-right">{t('maintenance.labels.matched')}</span>
                                             </div>
                                             <div className="max-h-[420px] overflow-y-auto custom-scrollbar pr-1 space-y-1 mt-2">
                                                 {(storageSummary?.libraries || []).map((row: any) => (
@@ -10949,9 +10950,9 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     </div>
                                                 ))}
                                                 {!storageSummaryLoading && !(storageSummary?.libraries || []).length && (
-                                                    <p className="text-sm text-muted px-2 py-2">No storage summary yet. Refresh or load candidates/rules first.</p>
+                                                    <p className="text-sm text-muted px-2 py-2">{t('maintenance.storage.noSummary')}</p>
                                                 )}
-                                                {storageSummaryLoading && <p className="text-sm text-muted px-2 py-2">Loading storage summary...</p>}
+                                                {storageSummaryLoading && <p className="text-sm text-muted px-2 py-2">{t('maintenance.storage.loading')}</p>}
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -10960,7 +10961,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                 <p className="text-xl font-bold text-text">{Number(storageSummary?.totals?.items || 0)}</p>
                                             </div>
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
-                                                <p className="text-xs text-muted">Matched Candidate Items</p>
+                                                <p className="text-xs text-muted">{t('maintenance.storage.matchedItems')}</p>
                                                 <p className="text-xl font-bold text-text">{Number(storageSummary?.totals?.matchedItems || 0)}</p>
                                             </div>
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
@@ -10970,10 +10971,10 @@ export const MaintenanceDashboard: React.FC = () => {
                                         </div>
                                         {storageSummary?.rulesConsidered?.length > 0 && (
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
-                                                <p className="text-xs text-muted font-bold uppercase tracking-wider mb-2">Rules Included</p>
+                                                <p className="text-xs text-muted font-bold uppercase tracking-wider mb-2">{t('maintenance.storage.rulesIncluded')}</p>
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {storageSummary.rulesConsidered.map((rule: any) => (
-                                                        <span key={`storage-rule-${rule.id}`} className="px-2 py-1 rounded bg-border text-xs text-text">{rule.name || 'Unnamed Rule'}</span>
+                                                        <span key={`storage-rule-${rule.id}`} className="px-2 py-1 rounded bg-border text-xs text-text">{rule.name || t('maintenance.labels.unnamedRule')}</span>
                                                     ))}
                                                 </div>
                                             </div>
@@ -10982,7 +10983,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                 )}
                                 {activeSection === 'library' && (
                                     <div className="glass-card-sm p-5 space-y-3">
-                                        <h3 className="text-xl font-bold text-plex">Rule Library</h3>
+                                        <h3 className="text-xl font-bold text-plex">{t('maintenance.library.title')}</h3>
                                         <div className="flex flex-wrap gap-2">
                                             <button
                                                 type="button"
@@ -10995,10 +10996,10 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     a.download = `maintenance-rules-${Date.now()}.json`;
                                                     a.click();
                                                     URL.revokeObjectURL(url);
-                                                    addToast('Rule export downloaded.');
+                                                    addToast(t('maintenance.library.exportDownloaded'));
                                                 }}
                                             >
-                                                Export Rules JSON
+                                                {t('maintenance.library.export')}
                                             </button>
                                             <button
                                                 type="button"
@@ -11006,20 +11007,20 @@ export const MaintenanceDashboard: React.FC = () => {
                                                 onClick={async () => {
                                                     try {
                                                         const parsed = JSON.parse(libraryJsonInput || '[]');
-                                                        if (!Array.isArray(parsed)) throw new Error('JSON must be an array of rules.');
+                                                        if (!Array.isArray(parsed)) throw new Error(t('maintenance.library.arrayRequired'));
                                                         await saveAllRules(parsed);
-                                                        addToast('Imported rules saved.');
+                                                        addToast(t('maintenance.library.importSaved'));
                                                     } catch (e: any) {
-                                                        addToast(e.message || 'Invalid JSON import.', 'error');
+                                                        addToast(e.message || t('maintenance.library.invalidJson'), 'error');
                                                     }
                                                 }}
                                             >
-                                                Import Rules JSON
+                                                {t('maintenance.library.import')}
                                             </button>
                                         </div>
                                         <textarea
                                             className="w-full min-h-[240px] p-3 rounded-lg border border-border bg-card text-text text-xs font-mono"
-                                            placeholder="Paste exported rules JSON here to import."
+                                            placeholder={t('maintenance.library.placeholder')}
                                             value={libraryJsonInput}
                                             onChange={(e) => setLibraryJsonInput(e.target.value)}
                                         />
@@ -11027,8 +11028,8 @@ export const MaintenanceDashboard: React.FC = () => {
                                 )}
                                 {activeSection === 'exclusions' && (
                                     <div className="glass-card-sm p-4 md:p-5 space-y-3">
-                                        <h3 className="text-xl font-bold text-plex">Exclusions</h3>
-                                        <p className="text-sm text-muted">Click posters to select them for bulk actions. Selected items show a checkmark overlay. Use the Exclude link under each title for one-off changes.</p>
+                                        <h3 className="text-xl font-bold text-plex">{t('maintenance.exclusions.title')}</h3>
+                                        <p className="text-sm text-muted">{t('maintenance.exclusions.description')}</p>
                                         <div className="bg-background/30 border border-white/5 rounded-lg p-3 md:p-4 space-y-2.5">
                                             <div className="min-w-0 md:w-[220px] h-9">
                                                 <CustomSelect
@@ -11038,7 +11039,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                         setLibraryBrowsePage(1);
                                                     }}
                                                     options={[
-                                                        { label: 'All Libraries', value: 'all' },
+                                                        { label: t('maintenance.exclusions.allLibraries'), value: 'all' },
                                                         ...libraryOptions.map((library) => ({
                                                             label: `${library.title} (${library.count})`,
                                                             value: library.id
@@ -11049,14 +11050,14 @@ export const MaintenanceDashboard: React.FC = () => {
                                             <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-center mt-1">
                                                 <input
                                                     className="h-9 px-2.5 rounded border border-border bg-card text-text text-xs md:text-sm min-w-0"
-                                                    placeholder="Search title..."
+                                                    placeholder={t('maintenance.exclusions.searchPlaceholder')}
                                                     value={libraryBrowseSearch}
                                                     onChange={(e) => {
                                                         setLibraryBrowseSearch(e.target.value);
                                                         setLibraryBrowsePage(1);
                                                     }}
                                                 />
-                                                <button type="button" className="h-9 px-3 bg-border text-text rounded-md text-xs md:text-sm font-semibold whitespace-nowrap" onClick={loadLibraryBrowse}>Refresh</button>
+                                                <button type="button" className="h-9 px-3 bg-border text-text rounded-md text-xs md:text-sm font-semibold whitespace-nowrap" onClick={loadLibraryBrowse}>{t('maintenance.exclusions.refresh')}</button>
                                             </div>
                                             <div className="grid grid-cols-[minmax(0,1fr)_auto] md:flex md:flex-wrap items-center gap-2">
                                                 <button
@@ -11065,30 +11066,30 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     onClick={() => setSelectedExcludeKeys(libraryItems.map((item: any) => String(item.ratingKey || '')).filter(Boolean))}
                                                     disabled={!libraryItems.length}
                                                 >
-                                                    Select Page
+                                                    {t('maintenance.exclusions.selectPage')}
                                                 </button>
                                                 <button
                                                     type="button"
                                                     className="h-9 px-3 bg-plex text-background rounded-md text-xs md:text-sm font-semibold whitespace-nowrap"
                                                     onClick={async () => {
                                                         if (!selectedExcludeKeys.length) {
-                                                            addToast('Select posters to exclude first.', 'error');
+                                                            addToast(t('maintenance.exclusions.selectToExclude'), 'error');
                                                             return;
                                                         }
                                                         const merged = Array.from(new Set([...(preferences?.exclusions?.ratingKeys || []).map((v: string) => String(v)), ...selectedExcludeKeys]));
                                                         await updateRatingKeyExclusions(merged);
                                                         setSelectedExcludeKeys([]);
-                                                        addToast(`Excluded ${selectedExcludeKeys.length} selected title(s).`);
+                                                        addToast(t('maintenance.exclusions.excludedSelected', { count: selectedExcludeKeys.length }));
                                                     }}
                                                 >
-                                                    Exclude Selected ({selectedExcludeKeys.length})
+                                                    {t('maintenance.exclusions.excludeSelected', { count: selectedExcludeKeys.length })}
                                                 </button>
                                                 <button
                                                     type="button"
                                                     className="h-9 w-9 flex items-center justify-center bg-red-500/15 border border-red-500/40 text-red-300 rounded-md hover:bg-red-500/25 transition-colors"
                                                     onClick={() => setSelectedExcludeKeys([])}
-                                                    title="Clear Selection"
-                                                    aria-label="Clear Selection"
+                                                    title={t('maintenance.exclusions.clearSelection')}
+                                                    aria-label={t('maintenance.exclusions.clearSelection')}
                                                 >
                                                     <X className="w-3.5 h-3.5 md:w-4 md:h-4" />
                                                 </button>
@@ -11097,22 +11098,22 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     className="col-span-2 md:col-auto h-9 px-3 bg-border text-text rounded-md text-xs md:text-sm font-semibold whitespace-nowrap"
                                                     onClick={async () => {
                                                         if (!selectedExcludeKeys.length) {
-                                                            addToast('Select posters to unexclude first.', 'error');
+                                                            addToast(t('maintenance.exclusions.selectToUnexclude'), 'error');
                                                             return;
                                                         }
                                                         const removedCount = selectedExcludeKeys.length;
                                                         const remaining = (preferences?.exclusions?.ratingKeys || []).map((v: string) => String(v)).filter((key: string) => !selectedExcludeKeys.includes(key));
                                                         await updateRatingKeyExclusions(remaining);
                                                         setSelectedExcludeKeys([]);
-                                                        addToast(`Removed ${removedCount} selected exclusion(s).`);
+                                                        addToast(t('maintenance.exclusions.removedSelected', { count: removedCount }));
                                                     }}
                                                 >
-                                                    Remove Selected Exclusions
+                                                    {t('maintenance.exclusions.removeSelected')}
                                                 </button>
-                                                <p className="col-span-2 text-[11px] md:text-xs text-muted w-full md:w-auto md:ml-auto md:text-right">Showing {libraryItems.length} of {libraryBrowseTotal} titles · page {libraryBrowsePage}</p>
+                                                <p className="col-span-2 text-[11px] md:text-xs text-muted w-full md:w-auto md:ml-auto md:text-right">{t('maintenance.exclusions.showing', { shown: libraryItems.length, total: libraryBrowseTotal, page: libraryBrowsePage })}</p>
                                             </div>
                                             {libraryBrowseLoading ? (
-                                                <p className="text-sm text-muted">Loading posters...</p>
+                                                <p className="text-sm text-muted">{t('maintenance.exclusions.loading')}</p>
                                             ) : (
                                                 <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2 md:gap-3 max-h-[1240px] overflow-y-auto custom-scrollbar pr-1">
                                                     {libraryItems.map((item: any) => {
@@ -11125,7 +11126,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                             const currentKeys = (preferences?.exclusions?.ratingKeys || []).map((v: string) => String(v));
                                                             const nextKeys = excluded ? currentKeys.filter((v: string) => v !== key) : Array.from(new Set([...currentKeys, key]));
                                                             await updateRatingKeyExclusions(nextKeys);
-                                                            addToast(excluded ? `Removed exclusion for ${item.title}.` : `Excluded ${item.title}.`);
+                                                            addToast(excluded ? t('maintenance.exclusions.removed', { title: item.title }) : t('maintenance.exclusions.excludedTitle', { title: item.title }));
                                                         };
                                                         return (
                                                             <div
@@ -11144,7 +11145,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                         {item.thumb ? (
                                                                             <img src={portalUrl(`/api/plex/image?path=${encodeURIComponent(item.thumb)}&width=220&height=330`)} alt={item.title} loading="lazy" className="w-full h-full object-cover" />
                                                                         ) : (
-                                                                            <div className="w-full h-full flex items-center justify-center text-xs text-muted">No Poster</div>
+                                                                        <div className="w-full h-full flex items-center justify-center text-xs text-muted">{t('maintenance.labels.noPoster')}</div>
                                                                         )}
                                                                         {selected && (
                                                                             <>
@@ -11156,7 +11157,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                         )}
                                                                         {excluded && (
                                                                             <span className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded bg-red-600/95 text-white font-bold pointer-events-none">
-                                                                                Excluded
+                                                                                {t('maintenance.exclusions.excluded')}
                                                                             </span>
                                                                         )}
                                                                     </div>
@@ -11169,13 +11170,13 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                         className={`text-[10px] font-semibold shrink-0 whitespace-nowrap transition-colors ${excluded ? 'text-muted hover:text-text' : 'text-plex hover:text-plex-hover'}`}
                                                                         onClick={toggleQuickExclude}
                                                                     >
-                                                                        {excluded ? 'Unexclude' : 'Exclude'}
+                                                                        {excluded ? t('maintenance.exclusions.unexclude') : t('maintenance.exclusions.exclude')}
                                                                     </button>
                                                                 </div>
                                                             </div>
                                                         );
                                                     })}
-                                                    {!libraryItems.length && <p className="text-sm text-muted col-span-full">No titles found for the current library/search.</p>}
+                                                    {!libraryItems.length && <p className="text-sm text-muted col-span-full">{t('maintenance.exclusions.noTitles')}</p>}
                                                 </div>
                                             )}
                                             <div className="flex items-center justify-between">
@@ -11185,7 +11186,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     disabled={libraryBrowsePage <= 1}
                                                     onClick={() => setLibraryBrowsePage((p) => Math.max(1, p - 1))}
                                                 >
-                                                    Previous
+                                                    {t('maintenance.labels.previous')}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -11193,15 +11194,15 @@ export const MaintenanceDashboard: React.FC = () => {
                                                     disabled={(libraryBrowsePage * libraryBrowseLimit) >= libraryBrowseTotal}
                                                     onClick={() => setLibraryBrowsePage((p) => p + 1)}
                                                 >
-                                                    Next
+                                                    {t('maintenance.labels.next')}
                                                 </button>
                                             </div>
                                         </div>
                                         <div className="bg-background/30 border border-white/5 rounded-lg p-3 space-y-3">
-                                            <h4 className="text-sm font-bold text-text">Current Exclusions (Resolved)</h4>
+                                            <h4 className="text-sm font-bold text-text">{t('maintenance.exclusions.currentResolved')}</h4>
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                                 <div className="bg-background/30 border border-white/5 rounded-lg p-3 space-y-2">
-                                                    <p className="text-xs font-bold text-muted uppercase tracking-wider">Excluded Titles by RatingKey</p>
+                                                    <p className="text-xs font-bold text-muted uppercase tracking-wider">{t('maintenance.exclusions.ratingKeyTitles')}</p>
                                                     <div className="space-y-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
                                                         {exclusionsSummary.ratingKeys.map((entry: any) => (
                                                             <div key={`resolved-key-${entry.ratingKey}`} className="flex items-center gap-2 bg-background/30 border border-white/5 rounded-md p-2">
@@ -11209,7 +11210,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                     {entry.thumb ? (
                                                                         <img src={portalUrl(`/api/plex/image?path=${encodeURIComponent(entry.thumb)}&width=80&height=120`)} alt={entry.title} className="w-full h-full object-cover" />
                                                                     ) : (
-                                                                        <div className="w-full h-full flex items-center justify-center text-[9px] text-muted">No Poster</div>
+                                                                        <div className="w-full h-full flex items-center justify-center text-[9px] text-muted">{t('maintenance.labels.noPoster')}</div>
                                                                     )}
                                                                 </div>
                                                                 <div className="min-w-0">
@@ -11218,11 +11219,11 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                 </div>
                                                             </div>
                                                         ))}
-                                                        {!exclusionsSummary.ratingKeys.length && <p className="text-xs text-muted">No ratingKey exclusions set.</p>}
+                                                        {!exclusionsSummary.ratingKeys.length && <p className="text-xs text-muted">{t('maintenance.exclusions.noRatingKeys')}</p>}
                                                     </div>
                                                 </div>
                                                 <div className="bg-background/30 border border-white/5 rounded-lg p-3 space-y-2">
-                                                    <p className="text-xs font-bold text-muted uppercase tracking-wider">Excluded Title Terms</p>
+                                                    <p className="text-xs font-bold text-muted uppercase tracking-wider">{t('maintenance.exclusions.titleTerms')}</p>
                                                     <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-1">
                                                         {exclusionsSummary.titles.map((entry: any) => (
                                                             <div key={`resolved-title-${entry.title}`} className="bg-background/30 border border-white/5 rounded-md px-2 py-1.5">
@@ -11230,11 +11231,11 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                 <p className="text-[10px] text-muted">{entry.matchCount} indexed match(es)</p>
                                                             </div>
                                                         ))}
-                                                        {!exclusionsSummary.titles.length && <p className="text-xs text-muted">No title exclusions set.</p>}
+                                                        {!exclusionsSummary.titles.length && <p className="text-xs text-muted">{t('maintenance.exclusions.noTitleTerms')}</p>}
                                                     </div>
                                                 </div>
                                                 <div className="bg-background/30 border border-white/5 rounded-lg p-3 space-y-2">
-                                                    <p className="text-xs font-bold text-muted uppercase tracking-wider">Excluded Libraries</p>
+                                                    <p className="text-xs font-bold text-muted uppercase tracking-wider">{t('maintenance.exclusions.libraries')}</p>
                                                     <div className="space-y-1.5 max-h-52 overflow-y-auto custom-scrollbar pr-1">
                                                         {exclusionsSummary.libraries.map((entry: any) => (
                                                             <div key={`resolved-library-${entry.libraryTitle}`} className="bg-background/30 border border-white/5 rounded-md px-2 py-1.5">
@@ -11242,14 +11243,14 @@ export const MaintenanceDashboard: React.FC = () => {
                                                                 <p className="text-[10px] text-muted">{entry.matchCount} indexed item(s)</p>
                                                             </div>
                                                         ))}
-                                                        {!exclusionsSummary.libraries.length && <p className="text-xs text-muted">No library exclusions set.</p>}
+                                                        {!exclusionsSummary.libraries.length && <p className="text-xs text-muted">{t('maintenance.exclusions.noLibraries')}</p>}
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                             <div>
-                                                <label className="text-xs text-muted font-bold uppercase">Title Exclusions (advanced, one per line)</label>
+                                                <label className="text-xs text-muted font-bold uppercase">{t('maintenance.exclusions.advancedTitle')}</label>
                                                 <textarea
                                                     className="w-full min-h-[180px] p-3 rounded-lg border border-border bg-card text-text text-xs"
                                                     value={(preferences?.exclusions?.titles || []).join('\n')}
@@ -11257,7 +11258,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="text-xs text-muted font-bold uppercase">Library Exclusions (advanced, one per line)</label>
+                                                <label className="text-xs text-muted font-bold uppercase">{t('maintenance.exclusions.advancedLibrary')}</label>
                                                 <textarea
                                                     className="w-full min-h-[180px] p-3 rounded-lg border border-border bg-card text-text text-xs"
                                                     value={(preferences?.exclusions?.libraries || []).join('\n')}
@@ -11265,7 +11266,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="text-xs text-muted font-bold uppercase">RatingKey Exclusions (advanced, one per line)</label>
+                                                <label className="text-xs text-muted font-bold uppercase">{t('maintenance.exclusions.advancedRating')}</label>
                                                 <textarea
                                                     className="w-full min-h-[180px] p-3 rounded-lg border border-border bg-card text-text text-xs"
                                                     value={(preferences?.exclusions?.ratingKeys || []).join('\n')}
@@ -11273,36 +11274,36 @@ export const MaintenanceDashboard: React.FC = () => {
                                                 />
                                             </div>
                                         </div>
-                                        <button type="button" className="px-3 py-2 bg-plex text-background rounded-md text-sm font-semibold" onClick={async () => { await savePreferences(preferences); await loadExclusionsSummary(); addToast('Exclusions saved.'); }}>
-                                            Save Exclusions
+                                        <button type="button" className="px-3 py-2 bg-plex text-background rounded-md text-sm font-semibold" onClick={async () => { await savePreferences(preferences); await loadExclusionsSummary(); addToast(t('maintenance.exclusions.saved')); }}>
+                                            {t('maintenance.exclusions.saved')}
                                         </button>
                                     </div>
                                 )}
                                 {activeSection === 'settings' && (
                                     <div className="glass-card-sm p-5 space-y-4">
-                                        <h3 className="text-xl font-bold text-plex">Cleaner Settings</h3>
+                                        <h3 className="text-xl font-bold text-plex">{t('maintenance.settings.title')}</h3>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
-                                                <label className="text-xs text-muted font-bold uppercase block mb-2">Default Dry-run</label>
+                                                <label className="text-xs text-muted font-bold uppercase block mb-2">{t('maintenance.settings.defaultDryRun')}</label>
                                                 <label className="text-sm text-muted flex items-center gap-2">
                                                     <input type="checkbox" checked={!!preferences?.global?.dryRunByDefault} onChange={(e) => setPreferences((prev: any) => ({ ...prev, global: { ...(prev.global || {}), dryRunByDefault: e.target.checked } }))} />
-                                                    Enable by default
+                                                    {t('maintenance.settings.enableByDefault')}
                                                 </label>
                                             </div>
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
-                                                <label className="text-xs text-muted font-bold uppercase block mb-2">Max Actions Per Run</label>
+                                                <label className="text-xs text-muted font-bold uppercase block mb-2">{t('maintenance.settings.maxActions')}</label>
                                                 <input type="number" min={1} className="w-full p-2 rounded border border-border bg-card text-text text-sm" value={preferences?.global?.maxActionsPerRun || 25} onChange={(e) => setPreferences((prev: any) => ({ ...prev, global: { ...(prev.global || {}), maxActionsPerRun: Math.max(1, Number(e.target.value) || 1) } }))} />
                                             </div>
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
-                                                <label className="text-xs text-muted font-bold uppercase block mb-2">Require Confirm Token</label>
+                                                <label className="text-xs text-muted font-bold uppercase block mb-2">{t('maintenance.settings.requireConfirm')}</label>
                                                 <label className="text-sm text-muted flex items-center gap-2">
                                                     <input type="checkbox" checked={!!preferences?.global?.requireConfirmForDestructive} onChange={(e) => setPreferences((prev: any) => ({ ...prev, global: { ...(prev.global || {}), requireConfirmForDestructive: e.target.checked } }))} />
-                                                    Required for destructive runs
+                                                    {t('maintenance.settings.required')}
                                                 </label>
                                             </div>
                                         </div>
-                                        <button type="button" className="px-3 py-2 bg-plex text-background rounded-md text-sm font-semibold" onClick={async () => { await savePreferences(preferences); addToast('Maintenance settings saved.'); }}>
-                                            Save Cleaner Settings
+                                        <button type="button" className="px-3 py-2 bg-plex text-background rounded-md text-sm font-semibold" onClick={async () => { await savePreferences(preferences); addToast(t('maintenance.settings.saved')); }}>
+                                            {t('maintenance.settings.save')}
                                         </button>
                                     </div>
                                 )}
