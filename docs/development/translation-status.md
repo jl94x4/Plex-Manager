@@ -33,6 +33,7 @@ This table describes broad UI i18n wiring and known remaining work. It does not 
 | Overlays dashboard | i18n-enabled |
 | Downloads page | i18n-enabled |
 | Media Stack Calendar | i18n-enabled |
+| Status page | i18n-enabled |
 | Wider Settings | Partial |
 | Scanner | Partial |
 | ColleXions | Partial |
@@ -41,7 +42,7 @@ This table describes broad UI i18n wiring and known remaining work. It does not 
 | Library Upgrader | Partial |
 | Requests admin UI | Partial |
 | Maintenance / Cleaner | Partial |
-| Status / About / Logs | Partial |
+| About / Logs | Partial |
 | Setup/admin utility areas | Mostly hardcoded |
 
 ## Current Recommended Small Batches
@@ -67,7 +68,7 @@ Future candidates include:
 - Library Upgrader module
 - Requests admin UI
 - Maintenance / Cleaner
-- Status / About / Logs
+- About / Logs
 - setup/admin utility areas
 
 ## Architecture / Maintainer Decision Backlog
