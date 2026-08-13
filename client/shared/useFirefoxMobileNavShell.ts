@@ -37,29 +37,13 @@ export const isStandaloneDisplayMode = () => {
 };
 
 /**
- * Firefox Android + iOS Safari/PWA leave `position:fixed; bottom:0` stranded
- * when the dynamic toolbar collapses (or the layout viewport is shorter than
- * the screen). Pin the bar so its bottom edge matches the visible viewport,
- * and extend to the layout bottom when chrome is gone so no black gap remains.
+ * Firefox Android needs explicit visual-viewport docking when its dynamic
+ * toolbar changes. iOS uses the same body portal, but keeps the native
+ * `bottom: 0` anchor so layout, visual, and screen coordinates are not mixed.
  *
  * Chrome / Chromium Android PWA must not use this path — plain CSS `bottom:0`
  * is correct there.
  */
-const readLargeViewportHeight = () => {
-    if (typeof document === 'undefined') return 0;
-    try {
-        const probe = document.createElement('div');
-        probe.setAttribute('aria-hidden', 'true');
-        probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:100lvh;pointer-events:none;visibility:hidden';
-        document.body.appendChild(probe);
-        const height = probe.offsetHeight || 0;
-        probe.remove();
-        return height;
-    } catch {
-        return 0;
-    }
-};
-
 export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
     useEffect(() => {
         if (!enabled || typeof window === 'undefined') return;
@@ -67,7 +51,6 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
         let raf = 0;
         let lastTop: number | string = Number.NaN;
         const ios = isIosMobileClient();
-        const largeViewportHeight = ios ? readLargeViewportHeight() : 0;
 
         const clearInline = (bar: HTMLElement) => {
             bar.style.position = '';
@@ -87,18 +70,10 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
 
             const vv = window.visualViewport;
             const barH = Math.max(bar.offsetHeight || 0, 56);
-            const landscape = window.innerWidth > window.innerHeight;
-            const screenFloor = ios
-                ? (landscape
-                    ? Math.min(window.screen?.width || 0, window.screen?.height || 0)
-                    : Math.max(window.screen?.width || 0, window.screen?.height || 0))
-                : 0;
             const layoutBottom = Math.max(
                 window.innerHeight || 0,
                 document.documentElement?.clientHeight || 0,
                 vv ? Math.ceil(vv.height + vv.offsetTop) : 0,
-                largeViewportHeight,
-                screenFloor,
             );
             const visualBottom = vv ? (vv.offsetTop + vv.height) : layoutBottom;
             const isZoomed = vv ? Math.abs(vv.scale - 1) > 0.01 : false;
@@ -122,16 +97,14 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             bar.style.margin = '0';
             bar.style.transform = 'translateZ(0)';
 
-            if (ios && !isZoomed) {
-                // iOS `position:fixed` is visual-viewport-relative. `bottom:0` therefore
-                // sits above Safari's chrome on first load. Shift down by the gap to
-                // the large/screen viewport so the bar starts on the device bottom.
-                const gap = Math.round(visualBottom - dockBottom);
-                const key = `b:${gap}`;
-                if (key === lastTop) return;
-                lastTop = key;
+            if (ios) {
+                // Keep iOS on one coordinate system. The portaled fixed bar is
+                // anchored to the visual viewport; safe-area padding is handled
+                // by CSS in standalone mode.
+                if (lastTop === 'ios') return;
+                lastTop = 'ios';
                 bar.style.top = 'auto';
-                bar.style.bottom = `${gap}px`;
+                bar.style.bottom = '0px';
                 return;
             }
 
