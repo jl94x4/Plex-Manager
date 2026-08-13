@@ -9,6 +9,7 @@ import { formatDateTime } from '../shared/format';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { CustomSelect } from '../shared/ui';
 import { issueStatusBadgeClass } from '../discovery/issueUtils';
+import { useDiscoverI18n } from '../discovery/i18n';
 
 type TicketFilter = 'open' | 'resolved' | 'closed' | 'all';
 
@@ -36,23 +37,32 @@ type Ticket = {
 };
 
 const CATEGORY_FALLBACK = [
-    { id: 'media', label: 'Media request / problem' },
-    { id: 'account', label: 'Account / access' },
-    { id: 'server', label: 'Server / service' },
-    { id: 'general', label: 'General question' },
-    { id: 'other', label: 'Other' },
+    { id: 'media' },
+    { id: 'account' },
+    { id: 'server' },
+    { id: 'general' },
+    { id: 'other' },
 ];
+
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+    media: 'support.categories.media',
+    account: 'support.categories.account',
+    server: 'support.categories.server',
+    general: 'support.categories.general',
+    other: 'support.categories.other',
+};
 
 export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => void }> = ({
     sessionInfo = null,
     onCountsChange,
 }) => {
+    const { t } = useDiscoverI18n();
     const isAdmin = !!sessionInfo?.session?.isAdmin;
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [filter, setFilter] = useState<TicketFilter>('open');
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [counts, setCounts] = useState({ open: 0, resolved: 0, closed: 0, unread: 0, total: 0 });
-    const [categories, setCategories] = useState(CATEGORY_FALLBACK);
+    const [categories, setCategories] = useState<Array<{ id: string; label?: string }>>(CATEGORY_FALLBACK);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [composeOpen, setComposeOpen] = useState(false);
@@ -76,12 +86,12 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
             setTickets(Array.isArray(data?.results) ? data.results : []);
             if (data?.counts) setCounts(data.counts);
         } catch (e: any) {
-            setError(e?.message || 'Failed to load tickets');
+            setError(e?.message || t('support.errors.loadFailed'));
             setTickets([]);
         } finally {
             setLoading(false);
         }
-    }, [filter]);
+    }, [filter, t]);
 
     useEffect(() => {
         apiFetch('/api/support/meta').then((meta) => {
@@ -125,17 +135,23 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
             setActive(data?.ticket || null);
             onCountsChange?.();
         }).catch((e: any) => {
-            if (!cancelled) addToast(e?.message || 'Could not open ticket', 'error');
+            if (!cancelled) addToast(e?.message || t('support.errors.openFailed'), 'error');
         });
         return () => { cancelled = true; };
-    }, [activeId, addToast, onCountsChange]);
+    }, [activeId, addToast, onCountsChange, t]);
 
     const tabs = useMemo(() => ([
-        { id: 'open' as const, label: 'Open', count: counts.open },
-        { id: 'resolved' as const, label: 'Resolved', count: counts.resolved },
-        { id: 'closed' as const, label: 'Closed', count: counts.closed },
-        { id: 'all' as const, label: 'All', count: counts.total },
-    ]), [counts]);
+        { id: 'open' as const, label: t('support.filters.open'), count: counts.open },
+        { id: 'resolved' as const, label: t('support.filters.resolved'), count: counts.resolved },
+        { id: 'closed' as const, label: t('support.filters.closed'), count: counts.closed },
+        { id: 'all' as const, label: t('support.filters.all'), count: counts.total },
+    ]), [counts, t]);
+
+    const displayStatus = (value: string) => ({
+        open: t('support.status.open'),
+        resolved: t('support.status.resolved'),
+        closed: t('support.status.closed'),
+    }[value.toLowerCase()] || value);
 
     const submitTicket = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -148,12 +164,12 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
             setSubject('');
             setMessage('');
             setComposeOpen(false);
-            addToast('Ticket sent');
+            addToast(t('support.toasts.sent'));
             setActiveId(data?.ticket?.id || null);
             await loadList();
             onCountsChange?.();
         } catch (err: any) {
-            addToast(err?.message || 'Could not send ticket', 'error');
+            addToast(err?.message || t('support.errors.sendFailed'), 'error');
         } finally {
             setSaving(false);
         }
@@ -172,7 +188,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
             await loadList();
             onCountsChange?.();
         } catch (err: any) {
-            addToast(err?.message || 'Reply failed', 'error');
+            addToast(err?.message || t('support.errors.replyFailed'), 'error');
         } finally {
             setBusy(false);
         }
@@ -190,7 +206,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
             await loadList();
             onCountsChange?.();
         } catch (err: any) {
-            addToast(err?.message || 'Could not update status', 'error');
+            addToast(err?.message || t('support.errors.statusFailed'), 'error');
         } finally {
             setBusy(false);
         }
@@ -205,9 +221,9 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
             setActive(null);
             await loadList();
             onCountsChange?.();
-            addToast('Ticket deleted');
+            addToast(t('support.toasts.deleted'));
         } catch (err: any) {
-            addToast(err?.message || 'Delete failed', 'error');
+            addToast(err?.message || t('support.errors.deleteFailed'), 'error');
         } finally {
             setBusy(false);
         }
@@ -220,11 +236,11 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
             <ToastContainer toasts={toasts} setToasts={setToasts} />
             <DashboardHero
                 accent="plex"
-                eyebrow="Support"
-                title={isAdmin ? 'Support inbox' : 'Contact admin'}
+                eyebrow={t('navigation.support')}
+                title={isAdmin ? t('support.page.adminTitle') : t('support.page.memberTitle')}
                 description={isAdmin
-                    ? 'Reply to member tickets without leaving the portal.'
-                    : 'Message the server admin directly — no Discord or email required.'}
+                    ? t('support.page.adminDescription')
+                    : t('support.page.memberDescription')}
                 icon={<LifeBuoy className="h-3.5 w-3.5" />}
                 secondaryBlob
                 actions={(
@@ -233,7 +249,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                         onClick={() => setComposeOpen(true)}
                         className="inline-flex items-center gap-2 rounded-xl bg-plex px-4 py-2.5 text-sm font-bold text-background hover:bg-plex-hover"
                     >
-                        <Plus className="w-4 h-4" /> New ticket
+                        <Plus className="w-4 h-4" /> {t('support.actions.newTicket')}
                     </button>
                 )}
             />
@@ -259,11 +275,11 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                 <div className="space-y-2">
                     {loading ? (
                         <div className="glass-card p-8 text-center text-muted text-sm">
-                            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" /> Loading tickets…
+                            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" /> {t('support.loading.tickets')}
                         </div>
                     ) : tickets.length === 0 ? (
                         <div className="glass-card p-8 text-center text-muted text-sm">
-                            No tickets in this view.
+                            {t('support.empty.noTickets')}
                         </div>
                     ) : tickets.map((ticket) => (
                         <button
@@ -286,11 +302,11 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                     <p className="text-[11px] text-muted mt-1 truncate">
                                         {isAdmin ? ticket.createdBy?.displayName : ticket.categoryLabel}
                                         {' · '}
-                                        {ticket.commentCount} {ticket.commentCount === 1 ? 'message' : 'messages'}
+                                        {t('support.labels.messages', { count: ticket.commentCount })}
                                     </p>
                                 </div>
                                 <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border shrink-0 ${issueStatusBadgeClass(ticket.statusLabel)}`}>
-                                    {ticket.statusLabel}
+                                    {displayStatus(ticket.statusLabel)}
                                 </span>
                             </div>
                         </button>
@@ -301,7 +317,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                     {!active ? (
                         <div className="h-full flex flex-col items-center justify-center text-center text-muted py-10">
                             <MessageSquare className="w-8 h-8 mb-3 opacity-60" />
-                            <p className="text-sm">Select a ticket to read the conversation.</p>
+                            <p className="text-sm">{t('support.empty.selectTicket')}</p>
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -314,7 +330,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                     </p>
                                 </div>
                                 <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border shrink-0 ${issueStatusBadgeClass(active.statusLabel)}`}>
-                                    {active.statusLabel}
+                                    {displayStatus(active.statusLabel)}
                                 </span>
                             </div>
                             <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
@@ -327,7 +343,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                     >
                                         <p className="text-[11px] font-bold text-muted">
                                             {comment.user?.displayName}
-                                            {comment.user?.isAdmin ? ' · Admin' : ''}
+                                            {comment.user?.isAdmin ? ` · ${t('support.labels.admin')}` : ''}
                                             {comment.createdAt ? ` · ${formatDateTime(comment.createdAt)}` : ''}
                                         </p>
                                         <p className="text-sm text-text mt-1 whitespace-pre-wrap">{comment.message}</p>
@@ -340,7 +356,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                         value={reply}
                                         onChange={(e) => setReply(e.target.value)}
                                         rows={3}
-                                        placeholder="Write a reply…"
+                                        placeholder={t('support.reply.placeholder')}
                                         className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-text outline-none focus:border-plex/50"
                                     />
                                     <button
@@ -356,22 +372,22 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                             <div className="flex flex-wrap gap-2">
                                 {isAdmin && active.statusLabel !== 'resolved' && (
                                     <button type="button" disabled={busy} onClick={() => { void setStatus('resolved'); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold hover:border-plex/40">
-                                        <Check className="w-3.5 h-3.5" /> Resolve
+                                        <Check className="w-3.5 h-3.5" /> {t('support.actions.resolve')}
                                     </button>
                                 )}
                                 {active.statusLabel !== 'open' && (
                                     <button type="button" disabled={busy} onClick={() => { void setStatus('open'); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold hover:border-plex/40">
-                                        <RotateCcw className="w-3.5 h-3.5" /> Reopen
+                                        <RotateCcw className="w-3.5 h-3.5" /> {t('support.actions.reopen')}
                                     </button>
                                 )}
                                 {active.statusLabel !== 'closed' && (
                                     <button type="button" disabled={busy} onClick={() => { void setStatus('closed'); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold hover:border-plex/40">
-                                        <X className="w-3.5 h-3.5" /> Close
+                                        <X className="w-3.5 h-3.5" /> {t('common.close')}
                                     </button>
                                 )}
                                 {isAdmin && (
                                     <button type="button" disabled={busy} onClick={() => { void deleteTicket(); }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/30 text-xs font-semibold text-red-300 hover:border-red-400/50 ml-auto">
-                                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                                        <Trash2 className="w-3.5 h-3.5" /> {t('common.delete')}
                                     </button>
                                 )}
                             </div>
@@ -382,48 +398,48 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
 
             {composeOpen && (
                 <div className="fixed inset-0 z-[220] flex items-end sm:items-center justify-center p-0 sm:p-5">
-                    <button type="button" className="absolute inset-0 bg-black/70" aria-label="Close" onClick={() => setComposeOpen(false)} />
+                    <button type="button" className="absolute inset-0 bg-black/70" aria-label={t('common.close')} onClick={() => setComposeOpen(false)} />
                     <form
                         onSubmit={submitTicket}
                         className="relative w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl border border-white/10 bg-[#12141a] p-5 space-y-3"
                     >
-                        <h2 className="text-lg font-black text-text">New support ticket</h2>
+                        <h2 className="text-lg font-black text-text">{t('support.compose.title')}</h2>
                         <div>
                             <label className="block text-xs font-bold text-muted uppercase tracking-wide mb-1">
-                                Category
+                                {t('support.compose.category')}
                             </label>
                             <CustomSelect
                                 value={category}
                                 onChange={setCategory}
                                 compact
-                                options={categories.map((item) => ({ label: item.label, value: item.id }))}
+                                options={categories.map((item) => ({ label: item.label || t(CATEGORY_LABEL_KEYS[item.id] || 'support.categories.other'), value: item.id }))}
                             />
                         </div>
                         <label className="block text-xs font-bold text-muted uppercase tracking-wide">
-                            Subject
+                            {t('support.compose.subject')}
                             <input
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
                                 className="mt-1 w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-text"
-                                placeholder="Short summary"
+                                placeholder={t('support.compose.subjectPlaceholder')}
                                 required
                             />
                         </label>
                         <label className="block text-xs font-bold text-muted uppercase tracking-wide">
-                            Message
+                            {t('support.compose.message')}
                             <textarea
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 rows={5}
                                 className="mt-1 w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-text"
-                                placeholder="What do you need help with?"
+                                placeholder={t('support.compose.messagePlaceholder')}
                                 required
                             />
                         </label>
                         <div className="flex justify-end gap-2 pt-1">
-                            <button type="button" onClick={() => setComposeOpen(false)} className="px-3 py-2 rounded-xl border border-border text-sm font-semibold">Cancel</button>
+                            <button type="button" onClick={() => setComposeOpen(false)} className="px-3 py-2 rounded-xl border border-border text-sm font-semibold">{t('common.cancel')}</button>
                             <button type="submit" disabled={saving} className="px-4 py-2 rounded-xl bg-plex text-background text-sm font-bold disabled:opacity-50">
-                                {saving ? 'Sending…' : 'Send'}
+                                {saving ? t('support.compose.sending') : t('support.actions.send')}
                             </button>
                         </div>
                     </form>

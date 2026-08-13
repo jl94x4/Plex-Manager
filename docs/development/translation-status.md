@@ -34,6 +34,7 @@ This table describes broad UI i18n wiring and known remaining work. It does not 
 | Downloads page | i18n-enabled |
 | Media Stack Calendar | i18n-enabled |
 | Status page | i18n-enabled |
+| Support tickets | i18n-enabled |
 | Wider Settings | Partial |
 | Scanner | Partial |
 | ColleXions | Partial |
