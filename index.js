@@ -1301,7 +1301,6 @@ import {
     enrichDiscoveryPayloadWithTvdbPosters,
     createPortalWatchlistService,
     evaluatePortalMemberQuota,
-    shouldPortalAutoApprove,
     getPortalRequestQuotaSettings,
     normalizeRequestQuotaLimit,
     normalizeRequestQuotaDays,
@@ -10289,24 +10288,13 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
                 tags,
             });
 
-            if (shouldPortalAutoApprove(config, type === 'music' ? 'movie' : type, { is4k: type === 'music' ? false : !!is4k })) {
-                try {
-                    const approved = await portalRequests.approveAdminRequest(created.id, null, req.user);
-                    // Auto-approve: skip "approved" member notify; still skip admin pending (already approved).
-                    await maybeNotifyRequestNotReleased(config, created);
-                    return res.status(201).json(approved);
-                } catch (approveError) {
-                    log(`Portal auto-approve failed for request ${created.id}: ${approveError.message}`);
-                    await notifyAdminNewRequest(config, created);
-                    await maybeNotifyRequestNotReleased(config, created);
-                    return res.status(201).json({
-                        ...created,
-                        autoApproveError: approveError.message,
-                    });
-                }
+            const createdStatus = Number(created?.status);
+            if (created.autoApproveError) {
+                log(`Portal auto-approve failed for request ${created.id}: ${created.autoApproveError}`);
             }
-
-            await notifyAdminNewRequest(config, created);
+            if (createdStatus !== 2) {
+                await notifyAdminNewRequest(config, created);
+            }
             await maybeNotifyRequestNotReleased(config, created);
             return res.status(201).json(created);
         }
