@@ -365,6 +365,11 @@ export const posterSetsApi = {
             warmActive?: number;
             rateLimit?: { gapMs?: number; cooldownMs?: number; msSinceLastRequest?: number | null };
         };
+        libraryContinue?: {
+            enabled?: boolean;
+            busy?: boolean;
+            exhausted?: number;
+        };
         dailyRefresh?: {
             hourLocal?: number;
             intervalHours?: number;
@@ -407,6 +412,9 @@ export const posterSetsApi = {
         force?: boolean;
         skipCached?: boolean;
         followedPrefetchOnly?: boolean;
+        fromLibrary?: boolean;
+        media?: 'all' | 'movie' | 'show';
+        source?: 'full' | 'recent';
     } = {}) => {
         const list = Array.isArray(items) ? items : [];
         // Stay well under reverse-proxy / historical body limits — queue merges across calls.
@@ -417,9 +425,17 @@ export const posterSetsApi = {
         const payloadExtra = {
             ...(options.force === true || options.skipCached === false ? { force: true } : {}),
             ...(options.followedPrefetchOnly === true ? { followedPrefetchOnly: true } : {}),
+            ...(options.fromLibrary === true ? {
+                fromLibrary: true,
+                media: options.media || 'all',
+                source: options.source || 'full',
+            } : {}),
         };
-        if (!list.length) {
-            return apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({ items: [], ...payloadExtra })) as Promise<{
+        if (options.fromLibrary === true || !list.length) {
+            return apiFetch(`${ROOT}/tpdb-cache/warm-library`, json({
+                items: list,
+                ...payloadExtra,
+            })) as Promise<{
                 ok: boolean;
                 started?: boolean;
                 titles?: number;
@@ -478,6 +494,7 @@ export const posterSetsApi = {
         section?: string;
         type?: 'movie' | 'show' | '';
         sort?: string;
+        cacheStatus?: 'all' | 'cached' | 'uncached';
         start?: number;
         limit?: number;
         refresh?: boolean;
@@ -486,6 +503,7 @@ export const posterSetsApi = {
         if (options.section) params.set('section', options.section);
         if (options.type) params.set('type', options.type);
         if (options.sort) params.set('sort', options.sort);
+        if (options.cacheStatus && options.cacheStatus !== 'all') params.set('cacheStatus', options.cacheStatus);
         if (options.start != null) params.set('start', String(options.start));
         if (options.limit != null) params.set('limit', String(options.limit));
         if (options.refresh) params.set('refresh', '1');
@@ -495,6 +513,7 @@ export const posterSetsApi = {
             items?: Array<Record<string, unknown>>;
             total?: number;
             sort?: string;
+            cacheStatus?: string;
         }>;
     },
     titleStatus: (payload: { title: string; mediaType?: string; ratingKey?: string }) => {

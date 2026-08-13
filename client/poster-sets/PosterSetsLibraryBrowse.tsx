@@ -14,6 +14,7 @@ import { useTpdbCoverageMap } from './shared/useTpdbCoverageMap';
 import {
     normalizeLibraryItems,
     type LibraryBrowseSort,
+    type LibraryCacheStatus,
     type LibraryRecentItem,
     type LibrarySection,
 } from './libraryRecent';
@@ -28,6 +29,13 @@ const SORT_OPTIONS = [
     { value: 'yearAsc', label: 'Year (oldest)' },
     { value: 'addedDesc', label: 'Recently added' },
     { value: 'addedAsc', label: 'Oldest added' },
+    { value: 'cachedFirst', label: 'Cached first' },
+];
+
+const CACHE_STATUS_OPTIONS = [
+    { value: 'all', label: 'All titles' },
+    { value: 'cached', label: 'Cached' },
+    { value: 'uncached', label: 'Not cached' },
 ];
 
 export type PosterSetsLibraryBrowseProps = {
@@ -47,6 +55,7 @@ export function PosterSetsLibraryBrowse({
     const [sectionKey, setSectionKey] = useState('');
     const [mediaType, setMediaType] = useState<'movie' | 'show' | ''>('');
     const [sort, setSort] = useState<LibraryBrowseSort>('titleAsc');
+    const [cacheStatus, setCacheStatus] = useState<LibraryCacheStatus>('all');
     const [page, setPage] = useState(0);
     const [items, setItems] = useState<LibraryRecentItem[]>([]);
     const [total, setTotal] = useState(0);
@@ -96,6 +105,7 @@ export function PosterSetsLibraryBrowse({
                 section: sectionKey || undefined,
                 type: mediaType || undefined,
                 sort,
+                cacheStatus,
                 start: page * BROWSE_PAGE_SIZE,
                 limit: BROWSE_PAGE_SIZE,
             });
@@ -110,7 +120,7 @@ export function PosterSetsLibraryBrowse({
         } finally {
             if (generation === loadGenRef.current) setLoading(false);
         }
-    }, [sectionKey, mediaType, sort, page]);
+    }, [sectionKey, mediaType, sort, cacheStatus, page]);
 
     useEffect(() => {
         if (sectionsLoading) return;
@@ -161,6 +171,16 @@ export function PosterSetsLibraryBrowse({
                     </div>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-2">
+                    <CustomSelect
+                        value={cacheStatus}
+                        onChange={(value) => {
+                            setCacheStatus((value === 'cached' || value === 'uncached' ? value : 'all') as LibraryCacheStatus);
+                            setPage(0);
+                        }}
+                        options={CACHE_STATUS_OPTIONS}
+                        className="min-w-[8.5rem]"
+                        compact
+                    />
                     <CustomSelect
                         value={sort}
                         onChange={(value) => {

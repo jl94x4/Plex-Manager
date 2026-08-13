@@ -22,7 +22,8 @@ export type LibrarySection = {
     count?: number;
 };
 
-export type LibraryBrowseSort = 'titleAsc' | 'titleDesc' | 'yearDesc' | 'yearAsc' | 'addedDesc' | 'addedAsc';
+export type LibraryBrowseSort = 'titleAsc' | 'titleDesc' | 'yearDesc' | 'yearAsc' | 'addedDesc' | 'addedAsc' | 'cachedFirst';
+export type LibraryCacheStatus = 'all' | 'cached' | 'uncached';
 
 const mapMovie = (item: Record<string, unknown>): LibraryRecentItem | null => {
     const title = String(item.title || '').trim();

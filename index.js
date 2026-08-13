@@ -61,6 +61,8 @@ import {
     spawnCommand,
 } from './lib/media-automation/index.js';
 import { createPosterSetsRouter, startPosterSetsWatcher, setPosterSetsNotifyDigest, schedulePosterSetsArrHook, startTpdbCacheDailyRefresh } from './lib/poster-sets/index.js';
+import { listTpdbCachedCoverageKeys } from './lib/poster-sets/tpdbCache.js';
+import { applyTpdbCacheBrowse } from './lib/poster-sets/tpdbCacheBrowse.js';
 import { createOverlaysRouter } from './lib/overlays/index.js';
 import { createEditionsRouter } from './lib/editions/index.js';
 import { startEditionsScheduler, runEditionsScheduledJob } from './lib/editions/scheduler.js';
@@ -1282,6 +1284,8 @@ import {
     fetchJellyfinLibrarySections,
     fetchPlexLibraryRecent,
     fetchPlexLibrarySections,
+    listAllJellyfinLibraryBrowseItems,
+    listAllPlexLibraryBrowseItems,
     resetPlexLibraryArtwork,
     searchJellyfinLibraryMedia,
     searchPlexLibraryMedia,
@@ -13723,28 +13727,65 @@ app.get('/api/media-server/library/browse', requireAuth, requireAdmin, async (re
         const sectionKey = String(req.query.section || req.query.sectionKey || '').trim();
         const mediaType = String(req.query.type || req.query.mediaType || '').trim().toLowerCase();
         const sort = String(req.query.sort || 'titleAsc').trim();
+        const cacheStatus = String(req.query.cacheStatus || 'all').trim().toLowerCase();
         const start = Math.max(parseInt(req.query.start, 10) || 0, 0);
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 120);
+        const needsCacheIndex = cacheStatus === 'cached'
+            || cacheStatus === 'uncached'
+            || cacheStatus === 'not-cached'
+            || sort === 'cachedFirst';
+        const plexSort = sort === 'cachedFirst' ? 'titleAsc' : sort;
         const bypassCache = shouldBypassLibraryCache(req);
-        const cacheKey = `media_library_browse_${mediaServerLibraryCacheId(config)}_${sectionKey}_${mediaType}_${sort}_${start}_${limit}`;
+        const cacheKey = `media_library_browse_${mediaServerLibraryCacheId(config)}_${sectionKey}_${mediaType}_${sort}_${cacheStatus}_${start}_${limit}`;
         const fetchBrowse = async () => {
+            const browseOptions = {
+                sectionKey, mediaType, sort: plexSort, start, limit,
+            };
+            if (needsCacheIndex) {
+                if (isEmbyLikeMediaServer(config)) {
+                    if (!isJellyfinConfigured(config)) {
+                        throw Object.assign(new Error('Jellyfin not configured'), { status: 503 });
+                    }
+                } else if (!config.plexToken || !config.serverIdentifier) {
+                    throw Object.assign(new Error('Plex not configured'), { status: 503 });
+                }
+                const listAll = isEmbyLikeMediaServer(config)
+                    ? listAllJellyfinLibraryBrowseItems
+                    : listAllPlexLibraryBrowseItems;
+                const all = await listAll(config, mediaServerLibraryDeps(), {
+                    sectionKey,
+                    mediaType,
+                    sort: plexSort,
+                });
+                const cachedKeys = await listTpdbCachedCoverageKeys();
+                const applied = applyTpdbCacheBrowse(all.items || [], {
+                    cachedKeys,
+                    cacheStatus,
+                    sort,
+                    start,
+                    limit,
+                });
+                return {
+                    items: applied.items,
+                    total: applied.total,
+                    sections: all.sections,
+                    sort: applied.sort || sort,
+                    cacheStatus: applied.cacheStatus,
+                };
+            }
             if (isEmbyLikeMediaServer(config)) {
                 if (!isJellyfinConfigured(config)) {
                     throw Object.assign(new Error('Jellyfin not configured'), { status: 503 });
                 }
-                return browseJellyfinLibraryMedia(config, mediaServerLibraryDeps(), {
-                    sectionKey, mediaType, sort, start, limit,
-                });
+                return browseJellyfinLibraryMedia(config, mediaServerLibraryDeps(), browseOptions);
             }
             if (!config.plexToken || !config.serverIdentifier) {
                 throw Object.assign(new Error('Plex not configured'), { status: 503 });
             }
-            return browsePlexLibraryMedia(config, mediaServerLibraryDeps(), {
-                sectionKey, mediaType, sort, start, limit,
-            });
+            return browsePlexLibraryMedia(config, mediaServerLibraryDeps(), browseOptions);
         };
         if (bypassCache) apiCache.delete(cacheKey);
-        const payload = await withCache(cacheKey, 120_000, fetchBrowse);
+        const payload = await withCache(cacheKey, needsCacheIndex ? 30_000 : 120_000, fetchBrowse);
         return res.json({ serverType, ...payload });
     } catch (e) {
         const status = Number(e.status) || 502;

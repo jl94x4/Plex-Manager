@@ -501,7 +501,10 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     <p className="text-sm font-semibold text-text">ThePosterDB local cache</p>
                                     <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted">
                                         Permanent local poster database for <span className="text-text">library titles</span> (Library / Watching) —
-                                        set lists and images stay on disk until you clear them or hit the image budget. Not a Browse crawl.
+                                        set lists and images stay on disk until you clear them or hit the image budget.
+                                        With cache enabled, uncached library titles keep resolving in the background after a build
+                                        (and after restart) until every title is attempted. Stop drops the queue and turns catch-up off
+                                        until you build again. The daily job only rechecks titles already on disk for new sets.
                                     </p>
                                 </div>
                                 {tpdbCacheStatus ? (
@@ -593,7 +596,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 : configDraft.tpdbLocalCacheEnabled !== true && tpdbCacheStatus.cacheEnabled === true
                                                     ? 'Form shows off; reload or Save to sync.'
                                                     : tpdbCacheStatus.cacheEnabled === true && (tpdbCacheStatus.titles || 0) === 0
-                                                        ? 'Enabled but empty — open a library title or build from library once.'
+                                                        ? 'Enabled but empty — click Build cache from library, or wait for background catch-up after save.'
                                                         : null}
                                         </p>
                                     )}
@@ -883,77 +886,13 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         onClick={async () => {
                                             setBusy('tpdb-cache');
                                             try {
-                                                const mapRow = (row: Record<string, unknown>) => {
-                                                    const tmdbRaw = row.tmdbId ?? row.tmdb_id;
-                                                    const tmdbId = tmdbRaw != null ? String(tmdbRaw).trim() : '';
-                                                    const mediaRaw = String(row.mediaType || row.type || 'movie').toLowerCase();
-                                                    return {
-                                                        tmdbId,
-                                                        title: String(row.title || row.name || '').trim(),
-                                                        year: (row.year as number | null | undefined) ?? null,
-                                                        mediaType: mediaRaw === 'show' || mediaRaw === 'tv' || mediaRaw === 'series'
-                                                            ? 'show'
-                                                            : 'movie',
-                                                    };
-                                                };
-                                                const seen = new Set<string>();
-                                                const items: Array<{
-                                                    tmdbId: string;
-                                                    title: string;
-                                                    year: number | null;
-                                                    mediaType: string;
-                                                }> = [];
-                                                const pushRows = (rows: Array<Record<string, unknown>>) => {
-                                                    for (const row of rows) {
-                                                        const mapped = mapRow(row);
-                                                        if (!/^\d+$/.test(mapped.tmdbId) || !mapped.title) continue;
-                                                        if (warmScope.media !== 'all' && mapped.mediaType !== warmScope.media) continue;
-                                                        const key = `${mapped.mediaType}:${mapped.tmdbId}`;
-                                                        if (seen.has(key)) continue;
-                                                        seen.add(key);
-                                                        items.push(mapped);
-                                                        if (items.length >= 1000) return;
-                                                    }
-                                                };
-
-                                                const recent = await posterSetsApi.libraryRecent(200);
-                                                pushRows([
-                                                    ...(recent.movies || []),
-                                                    ...(recent.shows || []),
-                                                    ...(recent.items || []),
-                                                ] as Array<Record<string, unknown>>);
-
-                                                if (warmScope.source === 'full') {
-                                                    const sections = await posterSetsApi.librarySections().catch(() => null);
-                                                    for (const section of sections?.sections || []) {
-                                                        if (items.length >= 1000) break;
-                                                        const sectionType = String(section.type || '').toLowerCase();
-                                                        if (sectionType !== 'movie' && sectionType !== 'show') continue;
-                                                        if (warmScope.media === 'movie' && sectionType !== 'movie') continue;
-                                                        if (warmScope.media === 'show' && sectionType !== 'show') continue;
-                                                        let start = 0;
-                                                        for (let page = 0; page < 20 && items.length < 1000; page += 1) {
-                                                            const browse = await posterSetsApi.libraryBrowse({
-                                                                section: section.key,
-                                                                type: sectionType === 'show' ? 'show' : 'movie',
-                                                                start,
-                                                                limit: 100,
-                                                                sort: 'titleSort',
-                                                            }).catch(() => null);
-                                                            const batch = (browse?.items || []) as Array<Record<string, unknown>>;
-                                                            if (!batch.length) break;
-                                                            const before = items.length;
-                                                            pushRows(batch);
-                                                            start += batch.length;
-                                                            if (batch.length < 100 || items.length === before) break;
-                                                        }
-                                                    }
-                                                }
-
-                                                const result = await posterSetsApi.warmTpdbLibraryCache(items, {
+                                                const result = await posterSetsApi.warmTpdbLibraryCache([], {
                                                     skipCached: warmScope.skipCached,
                                                     force: !warmScope.skipCached,
                                                     followedPrefetchOnly: warmScope.followedPrefetchOnly,
+                                                    fromLibrary: true,
+                                                    media: warmScope.media,
+                                                    source: warmScope.source,
                                                 });
                                                 toast(result.message || `Caching ${result.titles || 0} library title(s).`);
                                                 const status = await posterSetsApi.tpdbCacheStatus().catch(() => null);
@@ -1072,6 +1011,10 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         Refresh usage
                                     </button>
                                 </div>
+                                <p className="px-1 text-[11px] text-muted">
+                                    Build walks the full library (not just the first 1,000 titles) and keeps going in the background
+                                    until every title is attempted. Stop turns catch-up off; Pause only waits.
+                                </p>
                             </div>
 
                             <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-3 sm:px-4">
@@ -1086,7 +1029,9 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 ? 'Working…'
                                                 : (tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0 || (tpdbCacheStatus?.hydrate?.queue || 0) > 0
                                                     ? 'Queued'
-                                                    : 'Idle'}
+                                                    : tpdbCacheStatus?.libraryContinue?.enabled
+                                                        ? 'Background catch-up on'
+                                                        : 'Idle'}
                                         {(tpdbCacheStatus?.hydrate?.warmQueue || 0) > 0
                                             ? ` · ${tpdbCacheStatus?.hydrate?.warmQueue} title(s)`
                                             : ''}
