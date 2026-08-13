@@ -592,48 +592,59 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                     </div>
                                 </div>
 
-                                <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 space-y-4">
-                                    {(active.comments || []).map((comment) => {
+                                <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+                                    {(active.comments || []).map((comment, index) => {
                                         const mine = !!viewerId && String(comment.user?.id || '') === viewerId;
+                                        const prev = active.comments[index - 1];
+                                        const clustered = !!prev && String(prev.user?.id || '') === String(comment.user?.id || '');
                                         return (
-                                            <div key={comment.id} className="group flex items-start gap-3">
-                                                <TicketAvatar
-                                                    src={comment.user?.avatar}
-                                                    name={comment.user?.displayName || 'Member'}
-                                                    size={36}
-                                                />
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                                        <p className="text-sm font-bold text-text">
-                                                            {mine ? t('support.labels.you') : comment.user?.displayName}
-                                                            {comment.user?.isAdmin ? (
-                                                                <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wide text-plex">{t('support.labels.admin')}</span>
-                                                            ) : null}
-                                                        </p>
-                                                        {comment.createdAt && (
-                                                            <time
-                                                                className="text-[11px] text-muted"
-                                                                dateTime={comment.createdAt}
-                                                                title={comment.createdAt}
-                                                            >
-                                                                {formatDateTime(comment.createdAt)}
-                                                            </time>
-                                                        )}
-                                                        {comment.editedAt && (
-                                                            <span className="text-[10px] text-muted/80" title={formatDateTime(comment.editedAt)}>
-                                                                ({t('support.labels.edited')})
-                                                            </span>
-                                                        )}
-                                                    </div>
+                                            <div
+                                                key={comment.id}
+                                                className={`group flex items-end gap-2 ${mine ? 'flex-row' : 'flex-row-reverse'} ${clustered ? 'mt-1' : 'mt-3 first:mt-0'}`}
+                                            >
+                                                <div className={clustered ? 'w-8 shrink-0' : ''}>
+                                                    {!clustered && (
+                                                        <TicketAvatar
+                                                            src={comment.user?.avatar}
+                                                            name={comment.user?.displayName || 'Member'}
+                                                            size={32}
+                                                        />
+                                                    )}
+                                                </div>
+                                                <div className={`min-w-0 max-w-[78%] flex flex-col ${mine ? 'items-start' : 'items-end'}`}>
+                                                    {!clustered && (
+                                                        <div className={`flex flex-wrap items-baseline gap-x-2 ${mine ? '' : 'flex-row-reverse'}`}>
+                                                            <p className="text-[11px] font-bold text-text">
+                                                                {mine ? t('support.labels.you') : comment.user?.displayName}
+                                                                {comment.user?.isAdmin ? (
+                                                                    <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wide text-plex">{t('support.labels.admin')}</span>
+                                                                ) : null}
+                                                            </p>
+                                                            {comment.createdAt && (
+                                                                <time
+                                                                    className="text-[10px] text-muted"
+                                                                    dateTime={comment.createdAt}
+                                                                    title={comment.createdAt}
+                                                                >
+                                                                    {formatDateTime(comment.createdAt)}
+                                                                </time>
+                                                            )}
+                                                            {comment.editedAt && (
+                                                                <span className="text-[10px] text-muted/80" title={formatDateTime(comment.editedAt)}>
+                                                                    ({t('support.labels.edited')})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                     {editingId === comment.id ? (
-                                                        <div className="mt-1.5 space-y-2">
+                                                        <div className="mt-0.5 w-full space-y-2">
                                                             <textarea
                                                                 value={editDraft}
                                                                 onChange={(e) => setEditDraft(e.target.value)}
                                                                 rows={3}
                                                                 className="w-full rounded-xl border border-plex/40 bg-black/30 px-3 py-2 text-sm text-text outline-none"
                                                             />
-                                                            <div className="flex gap-2">
+                                                            <div className={`flex gap-2 ${mine ? '' : 'justify-end'}`}>
                                                                 <button
                                                                     type="button"
                                                                     disabled={busy || !editDraft.trim()}
@@ -652,19 +663,24 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <div className={`mt-1 rounded-2xl border px-3 py-2 ${
-                                                            comment.user?.isAdmin ? 'border-plex/25 bg-plex/10' : 'border-white/10 bg-white/5'
-                                                        }`}>
+                                                        <div
+                                                            className={`mt-0.5 rounded-2xl px-3 py-1.5 ${
+                                                                mine
+                                                                    ? 'rounded-bl-md border border-white/10 bg-white/5'
+                                                                    : 'rounded-br-md border border-plex/25 bg-plex/10'
+                                                            }`}
+                                                            title={comment.createdAt ? formatDateTime(comment.createdAt) : undefined}
+                                                        >
                                                             <p className="text-sm text-text whitespace-pre-wrap">{comment.message}</p>
                                                         </div>
                                                     )}
-                                                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                                    <div className={`mt-0.5 flex flex-wrap items-center gap-1 ${mine ? '' : 'flex-row-reverse'}`}>
                                                         {(comment.reactions || []).map((reaction) => (
                                                             <button
                                                                 key={reaction.emoji}
                                                                 type="button"
                                                                 onClick={() => { void toggleReaction(comment.id, reaction.emoji); }}
-                                                                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${
+                                                                className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px] ${
                                                                     hasReacted(reaction)
                                                                         ? 'border-plex/50 bg-plex/15 text-text'
                                                                         : 'border-white/10 bg-black/20 text-muted hover:border-white/20'
@@ -679,12 +695,12 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                                 type="button"
                                                                 title={t('support.actions.react')}
                                                                 onClick={() => setReactingId((id) => id === comment.id ? null : comment.id)}
-                                                                className="rounded-full p-1 text-muted opacity-80 hover:bg-white/10 hover:text-text sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+                                                                className="rounded-full p-1 text-muted hover:bg-white/10 hover:text-text opacity-70 group-hover:opacity-100 focus:opacity-100"
                                                             >
                                                                 <SmilePlus className="h-3.5 w-3.5" />
                                                             </button>
                                                             {reactingId === comment.id && (
-                                                                <div className="absolute left-0 top-7 z-20 flex gap-1 rounded-xl border border-white/10 bg-[#16181f] p-1.5 shadow-xl">
+                                                                <div className={`absolute top-7 z-20 flex gap-1 rounded-xl border border-white/10 bg-[#16181f] p-1.5 shadow-xl ${mine ? 'left-0' : 'right-0'}`}>
                                                                     {REACTION_EMOJIS.map((emoji) => (
                                                                         <button
                                                                             key={emoji}
@@ -707,7 +723,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                                     setEditDraft(comment.message);
                                                                     setReactingId(null);
                                                                 }}
-                                                                className="rounded-full p-1 text-muted opacity-80 hover:bg-white/10 hover:text-text sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+                                                                className="rounded-full p-1 text-muted hover:bg-white/10 hover:text-text opacity-70 group-hover:opacity-100 focus:opacity-100"
                                                             >
                                                                 <Pencil className="h-3.5 w-3.5" />
                                                             </button>
