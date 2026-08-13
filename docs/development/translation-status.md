@@ -42,7 +42,7 @@ This table describes broad UI i18n wiring and known remaining work. It does not 
 | Poster Sets | Partial |
 | Library Upgrader | Partial |
 | Requests admin UI | Partial |
-| Maintenance / Cleaner | Partial |
+| Maintenance / Cleaner | i18n-enabled |
 | About / Logs | Partial |
 | Setup/admin utility areas | Mostly hardcoded |
 
