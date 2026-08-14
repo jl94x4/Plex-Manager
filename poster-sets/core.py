@@ -1094,6 +1094,19 @@ def parse_string_to_dict(input_string: str) -> dict:
     return json.loads(json_data)
 
 
+_REGION_TITLE_SUFFIXES = {
+    "us", "uk", "au", "ca", "nz", "fr", "de", "jp", "kr", "cn", "br", "mx", "es", "it",
+}
+
+
+def _strip_collection_title(title: str) -> str:
+    text = str(title or "").strip()
+    text = re.sub(r"\s*\((?:\d{4}|n/a)\)\s*$", "", text, flags=re.I).strip()
+    text = re.sub(r"\s+(?:the\s+)?(?:complete\s+)?(?:movie\s+|film\s+)?collection\s*$", "", text, flags=re.I).strip()
+    text = re.sub(r"\s+box\s*sets?\s*$", "", text, flags=re.I).strip()
+    return text or str(title or "").strip()
+
+
 def _library_titles(libraries) -> str:
     names = []
     for lib in libraries or []:
@@ -1108,6 +1121,17 @@ def _normalize_plex_title_key(title: str) -> str:
     text = re.sub(r"\(\s*(?:\d{4}|n/a)\s*\)\s*$", "", text, flags=re.I).strip()
     text = re.sub(r"[^a-z0-9]+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _plex_title_tokens(title: str) -> list[str]:
+    key = _normalize_plex_title_key(_strip_collection_title(title))
+    tokens = [part for part in key.split() if part and part not in {"collection", "collections", "boxset"}]
+    articles = {"the", "a", "an"}
+    if tokens and tokens[0] in articles:
+        tokens = tokens[1:]
+    if tokens and tokens[-1] in _REGION_TITLE_SUFFIXES:
+        tokens = tokens[:-1]
+    return tokens
 
 
 def _plex_titles_exactly_match(left: str, right: str) -> bool:
@@ -1128,6 +1152,33 @@ def _plex_titles_exactly_match(left: str, right: str) -> bool:
     return bool(left_tokens) and left_tokens == right_tokens
 
 
+def _plex_titles_loosely_match(left: str, right: str) -> bool:
+    """Exact match, plus region suffixes and trailing 'Collection'."""
+    if _plex_titles_exactly_match(left, right):
+        return True
+    left_tokens = _plex_title_tokens(left)
+    right_tokens = _plex_title_tokens(right)
+    if not left_tokens or not right_tokens:
+        return False
+    if left_tokens == right_tokens:
+        return True
+    shorter, longer = (left_tokens, right_tokens) if len(left_tokens) <= len(right_tokens) else (right_tokens, left_tokens)
+    extra = longer[len(shorter):]
+    if longer[:len(shorter)] != shorter or not extra:
+        return False
+    return all(part in _REGION_TITLE_SUFFIXES or (part.isdigit() and len(part) == 4) for part in extra)
+
+
+def _is_collection_cover_title(title: str) -> bool:
+    """True for boxset/collection covers, not per-title posters inside a set."""
+    text = str(title or "").strip()
+    if not text:
+        return False
+    without_year = re.sub(r"\s*\((?:\d{4}|n/a)\)\s*$", "", text, flags=re.I).strip()
+    stripped = _strip_collection_title(text)
+    return bool(stripped) and stripped.casefold() != without_year.casefold()
+
+
 def _fetch_plex_item_by_rating_key(plex, rating_key: str):
     key = str(rating_key or "").strip()
     if not plex or not key:
@@ -1146,8 +1197,9 @@ def find_in_library(library, poster, *, plex=None, rating_key: str | None = None
     """Locate Plex library items for a poster.
 
     Plex Section.get()/search() are fuzzy — ``Sisters (2015)`` can return
-    ``Barbie & Her Sisters in the Great Puppy Adventure``. Always require an
-    exact normalized title match, and prefer an explicit ratingKey when given.
+    ``Barbie & Her Sisters in the Great Puppy Adventure``. Require a normalized
+    title match (region suffixes like ``(US)`` and trailing ``Collection`` are
+    allowed), and prefer an explicit ratingKey when given.
     """
     hint_key = str(rating_key or poster.get("_ratingKey") or "").strip() or None
     plex_server = plex or poster.get("_plex")
@@ -1170,63 +1222,70 @@ def find_in_library(library, poster, *, plex=None, rating_key: str | None = None
     if not want_title and not hint_title:
         return None
     search_title = want_title or hint_title
+    stripped_title = _strip_collection_title(search_title)
     want_year = poster.get("year")
     try:
         want_year_int = int(want_year) if want_year is not None else None
     except Exception:
         want_year_int = None
 
-    items = []
+    year_hits = []
+    title_hits = []
     seen_keys: set[str] = set()
+    search_titles = [search_title]
+    if stripped_title and stripped_title.casefold() != search_title.casefold():
+        search_titles.append(stripped_title)
     for lib in library or []:
         try:
             candidates = []
-            try:
+            for query in search_titles:
+                try:
+                    candidates.extend(list(lib.search(title=query) or []))
+                except Exception:
+                    pass
                 if want_year_int is not None:
-                    candidates.extend(list(lib.search(title=search_title, year=want_year_int) or []))
-                else:
-                    candidates.extend(list(lib.search(title=search_title) or []))
-            except Exception:
-                pass
-            try:
-                got = lib.get(search_title, year=want_year_int) if want_year_int is not None else lib.get(search_title)
-                if got is not None:
-                    candidates.insert(0, got)
-            except Exception:
-                pass
+                    try:
+                        candidates.extend(list(lib.search(title=query, year=want_year_int) or []))
+                    except Exception:
+                        pass
+                try:
+                    got = lib.get(query)
+                    if got is not None:
+                        candidates.insert(0, got)
+                except Exception:
+                    pass
+                if want_year_int is not None:
+                    try:
+                        got_year = lib.get(query, year=want_year_int)
+                        if got_year is not None:
+                            candidates.insert(0, got_year)
+                    except Exception:
+                        pass
 
             for item in candidates:
                 item_key = str(getattr(item, "ratingKey", None) or id(item))
                 if item_key in seen_keys:
                     continue
                 item_title = str(getattr(item, "title", None) or "").strip()
-                if not _plex_titles_exactly_match(search_title, item_title):
+                if not _plex_titles_loosely_match(search_title, item_title) and not (
+                    stripped_title and _plex_titles_loosely_match(stripped_title, item_title)
+                ):
                     continue
-                if want_year_int is not None:
-                    item_year = getattr(item, "year", None)
+                item_year = getattr(item, "year", None)
+                year_ok = True
+                if want_year_int is not None and item_year is not None:
                     try:
-                        if item_year is not None and int(item_year) != want_year_int:
-                            continue
+                        year_ok = int(item_year) == want_year_int
                     except Exception:
-                        pass
+                        year_ok = True
                 seen_keys.add(item_key)
-                items.append(item)
+                if year_ok:
+                    year_hits.append(item)
+                else:
+                    title_hits.append(item)
         except Exception:
             pass
-    return items or None
-
-
-def find_collection(library, poster):
-    collections = []
-    want_title = str(poster.get("title") or "").strip()
-    for lib in library:
-        try:
-            for plex_collection in lib.collections():
-                if _plex_titles_exactly_match(want_title, str(getattr(plex_collection, "title", "") or "")):
-                    collections.append(plex_collection)
-        except Exception:
-            pass
-    return collections or None
+    return year_hits or title_hits or None
 
 
 def upload_tv_poster(poster, tv, progress: ProgressFn = None) -> dict:
@@ -1337,7 +1396,12 @@ def upload_movie_poster(poster, movies, progress: ProgressFn = None) -> dict:
     return result
 
 
-def upload_collection_poster(poster, movies, progress: ProgressFn = None) -> dict:
+def upload_collection_poster(poster, movies, progress: ProgressFn = None, tv=None) -> dict:
+    """Apply a collection-set asset to its matching movie/show — never the Plex collection.
+
+    Boxset/collection *covers* are skipped. Per-title posters tagged Collection on
+    TPDB/MediUX are matched by that poster's own title.
+    """
     result = {
         "title": poster.get("title"),
         "kind": "collection",
@@ -1345,21 +1409,36 @@ def upload_collection_poster(poster, movies, progress: ProgressFn = None) -> dic
         "message": "",
         "id": poster.get("_assetId") or asset_id("collection", poster),
     }
-    collection_items = find_collection(movies, poster)
-    if not collection_items:
-        result["message"] = f'{poster["title"]} collection not found in any library.'
+    title = poster.get("title") or "Untitled"
+    if _is_collection_cover_title(title):
+        result["ok"] = True
+        result["skipped"] = True
+        result["message"] = (
+            f'Skipped collection cover “{title}” — not applied to Plex. '
+            "Each title poster in the set is applied to its matching movie/show."
+        )
         emit(progress, result["message"])
         return result
-    for collection in collection_items:
+    items = list(find_in_library(movies, poster) or [])
+    if not items:
+        items = list(find_in_library(tv, poster) or [])
+    if not items:
+        result["message"] = f"{title} not found in any library."
+        emit(progress, result["message"])
+        return result
+    for item in items:
         try:
-            apply_poster_or_art(collection, poster, progress=progress)
-            clear_kometa_overlay(collection, config=poster.get("_config"), progress=progress)
-            msg = f'Uploaded art for {poster["title"]} in {collection.librarySectionTitle}.'
+            apply_poster_or_art(item, poster, progress=progress)
+            clear_kometa_overlay(item, config=poster.get("_config"), progress=progress)
+            msg = (
+                f'Uploaded art for {title} on {getattr(item, "title", title)} '
+                f'in {getattr(item, "librarySectionTitle", "")}.'
+            )
             result["ok"] = True
             result["message"] = msg
             emit(progress, msg)
         except Exception as exc:
-            result["message"] = f'Unable to upload art for {poster["title"]}: {exc}'
+            result["message"] = f"Unable to upload art for {title}: {exc}"
             emit(progress, result["message"])
     return result
 
@@ -2010,10 +2089,13 @@ def match_poster(kind: str, poster: dict, tv, movies) -> Tuple[bool, str]:
             return False, f"{title_year} not found in movie libraries ({libs}){year_note}"
         return True, items[0].librarySectionTitle
     if kind == "collection":
-        items = find_collection(movies, poster)
+        if _is_collection_cover_title(title):
+            return True, "Collection cover (not applied)"
+        items = find_in_library(movies, poster) or find_in_library(tv, poster)
         if not items:
-            libs = _library_titles(movies)
-            return False, f"Collection “{title}” not found ({libs})"
+            libs = _library_titles(list(movies or []) + list(tv or []))
+            year_note = f"; tried year {year}" if year is not None else ""
+            return False, f"{title_year} not found in libraries ({libs}){year_note}"
         return True, items[0].librarySectionTitle
     items = find_in_library(tv, poster)
     if not items:
@@ -2342,24 +2424,29 @@ def apply_url(
 
     results = []
     for poster in collectionposters:
-        results.append(upload_collection_poster(_stamp(poster), movies, progress=progress))
+        results.append(upload_collection_poster(_stamp(poster), movies, progress=progress, tv=tv))
     for poster in movieposters:
         results.append(upload_movie_poster(_stamp(poster), movies, progress=progress))
     for poster in showposters:
         results.append(upload_tv_poster(_stamp(poster), tv, progress=progress))
-    uploaded = sum(1 for item in results if item.get("ok"))
-    attempted = len(results)
+    skipped = sum(1 for item in results if item.get("skipped"))
+    uploaded = sum(1 for item in results if item.get("ok") and not item.get("skipped"))
+    attempted = sum(1 for item in results if not item.get("skipped"))
     set_meta = build_set_meta(url, movieposters, showposters, collectionposters, page_meta=page_meta)
     ok = uploaded > 0
     error = None
     if not ok:
         if attempted == 0:
-            error = "No posters were found to apply from this set."
+            error = (
+                "Only collection covers were selected — those are not applied to Plex titles."
+                if skipped
+                else "No posters were found to apply from this set."
+            )
         else:
             failed_msgs = [
                 str(item.get("message") or "").strip()
                 for item in results
-                if not item.get("ok") and str(item.get("message") or "").strip()
+                if not item.get("ok") and not item.get("skipped") and str(item.get("message") or "").strip()
             ]
             error = failed_msgs[0] if failed_msgs else f"Applied 0 of {attempted} poster(s) — nothing changed on Plex."
         emit(progress, error)
