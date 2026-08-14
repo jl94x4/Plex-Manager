@@ -90,6 +90,9 @@ export const MediaDetailsPage: React.FC<{
     const [requestNotify, setRequestNotify] = useState<{
         canNotify?: boolean;
         isWatching?: boolean;
+        canRequest?: boolean;
+        mediaStatus?: number | null;
+        blockReason?: string | null;
         requestedByName?: string | null;
         requestedByCount?: number;
     } | null>(null);
@@ -180,6 +183,9 @@ export const MediaDetailsPage: React.FC<{
                 setRequestNotify({
                     canNotify: !!data?.canNotify,
                     isWatching: !!data?.isWatching,
+                    canRequest: data?.canRequest !== false,
+                    mediaStatus: Number.isFinite(Number(data?.mediaStatus)) ? Number(data.mediaStatus) : null,
+                    blockReason: data?.blockReason || null,
                     requestedByName: data?.requestedByName || null,
                     requestedByCount: Number(data?.requestedByCount) || 0,
                 });
@@ -543,6 +549,18 @@ export const MediaDetailsPage: React.FC<{
     const year = (details.releaseDate || details.firstAirDate || '').substring(0, 4);
     const mediaStatus = details.mediaInfo?.status ?? null;
     const requestButton = getRequestButtonState(mediaType, mediaStatus, seasonRows, details.mediaInfo, details);
+    const requestBlockReason = String(requestNotify?.blockReason || '').toLowerCase();
+    const requestOptionsStatus = Number.isFinite(Number(requestNotify?.mediaStatus))
+        ? Number(requestNotify?.mediaStatus)
+        : null;
+    const requestOptionsBlocksAction = requestNotify?.canRequest === false;
+    const requestOptionsSaysAvailable = requestOptionsStatus === 5
+        || requestBlockReason.includes('already available');
+    const requestOptionsSaysRequested = requestOptionsStatus === 2
+        || requestOptionsStatus === 3
+        || requestBlockReason.includes('already requested')
+        || requestBlockReason.includes('pending request');
+    const availabilitySaysAvailable = availability?.kind === 'available';
     const notifyCta = requestNotify?.canNotify || requestNotify?.isWatching
         ? {
             label: requestNotify.isWatching ? t('request.watching') : t('request.notifyMe'),
@@ -552,7 +570,21 @@ export const MediaDetailsPage: React.FC<{
         }
         : null;
     const preferRequestCta = !notifyCta && !requestButton.disabled && requestButton.variant === 'action';
-    const visibleRequestButton = preferRequestCta ? requestButton : (notifyCta || requestButton);
+    const visibleRequestButtonBase = preferRequestCta ? requestButton : (notifyCta || requestButton);
+    const visibleRequestButton = (
+        visibleRequestButtonBase.variant === 'action'
+        && !notifyCta
+        && (
+            (requestOptionsBlocksAction && (requestOptionsSaysAvailable || requestOptionsSaysRequested))
+            || availabilitySaysAvailable
+        )
+    )
+        ? {
+            label: requestOptionsSaysRequested ? 'Requested' : 'Available',
+            disabled: true,
+            variant: (requestOptionsSaysRequested ? 'pending' : 'available') as const,
+        }
+        : visibleRequestButtonBase;
     const requestButtonLabel = translateDiscoverStatus(t, visibleRequestButton.label);
     const mediaTypeLabel = mediaType === 'movie' ? t('mediaType.movie') : t('mediaType.tv');
     const seerrMediaId = Number(details.mediaInfo?.id);
