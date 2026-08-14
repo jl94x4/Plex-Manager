@@ -458,6 +458,15 @@ Object.assign(de, { maintenance: { ...de.maintenance,
     calendar: { currentRule: 'Aktuelle Regel:', graceDays: 'Karenztage', ruleAge: 'Regelalter', eligibleNow: 'Jetzt berechtigt', laterReclaim: 'Spätere Rückgewinnung', daysUntilEligible: 'Tag(e) bis zur Berechtigung', titleCount: 'Titel', laterDetail: 'Diese Titel warten noch auf das Ende der Karenzzeit.', dateTitleCount: 'Anzahl der Titel für dieses Datum.', delayedReclaimTooltip: 'Schätzung der Rückgewinnung aus verzögerten Treffern.', eligibilityDetailTooltip: 'Berechtigungsdetails des Backends.', ago: 'Tage zuvor', notAvailable: 'n/v', ...de.maintenance.calendar }
 } });
 
+Object.assign(de, { settings: { ...de.settings, logs: {
+    actions: { refresh: 'Aktualisieren', refreshing: 'Aktualisierung...', exportAll: 'Alles exportieren', exporting: 'Export wird erstellt…', unblock: 'Entsperren' },
+    audit: { viewerTitle: 'Auditprotokollanzeige', empty: 'Keine Audit-Ereignisse gefunden.', target: 'Ziel', system: 'System', actor: 'Akteur', field: 'Feld', before: 'Vorher', after: 'Nachher', value: 'Wert', unknownEvent: 'Ereignis' },
+    blocklist: { title: 'Sperrliste gelöschter Benutzer', empty: 'Derzeit sind keine gelöschten Benutzer gesperrt.', unknownUser: 'Unbekannter Benutzer', noIdentifier: 'Keine Kennung', deletedBy: 'Gelöscht am {date} von {actor}', defaultActor: 'Administrator' },
+    email: { title: 'E-Mail-Protokoll', empty: 'Es wurden noch keine System-E-Mails protokolliert.', systemEmail: 'System-E-Mail', to: 'An' },
+    pagination: { previous: 'Zurück', next: 'Weiter', pageOf: 'Seite {page} von {total}' }, dialogs: { unblockUser: '{name} wieder für das Portal zulassen? Dadurch wird keine Einladung automatisch gesendet.' }, fallbacks: { thisUser: 'dieser Benutzer', notAvailable: 'N/V' },
+    errors: { loadAuditLog: 'Auditprotokoll konnte nicht geladen werden', exportAuditLog: 'Auditprotokoll konnte nicht exportiert werden', loadDeletedUsers: 'Protokoll gelöschter Benutzer konnte nicht geladen werden', unblockUser: 'Benutzer konnte nicht entsperrt werden.' }, toasts: { auditExported: 'Auditprotokoll exportiert (Portal + Poster Sets + Upgrader).', userUnblocked: 'Gelöschter Benutzer entsperrt.' },
+} } });
+
 Object.assign(de, { maintenance: { ...de.maintenance,
     ...de.maintenance,
     page: { title: 'Cleaner', disabledTitle: 'Cleaner deaktiviert', disabledDescription: 'Der experimentelle Reinigungsmodus ist derzeit AUS.', disabledHint: 'Aktivieren Sie ihn unter `Einstellungen` → `System` bei `Experimenteller Reinigungsmodus` und klicken Sie auf Einstellungen speichern.', controlCenter: 'Cleaner-Kontrollzentrum', controlCenterDescription: 'Modul für die automatisierte Bibliothekswartung: Regeln, Sammlungen, Kandidaten, Ausführungszeitplan, Kalender, Speicher und Verwaltung.' },

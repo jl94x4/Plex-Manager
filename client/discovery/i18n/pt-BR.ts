@@ -44,6 +44,15 @@ Object.assign(ptBR, { maintenance: { ...ptBR.maintenance,
     errors: { loadOverview: 'Não foi possível carregar o resumo da limpeza', loadCandidates: 'Não foi possível carregar os candidatos', loadExclusions: 'Não foi possível carregar o resumo das exclusões.', loadLibrary: 'Não foi possível carregar os pôsteres da biblioteca.', loadStorage: 'Não foi possível carregar o resumo do armazenamento.' }
 } });
 
+Object.assign(ptBR, { settings: { ...ptBR.settings, logs: {
+    actions: { refresh: 'Atualizar', refreshing: 'Atualizando...', exportAll: 'Exportar tudo', exporting: 'Exportando…', unblock: 'Desbloquear' },
+    audit: { viewerTitle: 'Visualizador do registro de auditoria', empty: 'Nenhum evento de auditoria encontrado.', target: 'Destino', system: 'Sistema', actor: 'Autor', field: 'Campo', before: 'Antes', after: 'Depois', value: 'Valor', unknownEvent: 'Evento' },
+    blocklist: { title: 'Lista de bloqueio de usuários excluídos', empty: 'Não há usuários excluídos bloqueados no momento.', unknownUser: 'Usuário desconhecido', noIdentifier: 'Sem identificador', deletedBy: 'Excluído em {date} por {actor}', defaultActor: 'administrador' },
+    email: { title: 'Registro de e-mails', empty: 'Ainda não foram registrados e-mails do sistema.', systemEmail: 'E-mail do sistema', to: 'Para' },
+    pagination: { previous: 'Anterior', next: 'Próxima', pageOf: 'Página {page} de {total}' }, dialogs: { unblockUser: 'Permitir que {name} use o portal novamente? Isso não envia um convite automaticamente.' }, fallbacks: { thisUser: 'este usuário', notAvailable: 'N/D' },
+    errors: { loadAuditLog: 'Não foi possível carregar o registro de auditoria', exportAuditLog: 'Não foi possível exportar o registro de auditoria', loadDeletedUsers: 'Não foi possível carregar o registro de usuários excluídos', unblockUser: 'Não foi possível desbloquear o usuário.' }, toasts: { auditExported: 'Registro de auditoria exportado (portal + Poster Sets + Upgrader).', userUnblocked: 'Usuário excluído desbloqueado.' },
+} } });
+
 Object.assign(ptBR, { maintenance: {
     ...ptBR.maintenance,
     labels: { ...ptBR.maintenance.labels, true: 'Verdadeiro', false: 'Falso', minMax: 'mín,máx', values: 'v1,v2', value: 'valor', enabled: 'Ativado', disabled: 'Desativado', matches: 'Correspondências', grace: 'Período de carência', graceDays: 'Dias de carência', maxActions: 'Máximo de ações', collectionName: 'Nome da coleção', matchLogic: 'Lógica de correspondência', filterName: 'Nome do filtro', matchedTitles: 'Títulos correspondentes', noPoster: 'Sem pôster', eligible: 'Elegível', unmapped: 'Não mapeado', ambiguous: 'Ambíguo', ...ptBR.maintenance?.labels, mapped: 'mapeados', instanceMappingHint: 'Mapeamento de instância ambíguo', index: 'Índice', mediaItems: 'itens de mídia', lastBuild: 'Última reconstrução', requestRecords: 'Registros de solicitações',...ptBR.maintenance?.labels, matchLogicHint: 'Como as condições da regra são combinadas.', graceHint: 'Período de carência global para este conjunto de regras.', resetGraceHint: 'Redefinir agora o período de carência desta regra.' },

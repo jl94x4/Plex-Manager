@@ -764,7 +764,7 @@ export const SettingsDashboard: React.FC = () => {
             setAuditLogPage(1);
             setEmailLogPage(1);
         } catch (e) {
-            addToast('Failed to load audit log', 'error');
+            addToast(t('settings.logs.errors.loadAuditLog'), 'error');
         } finally {
             setIsLoadingAuditLog(false);
         }
@@ -783,9 +783,9 @@ export const SettingsDashboard: React.FC = () => {
             anchor.click();
             anchor.remove();
             URL.revokeObjectURL(url);
-            addToast('Audit log exported (portal + Poster Sets + Upgrader).', 'success');
+            addToast(t('settings.logs.toasts.auditExported'), 'success');
         } catch (e) {
-            addToast(e instanceof Error ? e.message : 'Failed to export audit log', 'error');
+            addToast(e instanceof Error ? e.message : t('settings.logs.errors.exportAuditLog'), 'error');
         } finally {
             setIsExportingAuditLog(false);
         }
@@ -809,7 +809,7 @@ export const SettingsDashboard: React.FC = () => {
             const data = await apiFetch('/api/deleted-users');
             setDeletedUsersLog(Array.isArray(data) ? data : []);
         } catch (e) {
-            addToast('Failed to load deleted users log', 'error');
+            addToast(t('settings.logs.errors.loadDeletedUsers'), 'error');
         }
     };
 
@@ -967,15 +967,15 @@ export const SettingsDashboard: React.FC = () => {
     usePoll(() => { void fetchTasks(); }, tasksNeedLivePoll ? 2000 : null, { immediate: false });
 
     const handleUnblockDeletedUser = async (deletedUser: any) => {
-        const label = deletedUser.username || deletedUser.email || 'this user';
-        appConfirm(`Allow ${label} to use the portal again? This does not invite them automatically.`, async () => {
+        const label = deletedUser.username || deletedUser.email || t('settings.logs.fallbacks.thisUser');
+        appConfirm(t('settings.logs.dialogs.unblockUser', { name: label }), async () => {
             setLoading(true);
             try {
                 await apiFetch(`/api/deleted-users/${encodeURIComponent(deletedUser.blockId)}`, { method: 'DELETE' });
-                addToast('Deleted user unblocked.');
+                addToast(t('settings.logs.toasts.userUnblocked'));
                 await Promise.all([fetchDeletedUsersLog(), fetchAuditLog()]);
             } catch (error: any) {
-                addToast(error instanceof Error ? error.message : 'Failed to unblock user.', 'error');
+                addToast(error instanceof Error ? error.message : t('settings.logs.errors.unblockUser'), 'error');
             } finally {
                 setLoading(false);
             }
@@ -988,9 +988,9 @@ export const SettingsDashboard: React.FC = () => {
         .join(' ');
 
     const formatDateTime = (value?: string | null) => {
-        if (!value) return 'N/A';
+        if (!value) return t('settings.logs.fallbacks.notAvailable');
         const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return 'N/A';
+        if (Number.isNaN(date.getTime())) return t('settings.logs.fallbacks.notAvailable');
         return date.toLocaleString();
     };
 
@@ -1027,12 +1027,12 @@ export const SettingsDashboard: React.FC = () => {
         };
 
         if ('before' in details && 'after' in details) {
-            rows.push({ field: 'Value', before: stringifyAuditValue(details.before), after: stringifyAuditValue(details.after) });
+            rows.push({ field: t('settings.logs.audit.value'), before: stringifyAuditValue(details.before), after: stringifyAuditValue(details.after) });
             used.add('before');
             used.add('after');
         }
         if ('oldValue' in details && 'newValue' in details) {
-            rows.push({ field: 'Value', before: stringifyAuditValue(details.oldValue), after: stringifyAuditValue(details.newValue) });
+            rows.push({ field: t('settings.logs.audit.value'), before: stringifyAuditValue(details.oldValue), after: stringifyAuditValue(details.newValue) });
             used.add('oldValue');
             used.add('newValue');
         }
@@ -4672,22 +4672,22 @@ export const SettingsDashboard: React.FC = () => {
 
                             <section className="space-y-4 mb-8">
                                 <div className="flex items-center justify-between">
-                                    <h4 className="font-bold text-text">Audit Log Viewer</h4>
+                                    <h4 className="font-bold text-text">{t('settings.logs.audit.viewerTitle')}</h4>
                                     <div className="flex items-center gap-2">
                                         <button
                                             className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80 disabled:opacity-50"
                                             disabled={isExportingAuditLog}
                                             onClick={() => void exportAuditLog()}
                                         >
-                                            {isExportingAuditLog ? 'Exporting…' : 'Export all'}
+                                            {isExportingAuditLog ? t('settings.logs.actions.exporting') : t('settings.logs.actions.exportAll')}
                                         </button>
                                         <button className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80" onClick={fetchAuditLog}>
-                                            {isLoadingAuditLog ? 'Refreshing...' : 'Refresh'}
+                                            {isLoadingAuditLog ? t('settings.logs.actions.refreshing') : t('settings.logs.actions.refresh')}
                                         </button>
                                     </div>
                                 </div>
                                 {pagedAuditEntries.length === 0 ? (
-                                    <p className="text-sm text-muted">No audit events found.</p>
+                                    <p className="text-sm text-muted">{t('settings.logs.audit.empty')}</p>
                                 ) : (
                                     <div className="space-y-3">
                                         {pagedAuditEntries.map((entry) => {
@@ -4699,12 +4699,12 @@ export const SettingsDashboard: React.FC = () => {
                                                 <details key={entry.id} className="py-3 border-b border-border/40 last:border-b-0">
                                                     <summary className="cursor-pointer list-none">
                                                         <div className="flex flex-wrap items-center justify-between gap-2">
-                                                            <p className="font-semibold text-text text-sm">{formatEventName(entry.event || 'event')}</p>
+                                                            <p className="font-semibold text-text text-sm">{entry.event ? formatEventName(entry.event) : t('settings.logs.audit.unknownEvent')}</p>
                                                             <span className="text-[11px] text-muted">{formatDateTime(entry.timestamp)}</span>
                                                         </div>
                                                         <p className="text-xs text-muted mt-1">
-                                                            Target: {entry.target?.username || entry.target?.email || 'System'}
-                                                            {entry.actor?.username || entry.actor?.email ? ` · Actor: ${entry.actor.username || entry.actor.email}` : ''}
+                                                            {t('settings.logs.audit.target')}: {entry.target?.username || entry.target?.email || t('settings.logs.audit.system')}
+                                                            {entry.actor?.username || entry.actor?.email ? ` · ${t('settings.logs.audit.actor')}: ${entry.actor.username || entry.actor.email}` : ''}
                                                         </p>
                                                     </summary>
                                                     <div className="mt-3 space-y-2">
@@ -4713,9 +4713,9 @@ export const SettingsDashboard: React.FC = () => {
                                                                 <table className="w-full text-xs border border-border/60 rounded-lg overflow-hidden">
                                                                     <thead className="bg-black/30 text-muted">
                                                                         <tr>
-                                                                            <th className="text-left px-2 py-1">Field</th>
-                                                                            <th className="text-left px-2 py-1">Before</th>
-                                                                            <th className="text-left px-2 py-1">After</th>
+                                                                            <th className="text-left px-2 py-1">{t('settings.logs.audit.field')}</th>
+                                                                            <th className="text-left px-2 py-1">{t('settings.logs.audit.before')}</th>
+                                                                            <th className="text-left px-2 py-1">{t('settings.logs.audit.after')}</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
@@ -4750,15 +4750,15 @@ export const SettingsDashboard: React.FC = () => {
                                                     disabled={auditLogPage === 1}
                                                     onClick={() => setAuditLogPage(p => Math.max(1, p - 1))}
                                                 >
-                                                    Previous
+                                                    {t('settings.logs.pagination.previous')}
                                                 </button>
-                                                <span className="text-xs text-muted">Page {auditLogPage} of {totalAuditLogPages}</span>
+                                                <span className="text-xs text-muted">{t('settings.logs.pagination.pageOf', { page: auditLogPage, total: totalAuditLogPages })}</span>
                                                 <button
                                                     className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80 disabled:opacity-50"
                                                     disabled={auditLogPage === totalAuditLogPages}
                                                     onClick={() => setAuditLogPage(p => Math.min(totalAuditLogPages, p + 1))}
                                                 >
-                                                    Next
+                                                    {t('settings.logs.pagination.next')}
                                                 </button>
                                             </div>
                                         )}
@@ -4769,29 +4769,29 @@ export const SettingsDashboard: React.FC = () => {
                     )}
                     {activeTab === 'logs' && (
                         <div className="mb-8 animate-fade-in space-y-8">
-                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Logs & Audit</h3>
+                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">{t('settings.navigation.tabs.logs')}</h3>
 
                             <section className="space-y-3">
                                 <div className="flex items-center justify-between">
-                                    <h4 className="font-bold text-text">Deleted User Blocklist</h4>
+                                    <h4 className="font-bold text-text">{t('settings.logs.blocklist.title')}</h4>
                                     <span className="px-2 py-1 rounded text-xs font-semibold bg-red-500/20 text-red-300">{deletedUsersLog.length}</span>
                                 </div>
                                 <div className="space-y-2">
                                     {deletedUsersLog.length === 0 ? (
-                                        <p className="text-sm text-muted">No deleted users are currently blocked.</p>
+                                        <p className="text-sm text-muted">{t('settings.logs.blocklist.empty')}</p>
                                     ) : (
                                         deletedUsersLog.map((deletedUser) => (
                                             <div key={deletedUser.blockId} className="py-3 border-b border-border/40 flex items-center justify-between gap-3 last:border-b-0">
                                                 <div className="min-w-0">
-                                                    <p className="text-sm font-semibold text-text truncate">{deletedUser.username || 'Unknown user'}</p>
-                                                    <p className="text-xs text-muted truncate">{deletedUser.email || deletedUser.plexId || deletedUser.id || 'No identifier'}</p>
-                                                    <p className="text-[11px] text-muted/80">Deleted {formatDateTime(deletedUser.deletedAt)} by {deletedUser.deletedBy || 'admin'}</p>
+                                                    <p className="text-sm font-semibold text-text truncate">{deletedUser.username || t('settings.logs.blocklist.unknownUser')}</p>
+                                                    <p className="text-xs text-muted truncate">{deletedUser.email || deletedUser.plexId || deletedUser.id || t('settings.logs.blocklist.noIdentifier')}</p>
+                                                    <p className="text-[11px] text-muted/80">{t('settings.logs.blocklist.deletedBy', { date: formatDateTime(deletedUser.deletedAt), actor: deletedUser.deletedBy || t('settings.logs.blocklist.defaultActor') })}</p>
                                                 </div>
                                                 <button
                                                     className="px-3 py-1.5 bg-border text-text rounded text-xs font-semibold hover:bg-opacity-80"
                                                     onClick={() => handleUnblockDeletedUser(deletedUser)}
                                                 >
-                                                    Unblock
+                                                    {t('settings.logs.actions.unblock')}
                                                 </button>
                                             </div>
                                         ))
@@ -4801,22 +4801,22 @@ export const SettingsDashboard: React.FC = () => {
 
                             <section className="space-y-3">
                                 <div className="flex items-center justify-between">
-                                    <h4 className="font-bold text-text">Email Log</h4>
+                                    <h4 className="font-bold text-text">{t('settings.logs.email.title')}</h4>
                                     <button className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80" onClick={fetchAuditLog}>
-                                        {isLoadingAuditLog ? 'Refreshing...' : 'Refresh'}
+                                        {isLoadingAuditLog ? t('settings.logs.actions.refreshing') : t('settings.logs.actions.refresh')}
                                     </button>
                                 </div>
                                 {pagedEmailEntries.length === 0 ? (
-                                    <p className="text-sm text-muted">No system emails have been logged yet.</p>
+                                    <p className="text-sm text-muted">{t('settings.logs.email.empty')}</p>
                                 ) : (
                                     <div className="space-y-2">
                                         {pagedEmailEntries.map((entry) => (
                                             <div key={entry.id} className="py-3 border-b border-border/40 last:border-b-0">
                                                 <div className="flex items-start justify-between gap-3">
-                                                    <p className="text-sm font-semibold text-text line-clamp-1">{entry.details?.subject || 'System Email'}</p>
+                                                    <p className="text-sm font-semibold text-text line-clamp-1">{entry.details?.subject || t('settings.logs.email.systemEmail')}</p>
                                                     <span className="text-[11px] text-muted whitespace-nowrap">{formatDateTime(entry.timestamp)}</span>
                                                 </div>
-                                                <p className="text-xs text-muted mt-1">To: {entry.target?.username || entry.target?.email || 'Unknown user'}</p>
+                                                <p className="text-xs text-muted mt-1">{t('settings.logs.email.to')}: {entry.target?.username || entry.target?.email || t('settings.logs.blocklist.unknownUser')}</p>
                                             </div>
                                         ))}
                                         {totalEmailLogPages > 1 && (
@@ -4826,15 +4826,15 @@ export const SettingsDashboard: React.FC = () => {
                                                     disabled={emailLogPage === 1}
                                                     onClick={() => setEmailLogPage(p => Math.max(1, p - 1))}
                                                 >
-                                                    Previous
+                                                    {t('settings.logs.pagination.previous')}
                                                 </button>
-                                                <span className="text-xs text-muted">Page {emailLogPage} of {totalEmailLogPages}</span>
+                                                <span className="text-xs text-muted">{t('settings.logs.pagination.pageOf', { page: emailLogPage, total: totalEmailLogPages })}</span>
                                                 <button
                                                     className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80 disabled:opacity-50"
                                                     disabled={emailLogPage === totalEmailLogPages}
                                                     onClick={() => setEmailLogPage(p => Math.min(totalEmailLogPages, p + 1))}
                                                 >
-                                                    Next
+                                                    {t('settings.logs.pagination.next')}
                                                 </button>
                                             </div>
                                         )}

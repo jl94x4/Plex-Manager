@@ -44,6 +44,15 @@ Object.assign(ru, { maintenance: { ...ru.maintenance,
     errors: { loadOverview: 'Не удалось загрузить обзор очистки', loadCandidates: 'Не удалось загрузить кандидатов', loadExclusions: 'Не удалось загрузить сводку исключений.', loadLibrary: 'Не удалось загрузить постеры библиотеки.', loadStorage: 'Не удалось загрузить сводку хранилища.' }
 } });
 
+Object.assign(ru, { settings: { ...ru.settings, logs: {
+    actions: { refresh: 'Обновить', refreshing: 'Обновление...', exportAll: 'Экспортировать всё', exporting: 'Экспорт…', unblock: 'Разблокировать' },
+    audit: { viewerTitle: 'Просмотр журнала аудита', empty: 'События аудита не найдены.', target: 'Цель', system: 'Система', actor: 'Исполнитель', field: 'Поле', before: 'До', after: 'После', value: 'Значение', unknownEvent: 'Событие' },
+    blocklist: { title: 'Список блокировки удалённых пользователей', empty: 'Сейчас нет заблокированных удалённых пользователей.', unknownUser: 'Неизвестный пользователь', noIdentifier: 'Нет идентификатора', deletedBy: 'Удалено {date} пользователем {actor}', defaultActor: 'администратор' },
+    email: { title: 'Журнал электронной почты', empty: 'Системные письма ещё не зарегистрированы.', systemEmail: 'Системное письмо', to: 'Кому' },
+    pagination: { previous: 'Назад', next: 'Далее', pageOf: 'Страница {page} из {total}' }, dialogs: { unblockUser: 'Разрешить {name} снова использовать портал? Приглашение не будет отправлено автоматически.' }, fallbacks: { thisUser: 'этот пользователь', notAvailable: 'Н/Д' },
+    errors: { loadAuditLog: 'Не удалось загрузить журнал аудита', exportAuditLog: 'Не удалось экспортировать журнал аудита', loadDeletedUsers: 'Не удалось загрузить журнал удалённых пользователей', unblockUser: 'Не удалось разблокировать пользователя.' }, toasts: { auditExported: 'Журнал аудита экспортирован (портал + Poster Sets + Upgrader).', userUnblocked: 'Удалённый пользователь разблокирован.' },
+} } });
+
 Object.assign(ru, { maintenance: {
     ...ru.maintenance,
     labels: { ...ru.maintenance.labels, true: 'Да', false: 'Нет', minMax: 'мин,макс', values: 'v1,v2', value: 'значение', enabled: 'Включено', disabled: 'Отключено', matches: 'Совпадения', grace: 'Льготный период', graceDays: 'Дни льготного периода', maxActions: 'Максимум действий', collectionName: 'Название коллекции', matchLogic: 'Логика совпадений', filterName: 'Имя фильтра', matchedTitles: 'Совпавшие названия', noPoster: 'Нет постера', eligible: 'Подходит', unmapped: 'Не сопоставлено', ambiguous: 'Неоднозначно', ...ru.maintenance?.labels, mapped: 'сопоставлено', instanceMappingHint: 'Неоднозначное сопоставление экземпляра', index: 'Индекс', mediaItems: 'медиаэлементов', lastBuild: 'Последняя сборка', requestRecords: 'Записи запросов',...ru.maintenance?.labels, matchLogicHint: 'Как объединяются условия правила.', graceHint: 'Общий льготный период для этого набора правил.', resetGraceHint: 'Сбросить льготный период этого правила сейчас.' },
