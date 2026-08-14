@@ -14,9 +14,9 @@ export const isFirefoxMobileClient = () => {
 };
 
 /**
- * True for iPhone / iPad (incl. iPadOS desktop UA). Used to portal the bottom
- * nav to `document.body` — Safari's `position:fixed` is trapped by the
- * `h-dvh`/`overflow` app shell and leaves a large empty gap under the bar.
+ * True for iPhone / iPad (incl. iPadOS desktop UA).
+ * iOS bottom nav uses plain CSS `fixed; bottom:0` + safe-area padding — do not
+ * run this hook on iOS.
  */
 export const isIosMobileClient = () => {
     if (typeof navigator === 'undefined') return false;
@@ -38,12 +38,7 @@ export const isStandaloneDisplayMode = () => {
 
 /**
  * Firefox Android needs explicit visual-viewport docking when its dynamic
- * toolbar changes. iOS uses the same body portal: dock to the visual viewport
- * while browser chrome is showing, and apply home-indicator padding when the
- * page is edge-to-edge (collapsed chrome / Chrome iOS / PWA).
- *
- * Chrome / Chromium Android PWA must not use this path — plain CSS `bottom:0`
- * is correct there.
+ * toolbar changes. iOS and Chrome / Chromium Android use plain CSS `bottom:0`.
  */
 export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
     useEffect(() => {
@@ -51,7 +46,6 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
 
         let raf = 0;
         let lastTop: number | string = Number.NaN;
-        const ios = isIosMobileClient();
 
         const clearInline = (bar: HTMLElement) => {
             bar.style.position = '';
@@ -63,7 +57,6 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             bar.style.bottom = '';
             bar.style.top = '';
             bar.style.transform = '';
-            bar.style.paddingBottom = '';
         };
 
         const sync = () => {
@@ -84,8 +77,8 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             let dockBottom = layoutBottom;
             if (isZoomed) {
                 dockBottom = visualBottom;
-            } else if (!ios && coveredByToolbar > 24) {
-                // Firefox: toolbar is visible over the page — keep the bar above it.
+            } else if (coveredByToolbar > 24) {
+                // Toolbar is visible over the page — keep the bar above it.
                 dockBottom = visualBottom;
             } else {
                 dockBottom = Math.max(layoutBottom, visualBottom);
@@ -98,30 +91,6 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             bar.style.maxWidth = '';
             bar.style.margin = '0';
             bar.style.transform = 'translateZ(0)';
-
-            if (ios) {
-                // Safari/Chrome chrome visible: visual viewport already sits above
-                // the toolbar + home indicator — extra safe-area padding left a
-                // tall empty band. Chrome collapsed / PWA: pad for the indicator.
-                const chromeVisible = !isZoomed && coveredByToolbar > 24;
-                if (chromeVisible) {
-                    bar.style.paddingBottom = '0px';
-                    const h = Math.max(bar.offsetHeight || 0, 56);
-                    const top = Math.round(visualBottom - h);
-                    const key = `ios-vv-${top}`;
-                    if (lastTop === key) return;
-                    lastTop = key;
-                    bar.style.bottom = 'auto';
-                    bar.style.top = `${top}px`;
-                    return;
-                }
-                if (lastTop === 'ios-edge') return;
-                lastTop = 'ios-edge';
-                bar.style.top = 'auto';
-                bar.style.bottom = '0px';
-                bar.style.paddingBottom = 'max(8px, env(safe-area-inset-bottom, 0px))';
-                return;
-            }
 
             const top = Math.round(dockBottom - barH);
             if (top === lastTop) return;
@@ -151,15 +120,9 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
         window.addEventListener('resize', schedule);
         window.addEventListener('orientationchange', schedule);
         window.addEventListener('pageshow', forceSync);
-        // iOS docks with bottom:0 / visualViewport resize; page scroll must not
-        // restyle the bar every frame (that makes home scrolling hitch).
-        if (!ios) {
-            window.addEventListener('scroll', schedule, { passive: true });
-        }
+        window.addEventListener('scroll', schedule, { passive: true });
         const mainScroll = document.getElementById('main-scroll-container');
-        if (!ios) {
-            mainScroll?.addEventListener('scroll', schedule, { passive: true });
-        }
+        mainScroll?.addEventListener('scroll', schedule, { passive: true });
         window.visualViewport?.addEventListener('resize', schedule);
         window.visualViewport?.addEventListener('scroll', schedule);
 
@@ -171,10 +134,7 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             : null;
         if (barRef.current) ro?.observe(barRef.current);
 
-        // iOS often reports a short visualViewport on the first frame; resync
-        // after chrome/layout settle so we don't wait for a user scroll.
-        const retryAt = ios ? [0, 50, 100, 250, 500, 1000] : [0, 100];
-        const retryTimers = retryAt.map((ms) => window.setTimeout(forceSync, ms));
+        const retryTimers = [0, 100].map((ms) => window.setTimeout(forceSync, ms));
 
         return () => {
             if (raf) window.cancelAnimationFrame(raf);

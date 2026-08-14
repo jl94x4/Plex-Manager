@@ -39,7 +39,7 @@ import { useDiscoverI18n } from './discovery/i18n';
 import { DiscoverNowPlayingStrip } from './discovery/DiscoverNowPlayingStrip';
 import { useNowPlaying } from './shared/useNowPlaying';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
-import { isFirefoxMobileClient, isIosMobileClient, isStandaloneDisplayMode, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
+import { isFirefoxMobileClient, isStandaloneDisplayMode, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
 import { AchievementsAnalyticsLeaderboard } from './achievements/AchievementsAnalyticsLeaderboard';
 import {
@@ -11360,9 +11360,6 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [mobileThemeOpen, setMobileThemeOpen] = useState(false);
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
     const [firefoxMobileNav] = useState(() => isFirefoxMobileClient());
-    const [iosMobileNav] = useState(() => isIosMobileClient());
-    /** Firefox + iOS: portal bar to body so fixed bottom is not trapped by the app shell. */
-    const portalMobileBottomNav = firefoxMobileNav || iosMobileNav;
     const firefoxNavBarRef = useRef<HTMLDivElement>(null);
     const [profileOpen, setProfileOpen] = useState(false);
     const [profileAchievements, setProfileAchievements] = useState<any>(null);
@@ -11370,8 +11367,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
     const [installBannerDismissed, setInstallBannerDismissed] = useState(false);
     const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplayMode());
-    // Firefox + iOS both strand fixed bottom:0 when chrome collapses; Chromium Android does not.
-    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: portalMobileBottomNav });
+    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav });
     const mobileThemeRef = useRef<HTMLDivElement>(null);
     const [mobileThemePos, setMobileThemePos] = useState<{ top: number; right: number } | null>(null);
     const isFirefoxMobile = typeof navigator !== 'undefined'
@@ -12067,8 +12063,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             )}
 
             {/* Mobile Bottom Nav
-                Chrome / PWA Chromium: plain fixed bottom:0 (do not change).
-                Firefox + iOS: portal + visualViewport dock + bleed under the bar. */}
+                Chrome / iOS / PWA Chromium: plain fixed bottom:0 + safe-area padding.
+                Firefox mobile: portal to body and dock to visualViewport. */}
             {(() => {
                 const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
                 // Keep More reachable for Install even when every nav item fits the bar.
@@ -12106,19 +12102,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         {navButtons}
                     </div>
                 );
-                // iOS: CSS defaults to home-indicator padding; the nav hook zeros
-                // it while Safari/Chrome chrome already insets the visual viewport.
-                const bottomSafeClass = iosMobileNav
-                    ? 'ios-mobile-bottom-nav'
-                    : 'pb-[env(safe-area-inset-bottom,0px)]';
-
-                if (portalMobileBottomNav && typeof document !== 'undefined') {
+                if (firefoxMobileNav && typeof document !== 'undefined') {
                     // Portal to body so no ancestor creates a fixed containing block.
-                    // Hook docks via visualViewport; bleed paints any leftover home-indicator gap.
+                    // Hook docks via visualViewport; bleed paints any leftover gesture-bar gap.
                     return ReactDOM.createPortal(
                         <div
                             ref={firefoxNavBarRef}
-                            className={`md:hidden fixed inset-x-0 bottom-0 w-full max-w-full nav-shell border-t z-[310] overflow-visible ${bottomSafeClass}`}
+                            className="md:hidden fixed inset-x-0 bottom-0 w-full max-w-full nav-shell border-t z-[310] overflow-visible pb-[env(safe-area-inset-bottom,0px)]"
                             style={{ bottom: 0 }}
                         >
                             {navInner}
@@ -12133,13 +12123,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 }
 
                 return (
-                    <div className={`md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] overflow-visible ${bottomSafeClass}`}>
+                    <div className="md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] overflow-visible pb-[env(safe-area-inset-bottom,0px)]">
                         {navInner}
                     </div>
                 );
             })()}
 
-            {/* Mobile More Drawer — above bottom nav (incl. body-portaled bar on Firefox/iOS) */}
+            {/* Mobile More Drawer — above bottom nav (incl. Firefox body-portaled bar) */}
             {mobileMoreOpen && (() => {
                 const drawer = (
                     <div className="md:hidden fixed inset-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setMobileMoreOpen(false)}>
@@ -12208,7 +12198,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         </div>
                     </div>
                 );
-                if (portalMobileBottomNav && typeof document !== 'undefined') {
+                if (firefoxMobileNav && typeof document !== 'undefined') {
                     return ReactDOM.createPortal(drawer, document.body);
                 }
                 return drawer;
