@@ -1769,6 +1769,15 @@ Object.assign(fr, { maintenance: {
             errors: { ...fr.maintenance.errors, loadOverview: 'Impossible de charger la vue d’ensemble du nettoyage', loadCandidates: 'Impossible de charger les candidats', loadExclusions: 'Impossible de charger le résumé des exclusions.', loadLibrary: 'Impossible de charger les affiches de la bibliothèque.', loadStorage: 'Impossible de charger le résumé du stockage.' }
 } });
 
+Object.assign(fr, { settings: { ...fr.settings, logs: {
+    actions: { refresh: 'Actualiser', refreshing: 'Actualisation...', exportAll: 'Tout exporter', exporting: 'Exportation…', unblock: 'Débloquer' },
+    audit: { viewerTitle: 'Visionneuse du journal d’audit', empty: 'Aucun événement d’audit trouvé.', target: 'Cible', system: 'Système', actor: 'Auteur', field: 'Champ', before: 'Avant', after: 'Après', value: 'Valeur', unknownEvent: 'Événement' },
+    blocklist: { title: 'Liste de blocage des utilisateurs supprimés', empty: 'Aucun utilisateur supprimé n’est actuellement bloqué.', unknownUser: 'Utilisateur inconnu', noIdentifier: 'Aucun identifiant', deletedBy: 'Supprimé le {date} par {actor}', defaultActor: 'administrateur' },
+    email: { title: 'Journal des e-mails', empty: 'Aucun e-mail système n’a encore été enregistré.', systemEmail: 'E-mail système', to: 'À' },
+    pagination: { previous: 'Précédent', next: 'Suivant', pageOf: 'Page {page} sur {total}' }, dialogs: { unblockUser: 'Autoriser {name} à utiliser à nouveau le portail ? Cela ne l’invite pas automatiquement.' }, fallbacks: { thisUser: 'cet utilisateur', notAvailable: 'N/D' },
+    errors: { loadAuditLog: 'Échec du chargement du journal d’audit', exportAuditLog: 'Échec de l’exportation du journal d’audit', loadDeletedUsers: 'Échec du chargement du journal des utilisateurs supprimés', unblockUser: 'Échec du déblocage de l’utilisateur.' }, toasts: { auditExported: 'Journal d’audit exporté (portail + Poster Sets + Upgrader).', userUnblocked: 'Utilisateur supprimé débloqué.' },
+} } });
+
 Object.assign(fr, { maintenance: { ...fr.maintenance,
     ...fr.maintenance,
     labels: { ...fr.maintenance?.labels, unknownTitle: 'Titre inconnu' },

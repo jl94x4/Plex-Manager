@@ -44,6 +44,15 @@ Object.assign(ja, { maintenance: { ...ja.maintenance,
     errors: { loadOverview: 'クリーナー概要を読み込めませんでした', loadCandidates: '候補を読み込めませんでした', loadExclusions: '除外の概要を読み込めませんでした。', loadLibrary: 'ライブラリのポスターを読み込めませんでした。', loadStorage: 'ストレージ概要を読み込めませんでした。' }
 } });
 
+Object.assign(ja, { settings: { ...ja.settings, logs: {
+    actions: { refresh: '更新', refreshing: '更新中...', exportAll: 'すべてエクスポート', exporting: 'エクスポート中…', unblock: 'ブロック解除' },
+    audit: { viewerTitle: '監査ログビューアー', empty: '監査イベントが見つかりません。', target: '対象', system: 'システム', actor: '実行者', field: '項目', before: '変更前', after: '変更後', value: '値', unknownEvent: 'イベント' },
+    blocklist: { title: '削除済みユーザーのブロックリスト', empty: '現在ブロックされている削除済みユーザーはいません。', unknownUser: '不明なユーザー', noIdentifier: '識別子なし', deletedBy: '{actor} が {date} に削除', defaultActor: '管理者' },
+    email: { title: 'メールログ', empty: 'システムメールはまだ記録されていません。', systemEmail: 'システムメール', to: '宛先' },
+    pagination: { previous: '前へ', next: '次へ', pageOf: '{total} ページ中 {page} ページ' }, dialogs: { unblockUser: '{name} が再びポータルを使用できるようにしますか？自動的に招待されることはありません。' }, fallbacks: { thisUser: 'このユーザー', notAvailable: '該当なし' },
+    errors: { loadAuditLog: '監査ログを読み込めませんでした', exportAuditLog: '監査ログをエクスポートできませんでした', loadDeletedUsers: '削除済みユーザーのログを読み込めませんでした', unblockUser: 'ユーザーのブロックを解除できませんでした。' }, toasts: { auditExported: '監査ログをエクスポートしました（ポータル + Poster Sets + Upgrader）。', userUnblocked: '削除済みユーザーのブロックを解除しました。' },
+} } });
+
 Object.assign(ja, { maintenance: {
     ...ja.maintenance,
     labels: { ...ja.maintenance.labels, true: '真', false: '偽', minMax: '最小,最大', values: 'v1,v2', value: '値', enabled: '有効', disabled: '無効', matches: '一致', grace: '猶予期間', graceDays: '猶予日数', maxActions: '最大アクション数', collectionName: 'コレクション名', matchLogic: '一致条件', filterName: 'フィルター名', matchedTitles: '一致したタイトル', noPoster: 'ポスターなし', eligible: '対象', unmapped: '未マッピング', ambiguous: '不明確', ...ja.maintenance?.labels, mapped: 'マッピング済み', instanceMappingHint: 'インスタンスのマッピングが不明確です', index: 'インデックス', mediaItems: 'メディア項目', lastBuild: '最終構築', requestRecords: 'リクエスト記録',...ja.maintenance?.labels, matchLogicHint: 'ルール条件の組み合わせ方。', graceHint: 'このルールセットの全体猶予期間。', resetGraceHint: 'このルールの猶予タイマーを今すぐリセットします。' },

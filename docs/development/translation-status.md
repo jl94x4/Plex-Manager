@@ -44,7 +44,7 @@ This table describes broad UI i18n wiring and known remaining work. It does not 
 | Requests admin UI | Partial |
 | Maintenance / Cleaner | i18n-enabled |
 | About | i18n-enabled |
-| Logs | Partial |
+| Logs | i18n-enabled |
 | Setup/admin utility areas | Mostly hardcoded |
 
 ## Current Recommended Small Batches

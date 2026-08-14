@@ -44,6 +44,15 @@ Object.assign(it, { maintenance: { ...it.maintenance,
     errors: { loadOverview: 'Impossibile caricare il riepilogo della pulizia', loadCandidates: 'Impossibile caricare i candidati', loadExclusions: 'Impossibile caricare il riepilogo delle esclusioni.', loadLibrary: 'Impossibile caricare i poster della libreria.', loadStorage: 'Impossibile caricare il riepilogo dello spazio.' }
 } });
 
+Object.assign(it, { settings: { ...it.settings, logs: {
+    actions: { refresh: 'Aggiorna', refreshing: 'Aggiornamento...', exportAll: 'Esporta tutto', exporting: 'Esportazione…', unblock: 'Sblocca' },
+    audit: { viewerTitle: 'Visualizzatore del registro di controllo', empty: 'Nessun evento di controllo trovato.', target: 'Destinazione', system: 'Sistema', actor: 'Autore', field: 'Campo', before: 'Prima', after: 'Dopo', value: 'Valore', unknownEvent: 'Evento' },
+    blocklist: { title: 'Elenco dei blocchi degli utenti eliminati', empty: 'Al momento non sono presenti utenti eliminati bloccati.', unknownUser: 'Utente sconosciuto', noIdentifier: 'Nessun identificatore', deletedBy: 'Eliminato il {date} da {actor}', defaultActor: 'amministratore' },
+    email: { title: 'Registro e-mail', empty: 'Non sono ancora state registrate e-mail di sistema.', systemEmail: 'E-mail di sistema', to: 'A' },
+    pagination: { previous: 'Precedente', next: 'Successivo', pageOf: 'Pagina {page} di {total}' }, dialogs: { unblockUser: 'Consentire a {name} di usare nuovamente il portale? Non verrà inviato automaticamente un invito.' }, fallbacks: { thisUser: 'questo utente', notAvailable: 'N/D' },
+    errors: { loadAuditLog: 'Impossibile caricare il registro di controllo', exportAuditLog: 'Impossibile esportare il registro di controllo', loadDeletedUsers: 'Impossibile caricare il registro degli utenti eliminati', unblockUser: 'Impossibile sbloccare l’utente.' }, toasts: { auditExported: 'Registro di controllo esportato (portale + Poster Sets + Upgrader).', userUnblocked: 'Utente eliminato sbloccato.' },
+} } });
+
 Object.assign(it, { maintenance: {
     ...it.maintenance,
     labels: { ...it.maintenance.labels, true: 'Vero', false: 'Falso', minMax: 'min,max', values: 'v1,v2', value: 'valore', enabled: 'Attivato', disabled: 'Disattivato', matches: 'Corrispondenze', grace: 'Periodo di grazia', graceDays: 'Giorni di grazia', maxActions: 'Azioni massime', collectionName: 'Nome raccolta', matchLogic: 'Logica corrispondenza', filterName: 'Nome filtro', matchedTitles: 'Titoli corrispondenti', noPoster: 'Nessun poster', eligible: 'Idoneo', unmapped: 'Non associato', ambiguous: 'Ambiguo', ...it.maintenance?.labels, mapped: 'associati', instanceMappingHint: 'Mappatura dell’istanza ambigua', index: 'Indice', mediaItems: 'elementi multimediali', lastBuild: 'Ultima ricostruzione', requestRecords: 'Record delle richieste',...it.maintenance?.labels, matchLogicHint: 'Come vengono combinate le condizioni della regola.', graceHint: 'Periodo di grazia globale per questo insieme di regole.', resetGraceHint: 'Reimposta ora il periodo di grazia di questa regola.' },

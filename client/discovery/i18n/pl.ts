@@ -44,6 +44,15 @@ Object.assign(pl, { maintenance: { ...pl.maintenance,
     errors: { loadOverview: 'Nie udało się wczytać przeglądu czyszczenia', loadCandidates: 'Nie udało się wczytać kandydatów', loadExclusions: 'Nie udało się wczytać podsumowania wykluczeń.', loadLibrary: 'Nie udało się wczytać plakatów biblioteki.', loadStorage: 'Nie udało się wczytać podsumowania pamięci.' }
 } });
 
+Object.assign(pl, { settings: { ...pl.settings, logs: {
+    actions: { refresh: 'Odśwież', refreshing: 'Odświeżanie...', exportAll: 'Eksportuj wszystko', exporting: 'Eksportowanie…', unblock: 'Odblokuj' },
+    audit: { viewerTitle: 'Przeglądarka dziennika audytu', empty: 'Nie znaleziono zdarzeń audytu.', target: 'Cel', system: 'System', actor: 'Wykonawca', field: 'Pole', before: 'Przed', after: 'Po', value: 'Wartość', unknownEvent: 'Zdarzenie' },
+    blocklist: { title: 'Lista blokad usuniętych użytkowników', empty: 'Obecnie nie ma zablokowanych usuniętych użytkowników.', unknownUser: 'Nieznany użytkownik', noIdentifier: 'Brak identyfikatora', deletedBy: 'Usunięto {date} przez {actor}', defaultActor: 'administrator' },
+    email: { title: 'Dziennik e-maili', empty: 'Nie zarejestrowano jeszcze żadnych e-maili systemowych.', systemEmail: 'E-mail systemowy', to: 'Do' },
+    pagination: { previous: 'Poprzednia', next: 'Następna', pageOf: 'Strona {page} z {total}' }, dialogs: { unblockUser: 'Zezwolić użytkownikowi {name} ponownie korzystać z portalu? Nie wyśle to automatycznie zaproszenia.' }, fallbacks: { thisUser: 'ten użytkownik', notAvailable: 'Brak danych' },
+    errors: { loadAuditLog: 'Nie udało się wczytać dziennika audytu', exportAuditLog: 'Nie udało się wyeksportować dziennika audytu', loadDeletedUsers: 'Nie udało się wczytać dziennika usuniętych użytkowników', unblockUser: 'Nie udało się odblokować użytkownika.' }, toasts: { auditExported: 'Wyeksportowano dziennik audytu (portal + Poster Sets + Upgrader).', userUnblocked: 'Odblokowano usuniętego użytkownika.' },
+} } });
+
 Object.assign(pl, { maintenance: {
     ...pl.maintenance,
     labels: { ...pl.maintenance.labels, true: 'Prawda', false: 'Fałsz', minMax: 'min,maks', values: 'v1,v2', value: 'wartość', enabled: 'Włączony', disabled: 'Wyłączony', matches: 'Dopasowania', grace: 'Okres karencji', graceDays: 'Dni karencji', maxActions: 'Maks. liczba działań', collectionName: 'Nazwa kolekcji', matchLogic: 'Logika dopasowania', filterName: 'Nazwa filtra', matchedTitles: 'Dopasowane tytuły', noPoster: 'Brak plakatu', eligible: 'Kwalifikuje się', unmapped: 'Nieprzypisane', ambiguous: 'Niejednoznaczne', ...pl.maintenance?.labels, mapped: 'przypisano', instanceMappingHint: 'Niejednoznaczne przypisanie instancji', index: 'Indeks', mediaItems: 'elementów multimedialnych', lastBuild: 'Ostatnia przebudowa', requestRecords: 'Rejestry żądań',...pl.maintenance?.labels, matchLogicHint: 'Sposób łączenia warunków reguły.', graceHint: 'Globalny okres karencji dla tego zestawu reguł.', resetGraceHint: 'Zresetuj teraz okres karencji tej reguły.' },

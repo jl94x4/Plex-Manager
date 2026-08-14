@@ -462,6 +462,15 @@ Object.assign(es, { maintenance: { ...es.maintenance,
     errors: { loadOverview: 'No se pudo cargar el resumen de limpieza', loadCandidates: 'No se pudieron cargar los candidatos', loadExclusions: 'No se pudo cargar el resumen de exclusiones.', loadLibrary: 'No se pudieron cargar los pósteres de la biblioteca.', loadStorage: 'No se pudo cargar el resumen de almacenamiento.' }
 } });
 
+Object.assign(es, { settings: { ...es.settings, logs: {
+    actions: { refresh: 'Actualizar', refreshing: 'Actualizando...', exportAll: 'Exportar todo', exporting: 'Exportando…', unblock: 'Desbloquear' },
+    audit: { viewerTitle: 'Visor del registro de auditoría', empty: 'No se encontraron eventos de auditoría.', target: 'Destino', system: 'Sistema', actor: 'Autor', field: 'Campo', before: 'Antes', after: 'Después', value: 'Valor', unknownEvent: 'Evento' },
+    blocklist: { title: 'Lista de bloqueo de usuarios eliminados', empty: 'No hay usuarios eliminados bloqueados actualmente.', unknownUser: 'Usuario desconocido', noIdentifier: 'Sin identificador', deletedBy: 'Eliminado el {date} por {actor}', defaultActor: 'administrador' },
+    email: { title: 'Registro de correo electrónico', empty: 'Aún no se han registrado correos electrónicos del sistema.', systemEmail: 'Correo electrónico del sistema', to: 'Para' },
+    pagination: { previous: 'Anterior', next: 'Siguiente', pageOf: 'Página {page} de {total}' }, dialogs: { unblockUser: '¿Permitir que {name} vuelva a usar el portal? Esto no le envía una invitación automáticamente.' }, fallbacks: { thisUser: 'este usuario', notAvailable: 'N/D' },
+    errors: { loadAuditLog: 'No se pudo cargar el registro de auditoría', exportAuditLog: 'No se pudo exportar el registro de auditoría', loadDeletedUsers: 'No se pudo cargar el registro de usuarios eliminados', unblockUser: 'No se pudo desbloquear al usuario.' }, toasts: { auditExported: 'Registro de auditoría exportado (portal + Poster Sets + Upgrader).', userUnblocked: 'Usuario eliminado desbloqueado.' },
+} } });
+
 Object.assign(es, { maintenance: { ...es.maintenance,
     ...es.maintenance,
     sections: { overview: 'Resumen', exclusions: 'Exclusiones', rules: 'Reglas', collections: 'Colecciones', candidates: 'Candidatos', calendar: 'Calendario', storage: 'Métricas de almacenamiento', library: 'Biblioteca de reglas', settings: 'Ajustes de limpieza', logs: 'Registros' },
