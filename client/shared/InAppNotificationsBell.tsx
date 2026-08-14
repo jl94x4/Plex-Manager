@@ -202,6 +202,7 @@ type Props = {
     /** Panel opens above the bell (desktop sidebar) or below (mobile top bar). */
     placement?: 'up' | 'down';
 };
+type NotificationFilter = 'all' | 'unread';
 
 type PanelBox = {
     left: number;
@@ -219,6 +220,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
 }) => {
     const { t } = useDiscoverI18n();
     const [open, setOpen] = useState(false);
+    const [filterMode, setFilterMode] = useState<NotificationFilter>('all');
     const [items, setItems] = useState<InAppNotification[]>([]);
     const [unread, setUnread] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -227,26 +229,28 @@ export const InAppNotificationsBell: React.FC<Props> = ({
     const buttonRef = useRef<HTMLButtonElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
 
-    const refresh = useCallback(async () => {
+    const refresh = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
         try {
-            setLoading(true);
-            const data = await apiFetch('/api/notifications?limit=50');
+            if (!silent) setLoading(true);
+            const params = new URLSearchParams({ limit: '50' });
+            if (filterMode === 'unread') params.set('unreadOnly', '1');
+            const data = await apiFetch(`/api/notifications?${params.toString()}`);
             setItems(Array.isArray(data?.items) ? data.items : []);
             setUnread(Number(data?.unread) || 0);
         } catch {
             // ignore — bell stays quiet if API unavailable
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
-    }, []);
+    }, [filterMode]);
 
     useEffect(() => {
         refresh();
 
-        const onChanged = () => { refresh(); };
-        const onFocus = () => { refresh(); };
+        const onChanged = () => { refresh({ silent: true }); };
+        const onFocus = () => { refresh({ silent: true }); };
         const onVisibility = () => {
-            if (document.visibilityState === 'visible') refresh();
+            if (document.visibilityState === 'visible') refresh({ silent: true });
         };
 
         window.addEventListener(IN_APP_NOTIFICATIONS_CHANGED_EVENT, onChanged);
@@ -254,8 +258,8 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         document.addEventListener('visibilitychange', onVisibility);
 
         const id = window.setInterval(() => {
-            if (document.visibilityState === 'visible') refresh();
-        }, 15_000);
+            if (document.visibilityState === 'visible') refresh({ silent: true });
+        }, open ? 12_000 : 30_000);
 
         return () => {
             window.clearInterval(id);
@@ -263,7 +267,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             window.removeEventListener('focus', onFocus);
             document.removeEventListener('visibilitychange', onVisibility);
         };
-    }, [refresh]);
+    }, [refresh, open]);
 
     const updatePanelBox = useCallback(() => {
         const button = buttonRef.current;
@@ -348,7 +352,11 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                 method: 'POST',
                 body: JSON.stringify({ all: true }),
             });
-            setItems((prev) => prev.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() })));
+            setItems((prev) => (
+                filterMode === 'unread'
+                    ? []
+                    : prev.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() }))
+            ));
             setUnread(0);
             notifyInAppNotificationsChanged();
         } catch {
@@ -381,9 +389,11 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                     method: 'POST',
                     body: JSON.stringify({ ids: [item.id] }),
                 });
-                setItems((prev) => prev.map((row) => (
-                    row.id === item.id ? { ...row, readAt: new Date().toISOString() } : row
-                )));
+                setItems((prev) => (
+                    filterMode === 'unread'
+                        ? prev.filter((row) => row.id !== item.id)
+                        : prev.map((row) => (row.id === item.id ? { ...row, readAt: new Date().toISOString() } : row))
+                ));
                 setUnread((n) => Math.max(0, n - 1));
             } catch {
                 // ignore
@@ -460,6 +470,30 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                         </div>
                         {(unread > 0 || items.length > 0) && (
                             <div className="flex flex-wrap items-center gap-1.5">
+                                <div className="inline-flex items-center rounded-lg border border-border/80 bg-black/20 p-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterMode('all')}
+                                        className={`px-2 py-1 text-[10px] font-semibold rounded-md transition-colors ${
+                                            filterMode === 'all'
+                                                ? 'bg-plex/20 text-plex'
+                                                : 'text-muted hover:text-text'
+                                        }`}
+                                    >
+                                        {t('notifications.filterAll')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterMode('unread')}
+                                        className={`px-2 py-1 text-[10px] font-semibold rounded-md transition-colors ${
+                                            filterMode === 'unread'
+                                                ? 'bg-plex/20 text-plex'
+                                                : 'text-muted hover:text-text'
+                                        }`}
+                                    >
+                                        {t('notifications.filterUnread')}
+                                    </button>
+                                </div>
                                 {unread > 0 && (
                                     <button
                                         type="button"
@@ -507,6 +541,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                             {items.map((item, index) => {
                                 const unreadItem = !item.readAt;
                                 const dest = resolveNotificationDestination(item);
+                                const repeatCount = Math.max(1, Number(item?.meta?.repeatCount || 1));
                                 return (
                                     <li
                                         key={item.id}
@@ -530,6 +565,11 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                                         <p className={`text-xs leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
                                                             {item.title}
                                                         </p>
+                                                        {repeatCount > 1 && (
+                                                            <span className="shrink-0 rounded-md border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold text-plex">
+                                                                {t('notifications.repeats', { count: repeatCount })}
+                                                            </span>
+                                                        )}
                                                         <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
                                                     </div>
                                                     {item.body ? (
@@ -563,7 +603,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                 type="button"
                 onClick={() => {
                     setOpen((v) => !v);
-                    if (!open) refresh();
+                    if (!open) refresh({ silent: true });
                 }}
                 className={buttonClassName || 'relative text-muted hover:text-text transition-colors'}
                 title={t('notifications.title')}

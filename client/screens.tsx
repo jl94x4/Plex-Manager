@@ -71,7 +71,6 @@ import { ANALYTICS_PERIOD_OPTIONS, persistAnalyticsDays, readPersistedAnalyticsD
 import { UserDashboardLayout } from './home/UserDashboardLayout';
 import { HomeHeroMovieBackdrop } from './home/HomeHeroMovieBackdrop';
 import { createBazarrToolsSectionRenderer, createMainGridWidgetRenderer, createMediaAutomationSectionRenderer, createPendingRequestsSectionRenderer, createRecentlyAddedWidgetRenderer, createScannerSectionRenderer } from './home/userDashboardWidgetRenderers';
-import { useDiscoverI18n } from './discovery/i18n';
 import {
     DEFAULT_DASHBOARD_LAYOUT,
     DASHBOARD_SECTION_LABELS,
@@ -9510,6 +9509,21 @@ const EmptyStreamsMessage: React.FC = () => {
     return <div className="text-center text-muted p-8 border border-dashed border-border rounded-xl mt-4 w-full">{msg}</div>;
 };
 
+type AdminOpsSnapshot = {
+    checkedAt: number;
+    fleetUptime24h: number | null;
+    serviceCount: number;
+    unhealthyCount: number;
+    offlineCount: number;
+    unhealthyNames: string[];
+    requestPending: number;
+    requestEngineConnected: boolean;
+    notificationUnread: number;
+    notificationTotal: number;
+    failingJobs: number;
+    runningJobs: number;
+};
+
 export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean, publicConfig?: any, mediaServerType?: string, onViewAnalytics?: (hash?: string) => void }> = ({ onBack, isAdmin, publicConfig, mediaServerType, onViewAnalytics }) => {
     const [dashboardData, setDashboardData] = useState<{ activeSessions: any[], recentMovies: any[], recentShows: any[], recentMusic: any[] } | null>(null);
     const [trendingStats, setTrendingStats] = useState<{ trending7Days: any[], movies30Days: any[], shows30Days: any[], top365Days: any[], allTime: any[], weekendWarriors: any[], nightOwls: any[], retroHits: any[], cultClassics: any[] } | null>(null);
@@ -9528,6 +9542,12 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
     const recentLimit = recentLimitOverride ?? responsiveRecentLimit;
     const [gridSize, setGridSize] = useDiscoverGridSize();
     const [selectedSession, setSelectedSession] = useState<any | null>(null);
+    const [isDocumentVisible, setIsDocumentVisible] = useState(
+        () => typeof document === 'undefined' || document.visibilityState === 'visible'
+    );
+    const [opsSnapshot, setOpsSnapshot] = useState<AdminOpsSnapshot | null>(null);
+    const [opsLoading, setOpsLoading] = useState(false);
+    const [opsError, setOpsError] = useState<string | null>(null);
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const libraryMediaServerType = String(publicConfig?.mediaServerType || mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = libraryMediaServerType === 'jellyfin' || libraryMediaServerType === 'emby';
@@ -9618,6 +9638,12 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
     }, []);
 
     useEffect(() => {
+        const onVisibility = () => setIsDocumentVisible(document.visibilityState === 'visible');
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => document.removeEventListener('visibilitychange', onVisibility);
+    }, []);
+
+    useEffect(() => {
         if (!isJellyfinPortal) return;
         setDashboardData({ activeSessions: [], recentMovies: [], recentShows: [], recentMusic: [] });
         setTrendingStats(null);
@@ -9683,11 +9709,81 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
         }
     }, [recentLimit, isJellyfinPortal]);
 
+    const fetchOpsSnapshot = useCallback(async (silent = true) => {
+        if (!isAdmin) {
+            setOpsSnapshot(null);
+            setOpsError(null);
+            return;
+        }
+        if (!silent) setOpsLoading(true);
+        try {
+            const [statusRes, requestsRes, notificationsRes] = await Promise.all([
+                apiFetch('/api/status').catch(() => null),
+                apiFetch('/api/requests/count').catch(() => null),
+                apiFetch('/api/admin/notifications/status').catch(() => null),
+            ]);
+
+            const services = Array.isArray(statusRes?.config?.services) ? statusRes.config.services : [];
+            const healthData = statusRes?.healthData && typeof statusRes.healthData === 'object' ? statusRes.healthData : {};
+            const serviceIds = services
+                .map((service: any) => String(service?.id || '').trim())
+                .filter(Boolean);
+            const unhealthyServices = services.filter((service: any) => {
+                const id = String(service?.id || '').trim();
+                const status = String((healthData as any)?.[id]?.currentStatus || '').toLowerCase();
+                return status === 'offline' || status === 'degraded';
+            });
+            const offlineCount = unhealthyServices.filter((service: any) => {
+                const id = String(service?.id || '').trim();
+                const status = String((healthData as any)?.[id]?.currentStatus || '').toLowerCase();
+                return status === 'offline';
+            }).length;
+            const fleetUptime24h = serviceIds.length
+                ? fleetUptimeForPeriod(healthData as Record<string, any>, serviceIds, '24h')
+                : null;
+
+            const jobs = notificationsRes?.jobs || {};
+            const failingJobs = ['seerrAvailableNotify', 'requestStatusSync']
+                .filter((key) => String(jobs?.[key]?.lastError || '').trim()).length;
+            const runningJobs = ['seerrAvailableNotify', 'requestStatusSync']
+                .filter((key) => !!jobs?.[key]?.running).length;
+
+            setOpsSnapshot({
+                checkedAt: Date.now(),
+                fleetUptime24h,
+                serviceCount: services.length,
+                unhealthyCount: unhealthyServices.length,
+                offlineCount,
+                unhealthyNames: unhealthyServices
+                    .map((service: any) => String(service?.name || service?.id || '').trim())
+                    .filter(Boolean)
+                    .slice(0, 4),
+                requestPending: Math.max(0, Number(requestsRes?.pending || 0)),
+                requestEngineConnected: requestsRes?.connected !== false,
+                notificationUnread: Math.max(0, Number(notificationsRes?.inApp?.unread || 0)),
+                notificationTotal: Math.max(0, Number(notificationsRes?.inApp?.total || 0)),
+                failingJobs,
+                runningJobs,
+            });
+            setOpsError(null);
+        } catch (err: any) {
+            setOpsError(err?.message || 'Failed to load ops snapshot');
+        } finally {
+            if (!silent) setOpsLoading(false);
+        }
+    }, [isAdmin]);
+
     useEffect(() => {
         void fetchData();
     }, [fetchData]);
 
-    usePoll(() => { void fetchDashboardOnly(); }, 10_000);
+    useEffect(() => {
+        if (!isAdmin) return;
+        void fetchOpsSnapshot(false);
+    }, [isAdmin, fetchOpsSnapshot]);
+
+    usePoll(() => { if (isDocumentVisible) void fetchDashboardOnly(); }, isDocumentVisible ? 10_000 : null);
+    usePoll(() => { if (isDocumentVisible) void fetchOpsSnapshot(true); }, (isAdmin && isDocumentVisible) ? 30_000 : null);
 
     if (dashboardLoading && !dashboardData) {
         return <DiscoverPageSkeleton recentLimit={recentLimit} gridSize={gridSize} />;
@@ -9840,6 +9936,75 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                             <span className="text-muted text-[10px] uppercase tracking-wider font-bold">Total Bandwidth</span>
                         </div>
                     </div>
+                )}
+
+                {isAdmin && (
+                    <section className="mb-8 w-full">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                            <h2 className="text-plex text-sm uppercase tracking-[2px] font-bold border-b border-white/10 pb-2 w-full">OPS SNAPSHOT</h2>
+                            <button
+                                type="button"
+                                onClick={() => { void fetchOpsSnapshot(false); }}
+                                className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border border-border bg-white/5 hover:bg-white/10 transition-colors"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+                        {opsLoading && !opsSnapshot ? (
+                            <div className="text-center text-muted p-6 border border-dashed border-border rounded-xl">Loading ops snapshot…</div>
+                        ) : opsError && !opsSnapshot ? (
+                            <div className="text-center text-red-300 p-6 border border-red-500/30 rounded-xl bg-red-500/10">{opsError}</div>
+                        ) : opsSnapshot ? (
+                            <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
+                                <div className={`rounded-xl border px-3 py-2 ${opsSnapshot.unhealthyCount > 0 ? 'border-rose-500/40 bg-rose-500/10' : 'border-emerald-500/40 bg-emerald-500/10'}`}>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Services</div>
+                                    <div className="text-lg font-black text-white mt-0.5">{opsSnapshot.serviceCount}</div>
+                                    <div className={`text-xs mt-0.5 ${opsSnapshot.unhealthyCount > 0 ? 'text-rose-200' : 'text-emerald-200'}`}>
+                                        {opsSnapshot.unhealthyCount > 0
+                                            ? `${opsSnapshot.unhealthyCount} unhealthy`
+                                            : 'All healthy'}
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Fleet Uptime (24h)</div>
+                                    <div className="text-lg font-black text-white mt-0.5">
+                                        {opsSnapshot.fleetUptime24h == null ? '—' : `${opsSnapshot.fleetUptime24h.toFixed(2)}%`}
+                                    </div>
+                                    <div className="text-xs text-muted mt-0.5">{opsSnapshot.offlineCount} offline</div>
+                                </div>
+                                <div className={`rounded-xl border px-3 py-2 ${opsSnapshot.requestPending > 0 ? 'border-amber-500/40 bg-amber-500/10' : 'border-white/10 bg-white/5'}`}>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Pending Requests</div>
+                                    <div className="text-lg font-black text-white mt-0.5">{opsSnapshot.requestPending}</div>
+                                    <div className={`text-xs mt-0.5 ${opsSnapshot.requestEngineConnected ? 'text-muted' : 'text-rose-200'}`}>
+                                        {opsSnapshot.requestEngineConnected ? 'Request app connected' : 'Request app offline'}
+                                    </div>
+                                </div>
+                                <div className={`rounded-xl border px-3 py-2 ${opsSnapshot.notificationUnread > 0 ? 'border-sky-500/40 bg-sky-500/10' : 'border-white/10 bg-white/5'}`}>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Unread Notifications</div>
+                                    <div className="text-lg font-black text-white mt-0.5">{opsSnapshot.notificationUnread}</div>
+                                    <div className="text-xs text-muted mt-0.5">{opsSnapshot.notificationTotal} stored</div>
+                                </div>
+                                <div className={`rounded-xl border px-3 py-2 ${opsSnapshot.failingJobs > 0 ? 'border-rose-500/40 bg-rose-500/10' : 'border-white/10 bg-white/5'}`}>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Job Alerts</div>
+                                    <div className="text-lg font-black text-white mt-0.5">{opsSnapshot.failingJobs}</div>
+                                    <div className="text-xs text-muted mt-0.5">{opsSnapshot.runningJobs} running</div>
+                                </div>
+                                <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Last Check</div>
+                                    <div className="text-lg font-black text-white mt-0.5">
+                                        {Math.max(0, Math.round((Date.now() - opsSnapshot.checkedAt) / 1000))}s
+                                    </div>
+                                    <div className="text-xs text-muted mt-0.5">
+                                        {opsSnapshot.unhealthyNames.length
+                                            ? opsSnapshot.unhealthyNames.join(', ')
+                                            : 'No incidents'}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center text-muted p-6 border border-dashed border-border rounded-xl">Ops snapshot unavailable.</div>
+                        )}
+                    </section>
                 )}
 
                 {/* ACTIVITY CARDS */}

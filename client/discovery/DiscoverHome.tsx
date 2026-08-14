@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ChevronDown, ChevronUp, ClipboardList, Film, Music, Sparkles } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { DiscoverPosterCard } from '../screens';
@@ -16,6 +16,7 @@ import { portalRequestsToDiscoveryRowItems } from './myRequestUtils';
 import { filterHiddenAvailableItems, useDiscoveryPreferences } from './useDiscoveryPreferences';
 import { fetchDiscoverHomeRowResults } from './discoverFetchUtils';
 import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
+import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { WatchlistPanel } from './WatchlistPanel';
 import { DiscoverHomeSkeleton } from '../shared/skeletons';
 import { discoveryTheme } from './discoveryThemeClasses';
@@ -428,6 +429,52 @@ export const DiscoverHome: React.FC<{
         };
     }, [loadData]);
 
+    const contentGapItems = useMemo(() => {
+        const sources: Array<{ item: any; boost: number }> = [
+            ...(rows.becauseYouWatched || []).map((item) => ({ item, boost: 20 })),
+            ...(rows.trending || []).map((item) => ({ item, boost: 12 })),
+            ...(rows.popularMovies || []).map((item) => ({ item, boost: 8 })),
+            ...(rows.popularSeries || []).map((item) => ({ item, boost: 8 })),
+        ];
+        const ranked = new Map<string, { item: any; score: number }>();
+        const now = Date.now();
+        const futureWindowMs = 21 * 24 * 60 * 60 * 1000;
+
+        for (const entry of sources) {
+            const item = entry?.item;
+            if (!item) continue;
+            const availability = resolveMediaAvailabilityState(item);
+            if (!['none', 'pending', 'requested'].includes(availability.kind)) continue;
+
+            const hasPoster = !!(item?.posterPath || item?.posterUrl || item?.poster);
+            if (!hasPoster) continue;
+
+            const releaseRaw = String(item?.releaseDate || item?.firstAirDate || '').trim();
+            const releaseAt = releaseRaw ? Date.parse(releaseRaw) : Number.NaN;
+            if (Number.isFinite(releaseAt) && releaseAt > now + futureWindowMs) continue;
+
+            const vote = Number(item?.voteAverage ?? item?.vote_average ?? 0);
+            const popularity = Number(item?.popularity ?? 0);
+            const score = entry.boost
+                + (Number.isFinite(vote) ? vote * 5 : 0)
+                + (Number.isFinite(popularity) ? Math.min(popularity, 120) / 12 : 0);
+
+            const mediaType = String(item?.mediaType || item?.type || (item?.firstAirDate ? 'tv' : 'movie')).toLowerCase();
+            const numericId = Number(item?.tmdbId || item?.id || item?.mediaId || 0);
+            const fallbackId = String(item?.title || item?.name || '').toLowerCase();
+            const key = `${mediaType}:${numericId > 0 ? numericId : fallbackId}`;
+            if (!key || key.endsWith(':')) continue;
+
+            const current = ranked.get(key);
+            if (!current || score > current.score) ranked.set(key, { item, score });
+        }
+
+        return Array.from(ranked.values())
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 30)
+            .map((entry) => entry.item);
+    }, [rows.becauseYouWatched, rows.trending, rows.popularMovies, rows.popularSeries]);
+
     if (loading) {
         return (
             <div aria-busy="true">
@@ -584,6 +631,25 @@ export const DiscoverHome: React.FC<{
                         animateEnter={enterAnim}
                     />
                 </div>
+                <DiscoverHomeRow
+                    title={t('home.contentGapPicks')}
+                    items={contentGapItems}
+                    posterCardClass={posterCardClass}
+                    viewAllLabel={t('common.viewAll')}
+                    formatItem={formatItem}
+                    onSelect={onSelect}
+                    animateEnter={enterAnim}
+                    onViewAll={() => navigate('/discovery/movies')}
+                    empty={(
+                        <EmptyRail
+                            title={t('home.contentGapEmptyTitle')}
+                            body={t('home.contentGapEmptyBody')}
+                            actionLabel={t('home.browseMovies')}
+                            onAction={() => navigate('/discovery/movies')}
+                            icon={<Sparkles className="w-5 h-5" />}
+                        />
+                    )}
+                />
                 <DiscoverHomeRow
                     title={t('home.popularMovies')}
                     items={rows.popularMovies}

@@ -3936,7 +3936,9 @@ app.get('/api/notifications', requireAuth, requireMember, async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
         const limit = Math.max(1, Math.min(100, Number(req.query?.limit) || 30));
-        const items = await listInAppNotificationsForUser(localUser.id, { limit });
+        const unreadOnly = ['1', 'true', 'yes'].includes(String(req.query?.unreadOnly || req.query?.unread || '').toLowerCase());
+        const type = String(req.query?.type || '').trim();
+        const items = await listInAppNotificationsForUser(localUser.id, { limit, unreadOnly, type });
         const unread = await countUnreadInAppNotifications(localUser.id);
         let enriched = items;
         try {
