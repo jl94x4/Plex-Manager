@@ -36,7 +36,7 @@ This table describes broad UI i18n wiring and known remaining work. It does not 
 | Status page | i18n-enabled |
 | Support tickets | i18n-enabled |
 | Wider Settings | Partial |
-| Scanner | Partial |
+| Scanner | i18n-enabled |
 | ColleXions | Partial |
 | Media Automation | Partial |
 | Poster Sets | Partial |
