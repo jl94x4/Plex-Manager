@@ -6993,27 +6993,32 @@ export const DiscoverPosterCard: React.FC<{
             {hasQuickActions && (
                 <div
                     ref={quickActionsRef}
-                    className="absolute top-1.5 right-1.5 z-30"
-                    onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                    }}
+                    className="absolute inset-0 z-30 pointer-events-none"
                 >
-                    <button
-                        type="button"
-                        onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            setQuickActionsOpen((open) => !open);
-                        }}
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/65 text-white/90 border border-white/20 hover:bg-black/80 hover:text-white transition-colors"
-                        aria-label="Quick actions"
-                        aria-expanded={quickActionsOpen}
-                    >
-                        <MoreHorizontal className="w-4 h-4" />
-                    </button>
+                    <div className="absolute top-1.5 right-1.5 pointer-events-auto">
+                        <button
+                            type="button"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setQuickActionsOpen((open) => !open);
+                            }}
+                            className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/65 text-white/90 border border-white/20 hover:bg-black/80 hover:text-white transition-colors"
+                            aria-label="Quick actions"
+                            aria-expanded={quickActionsOpen}
+                        >
+                            <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                    </div>
                     {quickActionsOpen && (
-                        <div className="absolute inset-0 bg-black/75 backdrop-blur-[1px] px-2 py-2 flex flex-col justify-end gap-1">
+                        <div
+                            className="absolute inset-0 bg-black/75 backdrop-blur-[1px] px-2 py-2 flex flex-col justify-end gap-1 pointer-events-auto"
+                            onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setQuickActionsOpen(false);
+                            }}
+                        >
                             {quickActions!.map((action) => (
                                 <button
                                     key={action.id}
