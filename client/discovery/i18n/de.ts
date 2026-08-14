@@ -458,6 +458,20 @@ Object.assign(de, { maintenance: { ...de.maintenance,
     calendar: { currentRule: 'Aktuelle Regel:', graceDays: 'Karenztage', ruleAge: 'Regelalter', eligibleNow: 'Jetzt berechtigt', laterReclaim: 'Spätere Rückgewinnung', daysUntilEligible: 'Tag(e) bis zur Berechtigung', titleCount: 'Titel', laterDetail: 'Diese Titel warten noch auf das Ende der Karenzzeit.', dateTitleCount: 'Anzahl der Titel für dieses Datum.', delayedReclaimTooltip: 'Schätzung der Rückgewinnung aus verzögerten Treffern.', eligibilityDetailTooltip: 'Berechtigungsdetails des Backends.', ago: 'Tage zuvor', notAvailable: 'n/v', ...de.maintenance.calendar }
 } });
 
+Object.assign(de, { scanner: {
+    dashboard: { eyebrow: 'Bibliotheksscanner', title: 'Präzise aktualisieren', description: 'Stelle einen Ordner für eine teilweise Bibliotheksaktualisierung auf Plex, Jellyfin oder Emby in die Warteschlange. ARR-Webhooks treffen hier automatisch als Importe, Upgrades, Löschungen und Umbenennungen ein.' },
+    manual: { title: 'Manueller Pfad', hiddenHint: 'Ausgeblendet — klicke, um einen Ordner manuell in die Warteschlange zu stellen.', visibleHint: 'Füge jetzt einen Ordner hinzu — er wird nach dem Mindestalter verarbeitet.', placeholder: 'Zu scannender Pfad, z. B. /mnt/unionfs/Media/Movies/Movie Name (year)', submitHint: 'Absenden fügt den Pfad zur Scan-Warteschlange hinzu', waitsBeforeTargets: ' · wartet ', beforeTargetsAreCalled: ', bevor die Ziele aufgerufen werden' },
+    actions: { refresh: 'Aktualisieren', submit: 'Absenden', copy: 'Kopieren' },
+    stats: { queued: 'In Warteschlange', queuedHint: 'Wartet auf Mindestalter', processed: 'Verarbeitet', processedHint: 'Erfolgreiche Aktualisierungen', targets: 'Ziele', targetsHint: 'Plex / JF / Emby', minAge: 'Mindestalter', minAgeHint: 'Verzögerung vor dem Scan' },
+    webhooks: { title: 'ARR-Webhooks', instructions: 'In Sonarr / Radarr / Lidarr: Einstellungen → Connect → Webhook → Bei Import + Bei Upgrade (und bei Löschen/Umbenennen, falls gewünscht). Verwende Basic Auth unter Einstellungen → Scanner.' },
+    queue: { title: 'Warteschlange', subtitle: 'Pfade, die auf das Mindestalter warten.', pending: '{count} ausstehend', empty: 'Die Warteschlange ist leer — warte auf den nächsten Webhook oder manuellen Pfad.' },
+    filters: { allConfiguredApps: 'Alle konfigurierten Apps', allEvents: 'Alle Ereignisse', imports: 'Importe', upgrades: 'Upgrades', deleted: 'Gelöscht', renames: 'Umbenennungen', manual: 'Manuell', refresh: 'Aktualisieren', other: 'Andere' },
+    activity: { title: 'Letzte Aktivitäten', subtitle: 'Letzte {total} Ereignisse · {perPage} pro Seite.', eventCount: '{count} Ereignisse', noScansProcessed: 'Noch keine Scans verarbeitet.', noEventsForSource: 'Keine {filter}-Ereignisse für {source}.', noEvents: 'Keine {filter}-Ereignisse.', noSourceActivity: 'Keine Aktivitäten für {source} gefunden.', ok: 'OK', error: 'Fehler', targetSkipped: '{target}: übersprungen', targetRefreshed: '{target}: aktualisiert', showing: '{from}–{to} von {total} angezeigt', actions: { import: 'Import', upgrade: 'Upgrade', fileDeleted: 'Datei gelöscht', seriesDeleted: 'Serie gelöscht', movieDeleted: 'Film gelöscht', artistDeleted: 'Künstler gelöscht', rename: 'Umbenennen', manual: 'Manuell', refresh: 'Aktualisieren', other: 'Andere' } },
+    pagination: { previous: 'Zurück', next: 'Weiter' },
+    errors: { load: 'Scanner konnte nicht geladen werden', queuePath: 'Pfad konnte nicht in die Warteschlange gestellt werden' },
+    toasts: { queued: 'In Warteschlange: {path}', copied: 'In die Zwischenablage kopiert' },
+} });
+
 Object.assign(de, { settings: { ...de.settings, logs: {
     actions: { refresh: 'Aktualisieren', refreshing: 'Aktualisierung...', exportAll: 'Alles exportieren', exporting: 'Export wird erstellt…', unblock: 'Entsperren' },
     audit: { viewerTitle: 'Auditprotokollanzeige', empty: 'Keine Audit-Ereignisse gefunden.', target: 'Ziel', system: 'System', actor: 'Akteur', field: 'Feld', before: 'Vorher', after: 'Nachher', value: 'Wert', unknownEvent: 'Ereignis' },

@@ -44,6 +44,20 @@ Object.assign(ja, { maintenance: { ...ja.maintenance,
     errors: { loadOverview: 'クリーナー概要を読み込めませんでした', loadCandidates: '候補を読み込めませんでした', loadExclusions: '除外の概要を読み込めませんでした。', loadLibrary: 'ライブラリのポスターを読み込めませんでした。', loadStorage: 'ストレージ概要を読み込めませんでした。' }
 } });
 
+Object.assign(ja, { scanner: {
+    dashboard: { eyebrow: 'ライブラリスキャナー', title: '正確に更新', description: 'Plex、Jellyfin、Emby のライブラリを部分更新するためにフォルダーをキューへ追加します。ARR の Webhook は、インポート、アップグレード、削除、名前変更として自動的にここへ届きます。' },
+    manual: { title: '手動パス', hiddenHint: '非表示です — クリックしてフォルダーを手動でキューに追加します。', visibleHint: '今すぐフォルダーを追加できます — 最低経過時間後に処理されます。', placeholder: 'スキャンするパス（例: /mnt/unionfs/Media/Movies/Movie Name (year)）', submitHint: '送信するとパスがスキャンキューに追加されます', waitsBeforeTargets: ' · ', beforeTargetsAreCalled: '待機してからターゲットを呼び出します' },
+    actions: { refresh: '更新', submit: '送信', copy: 'コピー' },
+    stats: { queued: 'キュー済み', queuedHint: '最低経過時間を待機中', processed: '処理済み', processedHint: '更新成功数', targets: 'ターゲット', targetsHint: 'Plex / JF / Emby', minAge: '最低経過時間', minAgeHint: 'スキャン前の待機時間' },
+    webhooks: { title: 'ARR Webhook', instructions: 'Sonarr / Radarr / Lidarr で: Settings → Connect → Webhook → On Import + On Upgrade（削除/名前変更も必要なら有効化）。Settings → Scanner の Basic Auth を使用します。' },
+    queue: { title: 'キュー', subtitle: '最低経過時間を待っているパス。', pending: '{count} 件保留中', empty: 'キューは空です — 次の Webhook または手動パスを待っています。' },
+    filters: { allConfiguredApps: '設定済みのすべてのアプリ', allEvents: 'すべてのイベント', imports: 'インポート', upgrades: 'アップグレード', deleted: '削除済み', renames: '名前変更', manual: '手動', refresh: '更新', other: 'その他' },
+    activity: { title: '最近のアクティビティ', subtitle: '最新 {total} 件のイベント · 1 ページあたり {perPage} 件。', eventCount: '{count} 件のイベント', noScansProcessed: 'まだ処理されたスキャンはありません。', noEventsForSource: '{source} の {filter} イベントはありません。', noEvents: '{filter} イベントはありません。', noSourceActivity: '{source} のアクティビティは見つかりませんでした。', ok: 'OK', error: 'エラー', targetSkipped: '{target}: スキップ', targetRefreshed: '{target}: 更新済み', showing: '{total} 件中 {from}～{to} 件を表示', actions: { import: 'インポート', upgrade: 'アップグレード', fileDeleted: 'ファイルを削除', seriesDeleted: 'シリーズを削除', movieDeleted: '映画を削除', artistDeleted: 'アーティストを削除', rename: '名前変更', manual: '手動', refresh: '更新', other: 'その他' } },
+    pagination: { previous: '前へ', next: '次へ' },
+    errors: { load: 'Scanner を読み込めませんでした', queuePath: 'パスをキューに追加できませんでした' },
+    toasts: { queued: 'キューに追加しました: {path}', copied: 'クリップボードにコピーしました' },
+} });
+
 Object.assign(ja, { settings: { ...ja.settings, logs: {
     actions: { refresh: '更新', refreshing: '更新中...', exportAll: 'すべてエクスポート', exporting: 'エクスポート中…', unblock: 'ブロック解除' },
     audit: { viewerTitle: '監査ログビューアー', empty: '監査イベントが見つかりません。', target: '対象', system: 'システム', actor: '実行者', field: '項目', before: '変更前', after: '変更後', value: '値', unknownEvent: 'イベント' },

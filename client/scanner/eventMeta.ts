@@ -61,8 +61,21 @@ export const SCANNER_ACTION_FILTER_LABELS: Record<string, string> = {
     other: 'Other',
 };
 
+/** Translation keys for stable activity-filter buckets. */
+export const SCANNER_ACTION_FILTER_LABEL_KEYS: Record<string, string> = {
+    all: 'scanner.filters.allEvents',
+    import: 'scanner.filters.imports',
+    upgrade: 'scanner.filters.upgrades',
+    deleted: 'scanner.filters.deleted',
+    rename: 'scanner.filters.renames',
+    manual: 'scanner.filters.manual',
+    refresh: 'scanner.filters.refresh',
+    other: 'scanner.filters.other',
+};
+
 export const scannerActionStyles = (action?: string, isUpgrade?: boolean): {
     label: string;
+    labelKey?: string;
     className: string;
     iconTone: string;
 } => {
@@ -71,60 +84,70 @@ export const scannerActionStyles = (action?: string, isUpgrade?: boolean): {
         case 'import':
             return {
                 label: 'Import',
+                labelKey: 'scanner.activity.actions.import',
                 className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
                 iconTone: 'text-emerald-300',
             };
         case 'upgrade':
             return {
                 label: 'Upgrade',
+                labelKey: 'scanner.activity.actions.upgrade',
                 className: 'bg-amber-500/15 text-amber-300 border-amber-400/30',
                 iconTone: 'text-amber-300',
             };
         case 'file-delete':
             return {
                 label: 'File deleted',
+                labelKey: 'scanner.activity.actions.fileDeleted',
                 className: 'bg-rose-500/15 text-rose-300 border-rose-400/30',
                 iconTone: 'text-rose-300',
             };
         case 'series-delete':
             return {
                 label: 'Series deleted',
+                labelKey: 'scanner.activity.actions.seriesDeleted',
                 className: 'bg-rose-500/15 text-rose-300 border-rose-400/30',
                 iconTone: 'text-rose-300',
             };
         case 'movie-delete':
             return {
                 label: 'Movie deleted',
+                labelKey: 'scanner.activity.actions.movieDeleted',
                 className: 'bg-rose-500/15 text-rose-300 border-rose-400/30',
                 iconTone: 'text-rose-300',
             };
         case 'artist-delete':
             return {
                 label: 'Artist deleted',
+                labelKey: 'scanner.activity.actions.artistDeleted',
                 className: 'bg-rose-500/15 text-rose-300 border-rose-400/30',
                 iconTone: 'text-rose-300',
             };
         case 'rename':
             return {
                 label: 'Rename',
+                labelKey: 'scanner.activity.actions.rename',
                 className: 'bg-violet-500/15 text-violet-300 border-violet-400/30',
                 iconTone: 'text-violet-300',
             };
         case 'manual':
             return {
                 label: 'Manual',
+                labelKey: 'scanner.activity.actions.manual',
                 className: 'bg-sky-500/15 text-sky-300 border-sky-400/30',
                 iconTone: 'text-sky-300',
             };
         case 'refresh':
             return {
                 label: 'Refresh',
+                labelKey: 'scanner.activity.actions.refresh',
                 className: 'bg-plex/15 text-plex border-plex/30',
                 iconTone: 'text-plex',
             };
         default:
             return {
                 label: key === 'other' ? 'Other' : key.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+                labelKey: key === 'other' ? 'scanner.activity.actions.other' : undefined,
                 className: 'bg-white/10 text-muted border-white/15',
                 iconTone: 'text-muted',
             };

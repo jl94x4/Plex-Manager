@@ -1775,6 +1775,20 @@ Object.assign(fr, { maintenance: {
             errors: { ...fr.maintenance.errors, loadOverview: 'Impossible de charger la vue d’ensemble du nettoyage', loadCandidates: 'Impossible de charger les candidats', loadExclusions: 'Impossible de charger le résumé des exclusions.', loadLibrary: 'Impossible de charger les affiches de la bibliothèque.', loadStorage: 'Impossible de charger le résumé du stockage.' }
 } });
 
+Object.assign(fr, { scanner: {
+    dashboard: { eyebrow: 'Scanner de bibliothèque', title: 'Rafraîchir avec précision', description: 'Mettez un dossier en file d’attente pour rafraîchir partiellement une bibliothèque Plex, Jellyfin ou Emby. Les webhooks ARR arrivent ici automatiquement lors des importations, mises à niveau, suppressions et renommages.' },
+    manual: { title: 'Chemin manuel', hiddenHint: 'Masqué — cliquez pour mettre un dossier en file d’attente manuellement.', visibleHint: 'Ajoutez un dossier maintenant — il sera traité après l’âge minimal.', placeholder: 'Chemin à analyser, par ex. /mnt/unionfs/Media/Movies/Movie Name (year)', submitHint: 'Envoyer ajoute le chemin à la file d’attente d’analyse', waitsBeforeTargets: ' · attend ', beforeTargetsAreCalled: ' avant de lancer les cibles' },
+    actions: { refresh: 'Actualiser', submit: 'Envoyer', copy: 'Copier' },
+    stats: { queued: 'En attente', queuedHint: 'En attente de l’âge minimal', processed: 'Traités', processedHint: 'Rafraîchissements réussis', targets: 'Cibles', targetsHint: 'Plex / JF / Emby', minAge: 'Âge minimal', minAgeHint: 'Délai avant l’analyse' },
+    webhooks: { title: 'Webhooks ARR', instructions: 'Dans Sonarr / Radarr / Lidarr : Paramètres → Connecter → Webhook → À l’importation + À la mise à niveau (et suppression/renommage si nécessaire). Utilisez l’authentification basique depuis Paramètres → Scanner.' },
+    queue: { title: 'File d’attente', subtitle: 'Chemins en attente de l’âge minimal.', pending: '{count} en attente', empty: 'La file d’attente est vide — en attente du prochain webhook ou chemin manuel.' },
+    filters: { allConfiguredApps: 'Toutes les applications configurées', allEvents: 'Tous les événements', imports: 'Importations', upgrades: 'Mises à niveau', deleted: 'Supprimés', renames: 'Renommages', manual: 'Manuel', refresh: 'Actualiser', other: 'Autre' },
+    activity: { title: 'Activité récente', subtitle: '{total} derniers événements · {perPage} par page.', eventCount: '{count} événements', noScansProcessed: 'Aucune analyse traitée pour le moment.', noEventsForSource: 'Aucun événement {filter} pour {source}.', noEvents: 'Aucun événement {filter}.', noSourceActivity: 'Aucune activité {source} trouvée.', ok: 'OK', error: 'Erreur', targetSkipped: '{target} : ignoré', targetRefreshed: '{target} : rafraîchi', showing: 'Affichage de {from}–{to} sur {total}', actions: { import: 'Importation', upgrade: 'Mise à niveau', fileDeleted: 'Fichier supprimé', seriesDeleted: 'Série supprimée', movieDeleted: 'Film supprimé', artistDeleted: 'Artiste supprimé', rename: 'Renommage', manual: 'Manuel', refresh: 'Actualisation', other: 'Autre' } },
+    pagination: { previous: 'Préc.', next: 'Suiv.' },
+    errors: { load: 'Impossible de charger le Scanner', queuePath: 'Impossible de mettre le chemin en file d’attente' },
+    toasts: { queued: 'Mis en file d’attente : {path}', copied: 'Copié dans le presse-papiers' },
+} });
+
 Object.assign(fr, { settings: { ...fr.settings, logs: {
     actions: { refresh: 'Actualiser', refreshing: 'Actualisation...', exportAll: 'Tout exporter', exporting: 'Exportation…', unblock: 'Débloquer' },
     audit: { viewerTitle: 'Visionneuse du journal d’audit', empty: 'Aucun événement d’audit trouvé.', target: 'Cible', system: 'Système', actor: 'Auteur', field: 'Champ', before: 'Avant', after: 'Après', value: 'Valeur', unknownEvent: 'Événement' },

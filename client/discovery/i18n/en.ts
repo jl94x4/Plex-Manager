@@ -1761,6 +1761,53 @@ export const en = {
         status: { open: 'Open', resolved: 'Resolved', closed: 'Closed' },
         categories: { media: 'Media request / problem', account: 'Account / access', server: 'Server / service', general: 'General question', other: 'Other' },
     },
+    scanner: {
+        dashboard: {
+            eyebrow: 'Library Scanner',
+            title: 'Refresh with precision',
+            description: 'Queue a folder for a partial library refresh on Plex, Jellyfin, or Emby. ARR webhooks land here automatically as imports, upgrades, deletes, and renames.',
+        },
+        manual: {
+            title: 'Manual path',
+            hiddenHint: 'Hidden — click to queue a folder manually.',
+            visibleHint: 'Add a folder now — processed after the minimum age.',
+            placeholder: 'Path to scan e.g. /mnt/unionfs/Media/Movies/Movie Name (year)',
+            submitHint: 'Submit adds the path to the scan queue',
+            waitsBeforeTargets: ' · waits ',
+            beforeTargetsAreCalled: ' before targets are called',
+        },
+        actions: { refresh: 'Refresh', submit: 'Submit', copy: 'Copy' },
+        stats: {
+            queued: 'Queued', queuedHint: 'Waiting for min age', processed: 'Processed', processedHint: 'Successful refreshes',
+            targets: 'Targets', targetsHint: 'Plex / JF / Emby', minAge: 'Min age', minAgeHint: 'Delay before scan',
+        },
+        webhooks: {
+            title: 'ARR webhooks',
+            instructions: 'In Sonarr / Radarr / Lidarr: Settings → Connect → Webhook → On Import + On Upgrade (and delete/rename if you want those too). Use Basic Auth from Settings → Scanner.',
+        },
+        queue: {
+            title: 'Queue', subtitle: 'Paths waiting for the minimum age.', pending: '{count} pending',
+            empty: 'Queue is empty — waiting for the next webhook or manual path.',
+        },
+        filters: {
+            allConfiguredApps: 'All configured apps', allEvents: 'All events', imports: 'Imports', upgrades: 'Upgrades',
+            deleted: 'Deleted', renames: 'Renames', manual: 'Manual', refresh: 'Refresh', other: 'Other',
+        },
+        activity: {
+            title: 'Recent activity', subtitle: 'Latest {total} events · {perPage} per page.', eventCount: '{count} events',
+            noScansProcessed: 'No scans processed yet.', noEventsForSource: 'No {filter} events for {source}.',
+            noEvents: 'No {filter} events.', noSourceActivity: 'No {source} activity found.', ok: 'OK', error: 'Error',
+            targetSkipped: '{target}: skipped', targetRefreshed: '{target}: refreshed', showing: 'Showing {from}–{to} of {total}',
+            actions: {
+                import: 'Import', upgrade: 'Upgrade', fileDeleted: 'File deleted', seriesDeleted: 'Series deleted',
+                movieDeleted: 'Movie deleted', artistDeleted: 'Artist deleted', rename: 'Rename', manual: 'Manual',
+                refresh: 'Refresh', other: 'Other',
+            },
+        },
+        pagination: { previous: 'Prev', next: 'Next' },
+        errors: { load: 'Failed to load scanner', queuePath: 'Failed to queue path' },
+        toasts: { queued: 'Queued: {path}', copied: 'Copied to clipboard' },
+    },
     maintenance: {
         rules: { title: 'Library Maintenance Rules', description: 'Saved filters are listed below. Click one to edit, preview, and run.', savedFilters: 'Saved Filters', noFilters: 'No filters yet. Click Add Filter.', unsaved: 'You have unsaved changes. Save the filter before previewing or running against production rules.', selectFilter: 'Select a saved filter to preview matches.' },
         actions: { rebuildIndex: 'Rebuild Index', addFilter: 'Add Filter', edit: 'Edit', refresh: 'Refresh', reset: 'Reset', delete: 'Delete', closeEditor: 'Close Editor', deleteFilter: 'Delete Filter', addCondition: 'Add Filter Condition', saveFilter: 'Save Filter', previewMatches: 'Preview Matches', runDry: 'Run Dry-Run', runDestructive: 'Run Destructive' },
