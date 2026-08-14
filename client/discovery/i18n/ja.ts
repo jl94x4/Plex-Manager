@@ -58,6 +58,45 @@ Object.assign(ja, { scanner: {
     toasts: { queued: 'キューに追加しました: {path}', copied: 'クリップボードにコピーしました' },
 } });
 
+Object.assign(ja, { scanner: { ...ja.scanner, settings: {
+    general: {
+        description: 'Sonarr、Radarr、Lidarr 向けの Autoscan 形式ライブラリ更新です。有効にすると、手動パスとキューの状態を扱う管理者専用 Scanner ページがナビゲーションに表示されます。',
+        title: '一般', enableTitle: 'Scanner を有効にする', enableHint: '/triggers/* Webhook と管理者用 Scanner ページを有効にします。', currentStatus: '現在の状態', on: 'オン', off: 'オフ',
+        homeWidgetTitle: 'ホームウィジェットを表示', homeWidgetHint: 'ホームの「最近追加」の上に、幅いっぱいの Scanner ストリップを追加します（管理者）。ホーム → レイアウトを編集 で並べ替えられます。',
+        webhooksVisibleTitle: 'Scanner ページに ARR Webhook を表示', webhooksVisibleHint: 'オフにすると、Scanner ページの ARR Webhook URL ブロックを非表示にします。トリガーは引き続き動作し、ヘルプセクションだけが非表示になります。',
+        manualPathVisibleTitle: 'Scanner ページに手動パスを表示', manualPathVisibleHint: 'オフにすると、Scanner ページの手動パス欄を非表示にします。オンの場合もユーザーは折りたたむことができ、その設定は記憶されます。',
+        minimumAge: '最小経過時間', minimumAgeHint: '例: 30s、1m、5m。スキャンはこの時間待ってから対象を呼び出します。',
+    },
+    webhook: { title: 'Webhook 認証', description: 'Sonarr、Radarr、Lidarr の Connect Webhook は、このユーザー名とパスワードを使用する必要があります（HTTP Basic Auth）。' },
+    credentials: { username: 'ユーザー名', password: 'パスワード', hidePassword: 'パスワードを隠す', showPassword: 'パスワードを表示' },
+    triggers: {
+        targetCheck: '{target}: {status}', targetFallback: '対象', reachable: '到達可能', failed: '失敗', noEnabledTargets: '有効な対象はありません', passed: '成功', parserPassedTargetFailed: '解析は成功しましたが、対象の確認に失敗しました',
+        testPassedToast: '{name} トリガーテストに成功しました', testTargetFailedToast: '{name} の解析は成功しましたが、対象の一つに失敗しました', testFailed: 'トリガーテストに失敗しました', title: '{name} のトリガー', webhookPath: 'Webhook パス: {path}（または下のカスタム名）。',
+        name: 'トリガー名', urlBecomes: 'URL は {path} になります', priority: '優先度', testHint: '安全な合成テストです。スキャンをキューに入れずに、解析、保存済みの書き換え、対象への到達可能性を検証します。', testAction: 'トリガーをテスト',
+    },
+} } });
+
+Object.assign(ja, { scanner: { ...ja.scanner, settings: { ...ja.scanner.settings,
+    pathRewrites: {
+        title: 'パスの書き換え', add: '書き換えを追加', empty: '書き換えルールはありません。パスはトリガーから受け取ったまま使用されます。', sourcePath: '変換元パス', destinationPath: '変換先パス', sourcePathFor: '{name} のパス', scannerPath: 'Scanner パス', targetPath: '{name} のパス',
+        mediaAutomationTitle: 'Media Automation の書き換え', mediaAutomationDescription: 'Media Automation が Copy/Replace を完了して即時 Scanner 更新をキューに入れるときに適用されます。Sonarr の「変換元 → 変換先」と同様に、Automation/コンテナのパスを Plex（または Scanner）が期待するパスへ対応付けます。', label: 'ラベル', mediaAutomationLabelHint: 'Webhook URL ではありません。Scanner キュー内のソース表示にのみ使用されます。', automationPath: 'Automation パス', scannerOrPlexPath: 'Scanner / Plex パス', mediaAutomationExamplePrefix: '例:', mediaAutomationExampleSuffix: 'Media Automation → 「Queue Scanner refresh after library writes」と Scanner の有効化が必要です。',
+    },
+    targets: {
+        title: '{name} の対象', plexDescription: '設定 → Plex の Plex トークンとサーバー URL を使用します。マウントパスが異なる場合にのみ書き換えを追加してください。', optionalDescription: '{name} ライブラリを更新するための任意の対象です。', enable: '{name} を有効にする', usePortalCredentials: 'ポータルの認証情報を使用', usePortalCredentialsHint: 'オンにすると、設定のメディアサーバー URL と API キーを使用します。オフの場合は以下で上書きします。', url: 'URL', apiKey: 'API キー', saveHint: 'これらのオプションを変更した後、ページ下部の「設定を保存」をクリックしてください。',
+    },
+} } });
+
+Object.assign(ja, { scanner: { ...ja.scanner, settings: { ...ja.scanner.settings,
+    autoscan: {
+        title: 'Autoscan からインポート', description: 'Autoscan の config.yml をアップロードまたは貼り付けて、最小経過時間、Webhook 認証、トリガー、書き換えを設定します。Plex URL とトークンは引き続き 設定 → Plex から取得されます。', uploadConfig: 'config.yml をアップロード', previewPastedYaml: '貼り付けた YAML をプレビュー', applyImport: 'インポートを適用',
+        placeholder: '# Paste Autoscan config.yml here\nminimum-age: 1m\nauthentication:\n  username: admin\n  ...', previewNotApplied: 'プレビュー（まだ適用されていません）', applied: '適用済み', importedToast: 'Autoscan 設定をインポートしました。以下を確認してから「設定を保存」を実行してください', pasteOrUploadFirst: '先に Autoscan の config.yml を貼り付けるかアップロードしてください', yamlParsedToast: 'YAML を解析しました。プレビューを確認してからインポートを適用してください', previewFailed: 'プレビューに失敗しました', previewFirst: '先に YAML をプレビューしてください', readFileFailed: 'そのファイルを読み取れませんでした', summaryMinimumAge: '最小経過時間 {value}', summaryAuth: '認証 @{username}', summaryRewrites: '{name} の書き換え {count} 件',
+    },
+    live: {
+        title: 'ライブアクティビティ', description: 'Webhook キューと最近のスキャン結果です。このページを開いている間は数秒ごとに更新されます。', status: { paused: '一時停止中', live: 'ライブ' }, disabledHint: 'Scanner はオフです。新しい Webhook を処理するには有効化して保存してください', summary: 'キュー {queue} ・ 処理済み {processed}', updated: '更新: {time}', copyTitle: 'ライブログをクリップボードにコピー', exportTitle: 'ライブログを .txt としてエクスポート', export: 'エクスポート', resume: '再開', pause: '一時停止', loading: 'アクティビティを読み込み中…', empty: 'Scanner のアクティビティはまだありません。Sonarr/Radarr/Lidarr の Webhook をトリガーするか、Scanner ページからパスを送信してください。', targetSkipped: '{target} をスキップしました（{reason}）', targetFallback: '対象', noLibrary: 'ライブラリなし', targetScanned: '{target} をスキャンしました',
+        errors: { load: 'Scanner ログの読み込みに失敗しました', copyFailed: 'クリップボードにコピーできませんでした' }, toasts: { copied: 'ライブアクティビティをクリップボードにコピーしました', exported: 'ライブアクティビティをエクスポートしました' },
+    },
+} } });
+
 Object.assign(ja, { settings: { ...ja.settings, logs: {
     actions: { refresh: '更新', refreshing: '更新中...', exportAll: 'すべてエクスポート', exporting: 'エクスポート中…', unblock: 'ブロック解除' },
     audit: { viewerTitle: '監査ログビューアー', empty: '監査イベントが見つかりません。', target: '対象', system: 'システム', actor: '実行者', field: '項目', before: '変更前', after: '変更後', value: '値', unknownEvent: 'イベント' },
