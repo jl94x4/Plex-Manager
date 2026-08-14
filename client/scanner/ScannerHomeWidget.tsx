@@ -195,7 +195,7 @@ export const ScannerHomeWidget: React.FC<Props> = ({ onOpen }) => {
                                     </span>
                                     {(last.reason || last.action) ? (
                                         <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${lastStyle.className}`}>
-                                            {last.reason || lastStyle.label}
+                                            {last.reason || (lastStyle.labelKey ? t(lastStyle.labelKey) : lastStyle.label)}
                                         </span>
                                     ) : null}
                                     <ScannerSourceBadge source={last.source} className="ml-0.5" />
