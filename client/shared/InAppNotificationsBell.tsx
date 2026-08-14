@@ -292,18 +292,15 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             return;
         }
 
-        // Mobile top bar: medium dropdown under the bell.
-        const width = Math.min(
-            Math.max(280, Math.floor(window.innerWidth * 0.72)),
-            window.innerWidth - margin * 2,
-            420,
-        );
+        // Mobile top bar: nearly full-width sheet under the bell so long labels fit.
+        const width = Math.min(window.innerWidth - margin * 2, 420);
         const maxHeight = Math.max(
             220,
-            Math.min(Math.floor(window.innerHeight * 0.45), window.innerHeight - rect.bottom - margin * 2),
+            Math.min(Math.floor(window.innerHeight * 0.52), window.innerHeight - rect.bottom - margin * 2),
         );
-        let left = rect.right - width;
-        left = Math.min(Math.max(left, margin), window.innerWidth - margin - width);
+        const left = window.innerWidth <= 480
+            ? margin
+            : Math.min(Math.max(rect.right - width, margin), window.innerWidth - margin - width);
         setPanelBox({
             left,
             width,
@@ -445,47 +442,47 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                             : { top: panelBox.top, height: panelBox.maxHeight, maxHeight: panelBox.maxHeight }),
                 }}
             >
-                <div className="relative shrink-0 overflow-hidden border-b border-border/70">
+                <div className="relative shrink-0 border-b border-border/70">
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-plex/20 via-plex/5 to-transparent" />
-                    <div className="relative flex items-start justify-between gap-3 px-4 py-3 sm:px-5">
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                                <span className="notif-header-icon inline-flex h-8 w-8 items-center justify-center rounded-xl border border-plex/35 bg-plex/15 text-plex">
-                                    <Bell className="h-3.5 w-3.5" />
-                                </span>
-                                <div className="min-w-0">
-                                    <p className="text-xs font-bold tracking-wide text-text">{t('notifications.title')}</p>
-                                    <p className="text-[10px] text-muted mt-0.5">
-                                        {unread > 0
-                                            ? t('notifications.unreadCount', { count: unread })
-                                            : t('notifications.allCaughtUp')}
-                                    </p>
-                                </div>
+                    <div className="relative flex flex-col gap-2 px-3 py-3 sm:px-5">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className="notif-header-icon inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-plex/35 bg-plex/15 text-plex">
+                                <Bell className="h-3.5 w-3.5" />
+                            </span>
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold tracking-wide text-text truncate">{t('notifications.title')}</p>
+                                <p className="text-[10px] text-muted mt-0.5 truncate">
+                                    {unread > 0
+                                        ? t('notifications.unreadCount', { count: unread })
+                                        : t('notifications.allCaughtUp')}
+                                </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                            {unread > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={markAllRead}
-                                    className="notif-mark-read inline-flex items-center gap-1 rounded-lg border border-plex/30 bg-plex/10 px-2 py-1 text-[10px] font-semibold text-plex transition-all duration-200 hover:bg-plex/20 hover:border-plex/50 active:scale-[0.97]"
-                                >
-                                    <CheckCheck className="h-3 w-3" />
-                                    {t('notifications.markAllRead')}
-                                </button>
-                            )}
-                            {items.length > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={clearAll}
-                                    disabled={clearing}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-white/5 px-2 py-1 text-[10px] font-semibold text-muted transition-all duration-200 hover:text-text hover:border-border hover:bg-white/10 active:scale-[0.97] disabled:opacity-50"
-                                >
-                                    <Trash2 className="h-3 w-3" />
-                                    {t('notifications.clearAll')}
-                                </button>
-                            )}
-                        </div>
+                        {(unread > 0 || items.length > 0) && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                {unread > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={markAllRead}
+                                        className="notif-mark-read inline-flex min-h-8 items-center gap-1 rounded-lg border border-plex/30 bg-plex/10 px-2.5 py-1 text-[10px] font-semibold text-plex transition-all duration-200 hover:bg-plex/20 hover:border-plex/50 active:scale-[0.97]"
+                                    >
+                                        <CheckCheck className="h-3 w-3 shrink-0" />
+                                        <span className="whitespace-nowrap">{t('notifications.markAllRead')}</span>
+                                    </button>
+                                )}
+                                {items.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={clearAll}
+                                        disabled={clearing}
+                                        className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-border/80 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-muted transition-all duration-200 hover:text-text hover:border-border hover:bg-white/10 active:scale-[0.97] disabled:opacity-50"
+                                    >
+                                        <Trash2 className="h-3 w-3 shrink-0" />
+                                        <span className="whitespace-nowrap">{t('notifications.clearAll')}</span>
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
