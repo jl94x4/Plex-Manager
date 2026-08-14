@@ -232,7 +232,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                 {quotaHint && (
                                     <p className="text-xs text-muted">{quotaHint}</p>
                                 )}
-                                {options.canRequestAdvanced && (
+                                {options.canRequestAdvanced && !options.canNotify && !options.isWatching && (
                                     <button
                                         type="button"
                                         onClick={() => setShowAdvanced((v) => !v)}
@@ -241,7 +241,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                         {showAdvanced ? t('request.hideAdvanced') : t('request.advancedOptions')}
                                     </button>
                                 )}
-                                {showAdvanced && options.canRequestAdvanced && (
+                                {showAdvanced && options.canRequestAdvanced && !options.canNotify && !options.isWatching && (
                                     <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-white/[0.02] p-3">
                                         {serviceLoading ? (
                                             <div className="py-4 flex justify-center text-muted">
@@ -284,7 +284,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                         )}
                                     </div>
                                 )}
-                                {(options.canNotify || options.isWatching) && !options.canRequest ? (
+                                {(options.canNotify || options.isWatching) ? (
                                     <button
                                         type="button"
                                         disabled={submitting}

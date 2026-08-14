@@ -714,11 +714,12 @@ export const RequestModal: React.FC<Props> = ({
     const displayTitle = options?.title || fallbackTitle || t('request.requestMedia');
     const overview = (options?.overview || fallbackOverview || '').trim();
     const posterUrl = resolveTmdbImageUrl(options?.posterPath || fallbackPosterPath, 'w342');
-    const showAdvancedSection = !!options?.canRequestAdvanced;
+    const notifyOnly = !!(options?.canNotify || options?.isWatching);
+    const showAdvancedSection = !!options?.canRequestAdvanced && !notifyOnly;
     // Show HD + UHD chips whenever a 4K *arr exists, or 4K requests are allowed
     // (so members still see the dual picker when permissions are on).
-    const showQualityPicker = !!options?.has4kServer || !!options?.canRequest4k
-        || ((options?.servers || []).length > 1);
+    const showQualityPicker = !notifyOnly && (!!options?.has4kServer || !!options?.canRequest4k
+        || ((options?.servers || []).length > 1));
     const advancedLoading = showAdvancedSection && showAdvanced && activeForm.loading && !activeForm.loaded;
     const bothQualitiesSelected = selectedQualities.has('hd') && selectedQualities.has('4k');
     const showRoutingFields = !advancedLoading && (
@@ -729,7 +730,7 @@ export const RequestModal: React.FC<Props> = ({
         || !!activeForm.profileId
     );
 
-    const seasonsSection = mediaType === 'tv' && (options?.seasons?.length || 0) > 0 ? (
+    const seasonsSection = !notifyOnly && mediaType === 'tv' && (options?.seasons?.length || 0) > 0 ? (
         <div>
             <div className="flex items-center justify-between gap-3 mb-3">
                 <p className="text-xs font-bold uppercase tracking-wider text-white/40">{t('request.seasons')}</p>
@@ -995,7 +996,7 @@ export const RequestModal: React.FC<Props> = ({
                                 </div>
                             )}
 
-                            {options.canRequest && !showAdvancedSection && (
+                            {options.canRequest && !notifyOnly && !showAdvancedSection && (
                                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/70">
                                     {mediaType === 'tv'
                                         ? t('request.chooseTv')
@@ -1238,26 +1239,24 @@ export const RequestModal: React.FC<Props> = ({
                     >
                         {t('common.cancel')}
                     </button>
-                    {!options?.canRequest && !loading ? (
-                        options?.canNotify || options?.isWatching ? (
+                    {!options?.canRequest && !loading && !notifyOnly ? (
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors"
+                        >
+                            {t('common.close')}
+                        </button>
+                    ) : notifyOnly ? (
                             <button
                                 type="button"
                                 onClick={handleNotifyToggle}
-                                disabled={submitting}
+                                disabled={submitting || loading}
                                 className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
-                                {options.isWatching ? t('request.stopNotify') : t('request.notifyMe')}
+                                {options?.isWatching ? t('request.stopNotify') : t('request.notifyMe')}
                             </button>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={onClose}
-                                className="flex-1 py-3 rounded-xl bg-plex text-black font-black hover:bg-plex-hover transition-colors"
-                            >
-                                {t('common.close')}
-                            </button>
-                        )
                     ) : (
                         <button
                             type="button"

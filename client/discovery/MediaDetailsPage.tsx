@@ -537,13 +537,13 @@ export const MediaDetailsPage: React.FC<{
     const requestButton = getRequestButtonState(mediaType, mediaStatus, seasonRows, details.mediaInfo, details);
     const notifyCta = requestNotify?.canNotify || requestNotify?.isWatching
         ? {
-            label: requestNotify.isWatching ? 'Watching' : 'Notify me',
+            label: requestNotify.isWatching ? t('request.watching') : t('request.notifyMe'),
             disabled: false,
             variant: requestNotify.isWatching ? 'pending' as const : 'action' as const,
             hide: false,
         }
         : null;
-    const preferRequestCta = !requestButton.disabled && requestButton.variant === 'action';
+    const preferRequestCta = !notifyCta && !requestButton.disabled && requestButton.variant === 'action';
     const visibleRequestButton = preferRequestCta ? requestButton : (notifyCta || requestButton);
     const requestButtonLabel = translateDiscoverStatus(t, visibleRequestButton.label);
     const mediaTypeLabel = mediaType === 'movie' ? t('mediaType.movie') : t('mediaType.tv');
