@@ -1786,3 +1786,24 @@ Object.assign(fr, { maintenance: {
 type DeepPartial<T> = {
     [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
 };
+
+Object.assign(fr, { about: {
+    eyebrow: 'À propos du projet',
+    description: 'Server Portal Manager est le centre de contrôle d’un serveur multimédia auto-hébergé : un point central pour gérer les accès, les demandes, l’activité en direct, les analyses, les tableaux de bord et la maintenance avec Plex, Emby et Jellyfin.',
+    currentMode: 'Mode actuel', version: 'Version', development: 'Développement', centralPlace: 'Un espace central',
+    features: {
+        access: { title: 'Accès et utilisateurs', description: 'Gérez les invitations, les échéances, les révocations, les profils et l’usurpation d’identité administrateur sans passer d’un outil serveur à l’autre.' },
+        stats: { title: 'Statistiques et analyses', description: 'Regroupez les classements du serveur, les bilans personnels, l’historique de visionnage, les heures de pointe, les bibliothèques et les tendances de lecture dans un même tableau de bord.' },
+        monitoring: { title: 'Supervision en direct', description: 'Consultez en un coup d’œil les flux actifs, l’état de lecture directe ou de transcodage, les détails des lecteurs, la bande passante et l’activité multimédia en cours.' },
+        requests: { title: 'Demandes et révision', description: 'Examinez les demandes Seerr, Jellyseerr et Ombi au même endroit que les tableaux de bord, les statistiques utilisateurs et les opérations multimédias.' },
+        mediaStack: { title: 'Écosystème multimédia', description: 'Affichez les calendriers, files d’attente, historiques et l’état des services connectés de Sonarr et Radarr dans le portail.' },
+        maintenance: { title: 'Maintenance', description: 'Exécutez le nettoyage des bibliothèques, la supervision d’état, les processus Upgrader, les journaux, les audits et les contrôles opérationnels depuis une seule console.' },
+    },
+    ecosystem: { title: 'Écosystème pris en charge', downloadClients: 'Clients de téléchargement' },
+    contributors: {
+        title: 'Contributeurs',
+        primary: { role: 'Côté Plex', note: 'Mainteneur initial du projet et responsable du flux Plex.' },
+        integration: { role: 'Côté Jellyfin / Emby', note: 'Contributeur spécialisé dans Jellyfin et Emby, ainsi que dans leur intégration.' },
+    },
+    links: { title: 'Liens du projet', documentation: 'Documentation', githubRepository: 'Dépôt GitHub', featureOverview: 'Aperçu des fonctionnalités', gettingStarted: 'Bien démarrer' },
+} });

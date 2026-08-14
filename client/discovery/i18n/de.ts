@@ -482,3 +482,24 @@ Object.assign(de, { maintenance: {
 type DeepPartial<T> = {
     [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
 };
+
+Object.assign(de, { about: {
+    eyebrow: 'Über das Projekt',
+    description: 'Server Portal Manager ist die Mediensteuerzentrale für einen selbst gehosteten Medienserver: ein zentraler Ort für Benutzerzugriff, Anfragen, Live-Aktivität, Analysen, Dashboards und Wartung mit Plex, Emby und Jellyfin.',
+    currentMode: 'Aktueller Modus', version: 'Version', development: 'Entwicklung', centralPlace: 'Ein zentraler Ort',
+    features: {
+        access: { title: 'Zugriff & Benutzer', description: 'Verwalte Einladungen, Abläufe, Entzüge, Profile und Administrator-Imitationen, ohne zwischen Servertools zu wechseln.' },
+        stats: { title: 'Statistiken & Analysen', description: 'Führe serverweite Ranglisten, persönliche Zusammenfassungen, Watch-Verlauf, Spitzenzeiten, Bibliotheken und Wiedergabetrends in einem Dashboard zusammen.' },
+        monitoring: { title: 'Live-Überwachung', description: 'Sieh aktive Streams, Direktwiedergabe-/Transcode-Status, Playerdetails, Bandbreite und aktuelle Medienaktivität auf einen Blick.' },
+        requests: { title: 'Anfragen & Prüfung', description: 'Prüfe Anfragen aus Seerr, Jellyseerr und Ombi am selben Ort wie Dashboards, Benutzerstatistiken und Medienvorgänge.' },
+        mediaStack: { title: 'Medien-Stack', description: 'Zeige Sonarr- und Radarr-Kalender, Warteschlangen, Verlauf und den Zustand verbundener Dienste im Portal an.' },
+        maintenance: { title: 'Wartung', description: 'Führe Bibliotheksbereinigung, Statusüberwachung, Upgrader-Workflows, Protokolle, Audits und Betriebsprüfungen über eine zentrale Konsole aus.' },
+    },
+    ecosystem: { title: 'Unterstütztes Ökosystem', downloadClients: 'Download-Clients' },
+    contributors: {
+        title: 'Mitwirkende',
+        primary: { role: 'Plex-Seite', note: 'Ursprünglicher Projektbetreuer und Leiter des Plex-Workflows.' },
+        integration: { role: 'Jellyfin-/Emby-Seite', note: 'Mitwirkender mit Schwerpunkt auf Jellyfin, Emby und deren Integration.' },
+    },
+    links: { title: 'Projektlinks', documentation: 'Dokumentation', githubRepository: 'GitHub-Repository', featureOverview: 'Funktionsübersicht', gettingStarted: 'Erste Schritte' },
+} });

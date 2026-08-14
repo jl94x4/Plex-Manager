@@ -43,7 +43,8 @@ This table describes broad UI i18n wiring and known remaining work. It does not 
 | Library Upgrader | Partial |
 | Requests admin UI | Partial |
 | Maintenance / Cleaner | i18n-enabled |
-| About / Logs | Partial |
+| About | i18n-enabled |
+| Logs | Partial |
 | Setup/admin utility areas | Mostly hardcoded |
 
 ## Current Recommended Small Batches

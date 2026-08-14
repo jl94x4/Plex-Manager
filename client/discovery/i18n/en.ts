@@ -1779,6 +1779,26 @@ export const en = {
         yearsOld: '{count} years old',
         knownFor: 'Known For',
     },
+    about: {
+        eyebrow: 'About the project',
+        description: 'Server Portal Manager is the Media Control Station for a self-hosted media server: one central pane of glass for user access, request workflows, live activity, analytics, dashboards, and maintenance across Plex, Emby, and Jellyfin.',
+        currentMode: 'Current mode', version: 'Version', development: 'Development', centralPlace: 'One Central Place',
+        features: {
+            access: { title: 'Access & users', description: 'Manage invites, expiry, revokes, profiles, and admin impersonation without jumping between server tools.' },
+            stats: { title: 'Stats & analytics', description: 'Bring server-wide rankings, personal wrap-ups, watch history, peak hours, libraries, and play trends into one dashboard.' },
+            monitoring: { title: 'Live monitoring', description: 'See active streams, direct play/transcode status, player details, bandwidth, and current media activity at a glance.' },
+            requests: { title: 'Requests & review', description: 'Review Seerr, Jellyseerr, and Ombi requests from the same place as dashboards, user stats, and media operations.' },
+            mediaStack: { title: 'Media stack', description: 'Surface Sonarr and Radarr calendars, queues, history, and connected service health inside the portal.' },
+            maintenance: { title: 'Maintenance', description: 'Run library cleanup, status monitoring, upgrader workflows, logs, audits, and operational checks from a single console.' },
+        },
+        ecosystem: { title: 'Supported Ecosystem', downloadClients: 'Download clients' },
+        contributors: {
+            title: 'Contributors',
+            primary: { role: 'Plex side', note: 'Original project maintainer and Plex workflow lead.' },
+            integration: { role: 'Jellyfin / Emby side', note: 'Jellyfin and Emby focused contributor and integration work.' },
+        },
+        links: { title: 'Project Links', documentation: 'Documentation', githubRepository: 'GitHub Repository', featureOverview: 'Feature Overview', gettingStarted: 'Getting Started' },
+    },
 } as const;
 
 
