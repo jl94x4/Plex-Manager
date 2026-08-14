@@ -9858,7 +9858,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                     return (
                                         <div key={session.sessionId ?? i} onClick={() => setSelectedSession(session)} className="bg-card rounded-xl border border-border flex flex-col overflow-hidden shadow-lg hover:border-plex/50 hover:shadow-plex/20 transition-all cursor-pointer select-none h-full">
                                             <div className={`grid ${posterColumnClass} items-stretch flex-1 min-h-0`}>
-                                                <div className="relative aspect-[2/3] w-full overflow-hidden bg-black self-start">
+                                                <div className="relative aspect-[2/3] w-full overflow-hidden bg-black self-start rounded-tl-xl">
                                                     <img
                                                         src={sessionPosterSrc}
                                                         alt={session.title}
@@ -9868,7 +9868,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                                                 e.currentTarget.src = sessionFallbackPosterSrc;
                                                             }
                                                         }}
-                                                        className="absolute inset-0 w-full h-full object-cover object-top drop-shadow-[4px_0_15px_rgba(0,0,0,0.5)]"
+                                                        className="absolute inset-0 w-full h-full object-cover object-top drop-shadow-[4px_0_15px_rgba(0,0,0,0.5)] rounded-tl-xl"
                                                     />
                                                 </div>
                                                 <div className="p-2.5 md:p-3 flex flex-col min-w-0 h-full">
