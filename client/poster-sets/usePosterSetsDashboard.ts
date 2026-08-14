@@ -24,6 +24,8 @@ import {
     type PosterSetsAuditEntry,
     type PosterSetsBrowseRail,
     type PosterSetsBrowseResponse,
+    type PosterSetsCollectionGroup,
+    type PosterSetsCollectionsResponse,
     type PosterSetsConfig,
     type PosterSetsJob,
     type PosterSetsPreview,
@@ -190,6 +192,14 @@ export function usePosterSetsDashboardState() {
     browseRailsRef.current = browseRails;
     const [browseLoading, setBrowseLoading] = useState(false);
     const [browseSeeAllId, setBrowseSeeAllId] = useState<string | null>(initialLocation.rail);
+    const [collectionSets, setCollectionSets] = useState<PosterSetsSearchSet[]>([]);
+    const collectionSetsRef = useRef<PosterSetsSearchSet[]>([]);
+    collectionSetsRef.current = collectionSets;
+    const [collectionGroups, setCollectionGroups] = useState<PosterSetsCollectionGroup[]>([]);
+    const [collectionsLoading, setCollectionsLoading] = useState(false);
+    const [collectionsError, setCollectionsError] = useState<string | null>(null);
+    const [collectionsNeedsFollowers, setCollectionsNeedsFollowers] = useState(false);
+    const collectionsLoadGenRef = useRef(0);
     const [libraryShows, setLibraryShows] = useState<LibraryRecentItem[]>([]);
     const [libraryMovies, setLibraryMovies] = useState<LibraryRecentItem[]>([]);
     const [libraryLoading, setLibraryLoading] = useState(false);
@@ -360,6 +370,40 @@ export function usePosterSetsDashboardState() {
         }
     }, [toast]);
 
+    const loadCollections = useCallback(async (options?: { refresh?: boolean; silent?: boolean }) => {
+        const hasCached = collectionSetsRef.current.length > 0;
+        const silent = Boolean(options?.silent || (hasCached && !options?.refresh));
+        const requestId = ++collectionsLoadGenRef.current;
+        if (!silent) setCollectionsLoading(true);
+        try {
+            const response: PosterSetsCollectionsResponse = await posterSetsApi.collections({
+                refresh: options?.refresh,
+            });
+            if (requestId !== collectionsLoadGenRef.current) return;
+            const nextSets = Array.isArray(response.sets) ? response.sets : [];
+            const prevSets = collectionSetsRef.current;
+            const keepPrev = Boolean(
+                prevSets.length
+                && !nextSets.length
+                && (response.loading || options?.refresh)
+                && !response.needsFollowers
+            );
+            if (!keepPrev) {
+                setCollectionSets(nextSets);
+                setCollectionGroups(Array.isArray(response.groups) ? response.groups : []);
+            }
+            setCollectionsError(response.error || null);
+            setCollectionsNeedsFollowers(Boolean(response.needsFollowers));
+            setCollectionsLoading(Boolean(response.loading));
+        } catch (error) {
+            if (requestId !== collectionsLoadGenRef.current) return;
+            setCollectionsLoading(false);
+            if (!silent) {
+                toast(error instanceof Error ? error.message : 'Failed to load collection sets', 'error');
+            }
+        }
+    }, [toast]);
+
     /** Collapse the inline set inspector without wiping search/browse results. */
     const collapseSetInspector = useCallback((options?: { scrollToSets?: boolean }) => {
         setPreview(null);
@@ -371,7 +415,7 @@ export function usePosterSetsDashboardState() {
         syncedSetUrlRef.current = null;
         const creator = searchMode === 'creator' ? String(searchQuery || '').trim().replace(/^@+/, '') || null : null;
         writePosterSetsUrl(normalizePosterLocation({
-            tab: tab === 'browse' ? 'browse' : 'apply',
+            tab: tab === 'browse' ? 'browse' : tab === 'collections' ? 'collections' : 'apply',
             rail: tab === 'browse' ? browseSeeAllId : null,
             setUrl: null,
             creator: tab === 'apply' ? creator : null,
@@ -425,7 +469,8 @@ export function usePosterSetsDashboardState() {
         if (id === 'watches') void loadWatches();
         if (id === 'browse') void loadBrowse({ silent: browseRailsRef.current.length > 0 });
         if (id === 'library') void loadLibraryRecent({ silent: libraryShows.length > 0 || libraryMovies.length > 0 });
-    }, [historyFilter, loadAudit, loadBrowse, loadHistory, loadLibraryRecent, loadQueue, loadWatches, libraryMovies.length, libraryShows.length, pushPosterLocation, setHistoryFilter]);
+        if (id === 'collections') void loadCollections({ silent: collectionSetsRef.current.length > 0 });
+    }, [historyFilter, loadAudit, loadBrowse, loadCollections, loadHistory, loadLibraryRecent, loadQueue, loadWatches, libraryMovies.length, libraryShows.length, pushPosterLocation, setHistoryFilter]);
 
     const goToPrimaryTab = useCallback((id: PrimaryTabId, options?: { mode?: 'push' | 'replace' }) => {
         if (id === 'discover') {
@@ -548,6 +593,12 @@ export function usePosterSetsDashboardState() {
     }, [tab, loadBrowse]);
 
     useEffect(() => {
+        if (tab !== 'collections') return undefined;
+        void loadCollections({ silent: collectionSetsRef.current.length > 0 });
+        return undefined;
+    }, [tab, loadCollections]);
+
+    useEffect(() => {
         if (tab !== 'library' || !status) return undefined;
         void loadLibraryRecent({ silent: libraryShows.length > 0 || libraryMovies.length > 0 });
         return undefined;
@@ -577,6 +628,7 @@ export function usePosterSetsDashboardState() {
     }, [librarySearchQuery, runLibrarySearch, tab]);
 
     usePoll(() => { void loadBrowse({ silent: true }); }, (tab === 'browse' && browseRails.some((rail) => rail.loading)) ? 4000 : null, { immediate: false });
+    usePoll(() => { void loadCollections({ silent: true }); }, (tab === 'collections' && collectionsLoading) ? 4000 : null, { immediate: false });
 
     usePoll(async () => {
         if (!activeJob?.id || !['running', 'queued'].includes(String(activeJob.state || ''))) return;
@@ -689,6 +741,7 @@ export function usePosterSetsDashboardState() {
             setWhitelistText(listToText(response.config.creatorWhitelist));
             setBlocklistText(listToText(response.config.creatorBlocklist));
             void loadBrowse({ refresh: true, silent: true });
+            void loadCollections({ refresh: true, silent: true });
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to save creators', 'error');
             throw error;
@@ -747,6 +800,10 @@ export function usePosterSetsDashboardState() {
             await load();
             // Only hard-refresh Browse when followed creators changed; otherwise keep durable cache.
             void loadBrowse({
+                refresh: prevWhitelist !== nextWhitelist,
+                silent: true,
+            });
+            void loadCollections({
                 refresh: prevWhitelist !== nextWhitelist,
                 silent: true,
             });
@@ -2324,6 +2381,12 @@ export function usePosterSetsDashboardState() {
         browseRailsRef,
         browseLoading, setBrowseLoading,
         browseSeeAllId, setBrowseSeeAllId,
+        collectionSets, setCollectionSets,
+        collectionGroups, setCollectionGroups,
+        collectionsLoading, setCollectionsLoading,
+        collectionsError, setCollectionsError,
+        collectionsNeedsFollowers, setCollectionsNeedsFollowers,
+        loadCollections,
         libraryShows, setLibraryShows,
         libraryMovies, setLibraryMovies,
         libraryLoading, setLibraryLoading,

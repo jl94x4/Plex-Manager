@@ -1,7 +1,7 @@
 import { type DiscoverView } from '../urlState';
 
-export type TabId = 'apply' | 'browse' | 'library' | 'queue' | 'watches' | 'recent' | 'paste' | 'history' | 'settings';
-export type PrimaryTabId = 'library' | 'discover' | 'queue' | 'watches' | 'logs' | 'settings';
+export type TabId = 'apply' | 'browse' | 'library' | 'collections' | 'queue' | 'watches' | 'recent' | 'paste' | 'history' | 'settings';
+export type PrimaryTabId = 'library' | 'collections' | 'discover' | 'queue' | 'watches' | 'logs' | 'settings';
 export type HistoryFilter = 'all' | 'running' | 'succeeded' | 'failed' | 'audit';
 
 export const DISCOVER_SUB_NAV: Array<{ id: DiscoverView; label: string; internalTab: TabId }> = [

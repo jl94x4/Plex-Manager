@@ -60,7 +60,7 @@ export const normalizeRecentSetKind = (value?: string | null): RecentSetCategory
     if (kind === 'backgrounds' || kind === 'background' || kind === 'backdrop' || kind === 'backdrops') {
         return 'backgrounds';
     }
-    if (kind === 'posters' || kind === 'poster' || kind === 'covers' || kind === 'boxset') return 'posters';
+    if (kind === 'posters' || kind === 'poster' || kind === 'covers' || kind === 'boxset' || kind === 'collection' || kind === 'collections') return 'posters';
     return null;
 };
 

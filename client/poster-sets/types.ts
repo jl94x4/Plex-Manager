@@ -276,8 +276,9 @@ export type PosterSetsSearchSet = {
     user?: string | null;
     posterCount?: number | null;
     provider?: string;
-    /** MediUX card kind when known (boxset, title_cards). */
+    /** MediUX card kind when known (boxset, title_cards, collection). */
     setKind?: string | null;
+    mediaType?: string | null;
     alsoOn?: Array<{
         provider: string;
         setId: string;
@@ -307,6 +308,23 @@ export type PosterSetsBrowseResponse = {
     rails?: PosterSetsBrowseRail[];
     cap?: number;
     error?: string;
+};
+
+export type PosterSetsCollectionGroup = {
+    user: string;
+    sets: PosterSetsSearchSet[];
+};
+
+export type PosterSetsCollectionsResponse = {
+    ok?: boolean;
+    loading?: boolean;
+    error?: string | null;
+    sets?: PosterSetsSearchSet[];
+    groups?: PosterSetsCollectionGroup[];
+    buffered?: number;
+    usernames?: string[];
+    needsFollowers?: boolean;
+    updatedAt?: number;
 };
 
 export type PosterSetsSearchResult = {

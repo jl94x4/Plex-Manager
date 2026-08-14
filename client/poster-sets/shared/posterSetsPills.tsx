@@ -121,6 +121,13 @@ export const SetKindPill: React.FC<{
             </MetaPill>
         );
     }
+    if (kind === 'collection' || kind === 'collections') {
+        return (
+            <MetaPill compact={compact} className="border-amber-400/35 bg-amber-500/15 text-amber-100" title="Collection set">
+                Collection
+            </MetaPill>
+        );
+    }
     if (isTitleCardSet(set)) {
         return (
             <MetaPill compact={compact} className="border-violet-400/35 bg-violet-500/15 text-violet-100" title="Title card pack">

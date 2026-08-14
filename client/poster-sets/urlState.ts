@@ -1,6 +1,6 @@
 /** Hash routing for Poster Sets — library-first with Discover sub-views. */
 
-export const POSTER_SETS_PRIMARY_TABS = ['library', 'discover', 'queue', 'watches', 'logs', 'settings'] as const;
+export const POSTER_SETS_PRIMARY_TABS = ['library', 'collections', 'discover', 'queue', 'watches', 'logs', 'settings'] as const;
 export type PosterSetsPrimaryTab = (typeof POSTER_SETS_PRIMARY_TABS)[number];
 
 export const DISCOVER_VIEWS = ['search', 'browse', 'recent', 'paste'] as const;
@@ -11,6 +11,7 @@ export const POSTER_SETS_INTERNAL_TABS = [
     'apply',
     'browse',
     'library',
+    'collections',
     'queue',
     'watches',
     'recent',
@@ -66,6 +67,8 @@ const legacyTabToState = (legacy: PosterSetsInternalTab): Pick<PosterSetsUrlStat
     switch (legacy) {
         case 'library':
             return { tab: 'library', discoverView: 'search' };
+        case 'collections':
+            return { tab: 'collections', discoverView: 'search' };
         case 'queue':
             return { tab: 'queue', discoverView: 'search' };
         case 'watches':
@@ -88,6 +91,7 @@ const legacyTabToState = (legacy: PosterSetsInternalTab): Pick<PosterSetsUrlStat
 
 export function internalTabFromUrl(state: PosterSetsUrlState): PosterSetsInternalTab {
     if (state.tab === 'library') return 'library';
+    if (state.tab === 'collections') return 'collections';
     if (state.tab === 'queue') return 'queue';
     if (state.tab === 'watches') return 'watches';
     if (state.tab === 'logs') return 'history';

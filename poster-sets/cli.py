@@ -102,6 +102,13 @@ def main() -> int:
                 limit = int(raw_limit)
             batch_pages = int(request.get("batchPages") or request.get("batch_pages") or 3)
             stream_batches = bool(request.get("streamBatches") if "streamBatches" in request else request.get("stream_batches", True))
+            raw_max_pages = request.get("maxPages")
+            if raw_max_pages in (None, ""):
+                raw_max_pages = request.get("max_pages")
+            try:
+                max_set_pages = int(raw_max_pages) if raw_max_pages not in (None, "") else None
+            except Exception:
+                max_set_pages = None
 
             def on_batch(payload: dict) -> None:
                 if stream_batches:
@@ -125,6 +132,7 @@ def main() -> int:
                 on_batch=on_batch if stream_batches else None,
                 batch_pages=batch_pages,
                 config=config,
+                max_set_pages=max_set_pages,
             )
             write_event("result", **result)
             return 0

@@ -3659,11 +3659,74 @@ def _infer_set_kind(*, title: str = "", card_text: str = "") -> Optional[str]:
         return None
     if "boxset" in blob or "box set" in blob:
         return "boxset"
+    if re.search(r"\b(collection posters?|film collection|movie collection)\b", blob, re.I):
+        return "collection"
+    if re.search(r"\bcollections?\b", blob, re.I) and not re.search(
+        r"(title\s*cards?|episode\s*cards?)", blob, re.I
+    ):
+        return "collection"
     if re.search(r"\b(backdrops?|backgrounds?)\b", blob, re.I):
         return "backgrounds"
     if re.search(r"(title\s*cards?|episode\s*cards?|cover\s*style|episode\s*titles?)", blob, re.I):
         return "title_cards"
     return None
+
+
+def _kind_is_collections(kind: str | None) -> bool:
+    raw = str(kind or "").strip().lower().replace("-", "_")
+    return raw in {"collections", "collection", "boxset", "boxsets"}
+
+
+def _is_collection_set(item: dict | None) -> bool:
+    """True for MediUX boxsets, TPDB collection posters, and multi-title packs."""
+    if not isinstance(item, dict):
+        return False
+    kind = str(item.get("setKind") or "").strip().lower().replace("-", "_")
+    if kind in {"title_cards", "title_card", "backgrounds", "background", "backdrop", "backdrops"}:
+        return False
+    if kind in {"collection", "collections", "boxset", "boxsets"}:
+        return True
+    media = str(item.get("mediaType") or "").strip().lower()
+    if media in {"collection", "collections"}:
+        return True
+    title = str(item.get("title") or "")
+    inferred = _infer_set_kind(title=title)
+    if inferred in {"collection", "boxset"}:
+        return True
+    try:
+        count = int(item.get("posterCount") or 0)
+    except Exception:
+        count = 0
+    # Franchise / multi-title packs are typically much larger than single-title variant sets.
+    return count >= 10
+
+
+def _posterdb_card_media_hint(card) -> tuple[Optional[str], Optional[str]]:
+    """Return (mediaType, setKind) from TPDB Movie/Show/Collection tooltips."""
+    if card is None or not hasattr(card, "find_all"):
+        return None, None
+    media_type = None
+    try:
+        tips = card.find_all("a", attrs={"data-toggle": "tooltip", "title": True})
+    except Exception:
+        tips = []
+    for tip in tips:
+        title = str(tip.get("title") or "").strip()
+        if title in {"Movie", "Show", "Collection"}:
+            media_type = title.lower()
+            break
+    if media_type == "collection":
+        return media_type, "collection"
+    return media_type, None
+
+
+def _apply_posterdb_set_card_meta(card, entry: dict, *, title: str = "") -> None:
+    media_type, collection_kind = _posterdb_card_media_hint(card)
+    if media_type:
+        entry["mediaType"] = media_type
+    inferred = collection_kind or _infer_set_kind(title=title or str(entry.get("title") or ""))
+    if inferred:
+        entry["setKind"] = inferred
 
 
 def _infer_mediux_set_kind_from_card(card, *, media_type: str | None = None) -> Optional[str]:
@@ -3997,8 +4060,7 @@ def _collect_posterdb_set_cards(soup, *, sets: dict, limit: int, default_user: s
             thumb = _absolute_url("https://theposterdb.com", thumb)
         if thumb and "missing_poster" in thumb:
             thumb = ""
-        # Fallback: any /set/ links in the card row may not have set_poster_count styling.
-        sets[set_id] = {
+        entry = {
             "setId": set_id,
             "url": _absolute_url("https://theposterdb.com", f"/set/{set_id}"),
             "title": title or f"Set {set_id}",
@@ -4007,6 +4069,8 @@ def _collect_posterdb_set_cards(soup, *, sets: dict, limit: int, default_user: s
             "posterCount": poster_count,
             "provider": "posterdb",
         }
+        _apply_posterdb_set_card_meta(card, entry, title=title)
+        sets[set_id] = entry
         if len(sets) >= max(1, int(limit or 40)):
             return
 
@@ -4031,7 +4095,8 @@ def _collect_posterdb_set_cards(soup, *, sets: dict, limit: int, default_user: s
                 thumb = _absolute_url("https://theposterdb.com", thumb)
             if "missing_poster" in thumb:
                 thumb = ""
-        sets[set_id] = {
+        parent = getattr(anchor, "parent", None)
+        entry = {
             "setId": set_id,
             "url": _absolute_url("https://theposterdb.com", f"/set/{set_id}"),
             "title": title[:160] if title else f"Set {set_id}",
@@ -4040,6 +4105,8 @@ def _collect_posterdb_set_cards(soup, *, sets: dict, limit: int, default_user: s
             "posterCount": None,
             "provider": "posterdb",
         }
+        _apply_posterdb_set_card_meta(parent or anchor, entry, title=title)
+        sets[set_id] = entry
         if len(sets) >= max(1, int(limit or 40)):
             return
 
@@ -4193,12 +4260,22 @@ def _mediux_max_page(soup) -> int:
     return max_page
 
 
+def _filter_creator_sets(items: list, *, kind: str = "posters", take: int = 0) -> list:
+    results = list(items or [])
+    if _kind_is_collections(kind):
+        results = [item for item in results if _is_collection_set(item)]
+    if take:
+        return results[:take]
+    return results
+
+
 def list_posterdb_user_sets(
     username: str,
     progress: ProgressFn = None,
     limit: int = 0,
     max_pages: int = 0,
     *,
+    kind: str = "posters",
     on_batch: BatchFn = None,
     batch_pages: int = 3,
 ) -> dict:
@@ -4212,11 +4289,15 @@ def list_posterdb_user_sets(
     hard_cap = max(1, int(max_pages or 80))
     pages = min(max(1, int(page_count)), hard_cap)
     take = max(0, int(limit or 0)) or 10_000
+    want_collections = _kind_is_collections(kind)
     step = max(1, int(batch_pages or 3))
     sets: dict = {}
     last_emitted = 0
     pages_in_batch = 0
     last_page = 1
+
+    def visible_sets() -> list:
+        return _filter_creator_sets(list(sets.values()), kind=kind, take=take)
 
     def flush_batch(*, done: bool = False, force: bool = False) -> None:
         nonlocal last_emitted, pages_in_batch
@@ -4224,11 +4305,12 @@ def list_posterdb_user_sets(
             return
         if not force and not done and pages_in_batch < step:
             return
-        chunk = list(sets.values())[last_emitted:]
+        visible = visible_sets()
+        chunk = visible[last_emitted:]
         if not chunk and not done:
             pages_in_batch = 0
             return
-        last_emitted = len(sets)
+        last_emitted = len(visible)
         pages_in_batch = 0
         on_batch({
             "provider": "posterdb",
@@ -4238,7 +4320,7 @@ def list_posterdb_user_sets(
             "title": f"@{user}",
             "titleUrl": base,
             "sets": chunk,
-            "allSets": list(sets.values())[:take],
+            "allSets": visible,
             "pagesFetched": last_page,
             "pagesAvailable": page_count,
             "done": done,
@@ -4251,7 +4333,9 @@ def list_posterdb_user_sets(
     stagnant = 0
     for page in range(2, pages + 1):
         before = len(sets)
-        if before >= take:
+        if not want_collections and before >= take:
+            break
+        if want_collections and len(visible_sets()) >= take:
             break
         emit(progress, f"Creator page {page}/{pages}…")
         soup = cook_soup(f"{base}?section=uploads&page={page}")
@@ -4267,8 +4351,8 @@ def list_posterdb_user_sets(
         else:
             stagnant = 0
     flush_batch(done=True, force=True)
-    results = list(sets.values())[:take]
-    if not results:
+    results = visible_sets()
+    if not results and not want_collections:
         raise ValueError(f"No sets found for ThePosterDB creator @{user}. Check the username.")
     return {
         "ok": True,
@@ -4282,6 +4366,7 @@ def list_posterdb_user_sets(
         "sets": results,
         "pagesFetched": last_page,
         "pagesAvailable": page_count,
+        "kind": "collections" if want_collections else "posters",
     }
 
 
@@ -4291,6 +4376,7 @@ def list_mediux_user_sets(
     limit: int = 0,
     max_pages: int = 0,
     *,
+    kind: str = "posters",
     on_batch: BatchFn = None,
     batch_pages: int = 3,
 ) -> dict:
@@ -4307,11 +4393,15 @@ def list_mediux_user_sets(
     hard_cap = max(1, int(max_pages or 60))
     pages = min(_mediux_max_page(soup), hard_cap)
     take = max(0, int(limit or 0)) or 10_000
+    want_collections = _kind_is_collections(kind)
     step = max(1, int(batch_pages or 3))
     sets: dict = {}
     last_emitted = 0
     pages_in_batch = 0
     last_page = 1
+
+    def visible_sets() -> list:
+        return _filter_creator_sets(list(sets.values()), kind=kind, take=take)
 
     def flush_batch(*, done: bool = False, force: bool = False) -> None:
         nonlocal last_emitted, pages_in_batch
@@ -4319,11 +4409,12 @@ def list_mediux_user_sets(
             return
         if not force and not done and pages_in_batch < step:
             return
-        chunk = list(sets.values())[last_emitted:]
+        visible = visible_sets()
+        chunk = visible[last_emitted:]
         if not chunk and not done:
             pages_in_batch = 0
             return
-        last_emitted = len(sets)
+        last_emitted = len(visible)
         pages_in_batch = 0
         on_batch({
             "provider": "mediux",
@@ -4333,7 +4424,7 @@ def list_mediux_user_sets(
             "title": page_title or f"@{user}",
             "titleUrl": page_url,
             "sets": chunk,
-            "allSets": list(sets.values())[:take],
+            "allSets": visible,
             "pagesFetched": last_page,
             "pagesAvailable": pages,
             "done": done,
@@ -4344,7 +4435,9 @@ def list_mediux_user_sets(
     pages_in_batch = 1
     flush_batch()
     for page in range(2, pages + 1):
-        if len(sets) >= take:
+        if not want_collections and len(sets) >= take:
+            break
+        if want_collections and len(visible_sets()) >= take:
             break
         emit(progress, f"MediUX creator page {page}/{pages}…")
         soup = cook_soup(f"{page_url}?page={page}")
@@ -4357,8 +4450,8 @@ def list_mediux_user_sets(
         if added <= 0:
             break
     flush_batch(done=True, force=True)
-    results = list(sets.values())[:take]
-    if not results:
+    results = visible_sets()
+    if not results and not want_collections:
         raise ValueError(f"No sets found for MediUX creator @{user}. Check the username.")
     return {
         "ok": True,
@@ -4371,6 +4464,7 @@ def list_mediux_user_sets(
         "titles": [],
         "sets": results,
         "pagesFetched": last_page,
+        "kind": "collections" if want_collections else "posters",
     }
 
 
@@ -4515,20 +4609,28 @@ def search_catalog(
             raise ValueError("creator username is required")
         # Creator mode: pull paginated set catalogs (limit 0 = practically unbounded).
         creator_limit = max(0, int(limit or 0))
+        kind_value = str(kind or "posters").strip().lower()
+        extra = {}
+        if max_set_pages is not None:
+            extra["max_pages"] = int(max_set_pages)
         if source == "posterdb":
             return list_posterdb_user_sets(
                 query,
                 progress=progress,
                 limit=creator_limit,
+                kind=kind_value,
                 on_batch=on_batch,
                 batch_pages=batch_pages,
+                **extra,
             )
         return list_mediux_user_sets(
             query,
             progress=progress,
             limit=creator_limit,
+            kind=kind_value,
             on_batch=on_batch,
             batch_pages=batch_pages,
+            **extra,
         )
 
     if source == "posterdb":

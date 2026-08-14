@@ -4,6 +4,7 @@ import {
     Compass,
     Eye,
     Image as ImageIcon,
+    Layers,
     Library,
     ListOrdered,
     RefreshCw,
@@ -28,6 +29,7 @@ import {
 } from '../shared';
 import { PosterSetsBrowseView } from './PosterSetsBrowseView';
 import { PosterSetsLibraryView } from './PosterSetsLibraryView';
+import { PosterSetsCollectionsView } from './PosterSetsCollectionsView';
 import { PosterSetsQueueView } from './PosterSetsQueueView';
 import { PosterSetsWatchingView } from './PosterSetsWatchingView';
 import { PosterSetsRecentView } from './PosterSetsRecentView';
@@ -163,6 +165,7 @@ export const PosterSetsShell: React.FC = () => {
                     <DashboardSubnav>
                         {([
                             ['library', 'Library', Library],
+                            ['collections', 'Collection Sets', Layers],
                             ['discover', 'Discover', Compass],
                             ['queue', 'Queue', ListOrdered],
                             ['watches', 'Watching', Eye],
@@ -211,6 +214,7 @@ export const PosterSetsShell: React.FC = () => {
                     <div className="flex min-w-0 flex-wrap justify-center gap-1.5 md:hidden">
                     {([
                         ['library', 'Library', Library],
+                        ['collections', 'Collection Sets', Layers],
                         ['discover', 'Discover', Compass],
                         ['queue', 'Queue', ListOrdered],
                         ['watches', 'Watching', Eye],
@@ -277,6 +281,7 @@ export const PosterSetsShell: React.FC = () => {
 
             <PosterSetsBrowseView />
             <PosterSetsLibraryView />
+            <PosterSetsCollectionsView />
             <PosterSetsQueueView />
             <PosterSetsWatchingView />
             <PosterSetsRecentView />

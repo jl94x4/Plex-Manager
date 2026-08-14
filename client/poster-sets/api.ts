@@ -3,6 +3,7 @@ import { portalUrl } from '../shared/basePath';
 import type {
     PosterSetsAuditEntry,
     PosterSetsBrowseResponse,
+    PosterSetsCollectionsResponse,
     PosterSetsConfig,
     PosterSetsJob,
     PosterSetsJobInput,
@@ -124,6 +125,9 @@ export const posterSetsApi = {
     ),
     browse: (options?: { refresh?: boolean }) => (
         apiFetch(`${ROOT}/browse`, json({ refresh: Boolean(options?.refresh) })) as Promise<PosterSetsBrowseResponse>
+    ),
+    collections: (options?: { refresh?: boolean }) => (
+        apiFetch(`${ROOT}/collections`, json({ refresh: Boolean(options?.refresh) })) as Promise<PosterSetsCollectionsResponse>
     ),
     /**
      * Creator search streams NDJSON batches (first ~3 source pages, then more).
