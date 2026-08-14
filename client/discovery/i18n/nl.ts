@@ -44,6 +44,15 @@ Object.assign(nl, { maintenance: { ...nl.maintenance,
     errors: { loadOverview: 'Overzicht van opschonen kon niet worden geladen', loadCandidates: 'Kandidaten konden niet worden geladen', loadExclusions: 'Samenvatting van uitsluitingen kon niet worden geladen.', loadLibrary: 'Bibliotheekposters konden niet worden geladen.', loadStorage: 'Opslagsamenvatting kon niet worden geladen.' }
 } });
 
+Object.assign(nl, { settings: { ...nl.settings, logs: {
+    actions: { refresh: 'Vernieuwen', refreshing: 'Vernieuwen...', exportAll: 'Alles exporteren', exporting: 'Exporteren…', unblock: 'Deblokkeren' },
+    audit: { viewerTitle: 'Auditlogviewer', empty: 'Geen auditgebeurtenissen gevonden.', target: 'Doel', system: 'Systeem', actor: 'Uitvoerder', field: 'Veld', before: 'Vóór', after: 'Na', value: 'Waarde', unknownEvent: 'Gebeurtenis' },
+    blocklist: { title: 'Blokkeerlijst voor verwijderde gebruikers', empty: 'Er zijn momenteel geen verwijderde gebruikers geblokkeerd.', unknownUser: 'Onbekende gebruiker', noIdentifier: 'Geen identificatie', deletedBy: 'Verwijderd op {date} door {actor}', defaultActor: 'beheerder' },
+    email: { title: 'E-maillog', empty: 'Er zijn nog geen systeeme-mails geregistreerd.', systemEmail: 'Systeeme-mail', to: 'Aan' },
+    pagination: { previous: 'Vorige', next: 'Volgende', pageOf: 'Pagina {page} van {total}' }, dialogs: { unblockUser: '{name} weer toegang geven tot de portal? Dit verstuurt niet automatisch een uitnodiging.' }, fallbacks: { thisUser: 'deze gebruiker', notAvailable: 'N.v.t.' },
+    errors: { loadAuditLog: 'Auditlog kon niet worden geladen', exportAuditLog: 'Auditlog kon niet worden geëxporteerd', loadDeletedUsers: 'Log van verwijderde gebruikers kon niet worden geladen', unblockUser: 'Gebruiker kon niet worden gedeblokkeerd.' }, toasts: { auditExported: 'Auditlog geëxporteerd (portal + Poster Sets + Upgrader).', userUnblocked: 'Verwijderde gebruiker gedeblokkeerd.' },
+} } });
+
 Object.assign(nl, { maintenance: {
     ...nl.maintenance,
     labels: { ...nl.maintenance.labels, true: 'Waar', false: 'Onwaar', minMax: 'min,max', values: 'v1,v2', value: 'waarde', enabled: 'Ingeschakeld', disabled: 'Uitgeschakeld', matches: 'Overeenkomsten', grace: 'Respijtperiode', graceDays: 'Respijtdagen', maxActions: 'Max. acties', collectionName: 'Collectienaam', matchLogic: 'Overeenkomstlogica', filterName: 'Filternaam', matchedTitles: 'Overeenkomende titels', noPoster: 'Geen poster', eligible: 'In aanmerking komend', unmapped: 'Niet gekoppeld', ambiguous: 'Onduidelijk', ...nl.maintenance?.labels, mapped: 'gekoppeld', instanceMappingHint: 'Onduidelijke instantietoewijzing', index: 'Index', mediaItems: 'media-items', lastBuild: 'Laatste opbouw', requestRecords: 'Aanvraagrecords',...nl.maintenance?.labels, matchLogicHint: 'Hoe regelvoorwaarden worden gecombineerd.', graceHint: 'Algemene respijtperiode voor deze regelset.', resetGraceHint: 'Respijttimer voor deze regel nu resetten.' },

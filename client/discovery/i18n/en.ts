@@ -1173,6 +1173,17 @@ export const en = {
             sentTo: 'Sent to: {email}',
             revoke: 'Revoke',
         },
+        logs: {
+            actions: { refresh: 'Refresh', refreshing: 'Refreshing...', exportAll: 'Export all', exporting: 'Exporting…', unblock: 'Unblock' },
+            audit: { viewerTitle: 'Audit Log Viewer', empty: 'No audit events found.', target: 'Target', system: 'System', actor: 'Actor', field: 'Field', before: 'Before', after: 'After', value: 'Value', unknownEvent: 'Event' },
+            blocklist: { title: 'Deleted User Blocklist', empty: 'No deleted users are currently blocked.', unknownUser: 'Unknown user', noIdentifier: 'No identifier', deletedBy: 'Deleted {date} by {actor}', defaultActor: 'admin' },
+            email: { title: 'Email Log', empty: 'No system emails have been logged yet.', systemEmail: 'System Email', to: 'To' },
+            pagination: { previous: 'Previous', next: 'Next', pageOf: 'Page {page} of {total}' },
+            dialogs: { unblockUser: 'Allow {name} to use the portal again? This does not invite them automatically.' },
+            fallbacks: { thisUser: 'this user', notAvailable: 'N/A' },
+            errors: { loadAuditLog: 'Failed to load audit log', exportAuditLog: 'Failed to export audit log', loadDeletedUsers: 'Failed to load deleted users log', unblockUser: 'Failed to unblock user.' },
+            toasts: { auditExported: 'Audit log exported (portal + Poster Sets + Upgrader).', userUnblocked: 'Deleted user unblocked.' },
+        },
         navigation: {
             category: 'Settings Category',
             noSections: 'No settings sections found.',
