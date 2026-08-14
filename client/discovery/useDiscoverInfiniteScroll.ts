@@ -43,11 +43,59 @@ export function useDiscoverInfiniteScroll({
     const [loadingMore, setLoadingMore] = useState(false);
     const sentinelRef = useRef<HTMLDivElement>(null);
     const fetchingRef = useRef(false);
+    const prefetchingRef = useRef(false);
+    const prefetchRef = useRef<{
+        fromPage: number;
+        mergedBatch: any[];
+        lastPage: number;
+        totalPages: number;
+    } | null>(null);
+    const generationRef = useRef(0);
 
     const hasMore = loadedPage < totalPages;
 
+    const prefetchNextBatch = useCallback(async (fromPage: number, knownTotalPages: number) => {
+        if (prefetchingRef.current) return;
+        if (fromPage <= 0 || fromPage > knownTotalPages) return;
+        const generation = generationRef.current;
+        prefetchingRef.current = true;
+        try {
+            let mergedBatch: any[] = [];
+            let lastPage = fromPage - 1;
+            let maxTotalPages = Math.max(1, knownTotalPages);
+
+            while (mergedBatch.length < DISCOVER_LOAD_MORE_TARGET && lastPage < maxTotalPages) {
+                const nextPage = lastPage + 1;
+                const payload = await fetchPage(nextPage);
+                if (generation !== generationRef.current) return;
+                maxTotalPages = Math.max(1, Number(payload.totalPages) || maxTotalPages);
+                const batch = Array.isArray(payload.results) ? payload.results : [];
+                const filteredBatch = filterDiscoverBrowseItems(batch, filterOptionsRef.current || {});
+                mergedBatch = mergeDiscoverResults(mergedBatch, filteredBatch);
+                lastPage = payload.lastFetchedPage ?? nextPage;
+                if (lastPage >= maxTotalPages) break;
+            }
+
+            if (generation !== generationRef.current) return;
+            prefetchRef.current = {
+                fromPage,
+                mergedBatch,
+                lastPage,
+                totalPages: maxTotalPages,
+            };
+        } catch {
+            if (generation !== generationRef.current) return;
+            prefetchRef.current = null;
+        } finally {
+            if (generation === generationRef.current) prefetchingRef.current = false;
+        }
+    }, [fetchPage]);
+
     useEffect(() => {
         let cancelled = false;
+        generationRef.current += 1;
+        prefetchRef.current = null;
+        prefetchingRef.current = false;
 
         const runInitialLoad = async () => {
             setLoading(true);
@@ -81,6 +129,7 @@ export function useDiscoverInfiniteScroll({
                     setResults(filterDiscoverBrowseItems(merged, filterOptionsRef.current || {}));
                     setLoadedPage(lastPage);
                     setTotalPages(maxTotalPages);
+                    void prefetchNextBatch(lastPage + 1, maxTotalPages);
                 }
             } catch (e) {
                 console.error(e);
@@ -98,8 +147,9 @@ export function useDiscoverInfiniteScroll({
         return () => {
             cancelled = true;
             fetchingRef.current = false;
+            prefetchRef.current = null;
         };
-    }, [resetKey, fetchPage, gridSize, containerRef]);
+    }, [resetKey, fetchPage, gridSize, containerRef, prefetchNextBatch]);
 
     const loadNextPage = useCallback(async () => {
         if (fetchingRef.current || loading || loadingMore || !hasMore) return;
@@ -108,6 +158,19 @@ export function useDiscoverInfiniteScroll({
         setLoadingMore(true);
         fetchingRef.current = true;
         try {
+            const prefetched = prefetchRef.current;
+            if (
+                prefetched
+                && prefetched.fromPage === loadedPage + 1
+            ) {
+                prefetchRef.current = null;
+                setResults((prev) => mergeDiscoverResults(prev, prefetched.mergedBatch));
+                setLoadedPage(prefetched.lastPage);
+                setTotalPages(prefetched.totalPages);
+                void prefetchNextBatch(prefetched.lastPage + 1, prefetched.totalPages);
+                return;
+            }
+
             let mergedBatch: any[] = [];
             let lastPage = loadedPage;
             let maxTotalPages = totalPages;
@@ -126,6 +189,8 @@ export function useDiscoverInfiniteScroll({
             setResults((prev) => mergeDiscoverResults(prev, mergedBatch));
             setLoadedPage(lastPage);
             setTotalPages(maxTotalPages);
+            prefetchRef.current = null;
+            void prefetchNextBatch(lastPage + 1, maxTotalPages);
         } catch (e) {
             console.error(e);
             setLoadedPage(totalPages);
@@ -133,7 +198,7 @@ export function useDiscoverInfiniteScroll({
             fetchingRef.current = false;
             setLoadingMore(false);
         }
-    }, [fetchPage, hasMore, loadedPage, loading, loadingMore, totalPages]);
+    }, [fetchPage, hasMore, loadedPage, loading, loadingMore, prefetchNextBatch, totalPages]);
 
     useEffect(() => {
         if (loading || loadingMore || !hasMore) return undefined;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { PlusCircle, CheckCircle, Clock, ArrowLeft, Star, Calendar, Globe, Film, Tv, Loader2, Users, Ticket, Cloud, Disc, AlertTriangle, Bell } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
@@ -104,6 +104,20 @@ export const MediaDetailsPage: React.FC<{
         statusLabel: string;
         posterPath?: string | null;
     } | null>(null);
+    const autoRequestHandledRef = useRef('');
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const routeKey = `${mediaType}:${mediaId}`;
+        if (autoRequestHandledRef.current === routeKey) return;
+        autoRequestHandledRef.current = routeKey;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('request') !== '1') return;
+        setRequestModalOpen(true);
+        params.delete('request');
+        const nextSearch = params.toString();
+        window.history.replaceState({}, '', `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}`);
+    }, [mediaType, mediaId]);
 
     useEffect(() => {
         let cancelled = false;

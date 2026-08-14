@@ -6915,9 +6915,16 @@ export const DiscoverPosterCard: React.FC<{
     showQualityBadges?: boolean;
     posterOnlyLink?: boolean;
     onPosterClick?: () => void;
+    onPosterHover?: () => void;
+    quickActions?: Array<{
+        id: string;
+        label: string;
+        tone?: 'default' | 'danger';
+        onClick: () => void | Promise<void>;
+    }>;
     posterWidth?: number;
     posterHeight?: number;
-}> = ({ item, aspect, overlay, variant = 'discover', className = 'w-full', footer, showQualityBadges = true, posterOnlyLink = false, onPosterClick, posterWidth = 300, posterHeight }) => {
+}> = ({ item, aspect, overlay, variant = 'discover', className = 'w-full', footer, showQualityBadges = true, posterOnlyLink = false, onPosterClick, onPosterHover, quickActions, posterWidth = 300, posterHeight }) => {
     const resolvedAspect = aspect ?? (
         item?.mediaType === 'music' || item?.type === 'music' ? 'square' : '2/3'
     );
@@ -6936,13 +6943,34 @@ export const DiscoverPosterCard: React.FC<{
         : '';
     const [posterSrc, setPosterSrc] = useState(primaryPosterSrc);
     const [posterFailed, setPosterFailed] = useState(false);
+    const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+    const quickActionsRef = useRef<HTMLDivElement | null>(null);
     useEffect(() => {
         setPosterSrc(primaryPosterSrc);
         setPosterFailed(false);
     }, [primaryPosterSrc]);
+    useEffect(() => {
+        if (!quickActionsOpen) return;
+        const onDocMouseDown = (event: MouseEvent) => {
+            if (!quickActionsRef.current) return;
+            if (!quickActionsRef.current.contains(event.target as Node)) {
+                setQuickActionsOpen(false);
+            }
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setQuickActionsOpen(false);
+        };
+        document.addEventListener('mousedown', onDocMouseDown);
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', onDocMouseDown);
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, [quickActionsOpen]);
 
     const hasPoster = !!(primaryPosterSrc || fallbackPosterSrc);
     const showPosterPlaceholder = !hasPoster || posterFailed;
+    const hasQuickActions = Array.isArray(quickActions) && quickActions.length > 0;
     const posterInner = (
         <div className={`${posterShell} ${resolvedAspect === 'square' ? 'aspect-square' : 'aspect-[2/3]'} w-full`}>
             {showPosterPlaceholder ? (
@@ -6961,6 +6989,53 @@ export const DiscoverPosterCard: React.FC<{
                     }}
                     className={`w-full h-full object-cover ${variant === 'home' ? 'transition-[transform,opacity] duration-300 group-hover:scale-105 group-hover:opacity-80' : ''}`}
                 />
+            )}
+            {hasQuickActions && (
+                <div
+                    ref={quickActionsRef}
+                    className="absolute top-1.5 right-1.5 z-30"
+                    onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }}
+                >
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setQuickActionsOpen((open) => !open);
+                        }}
+                        className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/65 text-white/90 border border-white/20 hover:bg-black/80 hover:text-white transition-colors"
+                        aria-label="Quick actions"
+                        aria-expanded={quickActionsOpen}
+                    >
+                        <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                    {quickActionsOpen && (
+                        <div className="absolute inset-0 bg-black/75 backdrop-blur-[1px] px-2 py-2 flex flex-col justify-end gap-1">
+                            {quickActions!.map((action) => (
+                                <button
+                                    key={action.id}
+                                    type="button"
+                                    onClick={(event) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        setQuickActionsOpen(false);
+                                        void action.onClick();
+                                    }}
+                                    className={`w-full text-left px-2.5 py-2 rounded-md text-[11px] font-semibold transition-colors ${
+                                        action.tone === 'danger'
+                                            ? 'text-rose-200 bg-rose-500/20 hover:bg-rose-500/30'
+                                            : 'text-white bg-white/10 hover:bg-white/20'
+                                    }`}
+                                >
+                                    {action.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
             )}
             {overlay}
             {showQualityBadges && item.tags && item.tags.length > 0 && (
@@ -6986,6 +7061,8 @@ export const DiscoverPosterCard: React.FC<{
             <button
                 type="button"
                 onClick={onPosterClick}
+                onMouseEnter={onPosterHover}
+                onFocus={onPosterHover}
                 className="block w-full text-left border-0 p-0 bg-transparent cursor-pointer"
                 style={{ color: 'inherit' }}
             >
@@ -6996,6 +7073,8 @@ export const DiscoverPosterCard: React.FC<{
                 href={item.plexUrl}
                 target="_blank"
                 rel="noreferrer"
+                onMouseEnter={onPosterHover}
+                onFocus={onPosterHover}
                 className="block no-underline"
                 style={{ textDecoration: 'none', color: 'inherit' }}
             >
@@ -7012,10 +7091,35 @@ export const DiscoverPosterCard: React.FC<{
     }
 
     if (onPosterClick && !posterOnlyLink) {
+        if (hasQuickActions) {
+            return (
+                <div
+                    role="button"
+                    tabIndex={0}
+                    onMouseEnter={onPosterHover}
+                    onFocus={onPosterHover}
+                    onClick={() => onPosterClick()}
+                    onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return;
+                        if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            onPosterClick();
+                        }
+                    }}
+                    className={`flex flex-col gap-2 group text-left cursor-pointer ${className}`}
+                    style={{ color: 'inherit', textDecoration: 'none' }}
+                >
+                    {posterInner}
+                    {footer ?? defaultFooter}
+                </div>
+            );
+        }
         return (
             <button
                 type="button"
                 onClick={onPosterClick}
+                onMouseEnter={onPosterHover}
+                onFocus={onPosterHover}
                 className={`flex flex-col gap-2 group text-left border-0 p-0 bg-transparent cursor-pointer ${className}`}
                 style={{ color: 'inherit', textDecoration: 'none' }}
             >
@@ -7026,7 +7130,7 @@ export const DiscoverPosterCard: React.FC<{
     }
 
     return (
-        <a href={item.plexUrl} target="_blank" rel="noreferrer" className={`flex flex-col gap-2 group no-underline ${className}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+        <a href={item.plexUrl} target="_blank" rel="noreferrer" onMouseEnter={onPosterHover} onFocus={onPosterHover} className={`flex flex-col gap-2 group no-underline ${className}`} style={{ color: 'inherit', textDecoration: 'none' }}>
             {posterInner}
             {footer ?? defaultFooter}
         </a>

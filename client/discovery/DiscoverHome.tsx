@@ -92,6 +92,12 @@ const DiscoverHomeRow: React.FC<{
     animateEnter?: boolean;
     aspect?: '2/3' | 'square';
     hideTitle?: boolean;
+    getQuickActions?: (item: any) => Array<{
+        id: string;
+        label: string;
+        tone?: 'default' | 'danger';
+        onClick: () => void | Promise<void>;
+    }>;
 }> = ({
     title = '',
     items,
@@ -104,8 +110,13 @@ const DiscoverHomeRow: React.FC<{
     animateEnter = false,
     aspect = '2/3',
     hideTitle = false,
+    getQuickActions,
 }) => {
-    if (!items?.length) {
+    const visibleItems = (Array.isArray(items) ? items : [])
+        .map((rawItem) => formatItem(rawItem))
+        .filter((formatted) => formatted && !formatted.hidden);
+
+    if (!visibleItems.length) {
         if (!empty) return null;
         return (
             <div className="flex flex-col gap-2 relative">
@@ -136,9 +147,8 @@ const DiscoverHomeRow: React.FC<{
                 </div>
             )}
             <Carousel>
-                {items.map((rawItem, idx) => {
-                    if (!rawItem) return null;
-                    const formatted = formatItem(rawItem);
+                {visibleItems.map((formatted, idx) => {
+                    if (!formatted) return null;
                     return (
                         <div
                             key={`${title || 'row'}-${formatted.id || idx}`}
@@ -151,6 +161,7 @@ const DiscoverHomeRow: React.FC<{
                                 overlay={formatted.overlay}
                                 showQualityBadges={false}
                                 onPosterClick={() => onSelect(formatted)}
+                                quickActions={getQuickActions ? getQuickActions(formatted) : undefined}
                             />
                         </div>
                     );
@@ -202,7 +213,13 @@ export const DiscoverHome: React.FC<{
     navigate: (path: string) => void;
     pushToast?: (msg: string, type: 'success' | 'error') => void;
     providerLabel?: string;
-}> = ({ onSelect, formatItem, navigate, pushToast, providerLabel = 'Plex' }) => {
+    getQuickActions?: (item: any) => Array<{
+        id: string;
+        label: string;
+        tone?: 'default' | 'danger';
+        onClick: () => void | Promise<void>;
+    }>;
+}> = ({ onSelect, formatItem, navigate, pushToast, providerLabel = 'Plex', getQuickActions }) => {
     const { t, locale } = useDiscoverI18n();
     const { preferences, loaded } = useDiscoveryPreferences();
     const { profile: discoveryMe, refresh: refreshDiscoveryMe } = useDiscoveryMe(true);
@@ -535,6 +552,7 @@ export const DiscoverHome: React.FC<{
                             formatItem={formatItem}
                             onSelect={onSelect}
                             animateEnter={enterAnim}
+                            getQuickActions={getQuickActions}
                             onViewAll={() => navigate('/discovery/requests')}
                             empty={(
                                 <EmptyRail
@@ -585,6 +603,7 @@ export const DiscoverHome: React.FC<{
                                 formatItem={formatItem}
                                 onSelect={onSelect}
                                 animateEnter={enterAnim}
+                                getQuickActions={getQuickActions}
                             />
                         )}
                     </div>
@@ -618,6 +637,7 @@ export const DiscoverHome: React.FC<{
                         formatItem={formatItem}
                         onSelect={onSelect}
                         animateEnter={enterAnim}
+                        getQuickActions={getQuickActions}
                     />
                 )}
                 <div id="discover-trending">
@@ -629,6 +649,7 @@ export const DiscoverHome: React.FC<{
                         formatItem={formatItem}
                         onSelect={onSelect}
                         animateEnter={enterAnim}
+                        getQuickActions={getQuickActions}
                     />
                 </div>
                 <DiscoverHomeRow
@@ -639,6 +660,7 @@ export const DiscoverHome: React.FC<{
                     formatItem={formatItem}
                     onSelect={onSelect}
                     animateEnter={enterAnim}
+                    getQuickActions={getQuickActions}
                     onViewAll={() => navigate('/discovery/movies')}
                     empty={(
                         <EmptyRail
@@ -658,6 +680,7 @@ export const DiscoverHome: React.FC<{
                     formatItem={formatItem}
                     onSelect={onSelect}
                     animateEnter={enterAnim}
+                    getQuickActions={getQuickActions}
                     onViewAll={() => navigate('/discovery/movies')}
                 />
                 <DiscoverGenreSliderRow
@@ -675,6 +698,7 @@ export const DiscoverHome: React.FC<{
                     formatItem={formatItem}
                     onSelect={onSelect}
                     animateEnter={enterAnim}
+                    getQuickActions={getQuickActions}
                 />
 
                 <div className="flex flex-col gap-2 relative rounded-2xl border border-border/60 bg-white/[0.02] p-3 sm:p-4">
@@ -699,6 +723,7 @@ export const DiscoverHome: React.FC<{
                     formatItem={formatItem}
                     onSelect={onSelect}
                     animateEnter={enterAnim}
+                    getQuickActions={getQuickActions}
                     onViewAll={() => navigate('/discovery/series')}
                 />
                 <DiscoverGenreSliderRow
@@ -716,6 +741,7 @@ export const DiscoverHome: React.FC<{
                     formatItem={formatItem}
                     onSelect={onSelect}
                     animateEnter={enterAnim}
+                    getQuickActions={getQuickActions}
                 />
 
                 <div className="flex flex-col gap-2 relative rounded-2xl border border-border/60 bg-white/[0.02] p-3 sm:p-4">

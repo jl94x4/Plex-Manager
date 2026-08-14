@@ -25,7 +25,13 @@ export const DiscoverSeries: React.FC<{
     onSelect: (item: any) => void;
     formatItem: (item: any) => any;
     navigate: (path: string) => void;
-}> = ({ onSelect, formatItem, navigate }) => {
+    getQuickActions?: (item: any) => Array<{
+        id: string;
+        label: string;
+        tone?: 'default' | 'danger';
+        onClick: () => void | Promise<void>;
+    }>;
+}> = ({ onSelect, formatItem, navigate, getQuickActions }) => {
     const { t, locale } = useDiscoverI18n();
     const { preferences } = useDiscoveryPreferences();
     const { hideRequested, setHideRequested } = useHideRequestedToggle();
@@ -148,6 +154,7 @@ export const DiscoverSeries: React.FC<{
                     gridSize={gridSize}
                     formatItem={formatItem}
                     onSelect={onSelect}
+                    getQuickActions={getQuickActions}
                     loading={loading}
                     skeletonCount={skeletonCount}
                     emptyMessage={

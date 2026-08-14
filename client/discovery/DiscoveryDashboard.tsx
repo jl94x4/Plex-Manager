@@ -9,7 +9,7 @@ import { PersonDetailsPage } from './PersonDetailsPage';
 import { Film, Tv, Compass, ClipboardList, AlertTriangle, ChevronDown, Music } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl, stripBasePath } from '../shared/basePath';
-import { normalizeRawDiscoveryItem } from './discoverItemUtils';
+import { getDiscoverItemKey, normalizeRawDiscoveryItem } from './discoverItemUtils';
 import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { DiscoverStatusOverlay } from './DiscoverStatusOverlay';
 import { MyRequestsPage } from './MyRequestsPage';
@@ -20,11 +20,49 @@ import { useDiscoveryMe } from './useDiscoveryMe';
 import { WatchlistPage } from './WatchlistPage';
 import { DiscoverMusic } from './DiscoverMusic';
 import { MusicArtistPage } from './MusicArtistPage';
-import { scrollPortalToTop, stashDiscoverDetailSeed } from './discoverNavigationUtils';
+import {
+    currentDiscoverPathWithSearch,
+    readDiscoverBrowsePath,
+    restoreDiscoverScrollPosition,
+    scrollPortalToTop,
+    stashDiscoverBrowsePath,
+    stashDiscoverDetailSeed,
+    stashDiscoverScrollPosition,
+} from './discoverNavigationUtils';
 import { resolveTmdbImageUrl } from './tmdbImageUrl';
 import { useDiscoverI18n } from './i18n';
 import { discoveryTheme } from './discoveryThemeClasses';
 import { ToastContainer, pushToast as appendToast, type ToastMessage } from '../shared/toast';
+
+const DISCOVER_HIDDEN_KEYS_STORAGE_KEY = 'discover:hiddenKeys:v1';
+
+const readHiddenDiscoverKeys = () => {
+    if (typeof localStorage === 'undefined') return new Set<string>();
+    try {
+        const raw = localStorage.getItem(DISCOVER_HIDDEN_KEYS_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return new Set<string>();
+        return new Set(parsed.map((value) => String(value || '').trim()).filter(Boolean));
+    } catch {
+        return new Set<string>();
+    }
+};
+
+const writeHiddenDiscoverKeys = (keys: Set<string>) => {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(DISCOVER_HIDDEN_KEYS_STORAGE_KEY, JSON.stringify(Array.from(keys)));
+    } catch {
+        // ignore storage errors
+    }
+};
+
+type DiscoverQuickAction = {
+    id: string;
+    label: string;
+    tone?: 'default' | 'danger';
+    onClick: () => void | Promise<void>;
+};
 
 const DiscoveryDashboardInner: React.FC<{
     onItemClick: (item: any) => void;
@@ -51,6 +89,7 @@ const DiscoveryDashboardInner: React.FC<{
     const { openCount: myOpenIssueCount, refresh: refreshMyIssueCount } = useMyIssueCount(true);
     const { profile: discoveryMe } = useDiscoveryMe(true);
     const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+    const [hiddenDiscoverKeys, setHiddenDiscoverKeys] = useState<Set<string>>(() => readHiddenDiscoverKeys());
     const providerLabel = String(mediaServerType || 'plex').toLowerCase() === 'jellyfin'
         ? 'Jellyfin'
         : String(mediaServerType || 'plex').toLowerCase() === 'emby'
@@ -72,19 +111,173 @@ const DiscoveryDashboardInner: React.FC<{
     }, [refreshPath]);
 
     useEffect(() => {
-        scrollPortalToTop();
+        const fullPath = currentDiscoverPathWithSearch();
+        stashDiscoverBrowsePath(fullPath);
+        let raf2 = 0;
+        const raf = window.requestAnimationFrame(() => {
+            raf2 = window.requestAnimationFrame(() => {
+                if (!restoreDiscoverScrollPosition(fullPath)) {
+                    scrollPortalToTop();
+                }
+            });
+        });
+        return () => {
+            window.cancelAnimationFrame(raf);
+            if (raf2) window.cancelAnimationFrame(raf2);
+        };
     }, [path]);
 
     const navigate = useCallback((newPath: string) => {
+        const currentPath = currentDiscoverPathWithSearch();
+        stashDiscoverScrollPosition(currentPath);
+        stashDiscoverBrowsePath(currentPath);
         const [pathname, ...rest] = newPath.split('?');
         const search = rest.length ? `?${rest.join('?')}` : '';
         const target = `${portalUrl(pathname)}${search}`;
         window.history.pushState({}, '', target);
         setPath(window.location.pathname);
         setSearchOpen(false);
-        scrollPortalToTop();
         window.dispatchEvent(new Event('portal-discovery-navigate'));
     }, []);
+
+    const persistHiddenDiscoverKeys = useCallback((next: Set<string>) => {
+        setHiddenDiscoverKeys(next);
+        writeHiddenDiscoverKeys(next);
+    }, []);
+
+    const toggleHiddenDiscoverItem = useCallback((item: any) => {
+        const key = String(item?.discoverKey || getDiscoverItemKey(item) || '').trim();
+        if (!key) return false;
+        const next = new Set(hiddenDiscoverKeys);
+        const hidden = next.has(key);
+        if (hidden) next.delete(key);
+        else next.add(key);
+        persistHiddenDiscoverKeys(next);
+        pushToast?.(
+            hidden ? t('quickActions.unhidden') : t('quickActions.hidden'),
+            'success',
+        );
+        return !hidden;
+    }, [hiddenDiscoverKeys, persistHiddenDiscoverKeys, pushToast, t]);
+
+    const quickNotifyToggle = useCallback(async (item: any) => {
+        const mediaType = item?.mediaType === 'tv'
+            ? 'tv'
+            : item?.mediaType === 'music'
+                ? 'music'
+                : 'movie';
+        const mediaId = mediaType === 'music'
+            ? String(item?.mbid || item?.id || '').trim()
+            : Number(item?.id || item?.tmdbId || 0);
+        if ((mediaType === 'music' && !mediaId) || (mediaType !== 'music' && (!Number.isFinite(mediaId) || mediaId <= 0))) {
+            pushToast?.(t('quickActions.notifyBlocked'), 'error');
+            return;
+        }
+        try {
+            const params = new URLSearchParams({
+                mediaType,
+                mediaId: String(mediaId),
+            });
+            const options = await apiFetch(`/api/discovery/request-options?${params.toString()}`);
+            const watching = !!options?.isWatching;
+            if (!watching && !options?.canNotify) {
+                pushToast?.(String(options?.blockReason || t('quickActions.notifyBlocked')), 'error');
+                return;
+            }
+            await apiFetch('/api/discovery/request/notify', {
+                method: 'POST',
+                body: JSON.stringify({
+                    mediaType,
+                    mediaId,
+                    subscribe: !watching,
+                }),
+            });
+            pushToast?.(watching ? t('quickActions.notifyOff') : t('quickActions.notifyOn'), 'success');
+        } catch (error: any) {
+            pushToast?.(String(error?.message || t('quickActions.notifyBlocked')), 'error');
+        }
+    }, [pushToast, t]);
+
+    const openQuickRequest = useCallback((item: any) => {
+        const mediaType = item?.mediaType === 'tv'
+            ? 'tv'
+            : item?.mediaType === 'movie'
+                ? 'movie'
+                : item?.type === 'tv'
+                    ? 'tv'
+                    : item?.type === 'movie'
+                        ? 'movie'
+                        : null;
+        if (mediaType) {
+            const mediaId = Number(item?.id || item?.tmdbId || 0);
+            if (Number.isFinite(mediaId) && mediaId > 0) {
+                const here = currentDiscoverPathWithSearch();
+                stashDiscoverScrollPosition(here);
+                stashDiscoverBrowsePath(here);
+                stashDiscoverDetailSeed(item);
+                navigate(`/discovery/${mediaType}/${mediaId}?request=1`);
+                return;
+            }
+        }
+        if (item?.mediaType === 'music' || item?.type === 'music') {
+            const mbid = String(item?.mbid || item?.id || '').trim();
+            if (mbid) {
+                const here = currentDiscoverPathWithSearch();
+                stashDiscoverScrollPosition(here);
+                stashDiscoverBrowsePath(here);
+                navigate(`/discovery/music/artist/${encodeURIComponent(mbid)}`);
+                pushToast?.(t('quickActions.requestHint'), 'success');
+            }
+        }
+    }, [navigate, pushToast, t]);
+
+    const getQuickActions = useCallback((item: any): DiscoverQuickAction[] => {
+        const actions: DiscoverQuickAction[] = [];
+        if (item?.mediaType !== 'person') {
+            actions.push({
+                id: 'request',
+                label: t('quickActions.request'),
+                onClick: () => openQuickRequest(item),
+            });
+            actions.push({
+                id: 'notify',
+                label: t('quickActions.notify'),
+                onClick: () => quickNotifyToggle(item),
+            });
+        }
+        const plexUrl = String(item?.plexUrl || '').trim();
+        if (plexUrl && plexUrl !== '#') {
+            actions.push({
+                id: 'plex',
+                label: t('quickActions.openInPlex'),
+                onClick: () => window.open(plexUrl, '_blank', 'noopener,noreferrer'),
+            });
+        }
+        if (item?.discoverKey) {
+            const hidden = hiddenDiscoverKeys.has(String(item.discoverKey));
+            actions.push({
+                id: 'hide',
+                label: hidden ? t('quickActions.unhide') : t('quickActions.hide'),
+                tone: hidden ? 'default' : 'danger',
+                onClick: () => toggleHiddenDiscoverItem(item),
+            });
+        }
+        return actions;
+    }, [hiddenDiscoverKeys, openQuickRequest, quickNotifyToggle, t, toggleHiddenDiscoverItem]);
+
+    const navigateBackToBrowse = useCallback((fallback = '/discovery') => {
+        const stored = readDiscoverBrowsePath();
+        if (stored) {
+            navigate(stored);
+            return;
+        }
+        navigate(fallback);
+    }, [navigate]);
+
+    const resetHiddenDiscoverItems = useCallback(() => {
+        persistHiddenDiscoverKeys(new Set());
+        pushToast?.(t('quickActions.resetDone'), 'success');
+    }, [persistHiddenDiscoverKeys, pushToast, t]);
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {
@@ -155,7 +348,7 @@ const DiscoveryDashboardInner: React.FC<{
         };
     }, [query, locale, searchRetryToken, t]);
 
-    const formatItem = (rawItem: any) => {
+    const formatItem = useCallback((rawItem: any) => {
         const item = normalizeRawDiscoveryItem(rawItem);
         const isPerson = item.mediaType === 'person';
         const isMusic = item.mediaType === 'music';
@@ -170,6 +363,8 @@ const DiscoveryDashboardInner: React.FC<{
         const mediaType = isPerson ? 'person' : (isMusic ? 'music' : (isMovie ? 'movie' : 'tv'));
 
         const availability = resolveMediaAvailabilityState(item);
+        const discoverKey = getDiscoverItemKey(item);
+        const hidden = discoverKey ? hiddenDiscoverKeys.has(discoverKey) : false;
         const overlay = !isPerson && availability.kind !== 'none'
             ? <DiscoverStatusOverlay state={availability} />
             : null;
@@ -190,8 +385,10 @@ const DiscoveryDashboardInner: React.FC<{
             isPartial: availability.kind === 'partial',
             isPending: availability.kind === 'pending' || availability.kind === 'processing',
             overlay,
+            discoverKey,
+            hidden,
         };
-    };
+    }, [hiddenDiscoverKeys, t]);
 
     const heroProps = {
         query,
@@ -275,7 +472,7 @@ const DiscoveryDashboardInner: React.FC<{
         return (
             <PersonDetailsPage
                 personId={id}
-                onBack={() => window.history.back()}
+                onBack={() => navigateBackToBrowse('/discovery')}
                 onSelect={openMedia}
                 formatItem={formatItem}
             />
@@ -289,7 +486,7 @@ const DiscoveryDashboardInner: React.FC<{
                 <DiscoverHeroHeader {...heroProps} />
                 <MusicArtistPage
                     mbid={mbid}
-                    onBack={() => navigate('/discovery/music')}
+                    onBack={() => navigateBackToBrowse('/discovery/music')}
                     pushToast={pushToast}
                 />
             </div>
@@ -303,7 +500,7 @@ const DiscoveryDashboardInner: React.FC<{
             <MediaDetailsPage
                 mediaType={type}
                 mediaId={id}
-                onBack={() => navigate('/discovery')}
+                onBack={() => navigateBackToBrowse('/discovery')}
                 formatItem={formatItem}
                 pushToast={pushToast}
                 isAdmin={isAdmin}
@@ -420,6 +617,18 @@ const DiscoveryDashboardInner: React.FC<{
                         </div>
                     </div>
 
+                    {hiddenDiscoverKeys.size > 0 && (
+                        <div className="w-full mt-3 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={resetHiddenDiscoverItems}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-white/5 hover:bg-white/10 text-xs font-bold text-muted hover:text-text transition-colors"
+                            >
+                                {t('quickActions.resetHidden', { count: hiddenDiscoverKeys.size })}
+                            </button>
+                        </div>
+                    )}
+
                     <div className="w-full mt-1">
                         {subRoute === 'home' && (
                     <DiscoverHome
@@ -428,6 +637,7 @@ const DiscoveryDashboardInner: React.FC<{
                         navigate={navigate}
                         pushToast={pushToast}
                         providerLabel={providerLabel}
+                        getQuickActions={getQuickActions}
                     />
                         )}
                         {subRoute === 'movies' && (
@@ -435,6 +645,7 @@ const DiscoveryDashboardInner: React.FC<{
                                 onSelect={openMedia}
                                 formatItem={formatItem}
                                 navigate={navigate}
+                                getQuickActions={getQuickActions}
                             />
                         )}
                         {subRoute === 'series' && (
@@ -442,6 +653,7 @@ const DiscoveryDashboardInner: React.FC<{
                                 onSelect={openMedia}
                                 formatItem={formatItem}
                                 navigate={navigate}
+                                getQuickActions={getQuickActions}
                             />
                         )}
                         {subRoute === 'music' && (
