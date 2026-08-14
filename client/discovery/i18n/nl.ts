@@ -44,6 +44,20 @@ Object.assign(nl, { maintenance: { ...nl.maintenance,
     errors: { loadOverview: 'Overzicht van opschonen kon niet worden geladen', loadCandidates: 'Kandidaten konden niet worden geladen', loadExclusions: 'Samenvatting van uitsluitingen kon niet worden geladen.', loadLibrary: 'Bibliotheekposters konden niet worden geladen.', loadStorage: 'Opslagsamenvatting kon niet worden geladen.' }
 } });
 
+Object.assign(nl, { scanner: {
+    dashboard: { eyebrow: 'Bibliotheekscanner', title: 'Nauwkeurig vernieuwen', description: 'Zet een map in de wachtrij voor een gedeeltelijke bibliotheekvernieuwing op Plex, Jellyfin of Emby. ARR-webhooks komen hier automatisch binnen als importen, upgrades, verwijderingen en naamswijzigingen.' },
+    manual: { title: 'Handmatig pad', hiddenHint: 'Verborgen — klik om handmatig een map in de wachtrij te zetten.', visibleHint: 'Voeg nu een map toe — deze wordt verwerkt na de minimale wachttijd.', placeholder: 'Te scannen pad, bijv. /mnt/unionfs/Media/Movies/Movie Name (year)', submitHint: 'Verzenden voegt het pad toe aan de scanwachtrij', waitsBeforeTargets: ' · wacht ', beforeTargetsAreCalled: ' voordat de doelen worden aangeroepen' },
+    actions: { refresh: 'Vernieuwen', submit: 'Verzenden', copy: 'Kopiëren' },
+    stats: { queued: 'In wachtrij', queuedHint: 'Wacht op minimale wachttijd', processed: 'Verwerkt', processedHint: 'Geslaagde vernieuwingen', targets: 'Doelen', targetsHint: 'Plex / JF / Emby', minAge: 'Minimale wachttijd', minAgeHint: 'Vertraging voor de scan' },
+    webhooks: { title: 'ARR-webhooks', instructions: 'In Sonarr / Radarr / Lidarr: Instellingen → Connect → Webhook → On Import + On Upgrade (en verwijderen/naam wijzigen als je die ook wilt). Gebruik Basic Auth vanuit Instellingen → Scanner.' },
+    queue: { title: 'Wachtrij', subtitle: 'Paden die wachten op de minimale wachttijd.', pending: '{count} in behandeling', empty: 'De wachtrij is leeg — wacht op de volgende webhook of het volgende handmatige pad.' },
+    filters: { allConfiguredApps: 'Alle geconfigureerde apps', allEvents: 'Alle gebeurtenissen', imports: 'Importen', upgrades: 'Upgrades', deleted: 'Verwijderd', renames: 'Naamswijzigingen', manual: 'Handmatig', refresh: 'Vernieuwen', other: 'Overig' },
+    activity: { title: 'Recente activiteit', subtitle: 'Laatste {total} gebeurtenissen · {perPage} per pagina.', eventCount: '{count} gebeurtenissen', noScansProcessed: 'Nog geen scans verwerkt.', noEventsForSource: 'Geen {filter}-gebeurtenissen voor {source}.', noEvents: 'Geen {filter}-gebeurtenissen.', noSourceActivity: 'Geen activiteit voor {source} gevonden.', ok: 'OK', error: 'Fout', targetSkipped: '{target}: overgeslagen', targetRefreshed: '{target}: vernieuwd', showing: '{from}–{to} van {total} weergegeven', actions: { import: 'Importeren', upgrade: 'Upgrade', fileDeleted: 'Bestand verwijderd', seriesDeleted: 'Serie verwijderd', movieDeleted: 'Film verwijderd', artistDeleted: 'Artiest verwijderd', rename: 'Hernoemen', manual: 'Handmatig', refresh: 'Vernieuwen', other: 'Overig' } },
+    pagination: { previous: 'Vorige', next: 'Volgende' },
+    errors: { load: 'Scanner kon niet worden geladen', queuePath: 'Pad kon niet in de wachtrij worden gezet' },
+    toasts: { queued: 'In wachtrij gezet: {path}', copied: 'Gekopieerd naar het klembord' },
+} });
+
 Object.assign(nl, { settings: { ...nl.settings, logs: {
     actions: { refresh: 'Vernieuwen', refreshing: 'Vernieuwen...', exportAll: 'Alles exporteren', exporting: 'Exporteren…', unblock: 'Deblokkeren' },
     audit: { viewerTitle: 'Auditlogviewer', empty: 'Geen auditgebeurtenissen gevonden.', target: 'Doel', system: 'Systeem', actor: 'Uitvoerder', field: 'Veld', before: 'Vóór', after: 'Na', value: 'Waarde', unknownEvent: 'Gebeurtenis' },

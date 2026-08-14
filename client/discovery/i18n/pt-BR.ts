@@ -44,6 +44,20 @@ Object.assign(ptBR, { maintenance: { ...ptBR.maintenance,
     errors: { loadOverview: 'Não foi possível carregar o resumo da limpeza', loadCandidates: 'Não foi possível carregar os candidatos', loadExclusions: 'Não foi possível carregar o resumo das exclusões.', loadLibrary: 'Não foi possível carregar os pôsteres da biblioteca.', loadStorage: 'Não foi possível carregar o resumo do armazenamento.' }
 } });
 
+Object.assign(ptBR, { scanner: {
+    dashboard: { eyebrow: 'Scanner de biblioteca', title: 'Atualize com precisão', description: 'Coloque uma pasta na fila para uma atualização parcial da biblioteca no Plex, Jellyfin ou Emby. Os webhooks do ARR chegam aqui automaticamente como importações, atualizações, exclusões e renomeações.' },
+    manual: { title: 'Caminho manual', hiddenHint: 'Oculto — clique para colocar uma pasta na fila manualmente.', visibleHint: 'Adicione uma pasta agora — ela será processada após a idade mínima.', placeholder: 'Caminho para verificar, ex. /mnt/unionfs/Media/Movies/Movie Name (year)', submitHint: 'Enviar adiciona o caminho à fila de varredura', waitsBeforeTargets: ' · aguarda ', beforeTargetsAreCalled: ' antes de chamar os destinos' },
+    actions: { refresh: 'Atualizar', submit: 'Enviar', copy: 'Copiar' },
+    stats: { queued: 'Na fila', queuedHint: 'Aguardando a idade mínima', processed: 'Processados', processedHint: 'Atualizações bem-sucedidas', targets: 'Destinos', targetsHint: 'Plex / JF / Emby', minAge: 'Idade mínima', minAgeHint: 'Atraso antes da verificação' },
+    webhooks: { title: 'Webhooks do ARR', instructions: 'No Sonarr / Radarr / Lidarr: Configurações → Connect → Webhook → Ao importar + Ao atualizar (e excluir/renomear, se também quiser esses eventos). Use a autenticação básica em Configurações → Scanner.' },
+    queue: { title: 'Fila', subtitle: 'Caminhos aguardando a idade mínima.', pending: '{count} pendentes', empty: 'A fila está vazia — aguardando o próximo webhook ou caminho manual.' },
+    filters: { allConfiguredApps: 'Todos os aplicativos configurados', allEvents: 'Todos os eventos', imports: 'Importações', upgrades: 'Atualizações', deleted: 'Excluídos', renames: 'Renomeações', manual: 'Manual', refresh: 'Atualizar', other: 'Outro' },
+    activity: { title: 'Atividade recente', subtitle: 'Últimos {total} eventos · {perPage} por página.', eventCount: '{count} eventos', noScansProcessed: 'Nenhuma verificação processada ainda.', noEventsForSource: 'Nenhum evento de {filter} para {source}.', noEvents: 'Nenhum evento de {filter}.', noSourceActivity: 'Nenhuma atividade de {source} encontrada.', ok: 'OK', error: 'Erro', targetSkipped: '{target}: ignorado', targetRefreshed: '{target}: atualizado', showing: 'Mostrando {from}–{to} de {total}', actions: { import: 'Importação', upgrade: 'Atualização', fileDeleted: 'Arquivo excluído', seriesDeleted: 'Série excluída', movieDeleted: 'Filme excluído', artistDeleted: 'Artista excluído', rename: 'Renomear', manual: 'Manual', refresh: 'Atualizar', other: 'Outro' } },
+    pagination: { previous: 'Anterior', next: 'Próxima' },
+    errors: { load: 'Não foi possível carregar o Scanner', queuePath: 'Não foi possível colocar o caminho na fila' },
+    toasts: { queued: 'Na fila: {path}', copied: 'Copiado para a área de transferência' },
+} });
+
 Object.assign(ptBR, { settings: { ...ptBR.settings, logs: {
     actions: { refresh: 'Atualizar', refreshing: 'Atualizando...', exportAll: 'Exportar tudo', exporting: 'Exportando…', unblock: 'Desbloquear' },
     audit: { viewerTitle: 'Visualizador do registro de auditoria', empty: 'Nenhum evento de auditoria encontrado.', target: 'Destino', system: 'Sistema', actor: 'Autor', field: 'Campo', before: 'Antes', after: 'Depois', value: 'Valor', unknownEvent: 'Evento' },

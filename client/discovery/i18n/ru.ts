@@ -44,6 +44,20 @@ Object.assign(ru, { maintenance: { ...ru.maintenance,
     errors: { loadOverview: 'Не удалось загрузить обзор очистки', loadCandidates: 'Не удалось загрузить кандидатов', loadExclusions: 'Не удалось загрузить сводку исключений.', loadLibrary: 'Не удалось загрузить постеры библиотеки.', loadStorage: 'Не удалось загрузить сводку хранилища.' }
 } });
 
+Object.assign(ru, { scanner: {
+    dashboard: { eyebrow: 'Сканер библиотеки', title: 'Точное обновление', description: 'Добавьте папку в очередь для частичного обновления библиотеки Plex, Jellyfin или Emby. Webhook-и ARR автоматически поступают сюда как импорты, обновления, удаления и переименования.' },
+    manual: { title: 'Ручной путь', hiddenHint: 'Скрыто — нажмите, чтобы вручную добавить папку в очередь.', visibleHint: 'Добавьте папку сейчас — она будет обработана после минимального времени ожидания.', placeholder: 'Путь для сканирования, например /mnt/unionfs/Media/Movies/Movie Name (year)', submitHint: 'Отправка добавляет путь в очередь сканирования', waitsBeforeTargets: ' · ожидает ', beforeTargetsAreCalled: ' перед вызовом целей' },
+    actions: { refresh: 'Обновить', submit: 'Отправить', copy: 'Копировать' },
+    stats: { queued: 'В очереди', queuedHint: 'Ожидание минимального времени', processed: 'Обработано', processedHint: 'Успешные обновления', targets: 'Цели', targetsHint: 'Plex / JF / Emby', minAge: 'Минимальное время', minAgeHint: 'Задержка перед сканированием' },
+    webhooks: { title: 'Webhook-и ARR', instructions: 'В Sonarr / Radarr / Lidarr: Настройки → Connect → Webhook → On Import + On Upgrade (а также удаление/переименование, если они тоже нужны). Используйте Basic Auth из Настройки → Scanner.' },
+    queue: { title: 'Очередь', subtitle: 'Пути, ожидающие минимального времени.', pending: 'Ожидают: {count}', empty: 'Очередь пуста — ожидание следующего webhook или ручного пути.' },
+    filters: { allConfiguredApps: 'Все настроенные приложения', allEvents: 'Все события', imports: 'Импорты', upgrades: 'Обновления', deleted: 'Удалённые', renames: 'Переименования', manual: 'Вручную', refresh: 'Обновить', other: 'Другое' },
+    activity: { title: 'Недавняя активность', subtitle: 'Последние {total} событий · {perPage} на страницу.', eventCount: 'Событий: {count}', noScansProcessed: 'Сканирования ещё не обработаны.', noEventsForSource: 'Нет событий {filter} для {source}.', noEvents: 'Нет событий {filter}.', noSourceActivity: 'Активность {source} не найдена.', ok: 'OK', error: 'Ошибка', targetSkipped: '{target}: пропущено', targetRefreshed: '{target}: обновлено', showing: 'Показано {from}–{to} из {total}', actions: { import: 'Импорт', upgrade: 'Обновление', fileDeleted: 'Файл удалён', seriesDeleted: 'Сериал удалён', movieDeleted: 'Фильм удалён', artistDeleted: 'Исполнитель удалён', rename: 'Переименовать', manual: 'Вручную', refresh: 'Обновить', other: 'Другое' } },
+    pagination: { previous: 'Назад', next: 'Далее' },
+    errors: { load: 'Не удалось загрузить Scanner', queuePath: 'Не удалось поставить путь в очередь' },
+    toasts: { queued: 'Добавлено в очередь: {path}', copied: 'Скопировано в буфер обмена' },
+} });
+
 Object.assign(ru, { settings: { ...ru.settings, logs: {
     actions: { refresh: 'Обновить', refreshing: 'Обновление...', exportAll: 'Экспортировать всё', exporting: 'Экспорт…', unblock: 'Разблокировать' },
     audit: { viewerTitle: 'Просмотр журнала аудита', empty: 'События аудита не найдены.', target: 'Цель', system: 'Система', actor: 'Исполнитель', field: 'Поле', before: 'До', after: 'После', value: 'Значение', unknownEvent: 'Событие' },

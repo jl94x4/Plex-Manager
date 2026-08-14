@@ -44,6 +44,20 @@ Object.assign(pl, { maintenance: { ...pl.maintenance,
     errors: { loadOverview: 'Nie udało się wczytać przeglądu czyszczenia', loadCandidates: 'Nie udało się wczytać kandydatów', loadExclusions: 'Nie udało się wczytać podsumowania wykluczeń.', loadLibrary: 'Nie udało się wczytać plakatów biblioteki.', loadStorage: 'Nie udało się wczytać podsumowania pamięci.' }
 } });
 
+Object.assign(pl, { scanner: {
+    dashboard: { eyebrow: 'Skaner biblioteki', title: 'Odświeżaj precyzyjnie', description: 'Dodaj folder do kolejki, aby częściowo odświeżyć bibliotekę Plex, Jellyfin lub Emby. Webhooki ARR trafiają tutaj automatycznie jako importy, aktualizacje, usunięcia i zmiany nazw.' },
+    manual: { title: 'Ścieżka ręczna', hiddenHint: 'Ukryte — kliknij, aby ręcznie dodać folder do kolejki.', visibleHint: 'Dodaj folder teraz — zostanie przetworzony po minimalnym czasie oczekiwania.', placeholder: 'Ścieżka do skanowania, np. /mnt/unionfs/Media/Movies/Movie Name (year)', submitHint: 'Wyślij dodaje ścieżkę do kolejki skanowania', waitsBeforeTargets: ' · czeka ', beforeTargetsAreCalled: ' przed wywołaniem celów' },
+    actions: { refresh: 'Odśwież', submit: 'Wyślij', copy: 'Kopiuj' },
+    stats: { queued: 'W kolejce', queuedHint: 'Oczekiwanie na minimalny czas', processed: 'Przetworzone', processedHint: 'Udane odświeżenia', targets: 'Cele', targetsHint: 'Plex / JF / Emby', minAge: 'Minimalny czas', minAgeHint: 'Opóźnienie przed skanowaniem' },
+    webhooks: { title: 'Webhooki ARR', instructions: 'W Sonarr / Radarr / Lidarr: Ustawienia → Connect → Webhook → On Import + On Upgrade (oraz usuwanie/zmiana nazwy, jeśli też ich potrzebujesz). Użyj Basic Auth z Ustawienia → Scanner.' },
+    queue: { title: 'Kolejka', subtitle: 'Ścieżki oczekujące na minimalny czas.', pending: 'Oczekujących: {count}', empty: 'Kolejka jest pusta — oczekiwanie na następny webhook lub ścieżkę ręczną.' },
+    filters: { allConfiguredApps: 'Wszystkie skonfigurowane aplikacje', allEvents: 'Wszystkie zdarzenia', imports: 'Importy', upgrades: 'Aktualizacje', deleted: 'Usunięte', renames: 'Zmiany nazw', manual: 'Ręcznie', refresh: 'Odśwież', other: 'Inne' },
+    activity: { title: 'Ostatnia aktywność', subtitle: 'Ostatnie {total} zdarzeń · {perPage} na stronę.', eventCount: 'Liczba zdarzeń: {count}', noScansProcessed: 'Nie przetworzono jeszcze żadnego skanowania.', noEventsForSource: 'Brak zdarzeń {filter} dla {source}.', noEvents: 'Brak zdarzeń {filter}.', noSourceActivity: 'Nie znaleziono aktywności dla {source}.', ok: 'OK', error: 'Błąd', targetSkipped: '{target}: pominięto', targetRefreshed: '{target}: odświeżono', showing: 'Wyświetlanie {from}–{to} z {total}', actions: { import: 'Import', upgrade: 'Aktualizacja', fileDeleted: 'Plik usunięty', seriesDeleted: 'Serial usunięty', movieDeleted: 'Film usunięty', artistDeleted: 'Artysta usunięty', rename: 'Zmień nazwę', manual: 'Ręcznie', refresh: 'Odśwież', other: 'Inne' } },
+    pagination: { previous: 'Poprzednia', next: 'Następna' },
+    errors: { load: 'Nie udało się wczytać Scanner', queuePath: 'Nie udało się dodać ścieżki do kolejki' },
+    toasts: { queued: 'Dodano do kolejki: {path}', copied: 'Skopiowano do schowka' },
+} });
+
 Object.assign(pl, { settings: { ...pl.settings, logs: {
     actions: { refresh: 'Odśwież', refreshing: 'Odświeżanie...', exportAll: 'Eksportuj wszystko', exporting: 'Eksportowanie…', unblock: 'Odblokuj' },
     audit: { viewerTitle: 'Przeglądarka dziennika audytu', empty: 'Nie znaleziono zdarzeń audytu.', target: 'Cel', system: 'System', actor: 'Wykonawca', field: 'Pole', before: 'Przed', after: 'Po', value: 'Wartość', unknownEvent: 'Zdarzenie' },
