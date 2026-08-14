@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePoll } from '../shared/usePoll';
 import {
     ArrowUpCircle,
@@ -22,8 +22,10 @@ import {
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { CustomSelect } from '../shared/ui';
+import { useDiscoverI18n } from '../discovery/i18n';
 import {
     formatScannerWhen,
+    SCANNER_ACTION_FILTER_LABEL_KEYS,
     SCANNER_ACTION_FILTER_LABELS,
     scannerActionFilterGroup,
     scannerActionStyles,
@@ -138,6 +140,9 @@ const EventCard: React.FC<{
 };
 
 export const ScannerDashboard: React.FC = () => {
+    const { t } = useDiscoverI18n();
+    const tRef = useRef(t);
+    tRef.current = t;
     const [path, setPath] = useState('');
     const [status, setStatus] = useState<ScannerStatus | null>(null);
     const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -174,7 +179,7 @@ export const ScannerDashboard: React.FC = () => {
             setLog(Array.isArray(lg?.entries) ? lg.entries : []);
             setError(null);
         } catch (e: any) {
-            setError(e?.message || 'Failed to load scanner');
+            setError(e?.message || tRef.current('scanner.errors.load'));
         }
     }, []);
 
@@ -192,7 +197,7 @@ export const ScannerDashboard: React.FC = () => {
         return [...new Set([...configured, ...observed])];
     }, [status?.configuredSources, log]);
     const activitySourceOptions = useMemo(() => [
-        { value: 'all', label: 'All configured apps' },
+        { value: 'all', label: t('scanner.filters.allConfiguredApps') },
         ...configuredSources.map((source) => ({
             value: source,
             label: SOURCE_LABELS[source] || source,
@@ -208,7 +213,13 @@ export const ScannerDashboard: React.FC = () => {
                 <Cpu className="h-4 w-4 shrink-0 text-plex" />
             ) : undefined,
         })),
-    ], [configuredSources]);
+    ], [configuredSources, t]);
+    const activityEventLabel = useCallback((key: string) => {
+        const labelKey = SCANNER_ACTION_FILTER_LABEL_KEYS[key];
+        if (labelKey) return t(labelKey);
+        return SCANNER_ACTION_FILTER_LABELS[key]
+            || key.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    }, [t]);
     const activityEventOptions = useMemo(() => {
         const present = new Set(
             log.map((entry) => scannerActionFilterGroup(entry.action || entry.reason, entry.isUpgrade)),
@@ -218,14 +229,13 @@ export const ScannerDashboard: React.FC = () => {
             if (!ordered.includes(key)) ordered.push(key);
         }
         return [
-            { value: 'all', label: SCANNER_ACTION_FILTER_LABELS.all },
+            { value: 'all', label: activityEventLabel('all') },
             ...ordered.map((key) => ({
                 value: key,
-                label: SCANNER_ACTION_FILTER_LABELS[key]
-                    || key.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+                label: activityEventLabel(key),
             })),
         ];
-    }, [log]);
+    }, [activityEventLabel, log]);
     const filteredLog = useMemo(() => {
         let rows = log;
         if (activitySource !== 'all') {
@@ -286,11 +296,11 @@ export const ScannerDashboard: React.FC = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: value }),
             });
-            setMessage(`Queued: ${res.folder || value}`);
+            setMessage(t('scanner.toasts.queued', { path: res.folder || value }));
             setPath('');
             await refresh();
         } catch (err: any) {
-            setError(err?.message || 'Failed to queue path');
+            setError(err?.message || t('scanner.errors.queuePath'));
         } finally {
             setBusy(false);
         }
@@ -299,7 +309,7 @@ export const ScannerDashboard: React.FC = () => {
     const copyText = async (text: string) => {
         try {
             await navigator.clipboard.writeText(text);
-            setMessage('Copied to clipboard');
+            setMessage(t('scanner.toasts.copied'));
         } catch {
             setMessage(text);
         }
@@ -319,9 +329,9 @@ export const ScannerDashboard: React.FC = () => {
         <DashboardPageShell>
             <DashboardHero
                 accent="sky"
-                eyebrow="Library Scanner"
-                title="Refresh with precision"
-                description="Queue a folder for a partial library refresh on Plex, Jellyfin, or Emby. ARR webhooks land here automatically as imports, upgrades, deletes, and renames."
+                eyebrow={t('scanner.dashboard.eyebrow')}
+                title={t('scanner.dashboard.title')}
+                description={t('scanner.dashboard.description')}
                 icon={<Radar className="h-3.5 w-3.5" />}
                 actions={(
                     <button
@@ -329,7 +339,7 @@ export const ScannerDashboard: React.FC = () => {
                         onClick={() => void refresh()}
                         className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm font-semibold text-muted transition-colors hover:bg-white/5 hover:text-text"
                     >
-                        <RefreshCw className="h-4 w-4" /> Refresh
+                        <RefreshCw className="h-4 w-4" /> {t('scanner.actions.refresh')}
                     </button>
                 )}
             />
@@ -344,16 +354,16 @@ export const ScannerDashboard: React.FC = () => {
                 >
                     <div className="min-w-0">
                         <h2 className="text-sm font-bold uppercase tracking-wider text-muted transition-colors group-hover:text-sky-200">
-                            Manual path
+                            {t('scanner.manual.title')}
                         </h2>
                         <p className="mt-0.5 text-xs text-muted/80">
                             {manualCollapsed
-                                ? 'Hidden — click to queue a folder manually.'
-                                : 'Add a folder now — processed after the minimum age.'}
+                                ? t('scanner.manual.hiddenHint')
+                                : t('scanner.manual.visibleHint')}
                         </p>
                     </div>
                     <span className="mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-semibold text-muted transition-colors group-hover:bg-white/5 group-hover:text-text">
-                        {manualCollapsed ? 'Show' : 'Hide'}
+                        {manualCollapsed ? t('common.show') : t('common.hide')}
                         <ChevronDown className={`h-4 w-4 transition-transform ${manualCollapsed ? '' : 'rotate-180'}`} />
                     </span>
                 </button>
@@ -364,7 +374,7 @@ export const ScannerDashboard: React.FC = () => {
                                 type="text"
                                 value={path}
                                 onChange={(e) => setPath(e.target.value)}
-                                placeholder="Path to scan e.g. /mnt/unionfs/Media/Movies/Movie Name (year)"
+                                placeholder={t('scanner.manual.placeholder')}
                                 className="flex-1 rounded-xl border border-white/10 bg-background/70 px-4 py-3 text-text placeholder:text-muted/60 focus:outline-none focus:ring-2 focus:ring-sky-400/30"
                             />
                             <button
@@ -373,12 +383,16 @@ export const ScannerDashboard: React.FC = () => {
                                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-400 px-5 py-3 font-bold text-black transition-colors hover:bg-sky-300 disabled:opacity-50"
                             >
                                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                                Submit
+                                {t('scanner.actions.submit')}
                             </button>
                         </div>
                         <div className="rounded-xl border border-sky-400/20 bg-sky-500/10 px-4 py-3 text-sm leading-relaxed text-sky-100/95">
-                            Submit adds the path to the scan queue
-                            {status?.minimumAge ? <> · waits <code className="text-sky-200">{status.minimumAge}</code> before targets are called</> : null}.
+                            {t('scanner.manual.submitHint')}
+                            {status?.minimumAge ? <>
+                                {t('scanner.manual.waitsBeforeTargets')}
+                                <code className="text-sky-200">{status.minimumAge}</code>
+                                {t('scanner.manual.beforeTargetsAreCalled')}
+                            </> : null}.
                         </div>
                     </form>
                 ) : null}
@@ -393,30 +407,30 @@ export const ScannerDashboard: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
                 <DashboardStatCard
-                    label="Queued"
+                    label={t('scanner.stats.queued')}
                     value={status?.remaining ?? '—'}
-                    hint="Waiting for min age"
+                    hint={t('scanner.stats.queuedHint')}
                     icon={<ListTodo className="h-4 w-4 text-amber-300" />}
                     glow={dashboardGlowClass('amber')}
                 />
                 <DashboardStatCard
-                    label="Processed"
+                    label={t('scanner.stats.processed')}
                     value={status?.processed ?? '—'}
-                    hint="Successful refreshes"
+                    hint={t('scanner.stats.processedHint')}
                     icon={<Layers className="h-4 w-4 text-emerald-300" />}
                     glow={dashboardGlowClass('emerald')}
                 />
                 <DashboardStatCard
-                    label="Targets"
+                    label={t('scanner.stats.targets')}
                     value={status?.targetCount ?? '—'}
-                    hint="Plex / JF / Emby"
+                    hint={t('scanner.stats.targetsHint')}
                     icon={<Target className="h-4 w-4 text-violet-300" />}
                     glow={dashboardGlowClass('violet')}
                 />
                 <DashboardStatCard
-                    label="Min age"
+                    label={t('scanner.stats.minAge')}
                     value={status?.minimumAge ?? '—'}
-                    hint="Delay before scan"
+                    hint={t('scanner.stats.minAgeHint')}
                     icon={<Clock3 className="h-4 w-4 text-sky-300" />}
                     glow={dashboardGlowClass('sky')}
                 />
@@ -425,10 +439,9 @@ export const ScannerDashboard: React.FC = () => {
             {status?.showWebhooks !== false ? (
             <section className="glass-card space-y-4 p-4 shadow-xl md:p-5">
                 <div>
-                    <h2 className="text-lg font-bold tracking-tight text-text">ARR webhooks</h2>
+                    <h2 className="text-lg font-bold tracking-tight text-text">{t('scanner.webhooks.title')}</h2>
                     <p className="mt-1 text-sm leading-relaxed text-muted">
-                        In Sonarr / Radarr / Lidarr: Settings → Connect → Webhook → On Import + On Upgrade
-                        (and delete/rename if you want those too). Use Basic Auth from Settings → Scanner.
+                        {t('scanner.webhooks.instructions')}
                     </p>
                 </div>
                 <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
@@ -445,7 +458,7 @@ export const ScannerDashboard: React.FC = () => {
                                     type="button"
                                     onClick={() => void copyText(full)}
                                     className="rounded-lg border border-transparent p-2 text-muted transition-colors hover:border-white/10 hover:bg-white/10 hover:text-text"
-                                    title="Copy"
+                                    title={t('scanner.actions.copy')}
                                 >
                                     <Copy className="h-4 w-4" />
                                 </button>
@@ -458,17 +471,17 @@ export const ScannerDashboard: React.FC = () => {
 
             <div className="grid grid-cols-1 gap-4 md:gap-5 xl:grid-cols-2">
                 <DashboardPanel
-                    title="Queue"
-                    subtitle="Paths waiting for the minimum age."
+                    title={t('scanner.queue.title')}
+                    subtitle={t('scanner.queue.subtitle')}
                     badge={(
                         <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-200">
-                            {queue.length} pending
+                            {t('scanner.queue.pending', { count: queue.length })}
                         </span>
                     )}
                 >
                     {queue.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center">
-                            <p className="text-sm text-muted">Queue is empty — waiting for the next webhook or manual path.</p>
+                            <p className="text-sm text-muted">{t('scanner.queue.empty')}</p>
                         </div>
                     ) : (
                         <ul className="space-y-2">
@@ -479,7 +492,7 @@ export const ScannerDashboard: React.FC = () => {
                                         <div className="mb-2 flex flex-wrap items-center gap-2">
                                             <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${style.className}`}>
                                                 <ActionIcon action={item.action} className="h-3 w-3" />
-                                                {item.reason || style.label}
+                                                {item.reason || (style.labelKey ? t(style.labelKey) : style.label)}
                                             </span>
                                             <ScannerSourceBadge source={item.source} />
                                             <span className="ml-auto text-[10px] tabular-nums text-muted">P{item.priority ?? 0}</span>
@@ -501,8 +514,8 @@ export const ScannerDashboard: React.FC = () => {
                 </DashboardPanel>
 
                 <DashboardPanel
-                    title="Recent activity"
-                    subtitle={`Latest ${ACTIVITY_FETCH_LIMIT} events · ${ACTIVITY_PAGE_SIZE} per page.`}
+                    title={t('scanner.activity.title')}
+                    subtitle={t('scanner.activity.subtitle', { total: ACTIVITY_FETCH_LIMIT, perPage: ACTIVITY_PAGE_SIZE })}
                     controls={(
                         <div className="flex w-full min-w-0 flex-nowrap items-center gap-2 sm:w-auto">
                             {configuredSources.length > 0 ? (
@@ -524,7 +537,7 @@ export const ScannerDashboard: React.FC = () => {
                                 className="min-w-0 flex-1 sm:w-40 sm:flex-none"
                             />
                             <span className="shrink-0 whitespace-nowrap rounded-full border border-emerald-400/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-200">
-                                {filteredLog.length} events
+                                {t('scanner.activity.eventCount', { count: filteredLog.length })}
                             </span>
                         </div>
                     )}
@@ -533,10 +546,19 @@ export const ScannerDashboard: React.FC = () => {
                         <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-10 text-center">
                             <p className="text-sm text-muted">
                                 {log.length === 0
-                                    ? 'No scans processed yet.'
+                                    ? t('scanner.activity.noScansProcessed')
                                     : activityEvent !== 'all'
-                                        ? `No ${SCANNER_ACTION_FILTER_LABELS[activityEvent] || activityEvent} events${activitySource !== 'all' ? ` for ${SOURCE_LABELS[activitySource] || activitySource}` : ''}.`
-                                        : `No ${SOURCE_LABELS[activitySource] || activitySource} activity found.`}
+                                        ? activitySource !== 'all'
+                                            ? t('scanner.activity.noEventsForSource', {
+                                                filter: activityEventLabel(activityEvent),
+                                                source: SOURCE_LABELS[activitySource] || activitySource,
+                                            })
+                                            : t('scanner.activity.noEvents', {
+                                                filter: activityEventLabel(activityEvent),
+                                            })
+                                        : t('scanner.activity.noSourceActivity', {
+                                            source: SOURCE_LABELS[activitySource] || activitySource,
+                                        })}
                             </p>
                         </div>
                     ) : (
@@ -554,11 +576,11 @@ export const ScannerDashboard: React.FC = () => {
                                                     ? 'border-emerald-400/30 bg-emerald-500/15 text-emerald-300'
                                                     : 'border-red-400/30 bg-red-500/15 text-red-300'
                                             }`}>
-                                                {entry.ok ? 'OK' : 'Error'}
+                                                {entry.ok ? t('scanner.activity.ok') : t('scanner.activity.error')}
                                             </span>
                                             <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${style.className}`}>
                                                 <ActionIcon action={entry.action} className="h-3 w-3" />
-                                                {entry.reason || style.label}
+                                                {entry.reason || (style.labelKey ? t(style.labelKey) : style.label)}
                                             </span>
                                             <ScannerSourceBadge source={entry.source} />
                                             <span className="ml-auto text-[10px] text-muted">{formatScannerWhen(entry.at)}</span>
@@ -574,8 +596,8 @@ export const ScannerDashboard: React.FC = () => {
                                                 <span>
                                                     {targets.map((r: any) => (
                                                         r?.skipped
-                                                            ? `${r.type}: skipped`
-                                                            : `${r.type}: refreshed`
+                                                            ? t('scanner.activity.targetSkipped', { target: r.type })
+                                                            : t('scanner.activity.targetRefreshed', { target: r.type })
                                                     )).join(' · ')}
                                                 </span>
                                             ) : null}
@@ -588,7 +610,7 @@ export const ScannerDashboard: React.FC = () => {
                         {filteredLog.length > ACTIVITY_PAGE_SIZE ? (
                             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
                                 <p className="text-xs text-muted">
-                                    Showing {activitySafePage * ACTIVITY_PAGE_SIZE + 1}–{Math.min(filteredLog.length, (activitySafePage + 1) * ACTIVITY_PAGE_SIZE)} of {filteredLog.length}
+                                    {t('scanner.activity.showing', { from: activitySafePage * ACTIVITY_PAGE_SIZE + 1, to: Math.min(filteredLog.length, (activitySafePage + 1) * ACTIVITY_PAGE_SIZE), total: filteredLog.length })}
                                 </p>
                                 <div className="flex items-center gap-2">
                                     <button
@@ -598,7 +620,7 @@ export const ScannerDashboard: React.FC = () => {
                                         onClick={() => setActivityPage((p) => Math.max(0, p - 1))}
                                     >
                                         <ChevronLeft className="h-3.5 w-3.5" />
-                                        Prev
+                                        {t('scanner.pagination.previous')}
                                     </button>
                                     <span className="text-xs font-semibold tabular-nums text-muted">
                                         {activitySafePage + 1} / {activityTotalPages}
@@ -609,7 +631,7 @@ export const ScannerDashboard: React.FC = () => {
                                         disabled={activitySafePage >= activityTotalPages - 1}
                                         onClick={() => setActivityPage((p) => Math.min(activityTotalPages - 1, p + 1))}
                                     >
-                                        Next
+                                        {t('scanner.pagination.next')}
                                         <ChevronRight className="h-3.5 w-3.5" />
                                     </button>
                                 </div>

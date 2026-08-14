@@ -44,6 +44,20 @@ Object.assign(it, { maintenance: { ...it.maintenance,
     errors: { loadOverview: 'Impossibile caricare il riepilogo della pulizia', loadCandidates: 'Impossibile caricare i candidati', loadExclusions: 'Impossibile caricare il riepilogo delle esclusioni.', loadLibrary: 'Impossibile caricare i poster della libreria.', loadStorage: 'Impossibile caricare il riepilogo dello spazio.' }
 } });
 
+Object.assign(it, { scanner: {
+    dashboard: { eyebrow: 'Scanner della libreria', title: 'Aggiorna con precisione', description: 'Metti una cartella in coda per un aggiornamento parziale della libreria su Plex, Jellyfin o Emby. I webhook ARR arrivano qui automaticamente come importazioni, aggiornamenti, eliminazioni e rinominazioni.' },
+    manual: { title: 'Percorso manuale', hiddenHint: 'Nascosto — fai clic per mettere manualmente una cartella in coda.', visibleHint: 'Aggiungi ora una cartella — verrà elaborata dopo l’età minima.', placeholder: 'Percorso da analizzare, ad es. /mnt/unionfs/Media/Movies/Movie Name (year)', submitHint: 'Invia aggiunge il percorso alla coda di scansione', waitsBeforeTargets: ' · attende ', beforeTargetsAreCalled: ' prima di chiamare le destinazioni' },
+    actions: { refresh: 'Aggiorna', submit: 'Invia', copy: 'Copia' },
+    stats: { queued: 'In coda', queuedHint: 'In attesa dell’età minima', processed: 'Elaborati', processedHint: 'Aggiornamenti riusciti', targets: 'Destinazioni', targetsHint: 'Plex / JF / Emby', minAge: 'Età minima', minAgeHint: 'Ritardo prima della scansione' },
+    webhooks: { title: 'Webhook ARR', instructions: 'In Sonarr / Radarr / Lidarr: Impostazioni → Connect → Webhook → All’importazione + All’aggiornamento (e all’eliminazione/rinominazione se li vuoi anche per questi eventi). Usa l’autenticazione di base da Impostazioni → Scanner.' },
+    queue: { title: 'Coda', subtitle: 'Percorsi in attesa dell’età minima.', pending: '{count} in attesa', empty: 'La coda è vuota — in attesa del prossimo webhook o percorso manuale.' },
+    filters: { allConfiguredApps: 'Tutte le app configurate', allEvents: 'Tutti gli eventi', imports: 'Importazioni', upgrades: 'Aggiornamenti', deleted: 'Eliminati', renames: 'Rinominazioni', manual: 'Manuale', refresh: 'Aggiorna', other: 'Altro' },
+    activity: { title: 'Attività recente', subtitle: 'Ultimi {total} eventi · {perPage} per pagina.', eventCount: '{count} eventi', noScansProcessed: 'Nessuna scansione elaborata finora.', noEventsForSource: 'Nessun evento {filter} per {source}.', noEvents: 'Nessun evento {filter}.', noSourceActivity: 'Nessuna attività {source} trovata.', ok: 'OK', error: 'Errore', targetSkipped: '{target}: ignorato', targetRefreshed: '{target}: aggiornato', showing: 'Visualizzazione di {from}–{to} su {total}', actions: { import: 'Importazione', upgrade: 'Aggiornamento', fileDeleted: 'File eliminato', seriesDeleted: 'Serie eliminata', movieDeleted: 'Film eliminato', artistDeleted: 'Artista eliminato', rename: 'Rinomina', manual: 'Manuale', refresh: 'Aggiorna', other: 'Altro' } },
+    pagination: { previous: 'Precedente', next: 'Successivo' },
+    errors: { load: 'Impossibile caricare Scanner', queuePath: 'Impossibile mettere il percorso in coda' },
+    toasts: { queued: 'In coda: {path}', copied: 'Copiato negli appunti' },
+} });
+
 Object.assign(it, { settings: { ...it.settings, logs: {
     actions: { refresh: 'Aggiorna', refreshing: 'Aggiornamento...', exportAll: 'Esporta tutto', exporting: 'Esportazione…', unblock: 'Sblocca' },
     audit: { viewerTitle: 'Visualizzatore del registro di controllo', empty: 'Nessun evento di controllo trovato.', target: 'Destinazione', system: 'Sistema', actor: 'Autore', field: 'Campo', before: 'Prima', after: 'Dopo', value: 'Valore', unknownEvent: 'Evento' },
