@@ -560,6 +560,30 @@ export type RequestOptionsPayload = {
     engine?: string;
     canNotify?: boolean;
     isWatching?: boolean;
+    requestedByName?: string | null;
+    requestedByCount?: number;
+};
+
+export const formatRequestedByCopy = (
+    t: (key: string, vars?: Record<string, string | number>) => string,
+    name?: string | null,
+    count?: number,
+): string => {
+    const n = Number(count) || 0;
+    if (name && n > 1) return t('request.requestedByAndMore', { name, count: n - 1 });
+    if (name) return t('request.requestedBy', { name });
+    return t('request.requestedBySomeone');
+};
+
+export const formatNotifyMeHint = (
+    t: (key: string, vars?: Record<string, string | number>) => string,
+    name?: string | null,
+    count?: number,
+): string => {
+    const n = Number(count) || 0;
+    if (name && n > 1) return t('request.notifyMeHintNamedMore', { name, count: n - 1 });
+    if (name) return t('request.notifyMeHintNamed', { name });
+    return t('request.notifyMeHint');
 };
 
 export const formatQuotaHint = (

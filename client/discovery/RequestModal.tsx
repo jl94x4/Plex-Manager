@@ -7,6 +7,7 @@ import { CustomSelect } from '../shared/ui';
 import type { PortalServiceOptions } from '../requests/types';
 import type { RequestOptionsPayload } from './requestSeasonUtils';
 import {
+    formatNotifyMeHint,
     formatQuotaHint,
     isMainSeasonNumber,
     seasonStatusBadgeClass,
@@ -849,7 +850,9 @@ export const RequestModal: React.FC<Props> = ({
                                     <Tv className="w-4 h-4 text-plex" />
                                 )}
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-plex">
-                                    {mediaType === 'movie' ? t('request.requestMovie') : t('request.requestSeries')}
+                                    {notifyOnly
+                                        ? t('request.notifyMe')
+                                        : (mediaType === 'movie' ? t('request.requestMovie') : t('request.requestSeries'))}
                                 </span>
                             </div>
                             <h2 id="request-modal-title" className="text-xl sm:text-2xl font-black text-white leading-tight">
@@ -860,7 +863,7 @@ export const RequestModal: React.FC<Props> = ({
                                     {overview}
                                 </p>
                             ) : null}
-                            {quotaHints.length > 0 && (
+                            {quotaHints.length > 0 && !notifyOnly && (
                                 <div className="mt-2 flex flex-col gap-0.5">
                                     {quotaHints.map((hint) => (
                                         <p key={hint} className="text-xs text-white/45">{hint}</p>
@@ -893,8 +896,16 @@ export const RequestModal: React.FC<Props> = ({
                                 <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                                     {options.blockReason}
                                     {options.canNotify ? (
-                                        <p className="mt-2 text-[13px] text-amber-100/80">{t('request.notifyMeHint')}</p>
+                                        <p className="mt-2 text-[13px] text-amber-100/80">
+                                            {formatNotifyMeHint(t, options.requestedByName, options.requestedByCount)}
+                                        </p>
                                     ) : null}
+                                </div>
+                            )}
+
+                            {notifyOnly && (!options.blockReason || options.canRequest) && (
+                                <div className="rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-sm text-sky-100">
+                                    {formatNotifyMeHint(t, options.requestedByName, options.requestedByCount)}
                                 </div>
                             )}
 
@@ -904,13 +915,13 @@ export const RequestModal: React.FC<Props> = ({
                                 </div>
                             )}
 
-                            {hdQuotaBlocked && selectedQualities.has('hd') && (
+                            {hdQuotaBlocked && selectedQualities.has('hd') && !notifyOnly && (
                                 <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                                     {t('request.quotaUsed', { count: options.quota?.standard?.limit || 0, quality: 'HD' })}
                                 </div>
                             )}
 
-                            {fourKQuotaBlocked && selectedQualities.has('4k') && (
+                            {fourKQuotaBlocked && selectedQualities.has('4k') && !notifyOnly && (
                                 <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                                     {t('request.quotaUsed', { count: options.quota?.fourK?.limit || 0, quality: '4K' })}
                                 </div>

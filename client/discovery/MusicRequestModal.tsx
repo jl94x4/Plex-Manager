@@ -4,7 +4,7 @@ import { apiFetch } from '../shared/api';
 import { ModalPortal } from '../shared/ModalPortal';
 import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import { CustomSelect } from '../shared/ui';
-import { formatQuotaHint } from './requestSeasonUtils';
+import { formatNotifyMeHint, formatQuotaHint } from './requestSeasonUtils';
 import { useDiscoverI18n } from './i18n';
 
 type AlbumTarget = {
@@ -225,8 +225,15 @@ export const MusicRequestModal: React.FC<Props> = ({
                                     <p className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                                         {options.blockReason}
                                         {options.canNotify ? (
-                                            <span className="block mt-1 text-amber-100/80">{t('request.notifyMeHint')}</span>
+                                            <span className="block mt-1 text-amber-100/80">
+                                                {formatNotifyMeHint(t, options.requestedByName, options.requestedByCount)}
+                                            </span>
                                         ) : null}
+                                    </p>
+                                )}
+                                {(options.canNotify || options.isWatching) && !options.blockReason && (
+                                    <p className="text-sm text-sky-100 bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-2">
+                                        {formatNotifyMeHint(t, options.requestedByName, options.requestedByCount)}
                                     </p>
                                 )}
                                 {quotaHint && (

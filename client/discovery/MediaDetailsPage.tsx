@@ -27,6 +27,7 @@ import {
     canMarkTvAsAvailable,
     getRequestButtonState,
     seasonStatusBadgeClass,
+    formatRequestedByCopy,
 } from './requestSeasonUtils';
 import { useDiscoverI18n, translateDiscoverStatus } from './i18n';
 
@@ -86,7 +87,12 @@ export const MediaDetailsPage: React.FC<{
     const [radarrReleases, setRadarrReleases] = useState<RadarrReleaseDates | null>(null);
     const [ratings, setRatings] = useState<CombinedRatings | null>(null);
     const [requestModalOpen, setRequestModalOpen] = useState(false);
-    const [requestNotify, setRequestNotify] = useState<{ canNotify?: boolean; isWatching?: boolean } | null>(null);
+    const [requestNotify, setRequestNotify] = useState<{
+        canNotify?: boolean;
+        isWatching?: boolean;
+        requestedByName?: string | null;
+        requestedByCount?: number;
+    } | null>(null);
     const [issueModalOpen, setIssueModalOpen] = useState(false);
     const [episodesSeason, setEpisodesSeason] = useState<{
         seasonNumber: number;
@@ -174,6 +180,8 @@ export const MediaDetailsPage: React.FC<{
                 setRequestNotify({
                     canNotify: !!data?.canNotify,
                     isWatching: !!data?.isWatching,
+                    requestedByName: data?.requestedByName || null,
+                    requestedByCount: Number(data?.requestedByCount) || 0,
                 });
             })
             .catch(() => undefined);
@@ -724,6 +732,7 @@ export const MediaDetailsPage: React.FC<{
 
                     <div className={`grid gap-2.5 w-full ${canReportIssue && !visibleRequestButton.hide ? 'grid-cols-2 md:grid-cols-1' : 'grid-cols-1'}`}>
                     {!visibleRequestButton.hide && (
+                    <div className="flex flex-col gap-1.5 min-w-0">
                     <button
                         type="button"
                         onClick={() => setRequestModalOpen(true)}
@@ -748,6 +757,15 @@ export const MediaDetailsPage: React.FC<{
                             <><PlusCircle className="w-4 h-4" /> {requestButtonLabel}</>
                         )}
                     </button>
+                    {notifyCta ? (
+                        <p className="text-[11px] sm:text-xs text-white/55 text-center leading-snug px-1">
+                            {formatRequestedByCopy(t, requestNotify?.requestedByName, requestNotify?.requestedByCount)}
+                        </p>
+                    ) : null}
+                    {requestNotify?.isWatching ? (
+                        <p className="text-[11px] text-white/40 text-center">{t('request.watchingHint')}</p>
+                    ) : null}
+                    </div>
                     )}
 
                     {canReportIssue && (
@@ -1087,7 +1105,11 @@ export const MediaDetailsPage: React.FC<{
             overview={details.overview}
             onClose={() => setRequestModalOpen(false)}
             onSuccess={handleRequestSuccess}
-            onNotifyChange={(watching) => setRequestNotify({ canNotify: true, isWatching: watching })}
+            onNotifyChange={(watching) => setRequestNotify((prev) => ({
+                ...prev,
+                canNotify: true,
+                isWatching: watching,
+            }))}
             onError={(msg) => pushToast?.(msg, 'error')}
         />
         {mediaType === 'tv' && episodesSeason ? (

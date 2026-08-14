@@ -7,6 +7,7 @@ import { discoveryTheme } from './discoveryThemeClasses';
 import { translateDiscoverAvailabilityDetail, translateDiscoverStatus, useDiscoverI18n } from './i18n';
 import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { mediaStatusPanelClass } from './DiscoverStatusOverlay';
+import { formatRequestedByCopy } from './requestSeasonUtils';
 
 type ArtistAlbum = {
     mbid: string;
@@ -79,7 +80,12 @@ export const MusicArtistPage: React.FC<{
     const [albumTarget, setAlbumTarget] = useState<ArtistAlbum | null>(null);
     const [requestedAlbumMbids, setRequestedAlbumMbids] = useState<Set<string>>(new Set());
     const [artistRequested, setArtistRequested] = useState(false);
-    const [artistNotify, setArtistNotify] = useState<{ canNotify?: boolean; isWatching?: boolean } | null>(null);
+    const [artistNotify, setArtistNotify] = useState<{
+        canNotify?: boolean;
+        isWatching?: boolean;
+        requestedByName?: string | null;
+        requestedByCount?: number;
+    } | null>(null);
 
     const loadArtist = useCallback(async () => {
         setLoading(true);
@@ -106,6 +112,8 @@ export const MusicArtistPage: React.FC<{
             setArtistNotify({
                 canNotify: !!opts?.canNotify,
                 isWatching: !!opts?.isWatching,
+                requestedByName: opts?.requestedByName || null,
+                requestedByCount: Number(opts?.requestedByCount) || 0,
             });
         } catch (e: any) {
             setArtist(null);
@@ -259,6 +267,14 @@ export const MusicArtistPage: React.FC<{
                             {canNotifyArtist ? <Bell className="w-4 h-4" /> : null}
                             {requestButtonLabel}
                         </button>
+                        {canNotifyArtist ? (
+                            <p className="mt-2 text-xs text-muted">
+                                {formatRequestedByCopy(t, artistNotify?.requestedByName, artistNotify?.requestedByCount)}
+                            </p>
+                        ) : null}
+                        {artistNotify?.isWatching ? (
+                            <p className="mt-1 text-[11px] text-muted/80">{t('request.watchingHint')}</p>
+                        ) : null}
                     </div>
                 </div>
             </div>
@@ -333,7 +349,13 @@ export const MusicArtistPage: React.FC<{
                 }}
                 onError={(msg) => toast(msg, 'error')}
                 onNotifyChange={(watching) => {
-                    if (!albumTarget) setArtistNotify({ canNotify: true, isWatching: watching });
+                    if (!albumTarget) {
+                        setArtistNotify((prev) => ({
+                            ...prev,
+                            canNotify: true,
+                            isWatching: watching,
+                        }));
+                    }
                 }}
             />
         </div>
