@@ -209,6 +209,28 @@
     min-height: 100dvh;
   }
 
+  /*
+   * iOS bottom nav: Safari tabs already clear the browser chrome, so default
+   * to zero inset in browser mode. Standalone/PWA gets the home-indicator inset.
+   */
+  .ios-mobile-bottom-nav {
+    padding-bottom: 0;
+    top: auto;
+    bottom: 0;
+  }
+
+  @media (display-mode: standalone), (display-mode: fullscreen) {
+    .ios-mobile-bottom-nav {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+  }
+
+  @supports (-webkit-touch-callout: none) {
+    html.ios-standalone .ios-mobile-bottom-nav {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+  }
+
   input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"] {
     color-scheme: dark;
   }
