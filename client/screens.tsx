@@ -12160,7 +12160,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                                 <item.icon className="w-6 h-6" />
                                             </div>
                                             {badgeCount > 0 && (
-                                                <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 px-1 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
+                                                <span className="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
                                                     {badgeCount > 9 ? '9+' : badgeCount}
                                                 </span>
                                             )}
