@@ -12117,7 +12117,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         {navButtons}
                     </div>
                 );
-                // Non-iOS: keep env(safe-area). iOS uses .ios-mobile-bottom-nav (standalone only).
+                // iOS: CSS defaults to home-indicator padding; the nav hook zeros
+                // it while Safari/Chrome chrome already insets the visual viewport.
                 const bottomSafeClass = iosMobileNav
                     ? 'ios-mobile-bottom-nav'
                     : 'pb-[env(safe-area-inset-bottom,0px)]';

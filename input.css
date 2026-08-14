@@ -210,29 +210,15 @@
   }
 
   /*
-   * iOS bottom nav: in Safari *tabs*, viewport-fit=cover still reports a home-
-   * indicator inset even though Safari’s chrome already clears it — that created
-   * the tall empty band under the icons. Only pad when installed (standalone).
-   * A painted bleed under the bar (see Navigation) covers any leftover gap.
+   * iOS bottom nav: the bar is portaled to body. Pad for the home indicator
+   * when the page is edge-to-edge (Chrome, collapsed Safari chrome, PWA).
+   * useFirefoxMobileNavShell zeros this padding while Safari/Chrome chrome
+   * already insets the visual viewport, so we do not get a double gap.
    */
   .ios-mobile-bottom-nav {
-    padding-bottom: 0;
-    /* The portaled fixed bar owns the visual viewport edge. */
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
     top: auto;
     bottom: 0;
-  }
-
-  @media (display-mode: standalone), (display-mode: fullscreen) {
-    .ios-mobile-bottom-nav {
-      padding-bottom: env(safe-area-inset-bottom, 0px);
-    }
-  }
-
-  @supports (-webkit-touch-callout: none) {
-    /* navigator.standalone fallback when display-mode media isn’t enough */
-    html.ios-standalone .ios-mobile-bottom-nav {
-      padding-bottom: env(safe-area-inset-bottom, 0px);
-    }
   }
 
   input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"] {

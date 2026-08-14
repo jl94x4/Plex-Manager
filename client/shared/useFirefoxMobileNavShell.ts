@@ -38,8 +38,9 @@ export const isStandaloneDisplayMode = () => {
 
 /**
  * Firefox Android needs explicit visual-viewport docking when its dynamic
- * toolbar changes. iOS uses the same body portal, but keeps the native
- * `bottom: 0` anchor so layout, visual, and screen coordinates are not mixed.
+ * toolbar changes. iOS uses the same body portal: dock to the visual viewport
+ * while browser chrome is showing, and apply home-indicator padding when the
+ * page is edge-to-edge (collapsed chrome / Chrome iOS / PWA).
  *
  * Chrome / Chromium Android PWA must not use this path — plain CSS `bottom:0`
  * is correct there.
@@ -62,6 +63,7 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             bar.style.bottom = '';
             bar.style.top = '';
             bar.style.transform = '';
+            bar.style.paddingBottom = '';
         };
 
         const sync = () => {
@@ -98,13 +100,26 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             bar.style.transform = 'translateZ(0)';
 
             if (ios) {
-                // Keep iOS on one coordinate system. The portaled fixed bar is
-                // anchored to the visual viewport; safe-area padding is handled
-                // by CSS in standalone mode.
-                if (lastTop === 'ios') return;
-                lastTop = 'ios';
+                // Safari/Chrome chrome visible: visual viewport already sits above
+                // the toolbar + home indicator — extra safe-area padding left a
+                // tall empty band. Chrome collapsed / PWA: pad for the indicator.
+                const chromeVisible = !isZoomed && coveredByToolbar > 24;
+                if (chromeVisible) {
+                    bar.style.paddingBottom = '0px';
+                    const h = Math.max(bar.offsetHeight || 0, 56);
+                    const top = Math.round(visualBottom - h);
+                    const key = `ios-vv-${top}`;
+                    if (lastTop === key) return;
+                    lastTop = key;
+                    bar.style.bottom = 'auto';
+                    bar.style.top = `${top}px`;
+                    return;
+                }
+                if (lastTop === 'ios-edge') return;
+                lastTop = 'ios-edge';
                 bar.style.top = 'auto';
                 bar.style.bottom = '0px';
+                bar.style.paddingBottom = 'max(8px, env(safe-area-inset-bottom, 0px))';
                 return;
             }
 
