@@ -53,3 +53,24 @@ Object.assign(ja, { maintenance: {
 type DeepPartial<T> = {
     [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
 };
+
+Object.assign(ja, { about: {
+    eyebrow: 'プロジェクトについて',
+    description: 'Server Portal Manager は、セルフホスト型メディアサーバーのためのメディア管理センターです。Plex、Emby、Jellyfin とともに、ユーザーアクセス、リクエスト、ライブアクティビティ、分析、ダッシュボード、メンテナンスを一元管理できます。',
+    currentMode: '現在のモード', version: 'バージョン', development: '開発版', centralPlace: 'ひとつの管理場所',
+    features: {
+        access: { title: 'アクセスとユーザー', description: 'サーバーツールを切り替えることなく、招待、有効期限、取り消し、プロフィール、管理者のなりすましを管理できます。' },
+        stats: { title: '統計と分析', description: 'サーバー全体のランキング、個人のまとめ、視聴履歴、ピーク時間、ライブラリ、再生傾向をひとつのダッシュボードに集約します。' },
+        monitoring: { title: 'ライブ監視', description: 'アクティブなストリーム、直接再生やトランスコードの状態、プレーヤー詳細、帯域幅、現在のメディアアクティビティをひと目で確認できます。' },
+        requests: { title: 'リクエストと確認', description: 'Seerr、Jellyseerr、Ombi のリクエストを、ダッシュボード、ユーザー統計、メディア操作と同じ場所で確認できます。' },
+        mediaStack: { title: 'メディアスタック', description: 'Sonarr と Radarr のカレンダー、キュー、履歴、接続済みサービスの状態をポータル内に表示します。' },
+        maintenance: { title: 'メンテナンス', description: 'ライブラリのクリーンアップ、状態監視、Upgrader ワークフロー、ログ、監査、運用チェックをひとつのコンソールから実行します。' },
+    },
+    ecosystem: { title: '対応エコシステム', downloadClients: 'ダウンロードクライアント' },
+    contributors: {
+        title: '貢献者',
+        primary: { role: 'Plex 担当', note: 'プロジェクトの初代メンテナーであり、Plex ワークフローの責任者です。' },
+        integration: { role: 'Jellyfin / Emby 担当', note: 'Jellyfin、Emby、およびその統合を担当する貢献者です。' },
+    },
+    links: { title: 'プロジェクトリンク', documentation: 'ドキュメント', githubRepository: 'GitHub リポジトリ', featureOverview: '機能概要', gettingStarted: 'はじめに' },
+} });

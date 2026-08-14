@@ -4752,29 +4752,28 @@ export const LogsDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) 
 
 const ABOUT_CONTRIBUTORS = [
     {
+        id: 'primary',
         name: 'jl94x4',
-        role: 'Plex side',
         href: 'https://github.com/jl94x4',
         avatarUrl: 'https://github.com/jl94x4.png?size=128',
-        note: 'Original project maintainer and Plex workflow lead.',
     },
     {
+        id: 'integration',
         name: 'Nerdy-Technician',
-        role: 'Jellyfin / Emby side',
         href: 'https://github.com/Nerdy-Technician',
         avatarUrl: 'https://github.com/Nerdy-Technician.png?size=128',
-        note: 'Jellyfin and Emby focused contributor and integration work.',
     },
 ];
 
 const ABOUT_LINKS = [
-    { label: 'Documentation', href: 'https://jl94x4.github.io/Server-Manager-Portal/' },
-    { label: 'GitHub Repository', href: 'https://github.com/jl94x4/Server-Manager-Portal' },
-    { label: 'Feature Overview', href: 'https://jl94x4.github.io/Server-Manager-Portal/features/overview.html' },
-    { label: 'Getting Started', href: 'https://jl94x4.github.io/Server-Manager-Portal/guide/getting-started.html' },
+    { id: 'documentation', href: 'https://jl94x4.github.io/Server-Manager-Portal/' },
+    { id: 'githubRepository', href: 'https://github.com/jl94x4/Server-Manager-Portal' },
+    { id: 'featureOverview', href: 'https://jl94x4.github.io/Server-Manager-Portal/features/overview.html' },
+    { id: 'gettingStarted', href: 'https://jl94x4.github.io/Server-Manager-Portal/guide/getting-started.html' },
 ];
 
 export const AboutDashboard: React.FC<{ appVersion?: string; mediaServerType?: string }> = ({ appVersion, mediaServerType = 'plex' }) => {
+    const { t } = useDiscoverI18n();
     const providerLabel = String(mediaServerType || 'plex').toLowerCase() === 'jellyfin'
         ? 'Jellyfin'
         : String(mediaServerType || 'plex').toLowerCase() === 'emby'
@@ -4792,22 +4791,22 @@ export const AboutDashboard: React.FC<{ appVersion?: string; mediaServerType?: s
                                     <Info className="w-6 h-6 text-plex" />
                                 </span>
                                 <div>
-                                    <p className="text-xs uppercase tracking-[0.22em] text-muted font-bold">About the project</p>
+                                    <p className="text-xs uppercase tracking-[0.22em] text-muted font-bold">{t('about.eyebrow')}</p>
                                     <h1 className="text-3xl sm:text-4xl font-black text-text tracking-tight">Server Portal Manager</h1>
                                 </div>
                             </div>
                             <p className="text-base sm:text-lg text-muted max-w-3xl leading-relaxed">
-                                Server Portal Manager is the Media Control Station for a self-hosted media server: one central pane of glass for user access, request workflows, live activity, analytics, dashboards, and maintenance across Plex, Emby, and Jellyfin.
+                                {t('about.description')}
                             </p>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3 lg:w-72 flex-shrink-0">
                             <div className="rounded-lg border border-border bg-background/70 p-3">
-                                <p className="text-[10px] uppercase tracking-[0.18em] text-muted">Current mode</p>
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-muted">{t('about.currentMode')}</p>
                                 <p className="mt-1 text-lg font-black text-text">{providerLabel}</p>
                             </div>
                             <div className="rounded-lg border border-border bg-background/70 p-3">
-                                <p className="text-[10px] uppercase tracking-[0.18em] text-muted">Version</p>
-                                <p className="mt-1 text-sm font-mono font-bold text-plex truncate">{appVersion || 'Development'}</p>
+                                <p className="text-[10px] uppercase tracking-[0.18em] text-muted">{t('about.version')}</p>
+                                <p className="mt-1 text-sm font-mono font-bold text-plex truncate">{appVersion || t('about.development')}</p>
                             </div>
                         </div>
                     </div>
@@ -4816,33 +4815,33 @@ export const AboutDashboard: React.FC<{ appVersion?: string; mediaServerType?: s
                 <div className="p-6 sm:p-8 grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-6">
                     <section className="space-y-5">
                         <div>
-                            <h2 className="text-xl font-black text-text mb-3">One Central Place</h2>
+                            <h2 className="text-xl font-black text-text mb-3">{t('about.centralPlace')}</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {[
-                                    { icon: Users, title: 'Access & users', body: 'Manage invites, expiry, revokes, profiles, and admin impersonation without jumping between server tools.' },
-                                    { icon: BarChart3, title: 'Stats & analytics', body: 'Bring server-wide rankings, personal wrap-ups, watch history, peak hours, libraries, and play trends into one dashboard.' },
-                                    { icon: Activity, title: 'Live monitoring', body: 'See active streams, direct play/transcode status, player details, bandwidth, and current media activity at a glance.' },
-                                    { icon: ClipboardList, title: 'Requests & review', body: 'Review Seerr, Jellyseerr, and Ombi requests from the same place as dashboards, user stats, and media operations.' },
-                                    { icon: Calendar, title: 'Media stack', body: 'Surface Sonarr and Radarr calendars, queues, history, and connected service health inside the portal.' },
-                                    { icon: Shield, title: 'Maintenance', body: 'Run library cleanup, status monitoring, upgrader workflows, logs, audits, and operational checks from a single console.' },
-                                ].map(({ icon: Icon, title, body }) => (
-                                    <div key={title} className="rounded-lg border border-border bg-background/70 p-4">
+                                    { id: 'access', icon: Users },
+                                    { id: 'stats', icon: BarChart3 },
+                                    { id: 'monitoring', icon: Activity },
+                                    { id: 'requests', icon: ClipboardList },
+                                    { id: 'mediaStack', icon: Calendar },
+                                    { id: 'maintenance', icon: Shield },
+                                ].map(({ id, icon: Icon }) => (
+                                    <div key={id} className="rounded-lg border border-border bg-background/70 p-4">
                                         <div className="flex items-center gap-3 mb-2">
                                             <span className="w-9 h-9 rounded-lg bg-plex/10 border border-plex/20 flex items-center justify-center">
                                                 <Icon className="w-4 h-4 text-plex" />
                                             </span>
-                                            <h3 className="font-bold text-text">{title}</h3>
+                                            <h3 className="font-bold text-text">{t(`about.features.${id}.title`)}</h3>
                                         </div>
-                                        <p className="text-sm text-muted leading-relaxed">{body}</p>
+                                        <p className="text-sm text-muted leading-relaxed">{t(`about.features.${id}.description`)}</p>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
                         <div className="rounded-lg border border-border bg-background/70 p-4">
-                            <h2 className="text-lg font-black text-text mb-3">Supported Ecosystem</h2>
+                            <h2 className="text-lg font-black text-text mb-3">{t('about.ecosystem.title')}</h2>
                             <div className="flex flex-wrap gap-2">
-                                {['Plex', 'Jellyfin', 'Emby', 'Seerr', 'Jellyseerr', 'Ombi', 'Sonarr', 'Radarr', 'Tautulli', 'Jellystat', 'Download clients'].map((item) => (
+                                {['Plex', 'Jellyfin', 'Emby', 'Seerr', 'Jellyseerr', 'Ombi', 'Sonarr', 'Radarr', 'Tautulli', 'Jellystat', t('about.ecosystem.downloadClients')].map((item) => (
                                     <span key={item} className={featurePillClass}>{item}</span>
                                 ))}
                             </div>
@@ -4853,7 +4852,7 @@ export const AboutDashboard: React.FC<{ appVersion?: string; mediaServerType?: s
                         <section className="rounded-lg border border-border bg-background/70 p-4">
                             <div className="flex items-center gap-2 mb-4">
                                 <GitFork className="w-5 h-5 text-plex" />
-                                <h2 className="text-lg font-black text-text">Contributors</h2>
+                                <h2 className="text-lg font-black text-text">{t('about.contributors.title')}</h2>
                             </div>
                             <div className="space-y-3">
                                 {ABOUT_CONTRIBUTORS.map((contributor) => (
@@ -4875,11 +4874,11 @@ export const AboutDashboard: React.FC<{ appVersion?: string; mediaServerType?: s
 	                                                <div className="flex items-center justify-between gap-3">
 	                                                    <div className="min-w-0">
 	                                                        <p className="font-bold text-text truncate">{contributor.name}</p>
-	                                                        <p className="text-xs text-plex font-bold">{contributor.role}</p>
+                                                        <p className="text-xs text-plex font-bold">{t(`about.contributors.${contributor.id}.role`)}</p>
 	                                                    </div>
 	                                                    <ExternalLink className="w-4 h-4 text-muted flex-shrink-0" />
 	                                                </div>
-	                                                <p className="mt-2 text-xs text-muted leading-relaxed">{contributor.note}</p>
+                                                <p className="mt-2 text-xs text-muted leading-relaxed">{t(`about.contributors.${contributor.id}.note`)}</p>
 	                                            </div>
 	                                        </div>
 	                                    </a>
@@ -4890,7 +4889,7 @@ export const AboutDashboard: React.FC<{ appVersion?: string; mediaServerType?: s
                         <section className="rounded-lg border border-border bg-background/70 p-4">
                             <div className="flex items-center gap-2 mb-4">
                                 <BookOpen className="w-5 h-5 text-plex" />
-                                <h2 className="text-lg font-black text-text">Project Links</h2>
+                                <h2 className="text-lg font-black text-text">{t('about.links.title')}</h2>
                             </div>
                             <div className="space-y-2">
                                 {ABOUT_LINKS.map((link) => (
@@ -4901,7 +4900,7 @@ export const AboutDashboard: React.FC<{ appVersion?: string; mediaServerType?: s
                                         rel="noopener noreferrer"
                                         className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-colors px-3 py-2 text-sm font-semibold text-text"
                                     >
-                                        <span>{link.label}</span>
+                                        <span>{t(`about.links.${link.id}`)}</span>
                                         <ExternalLink className="w-4 h-4 text-muted flex-shrink-0" />
                                     </a>
                                 ))}

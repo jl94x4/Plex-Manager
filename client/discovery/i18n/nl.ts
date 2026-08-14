@@ -53,3 +53,24 @@ Object.assign(nl, { maintenance: {
 type DeepPartial<T> = {
     [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
 };
+
+Object.assign(nl, { about: {
+    eyebrow: 'Over het project',
+    description: 'Server Portal Manager is het mediabedieningscentrum voor een zelfgehoste mediaserver: één centrale plek voor gebruikerstoegang, aanvragen, liveactiviteit, analyses, dashboards en onderhoud met Plex, Emby en Jellyfin.',
+    currentMode: 'Huidige modus', version: 'Versie', development: 'Ontwikkelversie', centralPlace: 'Eén centrale plek',
+    features: {
+        access: { title: 'Toegang en gebruikers', description: 'Beheer uitnodigingen, vervaldatums, intrekkingen, profielen en beheerdersimitatie zonder tussen servertools te wisselen.' },
+        stats: { title: 'Statistieken en analyses', description: 'Breng serverbrede ranglijsten, persoonlijke overzichten, kijkgeschiedenis, piekuren, bibliotheken en afspeeltrends samen in één dashboard.' },
+        monitoring: { title: 'Livebewaking', description: 'Bekijk in één oogopslag actieve streams, de status van direct afspelen of transcoderen, spelergegevens, bandbreedte en huidige media-activiteit.' },
+        requests: { title: 'Aanvragen en beoordeling', description: 'Beoordeel aanvragen van Seerr, Jellyseerr en Ombi op dezelfde plek als dashboards, gebruikersstatistieken en mediabewerkingen.' },
+        mediaStack: { title: 'Mediastack', description: 'Toon Sonarr- en Radarr-kalenders, wachtrijen, geschiedenis en de status van verbonden services in het portaal.' },
+        maintenance: { title: 'Onderhoud', description: 'Voer bibliotheekopschoning, statusbewaking, Upgrader-workflows, logboeken, audits en operationele controles uit vanuit één console.' },
+    },
+    ecosystem: { title: 'Ondersteund ecosysteem', downloadClients: 'Downloadclients' },
+    contributors: {
+        title: 'Bijdragers',
+        primary: { role: 'Plex-kant', note: 'Oorspronkelijke projectonderhouder en leider van de Plex-workflow.' },
+        integration: { role: 'Jellyfin / Emby-kant', note: 'Bijdrager gericht op Jellyfin, Emby en integratiewerk.' },
+    },
+    links: { title: 'Projectlinks', documentation: 'Documentatie', githubRepository: 'GitHub-repository', featureOverview: 'Functieoverzicht', gettingStarted: 'Aan de slag' },
+} });
