@@ -39,7 +39,7 @@ import { useDiscoverI18n } from './discovery/i18n';
 import { DiscoverNowPlayingStrip } from './discovery/DiscoverNowPlayingStrip';
 import { useNowPlaying } from './shared/useNowPlaying';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
-import { isFirefoxMobileClient, isIosMobileClient, isStandaloneDisplayMode, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
+import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
 import { AchievementsAnalyticsLeaderboard } from './achievements/AchievementsAnalyticsLeaderboard';
 import {
@@ -11360,17 +11360,19 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [mobileThemeOpen, setMobileThemeOpen] = useState(false);
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
     const [firefoxMobileNav] = useState(() => isFirefoxMobileClient());
-    const [iosMobileNav] = useState(() => isIosMobileClient());
-    const portalMobileBottomNav = firefoxMobileNav || iosMobileNav;
     const firefoxNavBarRef = useRef<HTMLDivElement>(null);
     const [profileOpen, setProfileOpen] = useState(false);
     const [profileAchievements, setProfileAchievements] = useState<any>(null);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
     const [installBannerDismissed, setInstallBannerDismissed] = useState(false);
-    const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplayMode());
-    // Firefox + iOS mobile nav is portaled to body and docked from visualViewport/layout metrics.
-    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: portalMobileBottomNav });
+    const [isInstalledApp, setIsInstalledApp] = useState(() => (
+        typeof window !== 'undefined'
+        && (window.matchMedia?.('(display-mode: standalone)').matches
+            || window.matchMedia?.('(display-mode: fullscreen)').matches
+            || (navigator as any).standalone === true)
+    ));
+    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav });
     const mobileThemeRef = useRef<HTMLDivElement>(null);
     const [mobileThemePos, setMobileThemePos] = useState<{ top: number; right: number } | null>(null);
     const isFirefoxMobile = typeof navigator !== 'undefined'
@@ -11408,14 +11410,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             setIsInstalledApp(true);
             setInstallPrompt(null);
             setInstallHelpOpen(false);
-            document.documentElement.classList.add('ios-standalone');
         };
         const syncInstalledState = () => {
             const installed = window.matchMedia?.('(display-mode: standalone)').matches
                 || window.matchMedia?.('(display-mode: fullscreen)').matches
                 || (navigator as any).standalone === true;
             setIsInstalledApp(!!installed);
-            document.documentElement.classList.toggle('ios-standalone', !!installed);
         };
         syncInstalledState();
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -12066,28 +12066,25 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             )}
 
             {/* Mobile Bottom Nav
-                Chrome / iOS / PWA Chromium: plain fixed bottom:0 + safe-area padding.
-                Firefox mobile: portal to body and dock to visualViewport. */}
+                Chrome / PWA Chromium: plain fixed bottom:0 (do not change).
+                Firefox mobile: dock bar to visualViewport bottom (Firefox-only hook). */}
             {(() => {
                 const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
-                // Keep More reachable for Install even when every nav item fits the bar.
-                const showMore = normalizedNavOrder.length > maxPrimary || !isInstalledApp;
-                const primary = normalizedNavOrder.length > maxPrimary
-                    ? normalizedNavOrder.slice(0, maxPrimary)
-                    : normalizedNavOrder;
+                const showMore = normalizedNavOrder.length > maxPrimary;
+                const primary = showMore ? normalizedNavOrder.slice(0, maxPrimary) : normalizedNavOrder;
                 const navButtons = (
                     <>
                         {primary.map((key) => {
                             const item = navItemsConfig[key];
                             if (!item) return null;
                             const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                            const labelOverride = key === 'mediastack' ? t('navigation.calendar') : key === 'request' ? t('navigation.request') : item.label;
+                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
                             return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
                         })}
                         {showMore && (
                             <button
                                 type="button"
-                                className={`relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors bg-transparent border-0 ${
+                                className={`relative flex flex-col items-center justify-center gap-1 h-full flex-1 min-w-[4.25rem] px-1 text-center text-[0.65rem] transition-colors bg-transparent border-0 ${
                                     mobileMoreOpen ? 'text-plex font-bold' : 'text-muted hover:text-text'
                                 }`}
                                 onClick={() => setMobileMoreOpen((open) => !open)}
@@ -12095,33 +12092,30 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 <span className="relative shrink-0">
                                     <MoreHorizontal className="w-5 h-5" />
                                 </span>
-                                <span>{t('navigation.more')}</span>
+                                <span>More</span>
                             </button>
                         )}
                     </>
                 );
                 const navInner = (
-                    <div className="flex items-center justify-between w-full h-14 pt-1 page-x overflow-visible">
+                    <div className="flex items-center justify-between w-full h-16 px-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))]">
                         {navButtons}
                     </div>
                 );
-                const bottomSafeClass = iosMobileNav
-                    ? 'ios-mobile-bottom-nav'
-                    : 'pb-[env(safe-area-inset-bottom,0px)]';
 
-                if (portalMobileBottomNav && typeof document !== 'undefined') {
+                if (firefoxMobileNav && typeof document !== 'undefined') {
                     // Portal to body so no ancestor creates a fixed containing block.
-                    // Hook docks via visualViewport; bleed paints any leftover gesture-bar gap.
+                    // Hook sets top from visualViewport; bleed fills any gesture-bar gap.
                     return ReactDOM.createPortal(
                         <div
                             ref={firefoxNavBarRef}
-                            className={`md:hidden fixed inset-x-0 bottom-0 w-full max-w-full nav-shell border-t z-[310] overflow-visible ${bottomSafeClass}`}
+                            className="md:hidden fixed left-0 w-screen max-w-none nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom,0px)]"
                             style={{ bottom: 0 }}
                         >
                             {navInner}
                             <div
-                                className="absolute inset-x-0 w-full max-w-full nav-shell pointer-events-none"
-                                style={{ top: '100%', height: 160, borderTop: 'none' }}
+                                className="absolute left-0 w-screen max-w-none nav-shell pointer-events-none"
+                                style={{ top: '100%', height: 120, borderTop: 'none' }}
                                 aria-hidden="true"
                             />
                         </div>,
@@ -12130,86 +12124,56 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 }
 
                 return (
-                    <div className={`md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] overflow-visible ${bottomSafeClass}`}>
+                    <div className="md:hidden fixed bottom-0 left-0 right-0 w-full nav-shell border-t z-[310] pb-[env(safe-area-inset-bottom)]">
                         {navInner}
                     </div>
                 );
             })()}
 
-            {/* Mobile More Drawer — above bottom nav (incl. body-portaled bar on Firefox/iOS) */}
-            {mobileMoreOpen && (() => {
-                const drawer = (
-                    <div className="md:hidden fixed inset-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setMobileMoreOpen(false)}>
-                        <div className="bg-card border-t border-border rounded-t-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
-                            <div className="flex items-center justify-between p-4 border-b border-white/5">
-                                <h3 className="font-bold text-text">{t('navigation.moreMenu')}</h3>
-                                <button className="text-muted hover:text-text p-1 bg-white/5 rounded-full" onClick={() => setMobileMoreOpen(false)}><X className="w-5 h-5" /></button>
-                            </div>
-                            {!isInstalledApp && (
-                                <div className="px-4 pt-4">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setMobileMoreOpen(false);
-                                            void handleInstallApp();
-                                        }}
-                                        className={`w-full inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold transition-colors ${
-                                            installPrompt
-                                                ? 'border-plex/40 bg-plex text-background hover:bg-plex-hover'
-                                                : 'border-border bg-white/5 text-text hover:bg-white/10'
-                                        }`}
-                                    >
-                                        <MonitorSmartphone className="w-4 h-4" />
-                                        {installPrompt ? 'Install App' : 'How to Install App'}
-                                    </button>
-                                </div>
-                            )}
+            {/* Mobile More Drawer — above bottom nav (incl. Firefox body-portaled bar) */}
+            {mobileMoreOpen && (
+                <div className="md:hidden fixed inset-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setMobileMoreOpen(false)}>
+                    <div className="bg-card border-t border-border rounded-t-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between p-4 border-b border-white/5">
+                            <h3 className="font-bold text-text">More Menu</h3>
+                            <button className="text-muted hover:text-text p-1 bg-white/5 rounded-full" onClick={() => setMobileMoreOpen(false)}><X className="w-5 h-5" /></button>
+                        </div>
+                        <div className="p-5 grid grid-cols-4 gap-4">
                             {(() => {
                                 const maxPrimary = MOBILE_NAV_PRIMARY_SLOTS;
                                 const secondary = normalizedNavOrder.length > maxPrimary ? normalizedNavOrder.slice(maxPrimary) : [];
-                                if (secondary.length === 0) {
-                                    return <div className="pb-2" />;
-                                }
-                                return (
-                            <div className="p-5 grid grid-cols-4 gap-4">
-                                {secondary.map(key => {
-                                        const item = navItemsConfig[key];
-                                        if (!item) return null;
-                                        const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                        const labelOverride = key === 'mediastack' ? t('navigation.calendar') : key === 'request' ? t('navigation.request') : item.label;
-                                        const handleActivate = () => {
-                                            setMobileMoreOpen(false);
-                                            if (item.href) window.open(item.href, '_blank');
-                                            else if (item.onClick) item.onClick({ preventDefault: () => {} });
-                                            else if (item.route) onNavigate(item.route as any);
-                                        };
-                                        const badgeCount = getNavBadgeCount(key);
-                                        return (
-                                            <button key={key} onClick={handleActivate} className="flex flex-col items-center gap-2 relative bg-transparent border-0">
-                                                <div className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors ${isCurrent ? 'bg-plex text-background shadow-[0_0_15px_rgba(229,160,13,0.35)]' : 'bg-background/50 text-text hover:bg-white/10 border border-white/5'}`}>
-                                                    <item.icon className="w-6 h-6" />
-                                                </div>
-                                                {badgeCount > 0 && (
-                                                    <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 px-1 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
-                                                        {badgeCount > 9 ? '9+' : badgeCount}
-                                                    </span>
-                                                )}
-                                                <span className={`text-[10px] text-center w-full truncate px-1 ${isCurrent ? 'text-plex font-bold' : 'text-muted'}`}>{labelOverride}</span>
-                                            </button>
-                                        );
-                                    })}
-                            </div>
-                                );
+                                return secondary.map(key => {
+                                    const item = navItemsConfig[key];
+                                    if (!item) return null;
+                                    const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                                    const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                    const handleActivate = () => {
+                                        setMobileMoreOpen(false);
+                                        if (item.href) window.open(item.href, '_blank');
+                                        else if (item.onClick) item.onClick({ preventDefault: () => {} });
+                                        else if (item.route) onNavigate(item.route as any);
+                                    };
+                                    const badgeCount = getNavBadgeCount(key);
+                                    return (
+                                        <button key={key} onClick={handleActivate} className="flex flex-col items-center gap-2 relative bg-transparent border-0">
+                                            <div className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors ${isCurrent ? 'bg-plex text-background shadow-[0_0_15px_rgba(229,160,13,0.35)]' : 'bg-background/50 text-text hover:bg-white/10 border border-white/5'}`}>
+                                                <item.icon className="w-6 h-6" />
+                                            </div>
+                                            {badgeCount > 0 && (
+                                                <span className="absolute -top-1 -right-1 min-w-[18px] h-4.5 px-1 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
+                                                    {badgeCount > 9 ? '9+' : badgeCount}
+                                                </span>
+                                            )}
+                                            <span className={`text-[10px] text-center w-full truncate px-1 ${isCurrent ? 'text-plex font-bold' : 'text-muted'}`}>{labelOverride}</span>
+                                        </button>
+                                    );
+                                });
                             })()}
-                            <div className="pb-[calc(env(safe-area-inset-bottom,0px)+1rem)]"></div>
                         </div>
+                        <div className="pb-[calc(env(safe-area-inset-bottom)+1rem)]"></div>
                     </div>
-                );
-                if (portalMobileBottomNav && typeof document !== 'undefined') {
-                    return ReactDOM.createPortal(drawer, document.body);
-                }
-                return drawer;
-            })()}
+                </div>
+            )}
         </>
     );
 };
