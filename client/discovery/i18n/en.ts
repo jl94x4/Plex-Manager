@@ -1983,6 +1983,42 @@ export const en = {
 } as const;
 
 
+Object.assign(en, { settings: { ...en.settings, homeLayout: {
+    sectionShown: 'Section shown on home page',
+    sectionHidden: 'Section hidden on home page',
+    shown: 'Shown',
+    hidden: 'Hidden',
+    livePreview: 'Live preview',
+    leftColumn: 'Left column',
+    heroFixed: 'Hero banner stays at the top and is not configurable.',
+    title: 'Home Page Layout',
+    description: 'Drag sections to reorder the home page for everyone. Show or hide whole sections. The main dashboard grid keeps its fixed left/right layout so card heights stay balanced.',
+    resetDefault: 'Reset to default',
+    pageSections: 'Page sections',
+    reorderHint: 'Drag the handle to reorder. Use Shown/Hidden to toggle each section - all are visible by default.',
+    saveHintBefore: 'Click ',
+    saveAction: 'Save Settings',
+    saveHintAfter: ' at the bottom of this page to apply layout changes for everyone.',
+    tipLabel: 'Tip:',
+    tipBody: 'The live portal editor can also move, hide, and re-add individual widgets directly from the home page. This settings page remains the admin-wide section layout editor.',
+    watchHistory: 'Watch History Configuration',
+    recentlyWatchedRows: 'Recently Watched Rows',
+    mostWatchedRows: 'Most Watched Rows',
+    rowsPerPage: 'Number of rows to display per page.',
+    row: 'Row',
+    rows: 'Rows',
+    sections: {
+        wrapUp: { label: 'Personal Wrap-Up', description: 'Personal stats cards' },
+        mainGrid: { label: 'Main dashboard grid', description: 'Admin/actions left; library stats right' },
+        pendingRequests: { label: 'Pending requests', description: 'Approve media requests from home (admin)' },
+        watchRow: { label: 'Watch history', description: 'Recently watched and most watched' },
+        scanner: { description: 'Full-width library refresh status' },
+        mediaAutomation: { description: 'Native processing queue and worker status' },
+        recentlyAdded: { label: 'Recently added', description: 'Movies, shows, and music rows' },
+        bazarrTools: { label: 'Bazarr Subtitle Tools', description: 'Subtitle automation widget' },
+    },
+} } });
+
 Object.assign(en, { maintenance: {
     ...en.maintenance,
     page: { title: 'Cleaner', disabledTitle: 'Cleaner Disabled', disabledDescription: 'Experimental Cleaner Mode is currently OFF.', disabledHint: 'Enable it in `Settings` → `System` under `Maintenance Experimental Mode`, then click Save Settings.', controlCenter: 'Cleaner Control Center', controlCenterDescription: 'Dedicated module for library maintenance automation: rules, collections, candidates, execution timeline, calendar, storage, and governance.' },

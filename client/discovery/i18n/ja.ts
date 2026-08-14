@@ -44,6 +44,12 @@ Object.assign(ja, { maintenance: { ...ja.maintenance,
     errors: { loadOverview: 'クリーナー概要を読み込めませんでした', loadCandidates: '候補を読み込めませんでした', loadExclusions: '除外の概要を読み込めませんでした。', loadLibrary: 'ライブラリのポスターを読み込めませんでした。', loadStorage: 'ストレージ概要を読み込めませんでした。' }
 } });
 
+Object.assign(ja, { settings: { ...ja.settings, homeLayout: {
+    sectionShown: 'ホームページに表示中のセクション', sectionHidden: 'ホームページで非表示のセクション', shown: '表示', hidden: '非表示', livePreview: 'ライブプレビュー', leftColumn: '左列', heroFixed: 'ヒーローバナーは上部に固定され、設定できません。',
+    title: 'ホームページのレイアウト', description: 'セクションをドラッグして、全員のホームページの順序を変更します。セクション全体を表示または非表示にできます。メインダッシュボードのグリッドは、カードの高さを整えるため左右の固定レイアウトを維持します。', resetDefault: 'デフォルトに戻す', pageSections: 'ページセクション', reorderHint: 'ハンドルをドラッグして並べ替えます。表示/非表示で各セクションを切り替えます。すべてのセクションは初期状態で表示されています。', saveHintBefore: 'このページの下部にある', saveAction: '「設定を保存」', saveHintAfter: 'をクリックすると、レイアウトの変更が全員に適用されます。', tipLabel: 'ヒント:', tipBody: 'ライブポータルエディターでは、ホームページから直接個別のウィジェットを移動、非表示、再追加することもできます。このページは管理者向けのセクションレイアウトエディターです。', watchHistory: '視聴履歴の設定', recentlyWatchedRows: '最近視聴した行数', mostWatchedRows: '最も視聴された行数', rowsPerPage: 'ページごとに表示する行数。', row: '行', rows: '行',
+    sections: { wrapUp: { label: '個人のまとめ', description: '個人統計カード' }, mainGrid: { label: 'メインダッシュボードグリッド', description: '左に管理/操作、右にライブラリ統計' }, pendingRequests: { label: '保留中のリクエスト', description: 'ホームからメディアリクエストを承認（管理者）' }, watchRow: { label: '視聴履歴', description: '最近視聴した項目と最も視聴された項目' }, scanner: { description: '全幅のライブラリ更新ステータス' }, mediaAutomation: { description: 'ネイティブ処理キューとワーカーの状態' }, recentlyAdded: { label: '最近追加された項目', description: '映画、シリーズ、音楽の行' }, bazarrTools: { label: 'Bazarr 字幕ツール', description: '字幕自動化ウィジェット' } },
+} } });
+
 Object.assign(ja, { scanner: {
     dashboard: { eyebrow: 'ライブラリスキャナー', title: '正確に更新', description: 'Plex、Jellyfin、Emby のライブラリを部分更新するためにフォルダーをキューへ追加します。ARR の Webhook は、インポート、アップグレード、削除、名前変更として自動的にここへ届きます。' },
     manual: { title: '手動パス', hiddenHint: '非表示です — クリックしてフォルダーを手動でキューに追加します。', visibleHint: '今すぐフォルダーを追加できます — 最低経過時間後に処理されます。', placeholder: 'スキャンするパス（例: /mnt/unionfs/Media/Movies/Movie Name (year)）', submitHint: '送信するとパスがスキャンキューに追加されます', waitsBeforeTargets: ' · ', beforeTargetsAreCalled: '待機してからターゲットを呼び出します' },
