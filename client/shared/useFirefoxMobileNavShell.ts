@@ -151,10 +151,15 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
         window.addEventListener('resize', schedule);
         window.addEventListener('orientationchange', schedule);
         window.addEventListener('pageshow', forceSync);
-        window.addEventListener('scroll', schedule, { passive: true });
-        // Mobile portal scrolls inside #main-scroll-container (not the window).
+        // iOS docks with bottom:0 / visualViewport resize; page scroll must not
+        // restyle the bar every frame (that makes home scrolling hitch).
+        if (!ios) {
+            window.addEventListener('scroll', schedule, { passive: true });
+        }
         const mainScroll = document.getElementById('main-scroll-container');
-        mainScroll?.addEventListener('scroll', schedule, { passive: true });
+        if (!ios) {
+            mainScroll?.addEventListener('scroll', schedule, { passive: true });
+        }
         window.visualViewport?.addEventListener('resize', schedule);
         window.visualViewport?.addEventListener('scroll', schedule);
 

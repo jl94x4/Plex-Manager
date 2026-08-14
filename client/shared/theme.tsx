@@ -125,23 +125,23 @@ export const AppAmbientBackground: React.FC<{ backgroundImageUrl?: string; class
     className = 'fixed inset-0 z-0',
 }) => (
     <div className={`pointer-events-none bg-background ${className}`}>
-        <div className="absolute -top-40 -left-20 w-[420px] h-[420px] rounded-full bg-plex/[0.06] blur-[100px]" />
-        <div className="absolute top-1/2 -right-32 w-[360px] h-[360px] rounded-full bg-plex/[0.04] blur-[90px]" />
-        <div className="absolute bottom-0 left-1/3 w-[320px] h-[320px] rounded-full bg-plex/[0.03] blur-[80px]" />
+        <div className="hidden md:block absolute -top-40 -left-20 w-[420px] h-[420px] rounded-full bg-plex/[0.06] blur-[100px]" />
+        <div className="hidden md:block absolute top-1/2 -right-32 w-[360px] h-[360px] rounded-full bg-plex/[0.04] blur-[90px]" />
+        <div className="hidden md:block absolute bottom-0 left-1/3 w-[320px] h-[320px] rounded-full bg-plex/[0.03] blur-[80px]" />
         <div
-            className="absolute inset-0"
+            className="hidden md:block absolute inset-0"
             style={{ backgroundImage: 'radial-gradient(ellipse 70% 40% at 50% 0%, rgb(var(--color-plex) / 0.06), transparent)' }}
         />
         {backgroundImageUrl && (
             <div
-                className="absolute inset-0 bg-center bg-no-repeat opacity-100"
+                className="hidden md:block absolute inset-0 bg-center bg-no-repeat opacity-100"
                 style={{
                     ...backgroundImageStyle(backgroundImageUrl),
                     backgroundSize: 'cover',
                 }}
             />
         )}
-        <div className="absolute inset-0 opacity-[0.018]" style={{ backgroundImage: GRID_TEXTURE }} />
+        <div className="hidden md:block absolute inset-0 opacity-[0.018]" style={{ backgroundImage: GRID_TEXTURE }} />
     </div>
 );
 

@@ -69,6 +69,7 @@ import {
 } from './shared/dashboard/DashboardChrome';
 import { ANALYTICS_PERIOD_OPTIONS, persistAnalyticsDays, readPersistedAnalyticsDays } from './shared/analyticsPeriodOptions';
 import { UserDashboardLayout } from './home/UserDashboardLayout';
+import { HomeHeroMovieBackdrop } from './home/HomeHeroMovieBackdrop';
 import { createBazarrToolsSectionRenderer, createMainGridWidgetRenderer, createMediaAutomationSectionRenderer, createPendingRequestsSectionRenderer, createRecentlyAddedWidgetRenderer, createScannerSectionRenderer } from './home/userDashboardWidgetRenderers';
 import { useDiscoverI18n } from './discovery/i18n';
 import {
@@ -8121,23 +8122,11 @@ export const UserDashboard: React.FC<{
                             <div className="absolute inset-0 bg-black/10" />
                         </>
                     ) : dashboardData?.recentMovies?.length > 0 ? (
-                        <>
-                            <div className="absolute -inset-[50%] opacity-40 transform -rotate-12 scale-110 flex gap-4 overflow-hidden pointer-events-none justify-center">
-                                {[...Array(6)].map((_, colIdx) => (
-                                    <div key={colIdx} className={`flex flex-col gap-4 ${colIdx % 2 === 0 ? 'animate-[scrollVertical_40s_linear_infinite]' : 'animate-[scrollVertical_50s_linear_infinite_reverse]'}`}>
-                                        {[...dashboardData.recentMovies, ...dashboardData.recentMovies].sort(() => 0.5 - Math.random()).map((m: any, i: number) => (m.thumb || m.thumbUrl) && (
-                                            <img key={`c${colIdx}-${i}`} src={m.thumbUrl ? resolvePortalAssetUrl(m.thumbUrl) : portalUrl(`/api/plex/image?path=${encodeURIComponent(m.thumb)}&width=200&height=300`)} className="w-32 md:w-48 rounded-xl object-cover" alt="" />
-                                        ))}
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="home-hero-scrim absolute inset-0 bg-gradient-to-t from-card via-card/80 to-transparent" />
-                            <div className="absolute inset-0 bg-gradient-to-r from-card via-card/40 to-transparent" />
-                        </>
+                        <HomeHeroMovieBackdrop movies={dashboardData.recentMovies} />
                     ) : heroBg ? (
                         <>
                             <div
-                                className="absolute inset-0 bg-cover bg-center opacity-30 blur-2xl scale-110"
+                                className="absolute inset-0 bg-cover bg-center opacity-30 md:blur-2xl md:scale-110"
                                 style={{ backgroundImage: `url(${heroBg})` }}
                             />
                             <div className="home-hero-scrim absolute inset-0 bg-gradient-to-t from-card via-card/80 to-transparent" />

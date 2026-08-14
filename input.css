@@ -1415,3 +1415,21 @@ html.branded-skeleton .skeleton-base::after {
     }
   }
 }
+
+/* Phone home scroll: skip per-frame backdrop-filter on cards and the nav. */
+@media (max-width: 767px) {
+  .glass-card,
+  .glass-card-sm,
+  .glass-card-lg,
+  .nav-shell {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-color: rgb(var(--color-card) / 0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-banner [class*="scrollVertical"] {
+    animation: none !important;
+  }
+}
