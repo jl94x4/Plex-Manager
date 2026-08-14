@@ -15,8 +15,8 @@ export const isFirefoxMobileClient = () => {
 
 /**
  * True for iPhone / iPad (incl. iPadOS desktop UA).
- * iOS bottom nav uses plain CSS `fixed; bottom:0` + safe-area padding — do not
- * run this hook on iOS.
+ * iOS bottom nav still uses fixed-bottom CSS, but we also use viewport docking
+ * in the portal path for first-paint stability when browser chrome is present.
  */
 export const isIosMobileClient = () => {
     if (typeof navigator === 'undefined') return false;
@@ -38,7 +38,9 @@ export const isStandaloneDisplayMode = () => {
 
 /**
  * Firefox Android needs explicit visual-viewport docking when its dynamic
- * toolbar changes. iOS and Chrome / Chromium Android use plain CSS `bottom:0`.
+ * toolbar changes. iOS uses the same body-portal path to avoid fixed-position
+ * jitter inside the app shell and to anchor the nav at the physical bottom on
+ * first paint. Chrome / Chromium Android uses plain CSS `bottom:0`.
  */
 export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
     useEffect(() => {
@@ -46,6 +48,7 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
 
         let raf = 0;
         let lastTop: number | string = Number.NaN;
+        const ios = isIosMobileClient();
 
         const clearInline = (bar: HTMLElement) => {
             bar.style.position = '';
@@ -57,6 +60,7 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             bar.style.bottom = '';
             bar.style.top = '';
             bar.style.transform = '';
+            bar.style.paddingBottom = '';
         };
 
         const sync = () => {
@@ -91,6 +95,25 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             bar.style.maxWidth = '';
             bar.style.margin = '0';
             bar.style.transform = 'translateZ(0)';
+
+            if (ios) {
+                // On iOS we anchor to the larger of layout/visual bottoms so the
+                // bar is pinned to the device bottom from initial paint.
+                const standalone = isStandaloneDisplayMode();
+                const dockBottom = isZoomed
+                    ? visualBottom
+                    : Math.max(layoutBottom, visualBottom);
+                bar.style.paddingBottom = standalone
+                    ? 'env(safe-area-inset-bottom, 0px)'
+                    : '0px';
+                const top = Math.round(dockBottom - barH);
+                const key = `${standalone ? 's' : 'b'}:${top}`;
+                if (key === lastTop) return;
+                lastTop = key;
+                bar.style.bottom = 'auto';
+                bar.style.top = `${top}px`;
+                return;
+            }
 
             const top = Math.round(dockBottom - barH);
             if (top === lastTop) return;
@@ -134,7 +157,8 @@ export function useFirefoxMobileNavShell({ barRef, enabled }: Options) {
             : null;
         if (barRef.current) ro?.observe(barRef.current);
 
-        const retryTimers = [0, 100].map((ms) => window.setTimeout(forceSync, ms));
+        const retryTimers = (ios ? [0, 50, 100, 250, 500, 1000] : [0, 100])
+            .map((ms) => window.setTimeout(forceSync, ms));
 
         return () => {
             if (raf) window.cancelAnimationFrame(raf);

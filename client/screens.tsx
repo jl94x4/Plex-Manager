@@ -11361,6 +11361,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
     const [firefoxMobileNav] = useState(() => isFirefoxMobileClient());
     const [iosMobileNav] = useState(() => isIosMobileClient());
+    const portalMobileBottomNav = firefoxMobileNav || iosMobileNav;
     const firefoxNavBarRef = useRef<HTMLDivElement>(null);
     const [profileOpen, setProfileOpen] = useState(false);
     const [profileAchievements, setProfileAchievements] = useState<any>(null);
@@ -11368,8 +11369,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
     const [installBannerDismissed, setInstallBannerDismissed] = useState(false);
     const [isInstalledApp, setIsInstalledApp] = useState(() => isStandaloneDisplayMode());
-    // Firefox Android needs visualViewport docking; iOS should stay on plain fixed bottom.
-    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav && !iosMobileNav });
+    // Firefox + iOS mobile nav is portaled to body and docked from visualViewport/layout metrics.
+    useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: portalMobileBottomNav });
     const mobileThemeRef = useRef<HTMLDivElement>(null);
     const [mobileThemePos, setMobileThemePos] = useState<{ top: number; right: number } | null>(null);
     const isFirefoxMobile = typeof navigator !== 'undefined'
@@ -12108,7 +12109,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     ? 'ios-mobile-bottom-nav'
                     : 'pb-[env(safe-area-inset-bottom,0px)]';
 
-                if (firefoxMobileNav && !iosMobileNav && typeof document !== 'undefined') {
+                if (portalMobileBottomNav && typeof document !== 'undefined') {
                     // Portal to body so no ancestor creates a fixed containing block.
                     // Hook docks via visualViewport; bleed paints any leftover gesture-bar gap.
                     return ReactDOM.createPortal(
@@ -12135,7 +12136,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 );
             })()}
 
-            {/* Mobile More Drawer — above bottom nav (incl. Firefox body-portaled bar) */}
+            {/* Mobile More Drawer — above bottom nav (incl. body-portaled bar on Firefox/iOS) */}
             {mobileMoreOpen && (() => {
                 const drawer = (
                     <div className="md:hidden fixed inset-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setMobileMoreOpen(false)}>
@@ -12204,7 +12205,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         </div>
                     </div>
                 );
-                if (firefoxMobileNav && !iosMobileNav && typeof document !== 'undefined') {
+                if (portalMobileBottomNav && typeof document !== 'undefined') {
                     return ReactDOM.createPortal(drawer, document.body);
                 }
                 return drawer;
