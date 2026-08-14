@@ -58,6 +58,45 @@ Object.assign(nl, { scanner: {
     toasts: { queued: 'In wachtrij gezet: {path}', copied: 'Gekopieerd naar het klembord' },
 } });
 
+Object.assign(nl, { scanner: { ...nl.scanner, settings: {
+    general: {
+        description: 'Bibliotheekvernieuwingen in Autoscan-stijl voor Sonarr, Radarr en Lidarr. Wanneer ingeschakeld, verschijnt er voor beheerders een Scanner-pagina in de navigatie met handmatige paden en wachtrijstatus.',
+        title: 'Algemeen', enableTitle: 'Scanner inschakelen', enableHint: 'Schakelt /triggers/*-webhooks en de Scanner-pagina voor beheerders in.', currentStatus: 'Huidige status', on: 'AAN', off: 'UIT',
+        homeWidgetTitle: 'Widget op de startpagina weergeven', homeWidgetHint: 'Voegt een Scanner-balk over de volledige breedte toe boven Recent toegevoegd op de startpagina (beheerders). Je kunt hem herschikken via Startpagina → Indeling bewerken.',
+        webhooksVisibleTitle: 'ARR-webhooks op de Scanner-pagina weergeven', webhooksVisibleHint: 'Wanneer uitgeschakeld, wordt het ARR-webhook-URL-blok op de Scanner-pagina verborgen. Triggers blijven werken; alleen het hulpgedeelte wordt verborgen.',
+        manualPathVisibleTitle: 'Handmatig pad op de Scanner-pagina weergeven', manualPathVisibleHint: 'Wanneer uitgeschakeld, wordt het veld voor handmatige paden op de Scanner-pagina verborgen. Wanneer ingeschakeld kunnen gebruikers het nog steeds inklappen; die keuze wordt onthouden.',
+        minimumAge: 'Minimale leeftijd', minimumAgeHint: 'Voorbeelden: 30s, 1m, 5m. Scanner wacht deze tijd voordat doelen worden aangeroepen.',
+    },
+    webhook: { title: 'Webhookverificatie', description: 'Sonarr-, Radarr- en Lidarr-Connect-webhooks moeten deze gebruikersnaam en dit wachtwoord gebruiken (HTTP Basic Auth).' },
+    credentials: { username: 'Gebruikersnaam', password: 'Wachtwoord', hidePassword: 'Wachtwoord verbergen', showPassword: 'Wachtwoord weergeven' },
+    triggers: {
+        targetCheck: '{target}: {status}', targetFallback: 'doel', reachable: 'Bereikbaar', failed: 'Mislukt', noEnabledTargets: 'Geen ingeschakelde doelen', passed: 'Geslaagd', parserPassedTargetFailed: 'Parser geslaagd, maar doelcontrole mislukt',
+        testPassedToast: 'Triggertest voor {name} geslaagd', testTargetFailedToast: 'Parser voor {name} geslaagd, maar een doelcontrole is mislukt', testFailed: 'Triggertest mislukt', title: 'Trigger voor {name}', webhookPath: 'Webhookpad: {path} (of aangepaste naam hieronder).',
+        name: 'Triggernaam', urlBecomes: 'URL wordt {path}', priority: 'Prioriteit', testHint: 'Veilige synthetische test. Controleert parsering, opgeslagen herschrijvingen en bereikbaarheid van doelen zonder een scan in de wachtrij te plaatsen.', testAction: 'Trigger testen',
+    },
+} } });
+
+Object.assign(nl, { scanner: { ...nl.scanner, settings: { ...nl.scanner.settings,
+    pathRewrites: {
+        title: 'Padherschrijvingen', add: 'Herschrijving toevoegen', empty: 'Geen herschrijfregels. Paden worden exact gebruikt zoals ze van de trigger zijn ontvangen.', sourcePath: 'Bronpad', destinationPath: 'Doelpad', sourcePathFor: '{name}-pad', scannerPath: 'Scanner-pad', targetPath: '{name}-pad',
+        mediaAutomationTitle: 'Media Automation-herschrijvingen', mediaAutomationDescription: 'Wordt toegepast wanneer Media Automation Copy/Replace voltooit en een directe Scanner-vernieuwing in de wachtrij plaatst. Net als „bron → doel” in Sonarr koppel je het Automation-/containerpad aan het pad dat Plex (of Scanner) verwacht.', label: 'Label', mediaAutomationLabelHint: 'Dit is geen webhook-URL. Het wordt alleen gebruikt voor de bronweergave in de Scanner-wachtrij.', automationPath: 'Automation-pad', scannerOrPlexPath: 'Scanner- / Plex-pad', mediaAutomationExamplePrefix: 'Voorbeeld:', mediaAutomationExampleSuffix: 'Vereist Media Automation → „Queue Scanner refresh after library writes” en dat Scanner is ingeschakeld.',
+    },
+    targets: {
+        title: '{name}-doelen', plexDescription: 'Gebruikt het Plex-token en de server-URL uit Instellingen → Plex. Voeg alleen herschrijvingen toe als de koppelpaden verschillen.', optionalDescription: 'Optioneel doel om de {name}-bibliotheek te vernieuwen.', enable: '{name} inschakelen', usePortalCredentials: 'Portalreferenties gebruiken', usePortalCredentialsHint: 'Wanneer ingeschakeld, worden de mediaserver-URL en API-sleutel uit Instellingen gebruikt. Overschrijf ze hieronder wanneer uitgeschakeld.', url: 'URL', apiKey: 'API-sleutel', saveHint: 'Klik na het wijzigen van deze opties onderaan de pagina op Instellingen opslaan.',
+    },
+} } });
+
+Object.assign(nl, { scanner: { ...nl.scanner, settings: { ...nl.scanner.settings,
+    autoscan: {
+        title: 'Importeren vanuit Autoscan', description: 'Upload of plak je Autoscan config.yml om de minimale leeftijd, webhookverificatie, triggers en herschrijvingen in te vullen. Plex-URL en token komen nog steeds uit Instellingen → Plex.', uploadConfig: 'config.yml uploaden', previewPastedYaml: 'Geplakte YAML bekijken', applyImport: 'Import toepassen',
+        placeholder: '# Paste Autoscan config.yml here\nminimum-age: 1m\nauthentication:\n  username: admin\n  ...', previewNotApplied: 'Voorbeeld (nog niet toegepast)', applied: 'Toegepast', importedToast: 'Autoscan-configuratie geïmporteerd — controleer hieronder en sla daarna de instellingen op', pasteOrUploadFirst: 'Plak of upload eerst een Autoscan config.yml', yamlParsedToast: 'YAML geparseerd — controleer het voorbeeld en pas daarna de import toe', previewFailed: 'Voorbeeld kon niet worden geladen', previewFirst: 'Bekijk eerst de YAML', readFileFailed: 'Dat bestand kon niet worden gelezen', summaryMinimumAge: 'Minimale leeftijd {value}', summaryAuth: 'Authenticatie @{username}', summaryRewrites: '{count} herschrijvingen voor {name}',
+    },
+    live: {
+        title: 'Liveactiviteit', description: 'Webhookwachtrij en recente scanresultaten. Wordt elke paar seconden bijgewerkt terwijl deze pagina geopend is.', status: { paused: 'GEPAUZEERD', live: 'LIVE' }, disabledHint: 'Scanner staat UIT — schakel in en sla op om nieuwe webhooks te verwerken', summary: 'Wachtrij {queue} · Verwerkt {processed}', updated: 'Bijgewerkt {time}', copyTitle: 'Live logs naar klembord kopiëren', exportTitle: 'Live logs als .txt exporteren', export: 'Exporteren', resume: 'Hervatten', pause: 'Pauzeren', loading: 'Activiteit laden…', empty: 'Nog geen Scanner-activiteit. Activeer een Sonarr/Radarr/Lidarr-webhook of dien een pad in op de Scanner-pagina.', targetSkipped: '{target} overgeslagen ({reason})', targetFallback: 'doel', noLibrary: 'geen bibliotheek', targetScanned: '{target} gescand',
+        errors: { load: 'Scanner-logs konden niet worden geladen', copyFailed: 'Kon niet naar het klembord kopiëren' }, toasts: { copied: 'Liveactiviteit naar klembord gekopieerd', exported: 'Liveactiviteit geëxporteerd' },
+    },
+} } });
+
 Object.assign(nl, { settings: { ...nl.settings, logs: {
     actions: { refresh: 'Vernieuwen', refreshing: 'Vernieuwen...', exportAll: 'Alles exporteren', exporting: 'Exporteren…', unblock: 'Deblokkeren' },
     audit: { viewerTitle: 'Auditlogviewer', empty: 'Geen auditgebeurtenissen gevonden.', target: 'Doel', system: 'Systeem', actor: 'Uitvoerder', field: 'Veld', before: 'Vóór', after: 'Na', value: 'Waarde', unknownEvent: 'Gebeurtenis' },

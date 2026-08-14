@@ -58,6 +58,45 @@ Object.assign(ru, { scanner: {
     toasts: { queued: 'Добавлено в очередь: {path}', copied: 'Скопировано в буфер обмена' },
 } });
 
+Object.assign(ru, { scanner: { ...ru.scanner, settings: {
+    general: {
+        description: 'Обновления библиотек в стиле Autoscan для Sonarr, Radarr и Lidarr. При включении в навигации появится страница Scanner только для администраторов с ручными путями и состоянием очереди.',
+        title: 'Общие', enableTitle: 'Включить Scanner', enableHint: 'Включает webhook-и /triggers/* и страницу Scanner для администраторов.', currentStatus: 'Текущее состояние', on: 'ВКЛ.', off: 'ВЫКЛ.',
+        homeWidgetTitle: 'Показывать виджет на главной', homeWidgetHint: 'Добавляет полноширинную панель Scanner над «Недавно добавлено» на главной странице (для администраторов). Порядок можно изменить через Главная → Изменить макет.',
+        webhooksVisibleTitle: 'Показывать webhook-и ARR на странице Scanner', webhooksVisibleHint: 'При отключении блок URL webhook-ов ARR скрывается на странице Scanner. Триггеры продолжают работать; скрывается только раздел справки.',
+        manualPathVisibleTitle: 'Показывать ручной путь на странице Scanner', manualPathVisibleHint: 'При отключении поле ручного пути скрывается на странице Scanner. При включении пользователи всё равно могут свернуть его; этот выбор запоминается.',
+        minimumAge: 'Минимальный срок', minimumAgeHint: 'Примеры: 30s, 1m, 5m. Scanner ждёт это время перед вызовом целей.',
+    },
+    webhook: { title: 'Аутентификация webhook', description: 'Webhook-и Connect в Sonarr, Radarr и Lidarr должны использовать это имя пользователя и пароль (HTTP Basic Auth).' },
+    credentials: { username: 'Имя пользователя', password: 'Пароль', hidePassword: 'Скрыть пароль', showPassword: 'Показать пароль' },
+    triggers: {
+        targetCheck: '{target}: {status}', targetFallback: 'цель', reachable: 'Доступна', failed: 'Сбой', noEnabledTargets: 'Нет включённых целей', passed: 'Успешно', parserPassedTargetFailed: 'Разбор выполнен успешно, но проверка цели завершилась с ошибкой',
+        testPassedToast: 'Проверка триггера {name} выполнена успешно', testTargetFailedToast: 'Разбор для {name} выполнен успешно, но одна из проверок цели завершилась с ошибкой', testFailed: 'Проверка триггера не удалась', title: 'Триггер {name}', webhookPath: 'Путь webhook: {path} (или пользовательское имя ниже).',
+        name: 'Имя триггера', urlBecomes: 'URL будет {path}', priority: 'Приоритет', testHint: 'Безопасная синтетическая проверка. Проверяет разбор, сохранённые преобразования и доступность целей без постановки сканирования в очередь.', testAction: 'Проверить триггер',
+    },
+} } });
+
+Object.assign(ru, { scanner: { ...ru.scanner, settings: { ...ru.scanner.settings,
+    pathRewrites: {
+        title: 'Преобразования путей', add: 'Добавить преобразование', empty: 'Правил преобразования нет. Пути будут использоваться точно в том виде, в каком получены от триггера.', sourcePath: 'Исходный путь', destinationPath: 'Целевой путь', sourcePathFor: 'Путь {name}', scannerPath: 'Путь Scanner', targetPath: 'Путь {name}',
+        mediaAutomationTitle: 'Преобразования Media Automation', mediaAutomationDescription: 'Применяется, когда Media Automation завершает Copy/Replace и ставит в очередь немедленное обновление Scanner. Как «источник → назначение» в Sonarr, сопоставьте путь Automation/контейнера с путём, ожидаемым Plex (или Scanner).', label: 'Метка', mediaAutomationLabelHint: 'Это не URL webhook. Он используется только для отображения источника в очереди Scanner.', automationPath: 'Путь Automation', scannerOrPlexPath: 'Путь Scanner / Plex', mediaAutomationExamplePrefix: 'Пример:', mediaAutomationExampleSuffix: 'Требуются Media Automation → «Queue Scanner refresh after library writes» и включённый Scanner.',
+    },
+    targets: {
+        title: 'Цели {name}', plexDescription: 'Использует токен Plex и URL сервера из Настройки → Plex. Добавляйте преобразования только если пути монтирования различаются.', optionalDescription: 'Необязательная цель для обновления библиотеки {name}.', enable: 'Включить {name}', usePortalCredentials: 'Использовать учётные данные портала', usePortalCredentialsHint: 'При включении используются URL медиасервера и ключ API из Настроек. При отключении переопределите их ниже.', url: 'URL', apiKey: 'Ключ API', saveHint: 'После изменения этих параметров нажмите «Сохранить настройки» внизу страницы.',
+    },
+} } });
+
+Object.assign(ru, { scanner: { ...ru.scanner, settings: { ...ru.scanner.settings,
+    autoscan: {
+        title: 'Импорт из Autoscan', description: 'Загрузите или вставьте config.yml Autoscan, чтобы заполнить минимальный срок, аутентификацию webhook, триггеры и преобразования. URL и токен Plex по-прежнему берутся из Настройки → Plex.', uploadConfig: 'Загрузить config.yml', previewPastedYaml: 'Предпросмотр вставленного YAML', applyImport: 'Применить импорт',
+        placeholder: '# Paste Autoscan config.yml here\nminimum-age: 1m\nauthentication:\n  username: admin\n  ...', previewNotApplied: 'Предпросмотр (ещё не применён)', applied: 'Применено', importedToast: 'Конфигурация Autoscan импортирована — проверьте ниже, затем сохраните настройки', pasteOrUploadFirst: 'Сначала вставьте или загрузите config.yml Autoscan', yamlParsedToast: 'YAML разобран — проверьте предпросмотр, затем примените импорт', previewFailed: 'Не удалось создать предпросмотр', previewFirst: 'Сначала просмотрите YAML', readFileFailed: 'Не удалось прочитать этот файл', summaryMinimumAge: 'Минимальный срок {value}', summaryAuth: 'Аутентификация @{username}', summaryRewrites: '{name}: преобразований {count}',
+    },
+    live: {
+        title: 'Активность в реальном времени', description: 'Очередь webhook и последние результаты сканирования. Обновляется каждые несколько секунд, пока эта страница открыта.', status: { paused: 'ПРИОСТАНОВЛЕНО', live: 'В РЕАЛЬНОМ ВРЕМЕНИ' }, disabledHint: 'Scanner выключен — включите и сохраните его, чтобы обрабатывать новые webhook-и', summary: 'Очередь {queue} · Обработано {processed}', updated: 'Обновлено {time}', copyTitle: 'Копировать журнал активности в буфер обмена', exportTitle: 'Экспортировать журнал активности как .txt', export: 'Экспортировать', resume: 'Возобновить', pause: 'Приостановить', loading: 'Загрузка активности…', empty: 'Активности Scanner пока нет. Запустите webhook Sonarr/Radarr/Lidarr или отправьте путь на странице Scanner.', targetSkipped: '{target}: пропущено ({reason})', targetFallback: 'цель', noLibrary: 'нет библиотеки', targetScanned: '{target}: сканирование выполнено',
+        errors: { load: 'Не удалось загрузить журналы Scanner', copyFailed: 'Не удалось скопировать в буфер обмена' }, toasts: { copied: 'Активность скопирована в буфер обмена', exported: 'Активность экспортирована' },
+    },
+} } });
+
 Object.assign(ru, { settings: { ...ru.settings, logs: {
     actions: { refresh: 'Обновить', refreshing: 'Обновление...', exportAll: 'Экспортировать всё', exporting: 'Экспорт…', unblock: 'Разблокировать' },
     audit: { viewerTitle: 'Просмотр журнала аудита', empty: 'События аудита не найдены.', target: 'Цель', system: 'Система', actor: 'Исполнитель', field: 'Поле', before: 'До', after: 'После', value: 'Значение', unknownEvent: 'Событие' },

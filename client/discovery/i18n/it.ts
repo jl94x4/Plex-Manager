@@ -58,6 +58,46 @@ Object.assign(it, { scanner: {
     toasts: { queued: 'In coda: {path}', copied: 'Copiato negli appunti' },
 } });
 
+Object.assign(it, { scanner: { ...it.scanner, settings: {
+    general: {
+        description: 'Aggiornamento della libreria in stile Autoscan per Sonarr, Radarr e Lidarr. Se attiva, nella navigazione compare una pagina Scanner riservata agli amministratori per percorsi manuali e stato della coda.',
+        title: 'Generale', enableTitle: 'Abilita Scanner', enableHint: 'Attiva i webhook /triggers/* e la pagina Scanner per amministratori.', currentStatus: 'Stato attuale', on: 'ATTIVO', off: 'DISATTIVO',
+        homeWidgetTitle: 'Mostra il widget Home', homeWidgetHint: 'Aggiunge una fascia Scanner a larghezza intera nella Home sopra Aggiunti di recente (amministratori). Riordinala in Home → Modifica layout.',
+        webhooksVisibleTitle: 'Mostra i webhook ARR nella pagina Scanner', webhooksVisibleHint: 'Se disattivato, il blocco URL dei webhook ARR viene nascosto nella pagina Scanner. I trigger continuano a funzionare: viene nascosta solo la sezione di aiuto.',
+        manualPathVisibleTitle: 'Mostra il percorso manuale nella pagina Scanner', manualPathVisibleHint: 'Se disattivato, la casella del percorso manuale viene nascosta nella pagina Scanner. Se attivata, gli utenti possono comunque comprimerla e la preferenza viene ricordata.',
+        minimumAge: 'Età minima', minimumAgeHint: 'Esempi: 30s, 1m, 5m. Le scansioni attendono questo tempo prima di chiamare le destinazioni.',
+    },
+    webhook: { title: 'Autenticazione webhook', description: 'I webhook Connect di Sonarr, Radarr e Lidarr devono usare questo nome utente e questa password (HTTP Basic Auth).' },
+    credentials: { username: 'Nome utente', password: 'Password', hidePassword: 'Nascondi password', showPassword: 'Mostra password' },
+    triggers: {
+        targetCheck: '{target} {status}', targetFallback: 'destinazione', reachable: 'raggiungibile', failed: 'non riuscito', noEnabledTargets: 'Nessuna destinazione abilitata', passed: 'Superato', parserPassedTargetFailed: 'Analisi riuscita, controllo della destinazione non riuscito',
+        testPassedToast: 'Test del trigger {name} superato', testTargetFailedToast: 'Analisi di {name} riuscita, ma una destinazione non è riuscita', testFailed: 'Test del trigger non riuscito', title: 'Trigger di {name}', webhookPath: 'Percorso webhook {path} (o nome personalizzato qui sotto).',
+        name: 'Nome del trigger', urlBecomes: 'L’URL diventa {path}', priority: 'Priorità', testHint: 'Test sintetico sicuro: verifica l’analisi, le riscritture salvate e la raggiungibilità delle destinazioni senza accodare una scansione.', testAction: 'Testa trigger',
+    },
+} } });
+
+Object.assign(it, { scanner: { ...it.scanner, settings: { ...it.scanner.settings,
+    pathRewrites: {
+        title: 'Riscritture dei percorsi', add: 'Aggiungi riscrittura', empty: 'Nessuna regola di riscrittura. I percorsi vengono usati come ricevuti dal trigger.', sourcePath: 'Percorso di origine', destinationPath: 'Percorso di destinazione', sourcePathFor: 'Percorso {name}', scannerPath: 'Percorso Scanner', targetPath: 'Percorso {name}',
+        mediaAutomationTitle: 'Riscritture di Media Automation', mediaAutomationDescription: 'Applicate quando Media Automation termina Copy/Replace e accoda un aggiornamento immediato di Scanner. Mappa il percorso Automation/container sul percorso previsto da Plex (o Scanner), come in Sonarr Da → A.', label: 'Etichetta', mediaAutomationLabelHint: 'Non è un URL webhook: viene usato solo per l’etichetta della sorgente nella coda Scanner.', automationPath: 'Percorso Automation', scannerOrPlexPath: 'Percorso Scanner / Plex', mediaAutomationExamplePrefix: 'Esempio:', mediaAutomationExampleSuffix: 'Richiede Media Automation → “Queue Scanner refresh after library writes” e Scanner abilitato.',
+    },
+    targets: {
+        title: 'Destinazione {name}', plexDescription: 'Usa il token Plex e l’URL del server da Impostazioni → Plex. Aggiungi riscritture solo se i percorsi di montaggio differiscono.', optionalDescription: 'Destinazione facoltativa per aggiornare la libreria di {name}.', enable: 'Abilita {name}', usePortalCredentials: 'Usa credenziali del portale', usePortalCredentialsHint: 'Se attivo, usa URL del server multimediale e chiave API dalle Impostazioni. Sostituiscili qui sotto se disattivo.', url: 'URL', apiKey: 'Chiave API', saveHint: 'Dopo aver modificato queste opzioni, fai clic su Salva impostazioni in fondo alla pagina.',
+    },
+} } });
+
+Object.assign(it, { scanner: { ...it.scanner, settings: { ...it.scanner.settings,
+    autoscan: {
+        title: 'Importa da Autoscan', description: 'Carica o incolla il tuo config.yml di Autoscan per compilare età minima, autenticazione webhook, trigger e riscritture. URL e token Plex provengono ancora da Impostazioni → Plex.', uploadConfig: 'Carica config.yml', previewPastedYaml: 'Anteprima YAML incollato', applyImport: 'Applica importazione',
+        placeholder: '# Incolla qui config.yml di Autoscan\nminimum-age: 1m\nauthentication:\n  username: admin\n  ...', previewNotApplied: 'Anteprima (non ancora applicata)', applied: 'Applicato', importedToast: 'Configurazione Autoscan importata — controlla qui sotto, quindi salva le impostazioni', pasteOrUploadFirst: 'Prima incolla o carica un config.yml di Autoscan', yamlParsedToast: 'YAML analizzato — controlla l’anteprima, quindi applica l’importazione', previewFailed: 'Anteprima non riuscita', previewFirst: 'Prima visualizza l’anteprima YAML', readFileFailed: 'Impossibile leggere questo file', summaryMinimumAge: 'Età minima {value}', summaryAuth: 'Auth @{username}', summaryRewrites: '{name} {count} riscritture',
+    },
+    live: {
+        title: 'Attività in tempo reale', description: 'Coda dei webhook e risultati recenti delle scansioni. Si aggiorna ogni pochi secondi mentre questa pagina è aperta.', status: { paused: 'IN PAUSA', live: 'IN DIRETTA' }, disabledHint: 'Scanner è DISATTIVO — abilitalo e salva per elaborare nuovi webhook', summary: 'Coda {queue} · Elaborati {processed}', updated: 'Aggiornato alle {time}',
+        copyTitle: 'Copia i registri dell’attività negli appunti', exportTitle: 'Esporta i registri dell’attività come .txt', export: 'Esporta', resume: 'Riprendi', pause: 'Metti in pausa', loading: 'Caricamento attività…', empty: 'Nessuna attività Scanner ancora. Attiva un webhook Sonarr/Radarr/Lidarr o invia un percorso nella pagina Scanner.',
+        targetSkipped: 'Destinazione {target} ignorata ({reason})', targetFallback: 'destinazione', noLibrary: 'nessuna libreria', targetScanned: 'Scansione eseguita per {target}', errors: { load: 'Impossibile caricare i registri Scanner', copyFailed: 'Impossibile copiare negli appunti' }, toasts: { copied: 'Attività in tempo reale copiata negli appunti', exported: 'Attività in tempo reale esportata' },
+    },
+} } });
+
 Object.assign(it, { settings: { ...it.settings, logs: {
     actions: { refresh: 'Aggiorna', refreshing: 'Aggiornamento...', exportAll: 'Esporta tutto', exporting: 'Esportazione…', unblock: 'Sblocca' },
     audit: { viewerTitle: 'Visualizzatore del registro di controllo', empty: 'Nessun evento di controllo trovato.', target: 'Destinazione', system: 'Sistema', actor: 'Autore', field: 'Campo', before: 'Prima', after: 'Dopo', value: 'Valore', unknownEvent: 'Evento' },
