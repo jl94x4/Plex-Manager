@@ -628,7 +628,7 @@ export function usePosterSetsDashboardState() {
     }, [librarySearchQuery, runLibrarySearch, tab]);
 
     usePoll(() => { void loadBrowse({ silent: true }); }, (tab === 'browse' && browseRails.some((rail) => rail.loading)) ? 4000 : null, { immediate: false });
-    usePoll(() => { void loadCollections({ silent: true }); }, (tab === 'collections' && collectionsLoading) ? 4000 : null, { immediate: false });
+    usePoll(() => { void loadCollections({ silent: true }); }, (tab === 'collections' && collectionsLoading) ? 1500 : null, { immediate: false });
 
     usePoll(async () => {
         if (!activeJob?.id || !['running', 'queued'].includes(String(activeJob.state || ''))) return;

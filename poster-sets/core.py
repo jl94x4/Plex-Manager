@@ -4290,11 +4290,13 @@ def list_posterdb_user_sets(
     pages = min(max(1, int(page_count)), hard_cap)
     take = max(0, int(limit or 0)) or 10_000
     want_collections = _kind_is_collections(kind)
+    collect_limit = take if not want_collections else max(take, 10_000)
     step = max(1, int(batch_pages or 3))
     sets: dict = {}
     last_emitted = 0
     pages_in_batch = 0
     last_page = 1
+    empty_collection_pages = 0
 
     def visible_sets() -> list:
         return _filter_creator_sets(list(sets.values()), kind=kind, take=take)
@@ -4327,22 +4329,31 @@ def list_posterdb_user_sets(
             "loading": not done,
         })
 
-    _collect_posterdb_set_cards(soup, sets=sets, limit=take, default_user=user)
+    _collect_posterdb_set_cards(soup, sets=sets, limit=collect_limit, default_user=user)
     pages_in_batch = 1
     flush_batch()
     stagnant = 0
     for page in range(2, pages + 1):
         before = len(sets)
+        before_visible = len(visible_sets())
         if not want_collections and before >= take:
             break
-        if want_collections and len(visible_sets()) >= take:
+        if want_collections and before_visible >= take:
             break
         emit(progress, f"Creator page {page}/{pages}…")
         soup = cook_soup(f"{base}?section=uploads&page={page}")
-        _collect_posterdb_set_cards(soup, sets=sets, limit=take, default_user=user)
+        _collect_posterdb_set_cards(soup, sets=sets, limit=collect_limit, default_user=user)
         last_page = page
         pages_in_batch += 1
         flush_batch()
+        if want_collections:
+            if len(visible_sets()) == before_visible:
+                empty_collection_pages += 1
+                if last_page >= 3 and empty_collection_pages >= 3:
+                    emit(progress, f"Stopping @{user} after {page} pages — no more collection sets.")
+                    break
+            else:
+                empty_collection_pages = 0
         if len(sets) == before:
             stagnant += 1
             if stagnant >= 3:
@@ -4399,6 +4410,7 @@ def list_mediux_user_sets(
     last_emitted = 0
     pages_in_batch = 0
     last_page = 1
+    empty_collection_pages = 0
 
     def visible_sets() -> list:
         return _filter_creator_sets(list(sets.values()), kind=kind, take=take)
@@ -4435,9 +4447,10 @@ def list_mediux_user_sets(
     pages_in_batch = 1
     flush_batch()
     for page in range(2, pages + 1):
+        before_visible = len(visible_sets())
         if not want_collections and len(sets) >= take:
             break
-        if want_collections and len(visible_sets()) >= take:
+        if want_collections and before_visible >= take:
             break
         emit(progress, f"MediUX creator page {page}/{pages}…")
         soup = cook_soup(f"{page_url}?page={page}")
@@ -4447,6 +4460,14 @@ def list_mediux_user_sets(
         # Pagination links may under-report; keep going while pages add sets.
         pages = max(pages, min(_mediux_max_page(soup), hard_cap))
         flush_batch()
+        if want_collections:
+            if len(visible_sets()) == before_visible:
+                empty_collection_pages += 1
+                if last_page >= 3 and empty_collection_pages >= 3:
+                    emit(progress, f"Stopping @{user} after {page} pages — no more collection sets.")
+                    break
+            else:
+                empty_collection_pages = 0
         if added <= 0:
             break
     flush_batch(done=True, force=True)
