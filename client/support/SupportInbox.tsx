@@ -89,15 +89,24 @@ const TicketAvatar: React.FC<{ src?: string | null; name: string; size?: number 
     const initial = String(name || '?').trim().slice(0, 1).toUpperCase() || '?';
     return (
         <span
-            className="relative shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/10 text-[11px] font-bold text-white/80"
-            style={{ width: size, height: size }}
+            className="relative inline-flex shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/10 text-[11px] font-bold text-white/80"
+            style={{
+                width: size,
+                height: size,
+                minWidth: size,
+                minHeight: size,
+                maxWidth: size,
+                maxHeight: size,
+            }}
             title={name}
         >
             {url ? (
                 <img
                     src={url}
                     alt=""
-                    className="h-full w-full object-cover"
+                    width={size}
+                    height={size}
+                    className="block h-full w-full max-h-full max-w-full object-cover"
                     onError={() => setBroken(true)}
                 />
             ) : (
@@ -602,7 +611,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                 key={comment.id}
                                                 className={`group flex items-end gap-2 ${mine ? 'flex-row' : 'flex-row-reverse'} ${clustered ? 'mt-1' : 'mt-3 first:mt-0'}`}
                                             >
-                                                <div className={clustered ? 'w-8 shrink-0' : ''}>
+                                                <div className="w-8 shrink-0">
                                                     {!clustered && (
                                                         <TicketAvatar
                                                             src={comment.user?.avatar}
