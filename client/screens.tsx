@@ -2291,6 +2291,31 @@ const downloadClientTypeLabel = (type: string, fallback = 'Download Client') => 
     nzbget: 'NZBGet',
 }[String(type || '').toLowerCase()] || fallback);
 
+const torrentUploadFileKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`;
+
+const isTorrentUploadFile = (file: File) => {
+    const name = String(file.name || '').toLowerCase();
+    const type = String(file.type || '').toLowerCase();
+    return name.endsWith('.torrent') || type === 'application/x-bittorrent';
+};
+
+const collectTorrentUploadFiles = (current: File[], incoming: ArrayLike<File>) => {
+    const next = [...current];
+    const seen = new Set(next.map(torrentUploadFileKey));
+    let skipped = 0;
+    for (const file of Array.from(incoming)) {
+        if (!isTorrentUploadFile(file)) {
+            skipped += 1;
+            continue;
+        }
+        const key = torrentUploadFileKey(file);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        next.push(file);
+    }
+    return { files: next, skipped };
+};
+
 const readStoredDownloadFilter = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
     try {
         const raw = String(localStorage.getItem(key) || '').trim() as T;
@@ -2320,9 +2345,11 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
     const [uploadClientId, setUploadClientId] = useState('');
     const [uploadCategory, setUploadCategory] = useState('');
     const [torrentUrl, setTorrentUrl] = useState('');
-    const [torrentFile, setTorrentFile] = useState<File | null>(null);
+    const [torrentFiles, setTorrentFiles] = useState<File[]>([]);
+    const [fileDropActive, setFileDropActive] = useState(false);
     const [uploadBusy, setUploadBusy] = useState(false);
     const loadGenRef = useRef(0);
+    const torrentDropDepthRef = useRef(0);
 
     const load = useCallback(async () => {
         const gen = ++loadGenRef.current;
@@ -2479,40 +2506,73 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
         }
         sendDownloadControl(item, action);
     };
+    const addTorrentFiles = (incoming: ArrayLike<File>) => {
+        const { files, skipped } = collectTorrentUploadFiles(torrentFiles, incoming);
+        if (!files.length && skipped) {
+            setError(t('downloads.errors.invalidTorrent'));
+            return;
+        }
+        setTorrentFiles(files);
+        if (files.length) setTorrentUrl('');
+        if (skipped && files.length) setError('');
+    };
     const uploadTorrent = async () => {
         const targetClientId = String(uploadClientId || '').trim();
         if (!targetClientId) {
             setError(t('downloads.errors.chooseClient'));
             return;
         }
-        if (!torrentFile && !torrentUrl.trim()) {
+        if (!torrentFiles.length && !torrentUrl.trim()) {
             setError(t('downloads.errors.missingSource'));
             return;
         }
         setUploadBusy(true);
         const category = String(uploadCategory || '').trim();
         try {
-            if (torrentFile) {
-                const bytes = await torrentFile.arrayBuffer();
-                const params = new URLSearchParams({
-                    clientId: targetClientId,
-                    filename: torrentFile.name || 'upload.torrent',
-                });
-                if (category) params.set('category', category);
-                await apiFetch(`/api/downloads/add-file?${params.toString()}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': torrentFile.type || 'application/x-bittorrent' },
-                    body: bytes,
-                });
+            if (torrentFiles.length) {
+                const failedKeys: string[] = [];
+                const failedNames: string[] = [];
+                for (const file of torrentFiles) {
+                    try {
+                        const bytes = await file.arrayBuffer();
+                        const params = new URLSearchParams({
+                            clientId: targetClientId,
+                            filename: file.name || 'upload.torrent',
+                        });
+                        if (category) params.set('category', category);
+                        await apiFetch(`/api/downloads/add-file?${params.toString()}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': file.type || 'application/x-bittorrent' },
+                            body: bytes,
+                        });
+                    } catch {
+                        failedKeys.push(torrentUploadFileKey(file));
+                        failedNames.push(file.name || t('downloads.upload.torrentFile'));
+                    }
+                }
+                const added = torrentFiles.length - failedKeys.length;
+                if (failedKeys.length) {
+                    setError(t('downloads.errors.addPartial', {
+                        added,
+                        total: torrentFiles.length,
+                        failed: failedNames.join(', '),
+                    }));
+                    if (!added) return;
+                    setTorrentFiles((current) => current.filter((file) => failedKeys.includes(torrentUploadFileKey(file))));
+                } else {
+                    setTorrentFiles([]);
+                    setError('');
+                }
+                setTorrentUrl('');
             } else {
                 await apiFetch('/api/downloads/add-url', {
                     method: 'POST',
                     body: JSON.stringify({ clientId: targetClientId, url: torrentUrl.trim(), category }),
                 });
+                setTorrentUrl('');
+                setTorrentFiles([]);
+                setError('');
             }
-            setTorrentUrl('');
-            setTorrentFile(null);
-            setError('');
             await load();
         } catch (e: any) {
             setError(e.message || t('downloads.errors.addFailed'));
@@ -2562,57 +2622,132 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
 
             {isAdmin && (
                 <DashboardPanel title={t('downloads.upload.title')} subtitle={t('downloads.upload.subtitle')}>
-                    <div className="flex flex-col lg:flex-row lg:items-end gap-3">
-                        <div className="lg:w-56">
-                            <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.upload.client')}</label>
-                            <CustomSelect
-                                value={uploadClientId}
-                                onChange={setUploadClientId}
-                                options={torrentClients.map((client: any) => ({
-                                    label: client.name || downloadClientLabel(client.type),
-                                    value: String(client.id),
-                                }))}
-                            />
+                    <div className="space-y-3">
+                        <div className="flex flex-col lg:flex-row lg:items-end gap-3">
+                            <div className="lg:w-56">
+                                <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.upload.client')}</label>
+                                <CustomSelect
+                                    value={uploadClientId}
+                                    onChange={setUploadClientId}
+                                    options={torrentClients.map((client: any) => ({
+                                        label: client.name || downloadClientLabel(client.type),
+                                        value: String(client.id),
+                                    }))}
+                                />
+                            </div>
+                            <div className="lg:w-48">
+                                <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.upload.category')}</label>
+                                <CustomSelect
+                                    value={uploadCategory}
+                                    onChange={setUploadCategory}
+                                    options={uploadCategoryOptions}
+                                />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.upload.torrentUrl')}</label>
+                                <input
+                                    value={torrentUrl}
+                                    onChange={(e) => {
+                                        setTorrentUrl(e.target.value);
+                                        if (e.target.value.trim()) setTorrentFiles([]);
+                                    }}
+                                    placeholder="magnet:?xt=... or https://example/torrent.torrent"
+                                    className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={uploadTorrent}
+                                disabled={uploadBusy || !uploadClientId || (!torrentFiles.length && !torrentUrl.trim())}
+                                className="px-5 py-3 rounded-lg bg-plex text-background text-sm font-black hover:bg-plex-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {uploadBusy
+                                    ? t('downloads.upload.sending')
+                                    : torrentFiles.length > 1
+                                        ? t('downloads.upload.addCount', { count: torrentFiles.length })
+                                        : t('downloads.upload.add')}
+                            </button>
                         </div>
-                        <div className="lg:w-48">
-                            <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.upload.category')}</label>
-                            <CustomSelect
-                                value={uploadCategory}
-                                onChange={setUploadCategory}
-                                options={uploadCategoryOptions}
-                            />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <label className="text-[10px] uppercase tracking-widest font-bold text-muted mb-1.5 block">{t('downloads.upload.torrentUrl')}</label>
-                            <input
-                                value={torrentUrl}
-                                onChange={(e) => { setTorrentUrl(e.target.value); if (e.target.value.trim()) setTorrentFile(null); }}
-                                placeholder="magnet:?xt=... or https://example/torrent.torrent"
-                                className="w-full px-4 py-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
-                            />
-                        </div>
-                        <label className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-border bg-white/[0.04] text-sm font-bold text-text hover:bg-white/10 cursor-pointer transition-colors">
-                            <Upload className="w-4 h-4 text-plex" />
-                            {torrentFile ? torrentFile.name : t('downloads.upload.torrentFile')}
-                            <input
-                                type="file"
-                                accept=".torrent,application/x-bittorrent"
-                                className="hidden"
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0] || null;
-                                    setTorrentFile(file);
-                                    if (file) setTorrentUrl('');
-                                }}
-                            />
-                        </label>
-                        <button
-                            type="button"
-                            onClick={uploadTorrent}
-                            disabled={uploadBusy || !uploadClientId || (!torrentFile && !torrentUrl.trim())}
-                            className="px-5 py-3 rounded-lg bg-plex text-background text-sm font-black hover:bg-plex-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        <div
+                            onDragEnter={(event) => {
+                                event.preventDefault();
+                                torrentDropDepthRef.current += 1;
+                                setFileDropActive(true);
+                            }}
+                            onDragOver={(event) => {
+                                event.preventDefault();
+                                event.dataTransfer.dropEffect = 'copy';
+                            }}
+                            onDragLeave={(event) => {
+                                event.preventDefault();
+                                torrentDropDepthRef.current = Math.max(0, torrentDropDepthRef.current - 1);
+                                if (torrentDropDepthRef.current === 0) setFileDropActive(false);
+                            }}
+                            onDrop={(event) => {
+                                event.preventDefault();
+                                torrentDropDepthRef.current = 0;
+                                setFileDropActive(false);
+                                addTorrentFiles(event.dataTransfer.files);
+                            }}
+                            className={`rounded-xl border border-dashed px-4 py-3 transition-colors ${
+                                fileDropActive ? 'border-plex bg-plex/10' : 'border-white/15 bg-white/[0.03]'
+                            }`}
                         >
-                            {uploadBusy ? t('downloads.upload.sending') : t('downloads.upload.add')}
-                        </button>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                                <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-border bg-white/[0.04] text-sm font-bold text-text hover:bg-white/10 cursor-pointer transition-colors shrink-0">
+                                    <Upload className="w-4 h-4 text-plex" />
+                                    {t('downloads.upload.torrentFile')}
+                                    <input
+                                        type="file"
+                                        accept=".torrent,application/x-bittorrent"
+                                        multiple
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            addTorrentFiles(e.target.files || []);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </label>
+                                <p className="text-sm text-muted">
+                                    {fileDropActive
+                                        ? t('downloads.upload.dropHint')
+                                        : torrentFiles.length
+                                            ? t('downloads.upload.selectedCount', { count: torrentFiles.length })
+                                            : t('downloads.upload.torrentFileHint')}
+                                </p>
+                                {torrentFiles.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setTorrentFiles([])}
+                                        className="sm:ml-auto text-xs font-bold text-muted hover:text-text"
+                                    >
+                                        {t('downloads.upload.clearFiles')}
+                                    </button>
+                                )}
+                            </div>
+                            {torrentFiles.length > 0 && (
+                                <ul className="mt-3 space-y-1.5">
+                                    {torrentFiles.map((file) => (
+                                        <li
+                                            key={torrentUploadFileKey(file)}
+                                            className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
+                                        >
+                                            <FileText className="w-3.5 h-3.5 text-plex shrink-0" />
+                                            <span className="min-w-0 truncate font-semibold">{file.name}</span>
+                                            <span className="text-[11px] text-muted shrink-0">{formatBytes(file.size)}</span>
+                                            <button
+                                                type="button"
+                                                title={t('downloads.upload.removeFile', { name: file.name })}
+                                                onClick={() => setTorrentFiles((current) => current.filter((entry) => torrentUploadFileKey(entry) !== torrentUploadFileKey(file)))}
+                                                className="ml-auto rounded-md p-1 text-muted hover:text-text hover:bg-white/10"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
                     </div>
                 </DashboardPanel>
             )}

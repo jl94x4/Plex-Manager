@@ -1677,8 +1677,8 @@ export const en = {
         labels: { clients: 'Clients', downloadClient: 'Download Client', downloadCount: '{count} download', downloadCount_plural: '{count} downloads', downSpeed: 'Down {value}/s', upSpeed: 'Up {value}/s', matchedFromArrQueue: 'Matched from Arr queue' },
         status: { activeDownloads: 'Active Downloads', downloads: 'Downloads', unknown: 'Unknown' },
         empty: { noClients: 'No download clients configured in Settings.', noFilterResults: 'No downloads for this filter.' },
-        upload: { title: 'Add torrent', subtitle: 'Send a URL, magnet, or file to a configured client', client: 'Client', category: 'Category', torrentUrl: 'Torrent URL or Magnet', torrentFile: 'Torrent File', noCategory: 'No category', sending: 'Sending...', add: 'Add Torrent' },
-        errors: { loadFailed: 'Failed to load downloads', actionFailed: 'Failed to {action} download', chooseClient: 'Choose a download client first.', missingSource: 'Add a torrent URL, magnet link, or torrent file.', addFailed: 'Failed to add torrent' },
+        upload: { title: 'Add torrent', subtitle: 'Send a URL, magnet, or torrent files to a configured client', client: 'Client', category: 'Category', torrentUrl: 'Torrent URL or Magnet', torrentFile: 'Torrent files', torrentFileHint: 'Select or drop one or more .torrent files', dropHint: 'Drop torrent files here', selectedCount: '{count} torrent selected', selectedCount_plural: '{count} torrents selected', clearFiles: 'Clear files', removeFile: 'Remove {name}', noCategory: 'No category', sending: 'Sending...', add: 'Add Torrent', addCount: 'Add {count} torrents' },
+        errors: { loadFailed: 'Failed to load downloads', actionFailed: 'Failed to {action} download', chooseClient: 'Choose a download client first.', missingSource: 'Add a torrent URL, magnet link, or torrent file.', addFailed: 'Failed to add torrent', addPartial: 'Added {added} of {total} torrents. Failed: {failed}', invalidTorrent: 'Only .torrent files can be added.' },
         confirm: { remove: 'Remove "{name}" from {client}? Downloaded files will be left in place where the client supports it.' },
     },
     requestsAdmin: {
