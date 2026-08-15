@@ -458,6 +458,8 @@ Object.assign(de, { maintenance: { ...de.maintenance,
     calendar: { currentRule: 'Aktuelle Regel:', graceDays: 'Karenztage', ruleAge: 'Regelalter', eligibleNow: 'Jetzt berechtigt', laterReclaim: 'Spätere Rückgewinnung', daysUntilEligible: 'Tag(e) bis zur Berechtigung', titleCount: 'Titel', laterDetail: 'Diese Titel warten noch auf das Ende der Karenzzeit.', dateTitleCount: 'Anzahl der Titel für dieses Datum.', delayedReclaimTooltip: 'Schätzung der Rückgewinnung aus verzögerten Treffern.', eligibilityDetailTooltip: 'Berechtigungsdetails des Backends.', ago: 'Tage zuvor', notAvailable: 'n/v', ...de.maintenance.calendar }
 } });
 
+Object.assign(de, { quickActions: { menuLabel: 'Schnellaktionen' } });
+
 Object.assign(de, { homeDashboard: { ...de.homeDashboard, opsSnapshot: {
     title: 'Betriebsübersicht',
     loading: 'Betriebsübersicht wird geladen…',

@@ -44,6 +44,8 @@ Object.assign(it, { maintenance: { ...it.maintenance,
     errors: { loadOverview: 'Impossibile caricare il riepilogo della pulizia', loadCandidates: 'Impossibile caricare i candidati', loadExclusions: 'Impossibile caricare il riepilogo delle esclusioni.', loadLibrary: 'Impossibile caricare i poster della libreria.', loadStorage: 'Impossibile caricare il riepilogo dello spazio.' }
 } });
 
+Object.assign(it, { quickActions: { menuLabel: 'Azioni rapide' } });
+
 Object.assign(it, { homeDashboard: { ...it.homeDashboard, opsSnapshot: {
     title: 'Riepilogo operativo',
     loading: 'Caricamento del riepilogo operativo…',

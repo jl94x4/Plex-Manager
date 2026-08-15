@@ -44,6 +44,8 @@ Object.assign(ru, { maintenance: { ...ru.maintenance,
     errors: { loadOverview: 'Не удалось загрузить обзор очистки', loadCandidates: 'Не удалось загрузить кандидатов', loadExclusions: 'Не удалось загрузить сводку исключений.', loadLibrary: 'Не удалось загрузить постеры библиотеки.', loadStorage: 'Не удалось загрузить сводку хранилища.' }
 } });
 
+Object.assign(ru, { quickActions: { menuLabel: 'Быстрые действия' } });
+
 Object.assign(ru, { homeDashboard: { ...ru.homeDashboard, opsSnapshot: {
     title: 'Оперативная сводка',
     loading: 'Загрузка оперативной сводки…',

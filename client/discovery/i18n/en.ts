@@ -311,6 +311,7 @@ export const en = {
         openMediaAutomation: 'Open Media Automation',
     },
     quickActions: {
+        menuLabel: 'Quick actions',
         request: 'Request',
         requestHint: 'Opening request details…',
         notify: 'Notify me',
