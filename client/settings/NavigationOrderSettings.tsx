@@ -54,12 +54,12 @@ const FEATURE_OFF_SECTIONS: Record<string, string> = {
 };
 
 const NAV_ITEM_TRANSLATION_KEYS: Record<string, string> = {
-    home: 'navigation.home', discover: 'navigation.dashboard', request: 'navigation.request',
+    home: 'navigation.home', discover: 'navigation.dashboard', request: 'navigation.discoverRequest',
     analytics: 'navigation.analytics', achievements: 'navigation.achievements', support: 'navigation.support',
     users: 'navigation.users', downloads: 'navigation.downloads', upgrader: 'navigation.upgrader',
     collexions: 'navigation.collexions', scanner: 'navigation.scanner', 'media-automation': 'navigation.mediaAutomation',
     'poster-sets': 'navigation.posterSets', overlays: 'navigation.overlays', editions: 'navigation.editions',
-    mediastack: 'navigation.calendar', requests: 'navigation.requests', status: 'navigation.status',
+    mediastack: 'navigation.calendar', status: 'navigation.status',
     maintenance: 'navigation.cleaner', about: 'navigation.about', preferences: 'navigation.preferences',
     settings: 'navigation.settings', logs: 'navigation.logs', logout: 'navigation.logout',
 };

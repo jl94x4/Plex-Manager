@@ -270,6 +270,7 @@ export const en = {
         music: 'Music',
         myRequests: 'My Requests',
         myIssues: 'My Issues',
+        reviewQueue: 'Review Queue',
     },
     hero: {
         title: 'Discover & Request',

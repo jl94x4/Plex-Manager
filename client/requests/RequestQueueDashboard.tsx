@@ -16,6 +16,8 @@ type QueueTab = 'requests' | 'issues' | 'blocklist';
 type Props = {
     onCountsChange?: () => void;
     openIssueCount?: number;
+    /** When true, skip page shell/hero (used as a Discover tab). */
+    embedded?: boolean;
 };
 
 const readReviewIdFromUrl = (): number | null => {
@@ -25,7 +27,7 @@ const readReviewIdFromUrl = (): number | null => {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
-export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIssueCount = 0 }) => {
+export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIssueCount = 0, embedded = false }) => {
     const { t } = useDiscoverI18n();
     const [tab, setTab] = useState<QueueTab>('requests');
     const [reviewRequestId, setReviewRequestId] = useState<number | null>(() => readReviewIdFromUrl());
@@ -50,17 +52,8 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
         };
     }, []);
 
-    return (
-        <DashboardPageShell>
-            <DashboardHero
-                accent="amber"
-                eyebrow={t('navigation.requests')}
-                title={t('requestsAdmin.page.reviewQueue')}
-                description={t('requestsAdmin.page.description')}
-                icon={<ClipboardList className="h-3.5 w-3.5" />}
-                secondaryBlob
-            />
-
+    const body = (
+        <>
             <DashboardSubnav className="!flex">
                 <button
                     type="button"
@@ -104,6 +97,24 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
             ) : (
                 <BlocklistAdminPanel />
             )}
+        </>
+    );
+
+    if (embedded) {
+        return <div className="w-full flex flex-col gap-4">{body}</div>;
+    }
+
+    return (
+        <DashboardPageShell>
+            <DashboardHero
+                accent="amber"
+                eyebrow={t('navigation.requests')}
+                title={t('requestsAdmin.page.reviewQueue')}
+                description={t('requestsAdmin.page.description')}
+                icon={<ClipboardList className="h-3.5 w-3.5" />}
+                secondaryBlob
+            />
+            {body}
         </DashboardPageShell>
     );
 };

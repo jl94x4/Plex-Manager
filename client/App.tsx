@@ -17,7 +17,6 @@ import {
     type ReleaseNotes,
 } from './shared/releaseNotes';
 
-const RequestQueueDashboard = lazy(() => import('./requests/RequestQueueDashboard').then(m => ({ default: m.RequestQueueDashboard })));
 import { usePendingRequestCount } from './requests/usePendingRequestCount';
 import { useWatchingCount } from './shared/useWatchingCount';
 import { useDownloadCount } from './shared/useDownloadCount';
@@ -346,7 +345,17 @@ export const MainApp: React.FC = () => {
             if (route === 'overlays') path = '/overlays';
             if (route === 'editions') path = '/editions';
             if (route === 'requests') {
-                path = options?.reviewId ? `/requests?review=${options.reviewId}` : '/requests';
+                // Legacy route: Review Queue now lives under Discover & Request.
+                setCurrentRoute('discovery');
+                path = options?.reviewId
+                    ? `/discovery/queue?review=${options.reviewId}`
+                    : '/discovery/queue';
+                window.history.pushState({}, '', portalUrl(path));
+                window.dispatchEvent(new Event('portal-discovery-navigate'));
+                window.dispatchEvent(new CustomEvent('portal-requests-navigate', {
+                    detail: { reviewId: options?.reviewId ?? null },
+                }));
+                return;
             }
             if (route === 'discovery') {
                 const custom = String(options?.path || '').trim();
@@ -358,11 +367,19 @@ export const MainApp: React.FC = () => {
             window.history.pushState({}, '', portalUrl(path));
             if (route === 'discovery') {
                 window.dispatchEvent(new Event('portal-discovery-navigate'));
-            }
-            if (route === 'requests') {
-                window.dispatchEvent(new CustomEvent('portal-requests-navigate', {
-                    detail: { reviewId: options?.reviewId ?? null },
-                }));
+                if (String(path).includes('/discovery/queue')) {
+                    let reviewId = options?.reviewId ?? null;
+                    try {
+                        const url = new URL(path, 'http://local.invalid');
+                        const parsed = Number(url.searchParams.get('review'));
+                        if (Number.isFinite(parsed) && parsed > 0) reviewId = parsed;
+                    } catch {
+                        /* ignore */
+                    }
+                    window.dispatchEvent(new CustomEvent('portal-requests-navigate', {
+                        detail: { reviewId },
+                    }));
+                }
             }
             if (route === 'support') {
                 let ticketId = null;
@@ -457,7 +474,15 @@ export const MainApp: React.FC = () => {
                 window.history.replaceState({}, '', portalUrl('/portal'));
                 setCurrentRoute('user');
             }
-            else if (path.startsWith('/requests') && data.session.isAdmin) setCurrentRoute('requests');
+            else if (path.startsWith('/requests') && data.session.isAdmin) {
+                // Legacy URL — open Review Queue as a Discover tab.
+                setCurrentRoute('discovery');
+                const review = new URLSearchParams(window.location.search).get('review');
+                const nextPath = review && Number(review) > 0
+                    ? `/discovery/queue?review=${encodeURIComponent(review)}`
+                    : '/discovery/queue';
+                window.history.replaceState({}, '', portalUrl(nextPath));
+            }
             else if (path.startsWith('/discovery')) setCurrentRoute('discovery');
             else if (path.startsWith('/about')) setCurrentRoute('about');
             else if (path.startsWith('/preferences')) setCurrentRoute('preferences');
@@ -612,14 +637,32 @@ export const MainApp: React.FC = () => {
             );
         }
         if (currentRoute === 'requests' && isAdmin) {
+            // Keep legacy route id working by rendering Discover on the queue tab.
             return (
-                <RequestQueueDashboard
-                    onCountsChange={refreshQueueCounts}
+                <DiscoveryDashboard
+                    onItemClick={(item) => console.log('Item', item)}
+                    mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'}
+                    isAdmin={isAdmin}
+                    showReviewQueue={requestsQueueEnabled}
+                    queueBadgeCount={queueBadgeCount}
                     openIssueCount={openIssueCount}
+                    onQueueCountsChange={refreshQueueCounts}
                 />
             );
         }
-        if (currentRoute === 'discovery') return <DiscoveryDashboard onItemClick={(item) => console.log('Item', item)} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} isAdmin={isAdmin} />;
+        if (currentRoute === 'discovery') {
+            return (
+                <DiscoveryDashboard
+                    onItemClick={(item) => console.log('Item', item)}
+                    mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'}
+                    isAdmin={isAdmin}
+                    showReviewQueue={requestsQueueEnabled}
+                    queueBadgeCount={queueBadgeCount}
+                    openIssueCount={openIssueCount}
+                    onQueueCountsChange={refreshQueueCounts}
+                />
+            );
+        }
         if (currentRoute === 'logs' && isAdmin) return <LogsDashboard onLogout={handleLogout} />;
         if (currentRoute === 'mediastack') return <MediaStackDashboard isAdmin={isAdmin} />;
         if (currentRoute === 'downloads') return <DownloadStatusPage isAdmin={isAdmin} />;

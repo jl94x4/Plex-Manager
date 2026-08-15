@@ -6,7 +6,7 @@ import { DiscoverSeries } from './DiscoverSeries';
 import { DiscoverCategoryPage } from './DiscoverCategoryPage';
 import { MediaDetailsPage } from './MediaDetailsPage';
 import { PersonDetailsPage } from './PersonDetailsPage';
-import { Film, Tv, Compass, ClipboardList, AlertTriangle, ChevronDown, Music } from 'lucide-react';
+import { Film, Tv, Compass, ClipboardList, AlertTriangle, ChevronDown, Music, ShieldCheck } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl, stripBasePath } from '../shared/basePath';
 import { getDiscoverItemKey, normalizeRawDiscoveryItem } from './discoverItemUtils';
@@ -20,6 +20,7 @@ import { useDiscoveryMe } from './useDiscoveryMe';
 import { WatchlistPage } from './WatchlistPage';
 import { DiscoverMusic } from './DiscoverMusic';
 import { MusicArtistPage } from './MusicArtistPage';
+import { RequestQueueDashboard } from '../requests/RequestQueueDashboard';
 import {
     currentDiscoverPathWithSearch,
     readDiscoverBrowsePath,
@@ -69,7 +70,19 @@ const DiscoveryDashboardInner: React.FC<{
     pushToast?: (msg: string, type: 'success' | 'error') => void;
     mediaServerType?: string;
     isAdmin?: boolean;
-}> = ({ pushToast, mediaServerType = 'plex', isAdmin = false }) => {
+    showReviewQueue?: boolean;
+    queueBadgeCount?: number;
+    openIssueCount?: number;
+    onQueueCountsChange?: () => void;
+}> = ({
+    pushToast,
+    mediaServerType = 'plex',
+    isAdmin = false,
+    showReviewQueue = false,
+    queueBadgeCount = 0,
+    openIssueCount = 0,
+    onQueueCountsChange,
+}) => {
     const { t, locale } = useDiscoverI18n();
     const [path, setPath] = useState(() => {
         if (typeof window !== 'undefined') return window.location.pathname;
@@ -139,6 +152,17 @@ const DiscoveryDashboardInner: React.FC<{
         setSearchOpen(false);
         window.dispatchEvent(new Event('portal-discovery-navigate'));
     }, []);
+
+    const canSeeReviewQueueTab = Boolean(isAdmin && showReviewQueue);
+
+    useEffect(() => {
+        const normalized = stripBasePath(typeof window !== 'undefined' ? window.location.pathname : path);
+        const parts = normalized.split('/').filter(Boolean);
+        const currentSub = parts[1] || 'home';
+        if (currentSub === 'queue' && !canSeeReviewQueueTab) {
+            navigate('/discovery');
+        }
+    }, [canSeeReviewQueueTab, navigate, path]);
 
     const persistHiddenDiscoverKeys = useCallback((next: Set<string>) => {
         setHiddenDiscoverKeys(next);
@@ -507,7 +531,7 @@ const DiscoveryDashboardInner: React.FC<{
         );
     }
 
-    const showTabs = ['home', 'movies', 'series', 'music', 'requests', 'issues'].includes(subRoute);
+    const showTabs = ['home', 'movies', 'series', 'music', 'requests', 'issues', 'queue'].includes(subRoute);
 
     if (subRoute === 'watchlist') {
         return (
@@ -536,6 +560,9 @@ const DiscoveryDashboardInner: React.FC<{
         { id: 'requests', path: '/discovery/requests', label: t('nav.myRequests'), icon: ClipboardList, count: myPendingCount, countColor: 'bg-plex/25 text-plex' },
         ...(canSeeIssuesTab
             ? [{ id: 'issues', path: '/discovery/issues', label: t('nav.myIssues'), icon: AlertTriangle, count: myOpenIssueCount, countColor: 'bg-amber-500/25 text-amber-300' }]
+            : []),
+        ...(canSeeReviewQueueTab
+            ? [{ id: 'queue', path: '/discovery/queue', label: t('nav.reviewQueue'), icon: ShieldCheck, count: queueBadgeCount, countColor: 'bg-amber-500/25 text-amber-200' }]
             : []),
     ];
 
@@ -675,6 +702,13 @@ const DiscoveryDashboardInner: React.FC<{
                                 onCountsChange={refreshMyIssueCount}
                             />
                         )}
+                        {subRoute === 'queue' && canSeeReviewQueueTab && (
+                            <RequestQueueDashboard
+                                embedded
+                                onCountsChange={onQueueCountsChange}
+                                openIssueCount={openIssueCount}
+                            />
+                        )}
                     </div>
                 </>
             )}
@@ -687,6 +721,10 @@ export const DiscoveryDashboard: React.FC<{
     pushToast?: (msg: string, type: 'success' | 'error') => void;
     mediaServerType?: string;
     isAdmin?: boolean;
+    showReviewQueue?: boolean;
+    queueBadgeCount?: number;
+    openIssueCount?: number;
+    onQueueCountsChange?: () => void;
 }> = ({ pushToast: pushToastProp, ...props }) => {
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const pushToast = useCallback((msg: string, type: 'success' | 'error') => {

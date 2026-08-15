@@ -52,12 +52,15 @@ export const resolveNotificationDestination = (item: NotificationLike): Notifica
     const meta = item?.meta && typeof item.meta === 'object' ? item.meta : null;
 
     if (href.startsWith('/discovery')) {
+        const isQueue = href.includes('/discovery/queue');
         return {
             kind: 'discovery',
             path: href,
-            labelKey: href.includes('/requests')
-                ? 'notifications.openMyRequests'
-                : 'notifications.openInDiscover',
+            labelKey: isQueue
+                ? 'notifications.openRequestQueue'
+                : href.includes('/requests')
+                    ? 'notifications.openMyRequests'
+                    : 'notifications.openInDiscover',
         };
     }
 
@@ -70,9 +73,10 @@ export const resolveNotificationDestination = (item: NotificationLike): Notifica
     }
 
     if (href.startsWith('/requests')) {
+        const reviewId = parseReviewId(href, meta);
         return {
-            kind: 'requests',
-            reviewId: parseReviewId(href, meta),
+            kind: 'discovery',
+            path: reviewId ? `/discovery/queue?review=${reviewId}` : '/discovery/queue',
             labelKey: 'notifications.openRequestQueue',
         };
     }
@@ -104,9 +108,10 @@ export const resolveNotificationDestination = (item: NotificationLike): Notifica
     }
 
     if (type === 'admin_pending') {
+        const reviewId = parseReviewId('', meta);
         return {
-            kind: 'requests',
-            reviewId: parseReviewId('', meta),
+            kind: 'discovery',
+            path: reviewId ? `/discovery/queue?review=${reviewId}` : '/discovery/queue',
             labelKey: 'notifications.openRequestQueue',
         };
     }

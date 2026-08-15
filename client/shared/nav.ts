@@ -33,7 +33,6 @@ export const DEFAULT_NAV_ORDER = [
     'overlays',
     'editions',
     'mediastack',
-    'requests',
     'status',
     // After the usual primary/secondary slots so stock mobile bars stay uncrowded.
     'achievements',
@@ -123,6 +122,8 @@ const LEGACY_DEFAULT_NAV_ORDERS = [
     ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'mediastack', 'requests', 'status', 'achievements', 'maintenance', 'about', 'settings', 'logout'],
     // Pre-support-tickets stock order.
     ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'editions', 'mediastack', 'requests', 'status', 'achievements', 'maintenance', 'about', 'preferences', 'settings', 'logout'],
+    // Pre–Discover-tab Review Queue (standalone Requests nav item).
+    ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'editions', 'mediastack', 'requests', 'status', 'achievements', 'support', 'maintenance', 'about', 'preferences', 'settings', 'logout'],
 ];
 
 const sameOrder = (a: string[], b: string[]) => (
@@ -149,6 +150,8 @@ export const ensureCompleteNavOrder = (order?: string[] | null): string[] => {
 
     for (const key of incoming) {
         if (seen.has(key)) continue;
+        // Standalone Requests nav is retired — Review Queue is a Discover tab.
+        if (key === 'requests') continue;
         seen.add(key);
         result.push(key);
     }
@@ -329,8 +332,10 @@ export const filterNavOrder = (
 
     return (Array.isArray(order) ? order : []).filter((key) => {
         if (key === 'logout' || key === 'logs') return false;
+        // Review queue now lives as a Discover & Request tab — never show a standalone nav item.
+        if (key === 'requests') return false;
         if (hidden.has(key) && !alwaysVisible.has(key)) return false;
-        if ((key === 'users' || key === 'settings' || key === 'maintenance' || key === 'upgrader' || key === 'collexions' || key === 'scanner' || key === 'media-automation' || key === 'poster-sets' || key === 'overlays' || key === 'editions' || key === 'requests') && !options.isAdmin) return false;
+        if ((key === 'users' || key === 'settings' || key === 'maintenance' || key === 'upgrader' || key === 'collexions' || key === 'scanner' || key === 'media-automation' || key === 'poster-sets' || key === 'overlays' || key === 'editions') && !options.isAdmin) return false;
         if (key === 'downloads' && !options.isAdmin && features.downloads === false) return false;
         if (key === 'maintenance' && !maintenanceEnabled) return false;
         if (key === 'upgrader' && !upgraderEnabled) return false;
@@ -343,7 +348,6 @@ export const filterNavOrder = (
         if (key === 'achievements' && !achievementsEnabled) return false;
         if (key === 'support' && !supportEnabled) return false;
         if (key === 'request' && !requestEnabled) return false;
-        if (key === 'requests' && !requestsQueueEnabled) return false;
         return true;
     });
 };

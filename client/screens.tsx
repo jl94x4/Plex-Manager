@@ -12222,7 +12222,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     );
 
     const getNavBadgeCount = (key: string) => {
-        if (key === 'requests') return pendingRequestCount;
+        if (key === 'request') return pendingRequestCount;
         if (key === 'support') return supportUnreadCount;
         if (key === 'discover' && showDashboardWatchingBadge) return watchingCount;
         if (key === 'downloads') return downloadCount;

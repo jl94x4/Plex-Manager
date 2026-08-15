@@ -272,6 +272,7 @@ export const fr: DeepPartial<EnCatalog> = {
         music: 'Musique',
         myRequests: 'Mes demandes',
         myIssues: 'Mes signalements',
+        reviewQueue: 'File de revue',
     },
     hero: {
         title: 'Discover & Request',

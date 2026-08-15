@@ -32,10 +32,15 @@ const resolveNotificationDestination = (item = {}) => {
     const meta = item?.meta && typeof item.meta === 'object' ? item.meta : null;
 
     if (href.startsWith('/discovery')) {
+        const isQueue = href.includes('/discovery/queue');
         return {
             kind: 'discovery',
             path: href,
-            labelKey: href.includes('/requests') ? 'notifications.openMyRequests' : 'notifications.openInDiscover',
+            labelKey: isQueue
+                ? 'notifications.openRequestQueue'
+                : href.includes('/requests')
+                    ? 'notifications.openMyRequests'
+                    : 'notifications.openInDiscover',
         };
     }
     if (href.startsWith('/support') || type === 'support_ticket') {
@@ -46,7 +51,12 @@ const resolveNotificationDestination = (item = {}) => {
         };
     }
     if (href.startsWith('/requests')) {
-        return { kind: 'requests', reviewId: parseReviewId(href, meta), labelKey: 'notifications.openRequestQueue' };
+        const reviewId = parseReviewId(href, meta);
+        return {
+            kind: 'discovery',
+            path: reviewId ? `/discovery/queue?review=${reviewId}` : '/discovery/queue',
+            labelKey: 'notifications.openRequestQueue',
+        };
     }
     if (href === '/portal' || href === '/') {
         return { kind: 'home', labelKey: 'notifications.openHome' };
@@ -70,7 +80,12 @@ const resolveNotificationDestination = (item = {}) => {
         return { kind: 'external', href, labelKey: 'notifications.openLink' };
     }
     if (type === 'admin_pending') {
-        return { kind: 'requests', reviewId: parseReviewId('', meta), labelKey: 'notifications.openRequestQueue' };
+        const reviewId = parseReviewId('', meta);
+        return {
+            kind: 'discovery',
+            path: reviewId ? `/discovery/queue?review=${reviewId}` : '/discovery/queue',
+            labelKey: 'notifications.openRequestQueue',
+        };
     }
     if (type === 'admin_test') {
         return { kind: 'home', labelKey: 'notifications.openHome' };
@@ -90,13 +105,13 @@ test('media detail href stays on Discover title page', () => {
     assert.equal(dest.path, '/discovery/movie/123');
 });
 
-test('admin pending href opens requests review', () => {
+test('admin pending href opens discover review queue', () => {
     const dest = resolveNotificationDestination({
         type: 'admin_pending',
         href: '/requests?review=42',
     });
-    assert.equal(dest.kind, 'requests');
-    assert.equal(dest.reviewId, 42);
+    assert.equal(dest.kind, 'discovery');
+    assert.equal(dest.path, '/discovery/queue?review=42');
 });
 
 test('admin pending falls back to meta.requestId', () => {
@@ -105,8 +120,8 @@ test('admin pending falls back to meta.requestId', () => {
         href: '',
         meta: { requestId: 9 },
     });
-    assert.equal(dest.kind, 'requests');
-    assert.equal(dest.reviewId, 9);
+    assert.equal(dest.kind, 'discovery');
+    assert.equal(dest.path, '/discovery/queue?review=9');
 });
 
 test('declined without href opens my requests', () => {
