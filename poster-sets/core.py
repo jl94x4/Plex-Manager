@@ -4998,8 +4998,9 @@ def warm_library_titles(
                 query=title,
                 media_type=media_type,
                 tmdb_id=tmdb_id,
-                imdb_id=imdb_id if _posterdb_should_use_login(working) else None,
-                tvdb_id=tvdb_id if _posterdb_should_use_login(working) else None,
+                imdb_id=imdb_id or None,
+                # Prefer library TheTVDB ids when present (Plex TV agents often lack TMDB).
+                tvdb_id=tvdb_id or None,
                 title_hint=title,
                 year_hint=year_hint,
                 mode="title",
