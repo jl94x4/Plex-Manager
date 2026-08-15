@@ -32,7 +32,6 @@ type Props = {
     mediaServerType?: string;
     onNavigate?: (path: string) => void;
     onToast?: (message: string, type?: CompanionToastType) => void;
-    onDisable?: () => void;
 };
 
 type Recommendation = {
@@ -61,6 +60,14 @@ type CastInsight = {
     placeOfBirth: string;
     biographySnippet: string;
     knownFor: KnownForItem[];
+};
+
+type CrewInsight = {
+    id: number;
+    name: string;
+    job: string;
+    department: string;
+    profilePath: string | null;
 };
 
 type CompanionPayload = {
@@ -222,7 +229,6 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     mediaServerType = 'plex',
     onNavigate,
     onToast,
-    onDisable,
 }) => {
     const tmdbId = Number(session?.tmdbId || 0);
     const mediaType = session?.mediaType === 'tv' ? 'tv' : 'movie';
@@ -585,13 +591,19 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
     const crewHighlights = useMemo(() => {
         const crew = Array.isArray(payload?.details?.credits?.crew) ? payload.details.credits.crew : [];
-        if (!crew.length) return [] as string[];
-        const byJob = new Map<string, string>();
+        if (!crew.length) return [] as CrewInsight[];
+        const byJob = new Map<string, CrewInsight>();
         for (const entry of crew) {
             const job = String(entry?.job || '').trim();
             const name = String(entry?.name || '').trim();
             if (!job || !name || byJob.has(job)) continue;
-            byJob.set(job, name);
+            byJob.set(job, {
+                id: Number(entry?.id) || 0,
+                name,
+                job,
+                department: String(entry?.department || '').trim(),
+                profilePath: entry?.profile_path || entry?.profilePath || null,
+            });
         }
         const preferredJobs = [
             'Director',
@@ -603,16 +615,16 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             'Producer',
             'Executive Producer',
         ];
-        const picked: string[] = [];
+        const picked: CrewInsight[] = [];
         for (const job of preferredJobs) {
-            const person = byJob.get(job);
-            if (!person) continue;
-            picked.push(`${job}: ${person}`);
+            const match = byJob.get(job);
+            if (!match) continue;
+            picked.push(match);
             if (picked.length >= 6) break;
         }
         if (!picked.length) {
-            for (const [job, person] of byJob.entries()) {
-                picked.push(`${job}: ${person}`);
+            for (const match of byJob.values()) {
+                picked.push(match);
                 if (picked.length >= 6) break;
             }
         }
@@ -786,8 +798,8 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     ];
 
     return (
-        <div className="glass-card mt-4 p-4 md:p-5 border border-emerald-500/25 bg-black/25">
-            <div className="flex items-start justify-between gap-3">
+        <div className="glass-card mt-4 p-3 sm:p-4 md:p-5 border border-emerald-500/25 bg-black/25">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div>
                     <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-emerald-200 flex items-center gap-2">
                         <Sparkles className="w-4 h-4" />
@@ -798,16 +810,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                         {year ? ` (${year})` : ''} - only on Home hero.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    {onDisable ? (
-                        <button
-                            type="button"
-                            onClick={onDisable}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-300/30 bg-amber-500/15 text-xs font-bold text-amber-100 hover:bg-amber-500/25 transition-colors"
-                        >
-                            Disable companion
-                        </button>
-                    ) : null}
+                <div className="flex items-center justify-end">
                     <button
                         type="button"
                         onClick={() => setOpen((prev) => !prev)}
@@ -828,11 +831,11 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
             {!open ? null : (
                 <div className="mt-4 space-y-4">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-2">
                         <button
                             type="button"
                             onClick={() => setTab('companion')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                            className={`px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold border transition-colors ${
                                 tab === 'companion'
                                     ? 'border-emerald-400/50 bg-emerald-500/20 text-emerald-100'
                                     : 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10'
@@ -843,7 +846,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                         <button
                             type="button"
                             onClick={() => setTab('deep-dive')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                            className={`px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold border transition-colors ${
                                 tab === 'deep-dive'
                                     ? 'border-violet-400/50 bg-violet-500/20 text-violet-100'
                                     : 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10'
@@ -854,7 +857,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                         <button
                             type="button"
                             onClick={() => setTab('watch-room')}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                            className={`px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold border transition-colors ${
                                 tab === 'watch-room'
                                     ? 'border-sky-400/50 bg-sky-500/20 text-sky-100'
                                     : 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10'
@@ -881,11 +884,11 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
                     {tab === 'companion' && payload && (
                         <div className="space-y-4">
-                            <div className="flex flex-wrap gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <button
                                     type="button"
                                     onClick={toggleLocalWatchlist}
-                                    className="px-3 py-2 rounded-lg text-xs font-bold border border-white/20 bg-white/5 text-white hover:bg-white/10 transition-colors"
+                                    className="w-full px-3 py-2 rounded-lg text-xs font-bold border border-white/20 bg-white/5 text-white hover:bg-white/10 transition-colors"
                                 >
                                     {savedToWatchlist ? 'Saved to watchlist' : 'Save to watchlist'}
                                 </button>
@@ -893,7 +896,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     type="button"
                                     onClick={openInLibrary}
                                     disabled={openingLibrary}
-                                    className="px-3 py-2 rounded-lg text-xs font-bold border border-white/20 bg-white/5 text-white hover:bg-white/10 transition-colors disabled:opacity-60"
+                                    className="w-full px-3 py-2 rounded-lg text-xs font-bold border border-white/20 bg-white/5 text-white hover:bg-white/10 transition-colors disabled:opacity-60"
                                 >
                                     {openingLibrary ? `Opening ${providerLabel}...` : `Open in ${providerLabel}`}
                                 </button>
@@ -901,32 +904,32 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     type="button"
                                     onClick={() => requestSimilar(payload.recommendations[0] || null)}
                                     disabled={!payload.recommendations[0]}
-                                    className="px-3 py-2 rounded-lg text-xs font-bold border border-violet-400/40 bg-violet-500/20 text-violet-100 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
+                                    className="w-full px-3 py-2 rounded-lg text-xs font-bold border border-violet-400/40 bg-violet-500/20 text-violet-100 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
                                 >
                                     Request a similar title
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 {playbackTelemetry.map((entry) => (
-                                    <div key={`telemetry-${entry.label}`} className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2">
+                                    <div key={`telemetry-${entry.label}`} className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 min-w-0">
                                         <p className="text-[10px] uppercase tracking-wide text-white/50">{entry.label}</p>
-                                        <p className="text-xs font-bold text-white">{entry.value}</p>
+                                        <p className="text-xs font-bold text-white truncate">{entry.value}</p>
                                     </div>
                                 ))}
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
-                                <div className="lg:col-span-2 rounded-xl border border-white/10 bg-white/5 p-3">
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 items-start">
+                                <div className="xl:col-span-2 rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                         <Users className="w-3.5 h-3.5" />
                                         Cast intelligence grid
                                     </p>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
                                         {payload.castInsights.map((actor) => (
-                                            <div key={`cast-${actor.id}`} className="rounded-lg border border-white/10 bg-black/35 p-2.5">
+                                            <div key={`cast-${actor.id}`} className="rounded-lg border border-white/10 bg-black/35 p-2">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-16 h-16 rounded-full overflow-hidden bg-white/5 shrink-0 border border-white/15">
+                                                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-white/5 shrink-0 border border-white/15">
                                                         {actor.profilePath ? (
                                                             <img
                                                                 src={posterUrl(actor.profilePath, 'w185')}
@@ -943,7 +946,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                         <button
                                                             type="button"
                                                             onClick={() => goToPath(`/discovery/person/${actor.id}`)}
-                                                            className="text-left text-sm font-bold text-white hover:text-emerald-200 truncate"
+                                                            className="text-left text-sm font-bold text-white hover:text-emerald-200 truncate max-w-full"
                                                         >
                                                             {actor.name}
                                                         </button>
@@ -980,7 +983,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                                 key={`known-${actor.id}-${item.mediaType}-${item.id}`}
                                                                 type="button"
                                                                 onClick={() => goToPath(`/discovery/${item.mediaType}/${item.id}`)}
-                                                                className="px-2 py-1 rounded-md text-[10px] border border-white/15 bg-white/5 text-white/80 hover:bg-white/10 transition-colors"
+                                                                className="px-2 py-1 rounded-md text-[10px] border border-white/15 bg-white/5 text-white/80 hover:bg-white/10 transition-colors truncate max-w-full"
                                                             >
                                                                 {item.title}{item.year ? ` (${item.year})` : ''}
                                                             </button>
@@ -995,21 +998,59 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     {payload.castInsights.length === 0 ? (
                                         <p className="text-xs text-white/55 mt-2">No cast data was returned for this title.</p>
                                     ) : null}
-                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
+                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
                                         <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
                                             Crew intelligence
                                         </p>
-                                        {crewHighlights.length > 0 ? crewHighlights.map((entry, index) => (
-                                            <p key={`crew-${index}`} className="text-xs text-white/80">
-                                                - {entry}
-                                            </p>
-                                        )) : (
+                                        {crewHighlights.length > 0 ? (
+                                            <div className="flex gap-2 overflow-x-auto pb-1 pr-1 snap-x snap-mandatory">
+                                                {crewHighlights.map((entry, index) => (
+                                                    <div
+                                                        key={`crew-${entry.job}-${entry.name}-${index}`}
+                                                        className="snap-start min-w-[220px] sm:min-w-[240px] rounded-lg border border-white/10 bg-black/35 p-2.5"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-10 h-10 rounded-full overflow-hidden bg-white/5 border border-white/15 shrink-0">
+                                                                {entry.profilePath ? (
+                                                                    <img
+                                                                        src={posterUrl(entry.profilePath, 'w185')}
+                                                                        alt={entry.name}
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-500/35 to-cyan-500/20 text-violet-100 text-[10px] font-black">
+                                                                        {initialsForName(entry.name)}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                {entry.id > 0 ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => goToPath(`/discovery/person/${entry.id}`)}
+                                                                        className="text-left text-xs font-bold text-white hover:text-violet-200 truncate"
+                                                                    >
+                                                                        {entry.name}
+                                                                    </button>
+                                                                ) : (
+                                                                    <p className="text-xs font-bold text-white truncate">{entry.name}</p>
+                                                                )}
+                                                                <p className="text-[10px] text-violet-200/90">{entry.job}</p>
+                                                                {entry.department ? (
+                                                                    <p className="text-[10px] text-white/50 truncate">{entry.department}</p>
+                                                                ) : null}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
                                             <p className="text-xs text-white/55">Crew highlights are unavailable for this title.</p>
                                         )}
                                     </div>
                                 </div>
 
-                                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                                <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                         <Music2 className="w-3.5 h-3.5" />
                                         Soundtrack cues
@@ -1035,7 +1076,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
                                             Ratings and links
                                         </p>
-                                        <div className="grid grid-cols-2 gap-2">
+                                        <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                                             <div className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
                                                 <p className="text-[10px] uppercase tracking-wide text-white/50">IMDb</p>
                                                 <p className="text-xs font-bold text-white">
@@ -1086,7 +1127,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         {factLoading ? (
                                             <p className="text-xs text-white/55">Loading deep trivia from fact sources...</p>
                                         ) : overloadFacts.length > 0 ? (
-                                            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                            <div className="space-y-1.5 max-h-52 sm:max-h-56 overflow-y-auto pr-1">
                                                 {overloadFacts.map((fact, idx) => (
                                                     <p key={`overload-${idx}`} className="text-xs text-white/80 leading-relaxed">
                                                         - {fact}

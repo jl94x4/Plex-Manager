@@ -7626,6 +7626,7 @@ export const UserDashboard: React.FC<{
     const { session: nowPlaying } = useNowPlaying(nowPlayingEnabled);
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();
+    const homeNowPlayingCompanionEnabled = publicConfig?.homeNowPlayingCompanionEnabled !== false;
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
 
     useEffect(() => {
@@ -8403,13 +8404,12 @@ export const UserDashboard: React.FC<{
                 ) : null}
             </div>
 
-            {nowPlaying && showNowPlayingCompanion ? (
+            {nowPlaying && homeNowPlayingCompanionEnabled && showNowPlayingCompanion ? (
                 <NowPlayingCompanionPanel
                     session={nowPlaying}
                     userKey={wrapUpSubjectId}
                     mediaServerType={mediaServerType}
                     onNavigate={(path) => onNavigate?.('discovery', { path })}
-                    onDisable={() => toggleNowPlayingCompanion(false)}
                     onToast={(message, type = 'success') => setToast({
                         id: Date.now(),
                         message,
@@ -8417,7 +8417,7 @@ export const UserDashboard: React.FC<{
                     })}
                 />
             ) : null}
-            {nowPlaying && !showNowPlayingCompanion ? (
+            {nowPlaying && homeNowPlayingCompanionEnabled && !showNowPlayingCompanion ? (
                 <div className="mt-3 flex justify-end">
                     <button
                         type="button"

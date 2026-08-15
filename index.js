@@ -4856,6 +4856,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 showPosterQualityBadges: config.showPosterQualityBadges !== false,
                 showDashboardWatchingBadge: !!config.showDashboardWatchingBadge,
                 discoverNowPlayingEnabled: config.discoverNowPlayingEnabled !== false,
+                homeNowPlayingCompanionEnabled: config.homeNowPlayingCompanionEnabled !== false,
                 dashboardWatchingBadgePollSeconds: Math.min(15, Math.max(1, parseInt(config.dashboardWatchingBadgePollSeconds, 10) || 15)),
                 showPublicStatusMonitor: isPublicStatusVisible(config),
                 showPublicLibraryStats: arePublicLibraryStatsVisible(config),
@@ -5022,6 +5023,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 showPosterQualityBadges: true,
                 showDashboardWatchingBadge: false,
                 discoverNowPlayingEnabled: true,
+                homeNowPlayingCompanionEnabled: true,
                 dashboardWatchingBadgePollSeconds: 15,
                 showPublicStatusMonitor: true,
                 showPublicLibraryStats: true,
@@ -5109,7 +5111,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         requestDiscoverRegion, requestDiscoverLanguage, requestHideAvailableMedia, discoverySource, requestEngine,
         requestQuotaLimit, requestQuotaDays, requestQuotaLimit4k, autoApproveMovies, autoApproveTv,
         portalAllowRequestMovies, portalAllowRequestTv, portalAllowRequest4kMovies, portalAllowRequest4kTv,
-        portalAllowAdvancedRequests, portalShowRecentlyAdded, portalShowWatchlist, discoverNowPlayingEnabled,
+        portalAllowAdvancedRequests, portalShowRecentlyAdded, portalShowWatchlist, discoverNowPlayingEnabled, homeNowPlayingCompanionEnabled,
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
@@ -5423,6 +5425,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         discoverNowPlayingEnabled: discoverNowPlayingEnabled !== undefined
             ? !!discoverNowPlayingEnabled
             : existingConfig.discoverNowPlayingEnabled !== false,
+        homeNowPlayingCompanionEnabled: homeNowPlayingCompanionEnabled !== undefined
+            ? !!homeNowPlayingCompanionEnabled
+            : existingConfig.homeNowPlayingCompanionEnabled !== false,
         tvdbApiKey: resolveSecret(tvdbApiKey, existingConfig.tvdbApiKey),
         primaryColor: primaryColor || '#F7C600',
         customLogoUrl: normalizeBrandingAssetForMediaServer(customLogoUrl, normalizedMediaServerType),
@@ -5858,6 +5863,7 @@ app.get('/api/config/public', async (req, res) => {
             allowTemporaryAccess: !!config.allowTemporaryAccess,
             showPosterQualityBadges: config.showPosterQualityBadges !== false,
             showDashboardWatchingBadge: !!config.showDashboardWatchingBadge,
+            homeNowPlayingCompanionEnabled: config.homeNowPlayingCompanionEnabled !== false,
             dashboardWatchingBadgePollSeconds: Math.min(15, Math.max(1, parseInt(config.dashboardWatchingBadgePollSeconds, 10) || 15)),
             showPublicStatusMonitor: isPublicStatusVisible(config),
             showPublicLibraryStats: arePublicLibraryStatsVisible(config),
@@ -5893,6 +5899,7 @@ app.get('/api/config/public', async (req, res) => {
             allowTemporaryAccess: false,
             showPosterQualityBadges: true,
             showDashboardWatchingBadge: false,
+            homeNowPlayingCompanionEnabled: true,
             dashboardWatchingBadgePollSeconds: 15,
             showPublicStatusMonitor: true,
             showPublicLibraryStats: true,

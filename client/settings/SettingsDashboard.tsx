@@ -529,6 +529,7 @@ export const SettingsDashboard: React.FC = () => {
     const [portalShowRecentlyAdded, setPortalShowRecentlyAdded] = useState(true);
     const [portalShowWatchlist, setPortalShowWatchlist] = useState(true);
     const [discoverNowPlayingEnabled, setDiscoverNowPlayingEnabled] = useState(true);
+    const [homeNowPlayingCompanionEnabled, setHomeNowPlayingCompanionEnabled] = useState(true);
     const [portalAutoRequestMovies, setPortalAutoRequestMovies] = useState(false);
     const [portalAutoRequestTv, setPortalAutoRequestTv] = useState(false);
     const [seriesMetadataProvider, setSeriesMetadataProvider] = useState('tmdb');
@@ -1217,6 +1218,7 @@ export const SettingsDashboard: React.FC = () => {
             setPortalShowRecentlyAdded(initialSettings.portalShowRecentlyAdded !== false);
             setPortalShowWatchlist(initialSettings.portalShowWatchlist !== false);
             setDiscoverNowPlayingEnabled(initialSettings.discoverNowPlayingEnabled !== false);
+            setHomeNowPlayingCompanionEnabled(initialSettings.homeNowPlayingCompanionEnabled !== false);
             setPortalAutoRequestMovies(!!initialSettings.portalAutoRequestMovies);
             setPortalAutoRequestTv(!!initialSettings.portalAutoRequestTv);
             setSeriesMetadataProvider(initialSettings.seriesMetadataProvider === 'tvdb' ? 'tvdb' : 'tmdb');
@@ -1751,6 +1753,7 @@ export const SettingsDashboard: React.FC = () => {
             portalShowRecentlyAdded,
             portalShowWatchlist,
             discoverNowPlayingEnabled,
+            homeNowPlayingCompanionEnabled,
             portalAutoRequestMovies,
             portalAutoRequestTv,
             seriesMetadataProvider,
@@ -3201,6 +3204,13 @@ export const SettingsDashboard: React.FC = () => {
                                         <SettingsToggleRow title="Show recently added on Discover home" checked={portalShowRecentlyAdded} onChange={setPortalShowRecentlyAdded} border={false} />
                                         <SettingsToggleRow title="Show Plex watchlist on Discover home" checked={portalShowWatchlist} onChange={setPortalShowWatchlist} border={false} />
                                         <SettingsToggleRow title="Show Now Playing strip on Home & Discover heroes" checked={discoverNowPlayingEnabled} onChange={setDiscoverNowPlayingEnabled} border={false} />
+                                        <SettingsToggleRow
+                                            title="Enable Home second-screen companion panel"
+                                            description="Global admin switch. When off, the Home now-playing banner remains but the companion panel is hidden for everyone."
+                                            checked={homeNowPlayingCompanionEnabled}
+                                            onChange={setHomeNowPlayingCompanionEnabled}
+                                            border={false}
+                                        />
                                     </div>
 
                                     <div id={getSettingsSectionElementId('auto-approve')} className="scroll-mt-24 space-y-3">
