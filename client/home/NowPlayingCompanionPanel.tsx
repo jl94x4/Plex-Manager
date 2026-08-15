@@ -796,6 +796,66 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             ? [{ label: 'Episode', value: `S${seasonNumber}E${episodeNumber}` }]
             : []),
     ];
+    const firstRecommendation = payload?.recommendations?.[0] || null;
+    const leadCast = payload?.castInsights?.[0] || null;
+    const nextEpisodeNumber = Number(episodeContext.next?.episode_number || 0);
+    const nextBestAction = (() => {
+        if (
+            mediaType === 'tv'
+            && seasonNumber > 0
+            && Number.isFinite(nextEpisodeNumber)
+            && nextEpisodeNumber > 0
+            && basePath
+        ) {
+            const nextName = String(episodeContext.next?.name || '').trim();
+            return {
+                tone: 'sky' as const,
+                title: 'Continue with the next episode',
+                hint: nextName
+                    ? `Jump straight to S${seasonNumber}E${nextEpisodeNumber} - ${nextName}.`
+                    : `Jump straight to S${seasonNumber}E${nextEpisodeNumber}.`,
+                cta: 'Open next episode',
+                onClick: () => goToPath(`${basePath}?season=${seasonNumber}&episode=${nextEpisodeNumber}`),
+            };
+        }
+        if (firstRecommendation) {
+            return {
+                tone: 'violet' as const,
+                title: 'Queue a similar title right now',
+                hint: `Request ${firstRecommendation.title}${firstRecommendation.year ? ` (${firstRecommendation.year})` : ''} in one tap.`,
+                cta: 'Request similar',
+                onClick: () => requestSimilar(firstRecommendation),
+            };
+        }
+        if (leadCast && Number.isFinite(leadCast.id) && leadCast.id > 0) {
+            return {
+                tone: 'emerald' as const,
+                title: 'Explore the lead actor next',
+                hint: `Open ${leadCast.name}'s filmography and related titles.`,
+                cta: 'Open actor profile',
+                onClick: () => goToPath(`/discovery/person/${leadCast.id}`),
+            };
+        }
+        if (!savedToWatchlist) {
+            return {
+                tone: 'emerald' as const,
+                title: 'Save this session for later',
+                hint: 'Keep this title pinned in your quick watchlist on this device.',
+                cta: 'Save to watchlist',
+                onClick: toggleLocalWatchlist,
+            };
+        }
+        if (basePath) {
+            return {
+                tone: 'emerald' as const,
+                title: 'Dive into full details',
+                hint: 'Open Discover details for richer metadata and request controls.',
+                cta: 'Open details',
+                onClick: () => goToPath(basePath),
+            };
+        }
+        return null;
+    })();
 
     return (
         <div className="glass-card mt-4 p-3 sm:p-4 md:p-5 border border-emerald-500/25 bg-black/25">
@@ -884,6 +944,38 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
                     {tab === 'companion' && payload && (
                         <div className="space-y-4">
+                            {nextBestAction ? (
+                                <div className={`rounded-xl border p-3 ${
+                                    nextBestAction.tone === 'violet'
+                                        ? 'border-violet-400/30 bg-violet-500/10'
+                                        : nextBestAction.tone === 'sky'
+                                            ? 'border-sky-400/30 bg-sky-500/10'
+                                            : 'border-emerald-400/30 bg-emerald-500/10'
+                                }`}>
+                                    <p className="text-[11px] uppercase tracking-widest font-bold text-white/70">
+                                        Next best action
+                                    </p>
+                                    <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-bold text-white">{nextBestAction.title}</p>
+                                            <p className="text-xs text-white/70 mt-0.5">{nextBestAction.hint}</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={nextBestAction.onClick}
+                                            className={`w-full sm:w-auto px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                                                nextBestAction.tone === 'violet'
+                                                    ? 'border-violet-400/45 bg-violet-500/25 text-violet-100 hover:bg-violet-500/35'
+                                                    : nextBestAction.tone === 'sky'
+                                                        ? 'border-sky-400/45 bg-sky-500/25 text-sky-100 hover:bg-sky-500/35'
+                                                        : 'border-emerald-400/45 bg-emerald-500/25 text-emerald-100 hover:bg-emerald-500/35'
+                                            }`}
+                                        >
+                                            {nextBestAction.cta}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : null}
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                 <button
                                     type="button"
