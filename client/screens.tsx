@@ -7586,8 +7586,10 @@ export const UserDashboard: React.FC<{
         || sessionInfo?.session?.username
         || 'anon',
     );
-    // Prefer site default when account is missing/partial (admins often have no full users.json row).
-    const nowPlayingEnabled = !user || user.showDiscoverNowPlaying !== false;
+    // Admin home hero should always attempt now-playing; members can opt out per preference.
+    const nowPlayingEnabled = sessionInfo?.session?.isAdmin
+        ? true
+        : (!user || user.showDiscoverNowPlaying !== false);
     const { session: nowPlaying } = useNowPlaying(nowPlayingEnabled);
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();

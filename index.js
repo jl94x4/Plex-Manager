@@ -14459,7 +14459,8 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
 
         const users = await loadFile(USERS_PATH, []);
         const localUser = findLocalUserForSession(users, req.user);
-        if (!userAllowsDiscoverNowPlaying(localUser || req.user)) {
+        const viewerIsAdmin = !!req.user?.isAdmin && !isImpersonatingSession(req.user);
+        if (!viewerIsAdmin && !userAllowsDiscoverNowPlaying(localUser || req.user)) {
             return res.json({ available: true, enabled: true, optedOut: true, session: null });
         }
 

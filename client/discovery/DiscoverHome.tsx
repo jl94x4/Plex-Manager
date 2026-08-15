@@ -25,7 +25,6 @@ import { DiscoverGridSizeSelect } from './DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './useDiscoverGridSize';
 import { discoverRowCardWidthClass } from '../shared/portalLayout';
 import { useDiscoverI18n } from './i18n';
-import { useDiscoveryMe } from './useDiscoveryMe';
 import {
     MusicChartItem,
     MusicChartRail,
@@ -222,11 +221,7 @@ export const DiscoverHome: React.FC<{
 }> = ({ onSelect, formatItem, navigate, pushToast, providerLabel = 'Plex', getQuickActions }) => {
     const { t, locale } = useDiscoverI18n();
     const { preferences, loaded } = useDiscoveryPreferences();
-    const { profile: discoveryMe, refresh: refreshDiscoveryMe } = useDiscoveryMe(true);
     const { showLibraryQueue, toggleLibraryQueue } = useLibraryQueueToggle();
-    const siteNowPlayingEnabled = discoveryMe?.discovery?.nowPlayingEnabled !== false;
-    const showNowPlaying = discoveryMe?.discovery?.showNowPlaying !== false;
-    const [nowPlayingBusy, setNowPlayingBusy] = useState(false);
     const [gridSize, setGridSize] = useDiscoverGridSize();
     const posterCardClass = discoverRowCardWidthClass(gridSize);
     const [rows, setRows] = useState({
@@ -261,28 +256,6 @@ export const DiscoverHome: React.FC<{
         navigate,
         () => navigate('/discovery/music'),
     );
-
-    const toggleNowPlaying = useCallback(async () => {
-        if (nowPlayingBusy || !siteNowPlayingEnabled) return;
-        setNowPlayingBusy(true);
-        try {
-            const next = !showNowPlaying;
-            await apiFetch('/api/users/preferences', {
-                method: 'POST',
-                body: JSON.stringify({ showDiscoverNowPlaying: next }),
-            });
-            await refreshDiscoveryMe();
-            window.dispatchEvent(new Event('portal-discover-me-refresh'));
-            pushToast?.(
-                next ? t('nowPlaying.enabledToast') : t('nowPlaying.disabledToast'),
-                'success',
-            );
-        } catch (err: any) {
-            pushToast?.(err?.message || t('nowPlaying.prefFailed'), 'error');
-        } finally {
-            setNowPlayingBusy(false);
-        }
-    }, [nowPlayingBusy, siteNowPlayingEnabled, showNowPlaying, refreshDiscoveryMe, pushToast, t]);
 
     // Music rails are independent of the movie/TV pipeline — empty when Lidarr is not configured.
     useEffect(() => {
@@ -512,22 +485,6 @@ export const DiscoverHome: React.FC<{
                         )}
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-2">
-                        {siteNowPlayingEnabled && (
-                            <button
-                                type="button"
-                                onClick={toggleNowPlaying}
-                                disabled={nowPlayingBusy}
-                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors disabled:opacity-60 ${
-                                    showNowPlaying
-                                        ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25'
-                                        : 'border-border bg-white/5 text-muted hover:bg-white/10 hover:text-text'
-                                }`}
-                                aria-pressed={showNowPlaying}
-                                title={showNowPlaying ? t('nowPlaying.hidePref') : t('nowPlaying.showPref')}
-                            >
-                                {showNowPlaying ? t('nowPlaying.on') : t('nowPlaying.off')}
-                            </button>
-                        )}
                         <button
                             type="button"
                             onClick={toggleLibraryQueue}
