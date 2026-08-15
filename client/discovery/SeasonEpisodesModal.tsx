@@ -212,7 +212,11 @@ export const SeasonEpisodesModal: React.FC<Props> = ({
                                             key={episode.id}
                                             className="group flex flex-col sm:flex-row items-start gap-4 p-4 sm:p-5 hover:bg-white/[0.02] transition-colors"
                                         >
-                                            <div className="w-full sm:w-48 aspect-video rounded-xl overflow-hidden bg-white/5 shrink-0 flex items-center justify-center relative shadow-lg">
+                                            <div className={`rounded-xl overflow-hidden bg-white/5 shrink-0 flex items-center justify-center relative ${
+                                                stillUrl
+                                                    ? 'w-full sm:w-48 aspect-video shadow-lg'
+                                                    : 'hidden sm:flex sm:w-48 sm:aspect-video'
+                                            }`}>
                                                 {stillUrl ? (
                                                     <img
                                                         src={stillUrl}

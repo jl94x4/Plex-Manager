@@ -488,10 +488,22 @@ export const MediaDetailsPage: React.FC<{
         const readSeasonQuery = () => {
             try {
                 const params = new URLSearchParams(window.location.search);
-                const season = Number(params.get('season'));
-                if (!Number.isFinite(season) || season < 0) return;
+                const rawSeason = params.get('season');
+                // Number(null) === 0, which would auto-open Specials on every TV details visit.
+                if (rawSeason == null || String(rawSeason).trim() === '') {
+                    setEpisodesSeason(null);
+                    return;
+                }
+                const season = Number(rawSeason);
+                if (!Number.isFinite(season) || season < 0) {
+                    setEpisodesSeason(null);
+                    return;
+                }
                 const row = seasonRows.find((s) => s.seasonNumber === season);
-                if (!row) return;
+                if (!row) {
+                    setEpisodesSeason(null);
+                    return;
+                }
                 setEpisodesSeason({
                     seasonNumber: row.seasonNumber,
                     name: row.name,

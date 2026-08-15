@@ -3699,13 +3699,14 @@ const handlePlexPinLogin = async (req, res, pinId, ref, { redirectOnSuccess = fa
     const token = jwt.sign(sessionUser, JWT_SECRET, { expiresIn: '7d' });
     setSessionCookie(req, res, token);
 
-    if (!isAdmin) {
-        const users = await loadFile(USERS_PATH, []);
-        if (touchUserLastLogin(users, sessionUser, new Date().toISOString(), {
-            plexAuthToken: pinData.authToken,
-        })) {
-            await saveFile(USERS_PATH, users);
-        }
+    if (isAdmin) {
+        await ensurePortalUserForNotifications(sessionUser, { config });
+    }
+    const usersForToken = await loadFile(USERS_PATH, []);
+    if (touchUserLastLogin(usersForToken, sessionUser, new Date().toISOString(), {
+        plexAuthToken: pinData.authToken,
+    })) {
+        await saveFile(USERS_PATH, usersForToken);
     }
     await appendAuditLog('user_login', sessionUser, sessionUser);
 
@@ -6495,8 +6496,16 @@ const requestAppService = createRequestAppService({
         const fromLocal = decryptPlexAuthToken(local?.plexAuthToken);
         if (fromLocal) return fromLocal;
         // Impersonation must not reuse the admin's Plex token (that auto-approves on Seerr).
-        if (sessionUser?.impersonatingUserId) return null;
-        return decryptPlexAuthToken(sessionUser?.plexAuthToken);
+        if (isImpersonatingSession(sessionUser) || sessionUser?.impersonatingUserId) return null;
+        const fromSession = decryptPlexAuthToken(sessionUser?.plexAuthToken);
+        if (fromSession) return fromSession;
+        // Admins often never had plexAuthToken saved; use the server-owner token for their own requests.
+        if (sessionUser?.isAdmin) {
+            const config = await loadFile(CONFIG_PATH, {});
+            const adminToken = String(config?.plexToken || '').trim();
+            if (adminToken && adminToken !== SECRET_MASK) return adminToken;
+        }
+        return null;
     },
 });
 
