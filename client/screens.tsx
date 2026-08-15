@@ -8670,7 +8670,7 @@ export const UserDashboard: React.FC<{
                         onClick={() => toggleNowPlayingCompanion(true)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-400/30 bg-emerald-500/15 text-emerald-100 text-xs font-bold hover:bg-emerald-500/25 transition-colors"
                     >
-                        Enable second-screen companion
+                        {t('homeDashboard.nowPlayingCompanion.actions.enableCompanion')}
                     </button>
                 </div>
             ) : null}

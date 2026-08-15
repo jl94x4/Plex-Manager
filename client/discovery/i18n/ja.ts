@@ -60,6 +60,27 @@ Object.assign(ja, { homeDashboard: { ...ja.homeDashboard, opsSnapshot: {
     empty: { noIncidents: 'インシデントはありません', unavailable: '運用スナップショットは利用できません。' },
 } } });
 
+Object.assign(ja, { homeDashboard: { ...ja.homeDashboard, nowPlayingCompanion: {
+    ...ja.homeDashboard.nowPlayingCompanion,
+    timeline: { release: '公開日', runtime: '上映時間', episodeRuntime: 'エピソード時間', genres: 'ジャンル', tmdbScore: 'TMDBスコア', status: '状態', currentEpisode: '現在のエピソード', episodeAirDate: 'エピソードの放送日' },
+    loading: { context: 'コンパニオン情報を読み込んでいます...', facts: '情報源から詳細なトリビアを読み込んでいます...' },
+    errors: { noTmdbContext: 'このアクティブなセッションではTMDB情報を利用できません。', detailsUnavailable: 'コンパニオンの詳細はまだ利用できません。', loadFailed: 'コンパニオンのデータを読み込めませんでした。', providerLinkUnavailable: 'ライブラリへのリンクを利用できません', providerOpenFailed: 'プロバイダーのリンクを開けませんでした。' },
+    toasts: { watchlistRemoved: 'クイックリストから削除しました。', watchlistSaved: 'この端末のクイックリストに保存しました。', openedDiscoverContext: 'Discoverの詳細でコンテキストを開きました。', summaryCopied: '視聴ルームの概要をコピーしました。', clipboardUnavailable: 'このクライアントではクリップボードを利用できません。' },
+    fallbacks: { nowPlaying: '再生中' },
+    sections: { nextBestAction: '次のおすすめ操作', castIntelligence: '出演者情報', crewIntelligence: 'スタッフ情報', soundtrackCues: 'サウンドトラック情報', ratingsAndLinks: '評価とリンク', factOverload: 'トリビア', episodeContext: 'エピソード情報', similarPicks: '類似作品', liveTriviaTimeline: 'トリビアの時系列', productionFacts: '制作情報', actorGraph: '俳優の関連作品', subtitleQuoteContext: '字幕の引用コンテキスト', sharedReactions: '共有リアクション', quickPoll: '簡単な投票' },
+    empty: { noKnownFor: '代表作へのリンクはありません。', noCastData: 'この作品の出演者データはありません。', noCrewHighlights: 'この作品の注目スタッフはありません。', noSoundtrackCredits: 'この項目のサウンドトラックのクレジットはありません。', factsUnavailable: '現在、この作品の追加情報は利用できません。', noTimelineFacts: '時系列のトリビアはまだありません。', noProductionFacts: 'この作品の制作情報はありません。', noLinkedCredits: '関連クレジットはありません', noContextualLines: 'コンテキスト行はありません。', notAvailable: '該当なし', unknownYear: '年不明' },
+    cast: { popularity: '人気度 {value}' }, episode: { previous: '前: {name}', current: '現在: {name}', next: '次: {name}' },
+    nextAction: { continueTitle: '次のエピソードを続けて見る', continueHintWithName: 'S{season}E{episode} - {name}へ直接移動します。', continueHint: 'S{season}E{episode}へ直接移動します。', queueSimilarTitle: '今すぐ類似作品をリクエスト', queueSimilarHint: '{title}（{year}）をワンタップでリクエストします。', exploreActorTitle: '次に主演俳優を探す', exploreActorHint: '{name}の出演作品と関連作品を開きます。', saveForLaterTitle: 'このセッションを後で見るために保存', saveForLaterHint: 'この作品をこのデバイスのクイック視聴リストに固定したままにします。', diveDetailsTitle: '詳細を確認', diveDetailsHint: 'より詳しいメタデータとリクエスト操作のためにDiscoverの詳細を開きます。' },
+    factOverload: { live: 'ライブ', total: '合計 {total}', spotlight: '注目' },
+    reactions: { like: 'いいね', fire: '炎', laugh: '笑い', wow: 'すごい' },
+    poll: { bestPacing: 'テンポが良い', strongActing: '演技が素晴らしい', visualHighlight: '映像が印象的', greatSoundtrack: 'サウンドトラックが素晴らしい', totalVotes: '投票総数: {total}', summaryHint: '友だちとコンテキストを共有するために、視聴ルームの簡単な概要をコピーします。' },
+    facts: { communityScore: 'TMDBコミュニティスコアは{score}/10（{votes}票）です。', popularity: '現在の人気指数はTMDBトレンドで{value}です。', movieRuntime: '上映時間は約{value}分です。', episodeRuntime: '一般的なエピソードの長さは約{value}分です。', seriesSummary: 'このシリーズは現在{seasons}シーズン、{episodes}エピソードです。', multipleEpisodes: '複数', originCountry: '制作国: {countries}。', producedBy: '制作: {studios}{count}。', budget: '報告された予算は約${value}です。', revenue: '報告された興行収入は約${value}です。', returnOnBudget: '推定収益率は制作予算の約{ratio}倍です。', topBilled: '主要出演: {names}。', currentEpisodeAired: '現在のエピソードは{date}に初回放送されました。' },
+    header: { title: 'セカンドスクリーン コンパニオン', subtitle: '{title}のライブ情報（ホーム画面のみ）', subtitleWithYear: '{title}（{year}）のライブ情報（ホーム画面のみ）' },
+    tabs: { companion: 'コンパニオン', deepDive: '詳細', watchRoom: '視聴ルーム' },
+    actions: { enableCompanion: 'セカンドスクリーン コンパニオンを有効化', collapse: '折りたたむ', expand: '展開', savedToWatchlist: 'リストに保存済み', saveToWatchlist: 'リストに保存', openingProvider: '{provider}を開いています...', openInProvider: '{provider}で開く', requestTitle: '{title}をリクエスト', noSimilarTitles: 'リクエストできる類似作品はありません', openNextEpisode: '次のエピソードを開く', requestSimilar: '類似作品をリクエスト', openActorProfile: '俳優プロフィールを開く', openDetails: '詳細を開く', copySummary: '概要をコピー' },
+    telemetry: { state: '状態', progress: '進行状況', mediaType: 'メディア種別', episode: 'エピソード', playing: '再生中' },
+} } });
+
 Object.assign(ja, { settings: { ...ja.settings, homeLayout: {
     sectionShown: 'ホームページに表示中のセクション', sectionHidden: 'ホームページで非表示のセクション', shown: '表示', hidden: '非表示', livePreview: 'ライブプレビュー', leftColumn: '左列', heroFixed: 'ヒーローバナーは上部に固定され、設定できません。',
     title: 'ホームページのレイアウト', description: 'セクションをドラッグして、全員のホームページの順序を変更します。セクション全体を表示または非表示にできます。メインダッシュボードのグリッドは、カードの高さを整えるため左右の固定レイアウトを維持します。', resetDefault: 'デフォルトに戻す', pageSections: 'ページセクション', reorderHint: 'ハンドルをドラッグして並べ替えます。表示/非表示で各セクションを切り替えます。すべてのセクションは初期状態で表示されています。', saveHintBefore: 'このページの下部にある', saveAction: '「設定を保存」', saveHintAfter: 'をクリックすると、レイアウトの変更が全員に適用されます。', tipLabel: 'ヒント:', tipBody: 'ライブポータルエディターでは、ホームページから直接個別のウィジェットを移動、非表示、再追加することもできます。このページは管理者向けのセクションレイアウトエディターです。', watchHistory: '視聴履歴の設定', recentlyWatchedRows: '最近視聴した行数', mostWatchedRows: '最も視聴された行数', rowsPerPage: 'ページごとに表示する行数。', row: '行', rows: '行',

@@ -24,6 +24,7 @@ import {
     type CombinedRatings,
 } from '../discovery/mediaDetailUtils';
 import { enrichDiscoverItemsWithAvailability } from '../discovery/discoverAvailabilityEnrich';
+import { useDiscoverI18n } from '../discovery/i18n';
 import {
     resolveMediaAvailabilityState,
     shouldHideAvailableItem,
@@ -245,6 +246,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     onNavigate,
     onToast,
 }) => {
+    const { t } = useDiscoverI18n();
     const tmdbId = Number(session?.tmdbId || 0);
     const mediaType = session?.mediaType === 'tv' ? 'tv' : 'movie';
     const seasonNumber = Number(session?.season || 0);
@@ -268,7 +270,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     const [factLoading, setFactLoading] = useState(false);
     const [factSpotlightIndex, setFactSpotlightIndex] = useState(0);
 
-    const title = String(payload?.details?.title || payload?.details?.name || session?.title || 'Now playing').trim();
+    const title = String(payload?.details?.title || payload?.details?.name || session?.title || t('homeDashboard.nowPlayingCompanion.fallbacks.nowPlaying')).trim();
     const year = formatYear(payload?.details?.release_date || payload?.details?.first_air_date);
 
     useEffect(() => {
@@ -333,18 +335,20 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             if (cancelled) return;
             if (!details || details?.error) {
                 setPayload(null);
-                setError('Companion details are not available yet.');
+                setError('__companion_details_unavailable__');
                 return;
             }
 
-            const topCast = Array.isArray(details?.credits?.cast) ? details.credits.cast.slice(0, 10) : [];
+            const topCast = Array.isArray(details?.credits?.cast)
+                ? details.credits.cast.filter((actor: any) => String(actor?.name || '').trim()).slice(0, 10)
+                : [];
             const castInsights = await Promise.all(topCast.map(async (actor: any) => {
                 const personId = Number(actor?.id);
                 const profilePath = actor?.profile_path || actor?.profilePath || null;
                 if (!Number.isFinite(personId) || personId <= 0) {
                     return {
                         id: Number(actor?.id || 0),
-                        name: String(actor?.name || 'Unknown'),
+                        name: String(actor?.name || '').trim(),
                         character: String(actor?.character || '').trim(),
                         profilePath,
                         popularity: Number(actor?.popularity) || 0,
@@ -365,7 +369,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                     : '';
                 return {
                     id: personId,
-                    name: String(actor?.name || 'Unknown'),
+                    name: String(actor?.name || '').trim(),
                     character: String(actor?.character || '').trim(),
                     profilePath: profilePath || personDetails?.profile_path || personDetails?.profilePath || null,
                     popularity: Number(actor?.popularity ?? personDetails?.popularity) || 0,
@@ -403,7 +407,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             .catch((fetchError: any) => {
                 if (cancelled) return;
                 setPayload(null);
-                setError(String(fetchError?.message || 'Companion data failed to load.'));
+                setError(String(fetchError?.message || '__companion_load_failed__'));
             })
             .finally(() => {
                 if (!cancelled) setLoading(false);
@@ -513,23 +517,23 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         const vote = Number(details?.vote_average || 0);
         const status = String(details?.status || '').trim();
 
-        if (releaseDate) facts.push({ label: 'Release', value: releaseDate });
-        if (runtime > 0) facts.push({ label: 'Runtime', value: `${runtime} min` });
-        else if (avgRuntime > 0) facts.push({ label: 'Episode runtime', value: `${avgRuntime} min` });
-        if (genres.length) facts.push({ label: 'Genres', value: genres.join(' / ') });
-        if (vote > 0) facts.push({ label: 'TMDB score', value: `${vote.toFixed(1)} / 10` });
-        if (status) facts.push({ label: 'Status', value: status });
+        if (releaseDate) facts.push({ label: t('homeDashboard.nowPlayingCompanion.timeline.release'), value: releaseDate });
+        if (runtime > 0) facts.push({ label: t('homeDashboard.nowPlayingCompanion.timeline.runtime'), value: t('common.runtimeMin', { count: runtime }) });
+        else if (avgRuntime > 0) facts.push({ label: t('homeDashboard.nowPlayingCompanion.timeline.episodeRuntime'), value: t('common.runtimeMin', { count: avgRuntime }) });
+        if (genres.length) facts.push({ label: t('homeDashboard.nowPlayingCompanion.timeline.genres'), value: genres.join(' / ') });
+        if (vote > 0) facts.push({ label: t('homeDashboard.nowPlayingCompanion.timeline.tmdbScore'), value: `${vote.toFixed(1)} / 10` });
+        if (status) facts.push({ label: t('homeDashboard.nowPlayingCompanion.timeline.status'), value: status });
         if (mediaType === 'tv' && seasonNumber > 0 && episodeNumber > 0) {
             const epName = String(episodeContext.current?.name || session?.episodeTitle || '').trim();
             const epAirDate = String(episodeContext.current?.air_date || '').trim();
             facts.push({
-                label: 'Current episode',
+                label: t('homeDashboard.nowPlayingCompanion.timeline.currentEpisode'),
                 value: `S${seasonNumber}E${episodeNumber}${epName ? ` - ${epName}` : ''}`,
             });
-            if (epAirDate) facts.push({ label: 'Episode air date', value: epAirDate });
+            if (epAirDate) facts.push({ label: t('homeDashboard.nowPlayingCompanion.timeline.episodeAirDate'), value: epAirDate });
         }
         return facts;
-    }, [episodeContext.current?.air_date, episodeContext.current?.name, episodeNumber, mediaType, payload?.details, seasonNumber, session?.episodeTitle]);
+    }, [episodeContext.current?.air_date, episodeContext.current?.name, episodeNumber, mediaType, payload?.details, seasonNumber, session?.episodeTitle, t]);
 
     const quoteMoments = useMemo(() => {
         const source = String(
@@ -569,47 +573,51 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         const revenue = Number(details.revenue || 0);
 
         if (voteAverage > 0 && voteCount > 0) {
-            facts.push(`TMDB community score is ${voteAverage.toFixed(1)}/10 from ${voteCount.toLocaleString()} votes.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.communityScore', { score: voteAverage.toFixed(1), votes: voteCount.toLocaleString() }));
         }
         if (popularity > 0) {
-            facts.push(`Current popularity index sits at ${popularity.toFixed(1)} on TMDB trends.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.popularity', { value: popularity.toFixed(1) }));
         }
         if (mediaType === 'movie' && runtime > 0) {
-            facts.push(`Runtime is about ${runtime} minutes.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.movieRuntime', { value: runtime }));
         }
         if (mediaType === 'tv' && episodeRunTime > 0) {
-            facts.push(`Typical episode runtime is around ${episodeRunTime} minutes.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.episodeRuntime', { value: episodeRunTime }));
         }
         if (mediaType === 'tv' && seasonCount > 0) {
-            facts.push(`This show currently has ${seasonCount} season${seasonCount === 1 ? '' : 's'} and ${episodeCount > 0 ? episodeCount : 'multiple'} episodes.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.seriesSummary', { seasons: seasonCount, episodes: episodeCount > 0 ? episodeCount : t('homeDashboard.nowPlayingCompanion.facts.multipleEpisodes') }));
         }
         if (originCountries.length) {
-            facts.push(`Origin country: ${originCountries.join(', ')}.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.originCountry', { countries: originCountries.join(', ') }));
         }
         if (studios.length) {
-            facts.push(`Produced by ${studios.slice(0, 2).join(' and ')}${studios.length > 2 ? ` (+${studios.length - 2} more)` : ''}.`);
+            const additionalStudioCount = Math.max(0, studios.length - 2);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.producedBy', {
+                studios: studios.slice(0, 2).join(', '),
+                count: additionalStudioCount > 0 ? ` (+${additionalStudioCount})` : '',
+            }));
         }
         if (mediaType === 'movie' && budget > 0) {
-            facts.push(`Reported budget is about $${budget.toLocaleString()}.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.budget', { value: budget.toLocaleString() }));
         }
         if (mediaType === 'movie' && revenue > 0) {
-            facts.push(`Reported box office revenue is roughly $${revenue.toLocaleString()}.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.revenue', { value: revenue.toLocaleString() }));
         }
         if (mediaType === 'movie' && budget > 0 && revenue > 0) {
             const ratio = revenue / budget;
             if (Number.isFinite(ratio) && ratio > 1) {
-                facts.push(`Estimated return is about ${ratio.toFixed(1)}x the production budget.`);
+                facts.push(t('homeDashboard.nowPlayingCompanion.facts.returnOnBudget', { ratio: ratio.toFixed(1) }));
             }
         }
         if (topCast.length) {
-            facts.push(`Top billed: ${topCast.map((person) => person.name).join(', ')}.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.topBilled', { names: topCast.map((person) => person.name).join(', ') }));
         }
         if (episodeContext.current?.air_date) {
-            facts.push(`Current episode first aired on ${episodeContext.current.air_date}.`);
+            facts.push(t('homeDashboard.nowPlayingCompanion.facts.currentEpisodeAired', { date: episodeContext.current.air_date }));
         }
 
         return facts.slice(0, 8);
-    }, [episodeContext.current?.air_date, mediaType, normalizedDetails, payload?.castInsights]);
+    }, [episodeContext.current?.air_date, mediaType, normalizedDetails, payload?.castInsights, t]);
 
     const crewHighlights = useMemo(() => {
         const crew = Array.isArray(payload?.details?.credits?.crew) ? payload.details.credits.crew : [];
@@ -749,7 +757,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             delete current[storageKey];
             writeJsonStorage(LOCAL_WATCHLIST_KEY, current);
             setSavedToWatchlist(false);
-            onToast?.('Removed from quick watchlist.', 'success');
+            onToast?.(t('homeDashboard.nowPlayingCompanion.toasts.watchlistRemoved'), 'success');
             return;
         }
         current[storageKey] = {
@@ -763,7 +771,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         };
         writeJsonStorage(LOCAL_WATCHLIST_KEY, current);
         setSavedToWatchlist(true);
-        onToast?.('Saved to quick watchlist on this device.', 'success');
+        onToast?.(t('homeDashboard.nowPlayingCompanion.toasts.watchlistSaved'), 'success');
     };
 
     const openInLibrary = async () => {
@@ -780,10 +788,11 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             if (payloadRes?.url) {
                 window.open(String(payloadRes.url), '_blank', 'noopener,noreferrer');
             } else {
-                throw new Error('Library link not available');
+                throw new Error('__companion_provider_link_unavailable__');
             }
         } catch (openError: any) {
-            onToast?.(String(openError?.message || 'Could not open provider link.'), 'error');
+            const message = String(openError?.message || '__companion_provider_open_failed__');
+            onToast?.(message === '__companion_provider_link_unavailable__' ? t('homeDashboard.nowPlayingCompanion.errors.providerLinkUnavailable') : message === '__companion_provider_open_failed__' ? t('homeDashboard.nowPlayingCompanion.errors.providerOpenFailed') : message, 'error');
         } finally {
             setOpeningLibrary(false);
         }
@@ -799,7 +808,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         } else {
             onNavigate(basePath);
         }
-        onToast?.('Opened context in Discover details.', 'success');
+        onToast?.(t('homeDashboard.nowPlayingCompanion.toasts.openedDiscoverContext'), 'success');
         if (navigator?.clipboard?.writeText) {
             try {
                 await navigator.clipboard.writeText(quote);
@@ -814,13 +823,13 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         if (navigator?.clipboard?.writeText) {
             try {
                 await navigator.clipboard.writeText(summary);
-                onToast?.('Watch room summary copied.', 'success');
+                onToast?.(t('homeDashboard.nowPlayingCompanion.toasts.summaryCopied'), 'success');
                 return;
             } catch {
                 // fall through
             }
         }
-        onToast?.('Clipboard unavailable on this client.', 'error');
+        onToast?.(t('homeDashboard.nowPlayingCompanion.toasts.clipboardUnavailable'), 'error');
     };
 
     const providerLabel = String(mediaServerType || '').toLowerCase() === 'jellyfin'
@@ -829,11 +838,11 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             ? 'Emby'
             : 'Plex';
     const playbackTelemetry = [
-        { label: 'State', value: String(session.state || 'playing').toUpperCase() },
-        { label: 'Progress', value: `${Math.round(Number(session.progress) || 0)}%` },
-        { label: 'Media type', value: mediaType.toUpperCase() },
+        { label: t('homeDashboard.nowPlayingCompanion.telemetry.state'), value: String(session.state || 'playing').toLowerCase() === 'playing' ? t('homeDashboard.nowPlayingCompanion.telemetry.playing') : String(session.state || '').toLowerCase() === 'paused' ? t('nowPlaying.paused') : String(session.state || 'playing').toUpperCase() },
+        { label: t('homeDashboard.nowPlayingCompanion.telemetry.progress'), value: `${Math.round(Number(session.progress) || 0)}%` },
+        { label: t('homeDashboard.nowPlayingCompanion.telemetry.mediaType'), value: mediaType === 'tv' ? t('mediaType.tv') : t('mediaType.movie') },
         ...(seasonNumber > 0 && episodeNumber > 0
-            ? [{ label: 'Episode', value: `S${seasonNumber}E${episodeNumber}` }]
+            ? [{ label: t('homeDashboard.nowPlayingCompanion.telemetry.episode'), value: `S${seasonNumber}E${episodeNumber}` }]
             : []),
     ];
     const firstRecommendation = payload?.recommendations?.[0] || null;
@@ -850,47 +859,47 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             const nextName = String(episodeContext.next?.name || '').trim();
             return {
                 tone: 'sky' as const,
-                title: 'Continue with the next episode',
+                title: t('homeDashboard.nowPlayingCompanion.nextAction.continueTitle'),
                 hint: nextName
-                    ? `Jump straight to S${seasonNumber}E${nextEpisodeNumber} - ${nextName}.`
-                    : `Jump straight to S${seasonNumber}E${nextEpisodeNumber}.`,
-                cta: 'Open next episode',
+                    ? t('homeDashboard.nowPlayingCompanion.nextAction.continueHintWithName', { season: seasonNumber, episode: nextEpisodeNumber, name: nextName })
+                    : t('homeDashboard.nowPlayingCompanion.nextAction.continueHint', { season: seasonNumber, episode: nextEpisodeNumber }),
+                cta: t('homeDashboard.nowPlayingCompanion.actions.openNextEpisode'),
                 onClick: () => goToPath(`${basePath}?season=${seasonNumber}&episode=${nextEpisodeNumber}`),
             };
         }
         if (firstRecommendation) {
             return {
                 tone: 'violet' as const,
-                title: 'Queue a similar title right now',
-                hint: `Request ${firstRecommendation.title}${firstRecommendation.year ? ` (${firstRecommendation.year})` : ''} in one tap.`,
-                cta: 'Request similar',
+                title: t('homeDashboard.nowPlayingCompanion.nextAction.queueSimilarTitle'),
+                hint: t('homeDashboard.nowPlayingCompanion.nextAction.queueSimilarHint', { title: firstRecommendation.title, year: firstRecommendation.year || '' }),
+                cta: t('homeDashboard.nowPlayingCompanion.actions.requestSimilar'),
                 onClick: () => requestSimilar(firstRecommendation),
             };
         }
         if (leadCast && Number.isFinite(leadCast.id) && leadCast.id > 0) {
             return {
                 tone: 'emerald' as const,
-                title: 'Explore the lead actor next',
-                hint: `Open ${leadCast.name}'s filmography and related titles.`,
-                cta: 'Open actor profile',
+                title: t('homeDashboard.nowPlayingCompanion.nextAction.exploreActorTitle'),
+                hint: t('homeDashboard.nowPlayingCompanion.nextAction.exploreActorHint', { name: leadCast.name }),
+                cta: t('homeDashboard.nowPlayingCompanion.actions.openActorProfile'),
                 onClick: () => goToPath(`/discovery/person/${leadCast.id}`),
             };
         }
         if (!savedToWatchlist) {
             return {
                 tone: 'emerald' as const,
-                title: 'Save this session for later',
-                hint: 'Keep this title pinned in your quick watchlist on this device.',
-                cta: 'Save to watchlist',
+                title: t('homeDashboard.nowPlayingCompanion.nextAction.saveForLaterTitle'),
+                hint: t('homeDashboard.nowPlayingCompanion.nextAction.saveForLaterHint'),
+                cta: t('homeDashboard.nowPlayingCompanion.actions.saveToWatchlist'),
                 onClick: toggleLocalWatchlist,
             };
         }
         if (basePath) {
             return {
                 tone: 'emerald' as const,
-                title: 'Dive into full details',
-                hint: 'Open Discover details for richer metadata and request controls.',
-                cta: 'Open details',
+                title: t('homeDashboard.nowPlayingCompanion.nextAction.diveDetailsTitle'),
+                hint: t('homeDashboard.nowPlayingCompanion.nextAction.diveDetailsHint'),
+                cta: t('homeDashboard.nowPlayingCompanion.actions.openDetails'),
                 onClick: () => goToPath(basePath),
             };
         }
@@ -903,11 +912,10 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                 <div>
                     <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-emerald-200 flex items-center gap-2">
                         <Sparkles className="w-4 h-4" />
-                        Second Screen Companion
+                        {t('homeDashboard.nowPlayingCompanion.header.title')}
                     </h3>
                     <p className="text-xs text-white/70 mt-1">
-                        Live context for {title}
-                        {year ? ` (${year})` : ''} - only on Home hero.
+                        {year ? t('homeDashboard.nowPlayingCompanion.header.subtitleWithYear', { title, year }) : t('homeDashboard.nowPlayingCompanion.header.subtitle', { title })}
                     </p>
                 </div>
                 <div className="flex items-center justify-end">
@@ -918,11 +926,11 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                     >
                         {open ? (
                             <>
-                                Collapse <ChevronUp className="w-3.5 h-3.5" />
+                                {t('homeDashboard.nowPlayingCompanion.actions.collapse')} <ChevronUp className="w-3.5 h-3.5" />
                             </>
                         ) : (
                             <>
-                                Expand <ChevronDown className="w-3.5 h-3.5" />
+                                {t('homeDashboard.nowPlayingCompanion.actions.expand')} <ChevronDown className="w-3.5 h-3.5" />
                             </>
                         )}
                     </button>
@@ -941,7 +949,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     : 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10'
                             }`}
                         >
-                            Companion
+                            {t('homeDashboard.nowPlayingCompanion.tabs.companion')}
                         </button>
                         <button
                             type="button"
@@ -952,7 +960,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     : 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10'
                             }`}
                         >
-                            Deep Dive
+                            {t('homeDashboard.nowPlayingCompanion.tabs.deepDive')}
                         </button>
                         <button
                             type="button"
@@ -963,22 +971,22 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     : 'border-white/15 bg-white/5 text-white/80 hover:bg-white/10'
                             }`}
                         >
-                            Watch Room
+                            {t('homeDashboard.nowPlayingCompanion.tabs.watchRoom')}
                         </button>
                     </div>
 
                     {!Number.isFinite(tmdbId) || tmdbId <= 0 ? (
                         <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/70">
-                            TMDB context is unavailable for this active session.
+                            {t('homeDashboard.nowPlayingCompanion.errors.noTmdbContext')}
                         </div>
                     ) : loading ? (
                         <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex items-center gap-2 text-sm text-white/80">
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Loading companion context...
+                            {t('homeDashboard.nowPlayingCompanion.loading.context')}
                         </div>
                     ) : error ? (
                         <div className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
-                            {error}
+                            {error === '__companion_details_unavailable__' ? t('homeDashboard.nowPlayingCompanion.errors.detailsUnavailable') : error === '__companion_load_failed__' ? t('homeDashboard.nowPlayingCompanion.errors.loadFailed') : error}
                         </div>
                     ) : null}
 
@@ -993,7 +1001,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                             : 'border-emerald-400/30 bg-emerald-500/10'
                                 }`}>
                                     <p className="text-[11px] uppercase tracking-widest font-bold text-white/70">
-                                        Next best action
+                                        {t('homeDashboard.nowPlayingCompanion.sections.nextBestAction')}
                                     </p>
                                     <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                                         <div className="min-w-0 flex-1">
@@ -1022,7 +1030,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     onClick={toggleLocalWatchlist}
                                     className="w-full px-3 py-2 rounded-lg text-xs font-bold border border-white/20 bg-white/5 text-white hover:bg-white/10 transition-colors"
                                 >
-                                    {savedToWatchlist ? 'Saved to watchlist' : 'Save to watchlist'}
+                                    {savedToWatchlist ? t('homeDashboard.nowPlayingCompanion.actions.savedToWatchlist') : t('homeDashboard.nowPlayingCompanion.actions.saveToWatchlist')}
                                 </button>
                                 <button
                                     type="button"
@@ -1030,7 +1038,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     disabled={openingLibrary}
                                     className="w-full px-3 py-2 rounded-lg text-xs font-bold border border-white/20 bg-white/5 text-white hover:bg-white/10 transition-colors disabled:opacity-60"
                                 >
-                                    {openingLibrary ? `Opening ${providerLabel}...` : `Open in ${providerLabel}`}
+                                    {openingLibrary ? t('homeDashboard.nowPlayingCompanion.actions.openingProvider', { provider: providerLabel }) : t('homeDashboard.nowPlayingCompanion.actions.openInProvider', { provider: providerLabel })}
                                 </button>
                                 <button
                                     type="button"
@@ -1038,7 +1046,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     disabled={!firstRecommendation}
                                     className="w-full px-3 py-2 rounded-lg text-xs font-bold border border-violet-400/40 bg-violet-500/20 text-violet-100 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
                                 >
-                                    {firstRecommendation ? `Request ${firstRecommendation.title}` : 'No similar titles to request'}
+                                    {firstRecommendation ? t('homeDashboard.nowPlayingCompanion.actions.requestTitle', { title: firstRecommendation.title }) : t('homeDashboard.nowPlayingCompanion.actions.noSimilarTitles')}
                                 </button>
                             </div>
 
@@ -1055,7 +1063,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                 <div className="xl:col-span-2 rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                         <Users className="w-3.5 h-3.5" />
-                                        Cast intelligence grid
+                                        {t('homeDashboard.nowPlayingCompanion.sections.castIntelligence')}
                                     </p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
                                         {payload.castInsights.map((actor) => (
@@ -1087,7 +1095,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                         ) : null}
                                                         {actor.popularity > 0 ? (
                                                             <p className="text-[10px] text-emerald-200/80">
-                                                                Popularity {actor.popularity.toFixed(1)}
+                                                                {t('homeDashboard.nowPlayingCompanion.cast.popularity', { value: actor.popularity.toFixed(1) })}
                                                             </p>
                                                         ) : null}
                                                         {actor.knownForDepartment ? (
@@ -1122,17 +1130,17 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <p className="mt-2 text-[10px] text-white/45">No known-for links available.</p>
+                                                    <p className="mt-2 text-[10px] text-white/45">{t('homeDashboard.nowPlayingCompanion.empty.noKnownFor')}</p>
                                                 )}
                                             </div>
                                         ))}
                                     </div>
                                     {payload.castInsights.length === 0 ? (
-                                        <p className="text-xs text-white/55 mt-2">No cast data was returned for this title.</p>
+                                        <p className="text-xs text-white/55 mt-2">{t('homeDashboard.nowPlayingCompanion.empty.noCastData')}</p>
                                     ) : null}
                                     <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
                                         <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
-                                            Crew intelligence
+                                            {t('homeDashboard.nowPlayingCompanion.sections.crewIntelligence')}
                                         </p>
                                         {crewHighlights.length > 0 ? (
                                             <div className="flex gap-2 overflow-x-auto pb-1 pr-1 snap-x snap-mandatory">
@@ -1177,7 +1185,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                 ))}
                                             </div>
                                         ) : (
-                                            <p className="text-xs text-white/55">Crew highlights are unavailable for this title.</p>
+                                            <p className="text-xs text-white/55">{t('homeDashboard.nowPlayingCompanion.empty.noCrewHighlights')}</p>
                                         )}
                                     </div>
                                 </div>
@@ -1185,7 +1193,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                 <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3 flex flex-col min-h-0">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5 shrink-0">
                                         <Music2 className="w-3.5 h-3.5" />
-                                        Soundtrack cues
+                                        {t('homeDashboard.nowPlayingCompanion.sections.soundtrackCues')}
                                     </p>
                                     {payload.soundtrackPeople.length > 0 ? (
                                         <div className="space-y-1.5">
@@ -1200,13 +1208,13 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         </div>
                                     ) : (
                                         <p className="text-xs text-white/55">
-                                            No soundtrack credits were found for this item.
+                                            {t('homeDashboard.nowPlayingCompanion.empty.noSoundtrackCredits')}
                                         </p>
                                     )}
 
                                     <div className="mt-3 pt-3 border-t border-white/10 space-y-2 shrink-0">
                                         <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
-                                            Ratings and links
+                                        {t('homeDashboard.nowPlayingCompanion.sections.ratingsAndLinks')}
                                         </p>
                                         <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                                             <div className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
@@ -1252,10 +1260,10 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                             <span className="absolute inline-flex h-full w-full rounded-full bg-fuchsia-300 opacity-75 animate-ping motion-reduce:animate-none" />
                                                             <span className="relative inline-flex rounded-full h-2 w-2 bg-fuchsia-200" />
                                                         </span>
-                                                        Fact overload
+                                        {t('homeDashboard.nowPlayingCompanion.sections.factOverload')}
                                                     </p>
                                                     <span className="px-1.5 py-0.5 rounded border border-fuchsia-300/35 bg-fuchsia-500/15 text-[10px] font-bold text-fuchsia-100">
-                                                        LIVE
+                                        {t('homeDashboard.nowPlayingCompanion.factOverload.live')}
                                                     </span>
                                                 </div>
                                                 <div className="flex flex-wrap gap-1.5 text-[10px]">
@@ -1266,17 +1274,17 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                         TMDB {Number(factPayload?.sources?.tmdb) || 0}
                                                     </span>
                                                     <span className="px-1.5 py-0.5 rounded border border-white/20 bg-black/25 text-white/80">
-                                                        Total {overloadFacts.length}
+                                        {t('homeDashboard.nowPlayingCompanion.factOverload.total', { total: overloadFacts.length })}
                                                     </span>
                                                 </div>
                                                 {factLoading ? (
                                                     <div className="rounded-lg border border-fuchsia-300/25 bg-black/30 px-2.5 py-2 text-xs text-fuchsia-100/80 animate-pulse motion-reduce:animate-none">
-                                                        Loading deep trivia from fact sources...
+                                        {t('homeDashboard.nowPlayingCompanion.loading.facts')}
                                                     </div>
                                                 ) : overloadFacts.length > 0 ? (
                                                     <>
                                                         <div className="rounded-lg border border-fuchsia-300/35 bg-black/35 px-2.5 py-2 shadow-[0_0_24px_rgba(217,70,239,0.25)]">
-                                                            <p className="text-[10px] uppercase tracking-widest text-fuchsia-200/90 font-bold">Spotlight</p>
+                                            <p className="text-[10px] uppercase tracking-widest text-fuchsia-200/90 font-bold">{t('homeDashboard.nowPlayingCompanion.factOverload.spotlight')}</p>
                                                             <p className="mt-1 text-xs text-white leading-relaxed">
                                                                 {overloadFacts[factSpotlightIndex] || overloadFacts[0]}
                                                             </p>
@@ -1302,7 +1310,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                     </>
                                                 ) : (
                                                     <p className="text-xs text-white/65">
-                                                        Fact enrichment is unavailable for this title right now.
+                                            {t('homeDashboard.nowPlayingCompanion.empty.factsUnavailable')}
                                                     </p>
                                                 )}
                                             </div>
@@ -1313,7 +1321,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         <div className="mt-3 pt-3 border-t border-white/10 space-y-2 shrink-0">
                                             <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold flex items-center gap-1.5">
                                                 <Clapperboard className="w-3.5 h-3.5" />
-                                                Episode context
+                                        {t('homeDashboard.nowPlayingCompanion.sections.episodeContext')}
                                             </p>
                                             <div className="space-y-1 text-xs text-white/80">
                                                 <button
@@ -1322,7 +1330,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                     onClick={() => goToPath(`${basePath}?season=${seasonNumber}&episode=${Number(episodeContext.previous?.episode_number)}`)}
                                                     className="w-full text-left px-2 py-1.5 rounded-md border border-white/10 bg-black/30 hover:bg-black/45 disabled:opacity-50"
                                                 >
-                                                    Prev: {episodeContext.previous?.name || 'N/A'}
+                                            {t('homeDashboard.nowPlayingCompanion.episode.previous', { name: episodeContext.previous?.name || t('homeDashboard.nowPlayingCompanion.empty.notAvailable') })}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -1330,7 +1338,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                     onClick={() => goToPath(`${basePath}?season=${seasonNumber}&episode=${episodeNumber}`)}
                                                     className="w-full text-left px-2 py-1.5 rounded-md border border-emerald-400/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50"
                                                 >
-                                                    Current: {episodeContext.current?.name || session.episodeTitle || `Episode ${episodeNumber}`}
+                                            {t('homeDashboard.nowPlayingCompanion.episode.current', { name: episodeContext.current?.name || session.episodeTitle || t('nowPlaying.episode', { number: episodeNumber }) })}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -1338,7 +1346,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                     onClick={() => goToPath(`${basePath}?season=${seasonNumber}&episode=${Number(episodeContext.next?.episode_number)}`)}
                                                     className="w-full text-left px-2 py-1.5 rounded-md border border-white/10 bg-black/30 hover:bg-black/45 disabled:opacity-50"
                                                 >
-                                                    Next: {episodeContext.next?.name || 'N/A'}
+                                            {t('homeDashboard.nowPlayingCompanion.episode.next', { name: episodeContext.next?.name || t('homeDashboard.nowPlayingCompanion.empty.notAvailable') })}
                                                 </button>
                                             </div>
                                         </div>
@@ -1349,7 +1357,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                             {payload.recommendations.length > 0 ? (
                                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2">
-                                        Similar picks
+                                        {t('homeDashboard.nowPlayingCompanion.sections.similarPicks')}
                                     </p>
                                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
                                         {payload.recommendations.slice(0, 6).map((item) => (
@@ -1372,7 +1380,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                     </div>
                                                     <div className="p-2">
                                                         <p className="text-[11px] text-white font-semibold truncate">{item.title}</p>
-                                                        <p className="text-[10px] text-white/55">{item.year || 'Unknown year'}</p>
+                                                        <p className="text-[10px] text-white/55">{item.year || t('homeDashboard.nowPlayingCompanion.empty.unknownYear')}</p>
                                                     </div>
                                                 </button>
                                                 <button
@@ -1380,7 +1388,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                     onClick={() => requestSimilar(item)}
                                                     className="w-full px-2 py-1.5 text-[10px] font-bold border-t border-white/10 text-violet-200 bg-violet-500/15 hover:bg-violet-500/25 transition-colors"
                                                 >
-                                                    Request
+                                                    {t('quickActions.request')}
                                                 </button>
                                             </div>
                                         ))}
@@ -1395,7 +1403,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                                 <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                     <Sparkles className="w-3.5 h-3.5" />
-                                    Live trivia timeline
+                                    {t('homeDashboard.nowPlayingCompanion.sections.liveTriviaTimeline')}
                                 </p>
                                 <div className="space-y-2">
                                     {timelineFacts.map((fact) => (
@@ -1408,7 +1416,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         </div>
                                     ))}
                                     {!timelineFacts.length ? (
-                                        <p className="text-xs text-white/55">No timeline facts available yet.</p>
+                                        <p className="text-xs text-white/55">{t('homeDashboard.nowPlayingCompanion.empty.noTimelineFacts')}</p>
                                     ) : null}
                                 </div>
                             </div>
@@ -1416,7 +1424,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                                 <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                     <Clapperboard className="w-3.5 h-3.5" />
-                                    Production facts
+                                    {t('homeDashboard.nowPlayingCompanion.sections.productionFacts')}
                                 </p>
                                 <div className="space-y-2">
                                     {productionFacts.length > 0 ? productionFacts.map((fact) => (
@@ -1428,7 +1436,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                             <span>{fact.value}</span>
                                         </div>
                                     )) : (
-                                        <p className="text-xs text-white/55">No production facts were returned for this title.</p>
+                                        <p className="text-xs text-white/55">{t('homeDashboard.nowPlayingCompanion.empty.noProductionFacts')}</p>
                                     )}
                                 </div>
                             </div>
@@ -1436,7 +1444,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                                 <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                     <Link2 className="w-3.5 h-3.5" />
-                                    Actor deep-link graph
+                                    {t('homeDashboard.nowPlayingCompanion.sections.actorGraph')}
                                 </p>
                                 <div className="space-y-2">
                                     {payload.castInsights.slice(0, 4).map((actor) => (
@@ -1460,7 +1468,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                     </button>
                                                     {idx < actor.knownFor.length - 1 ? <span className="text-white/35 mx-1">/</span> : null}
                                                 </React.Fragment>
-                                            )) : <span className="text-white/55">No linked credits</span>}
+                                            )) : <span className="text-white/55">{t('homeDashboard.nowPlayingCompanion.empty.noLinkedCredits')}</span>}
                                         </div>
                                     ))}
                                 </div>
@@ -1469,7 +1477,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                                 <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                     <MessageSquareQuote className="w-3.5 h-3.5" />
-                                    Subtitle quote context
+                                    {t('homeDashboard.nowPlayingCompanion.sections.subtitleQuoteContext')}
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     {quoteMoments.map((quote, index) => (
@@ -1487,7 +1495,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         </button>
                                     ))}
                                     {!quoteMoments.length ? (
-                                        <p className="text-xs text-white/55">No contextual lines available.</p>
+                                        <p className="text-xs text-white/55">{t('homeDashboard.nowPlayingCompanion.empty.noContextualLines')}</p>
                                     ) : null}
                                 </div>
                             </div>
@@ -1498,7 +1506,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                         <div className="space-y-3">
                             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                                 <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2">
-                                    Shared reactions
+                                    {t('homeDashboard.nowPlayingCompanion.sections.sharedReactions')}
                                 </p>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                     <button
@@ -1506,7 +1514,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         onClick={() => bumpReaction('like')}
                                         className="px-2.5 py-2 rounded-lg border border-white/15 bg-black/30 hover:bg-black/45 text-xs text-white/85 flex items-center justify-between"
                                     >
-                                        <span className="inline-flex items-center gap-1.5"><ThumbsUp className="w-3.5 h-3.5" /> Like</span>
+                                        <span className="inline-flex items-center gap-1.5"><ThumbsUp className="w-3.5 h-3.5" /> {t('homeDashboard.nowPlayingCompanion.reactions.like')}</span>
                                         <span className="font-bold">{reactions.like || 0}</span>
                                     </button>
                                     <button
@@ -1514,7 +1522,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         onClick={() => bumpReaction('fire')}
                                         className="px-2.5 py-2 rounded-lg border border-white/15 bg-black/30 hover:bg-black/45 text-xs text-white/85 flex items-center justify-between"
                                     >
-                                        <span className="inline-flex items-center gap-1.5"><Flame className="w-3.5 h-3.5" /> Fire</span>
+                                        <span className="inline-flex items-center gap-1.5"><Flame className="w-3.5 h-3.5" /> {t('homeDashboard.nowPlayingCompanion.reactions.fire')}</span>
                                         <span className="font-bold">{reactions.fire || 0}</span>
                                     </button>
                                     <button
@@ -1522,7 +1530,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         onClick={() => bumpReaction('laugh')}
                                         className="px-2.5 py-2 rounded-lg border border-white/15 bg-black/30 hover:bg-black/45 text-xs text-white/85 flex items-center justify-between"
                                     >
-                                        <span className="inline-flex items-center gap-1.5"><Laugh className="w-3.5 h-3.5" /> Laugh</span>
+                                        <span className="inline-flex items-center gap-1.5"><Laugh className="w-3.5 h-3.5" /> {t('homeDashboard.nowPlayingCompanion.reactions.laugh')}</span>
                                         <span className="font-bold">{reactions.laugh || 0}</span>
                                     </button>
                                     <button
@@ -1530,7 +1538,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         onClick={() => bumpReaction('wow')}
                                         className="px-2.5 py-2 rounded-lg border border-white/15 bg-black/30 hover:bg-black/45 text-xs text-white/85 flex items-center justify-between"
                                     >
-                                        <span className="inline-flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> Wow</span>
+                                        <span className="inline-flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> {t('homeDashboard.nowPlayingCompanion.reactions.wow')}</span>
                                         <span className="font-bold">{reactions.wow || 0}</span>
                                     </button>
                                 </div>
@@ -1538,14 +1546,14 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
                             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                                 <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2">
-                                    Quick poll
+                                    {t('homeDashboard.nowPlayingCompanion.sections.quickPoll')}
                                 </p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     {[
-                                        { id: 'pacing', label: 'Best pacing' },
-                                        { id: 'acting', label: 'Strong acting' },
-                                        { id: 'visuals', label: 'Visual highlight' },
-                                        { id: 'soundtrack', label: 'Great soundtrack' },
+                                        { id: 'pacing', label: t('homeDashboard.nowPlayingCompanion.poll.bestPacing') },
+                                        { id: 'acting', label: t('homeDashboard.nowPlayingCompanion.poll.strongActing') },
+                                        { id: 'visuals', label: t('homeDashboard.nowPlayingCompanion.poll.visualHighlight') },
+                                        { id: 'soundtrack', label: t('homeDashboard.nowPlayingCompanion.poll.greatSoundtrack') },
                                     ].map((option) => (
                                         <button
                                             key={option.id}
@@ -1565,20 +1573,20 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     ))}
                                 </div>
                                 <p className="mt-2 text-[11px] text-white/55">
-                                    Total votes: {totalPollVotes}
+                                    {t('homeDashboard.nowPlayingCompanion.poll.totalVotes', { total: totalPollVotes })}
                                 </p>
                             </div>
 
                             <div className="rounded-xl border border-white/10 bg-white/5 p-3 flex flex-wrap items-center justify-between gap-2">
                                 <p className="text-xs text-white/75">
-                                    Copy a quick room summary to share context with friends.
+                                    {t('homeDashboard.nowPlayingCompanion.poll.summaryHint')}
                                 </p>
                                 <button
                                     type="button"
                                     onClick={copyRoomSummary}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 bg-white/5 text-xs font-bold text-white hover:bg-white/10"
                                 >
-                                    Copy summary <ExternalLink className="w-3.5 h-3.5" />
+                                    {t('homeDashboard.nowPlayingCompanion.actions.copySummary')} <ExternalLink className="w-3.5 h-3.5" />
                                 </button>
                             </div>
                         </div>
