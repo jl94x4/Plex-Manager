@@ -251,6 +251,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     const [ratings, setRatings] = useState<CombinedRatings | null>(null);
     const [factPayload, setFactPayload] = useState<DiscoveryFactPayload | null>(null);
     const [factLoading, setFactLoading] = useState(false);
+    const [factSpotlightIndex, setFactSpotlightIndex] = useState(0);
 
     const title = String(payload?.details?.title || payload?.details?.name || session?.title || 'Now playing').trim();
     const year = formatYear(payload?.details?.release_date || payload?.details?.first_air_date);
@@ -647,6 +648,24 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         }
         return out;
     }, [factPayload?.facts, triviaFacts]);
+
+    useEffect(() => {
+        setFactSpotlightIndex(0);
+    }, [tmdbId, mediaType]);
+
+    useEffect(() => {
+        if (factSpotlightIndex >= overloadFacts.length) {
+            setFactSpotlightIndex(0);
+        }
+    }, [factSpotlightIndex, overloadFacts.length]);
+
+    useEffect(() => {
+        if (!open || tab !== 'companion' || factLoading || overloadFacts.length <= 1) return undefined;
+        const timer = window.setInterval(() => {
+            setFactSpotlightIndex((prev) => ((prev + 1) % overloadFacts.length));
+        }, 3200);
+        return () => window.clearInterval(timer);
+    }, [factLoading, open, overloadFacts.length, tab]);
 
     const bumpReaction = useCallback((key: string) => {
         setReactions((prev) => {
@@ -1201,36 +1220,72 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         ) : null}
                                     </div>
 
-                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
-                                        <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
-                                            Fact overload
-                                        </p>
-                                        <div className="flex flex-wrap gap-1.5 text-[10px]">
-                                            <span className="px-1.5 py-0.5 rounded border border-white/15 bg-white/5 text-white/70">
-                                                Wiki facts: {Number(factPayload?.sources?.wikipedia) || 0}
-                                            </span>
-                                            <span className="px-1.5 py-0.5 rounded border border-white/15 bg-white/5 text-white/70">
-                                                TMDB facts: {Number(factPayload?.sources?.tmdb) || 0}
-                                            </span>
-                                            <span className="px-1.5 py-0.5 rounded border border-white/15 bg-white/5 text-white/70">
-                                                Total loaded: {overloadFacts.length}
-                                            </span>
-                                        </div>
-                                        {factLoading ? (
-                                            <p className="text-xs text-white/55">Loading deep trivia from fact sources...</p>
-                                        ) : overloadFacts.length > 0 ? (
-                                            <div className="space-y-1.5 max-h-52 sm:max-h-56 overflow-y-auto pr-1">
-                                                {overloadFacts.map((fact, idx) => (
-                                                    <p key={`overload-${idx}`} className="text-xs text-white/80 leading-relaxed">
-                                                        - {fact}
+                                    <div className="mt-3 pt-3 border-t border-white/10">
+                                        <div className="relative overflow-hidden rounded-xl border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-500/10 via-violet-500/10 to-cyan-500/10 p-2.5">
+                                            <div className="pointer-events-none absolute -top-10 right-0 w-28 h-28 rounded-full bg-fuchsia-400/20 blur-2xl animate-pulse motion-reduce:animate-none" />
+                                            <div className="pointer-events-none absolute -bottom-12 -left-6 w-32 h-32 rounded-full bg-cyan-400/15 blur-2xl animate-pulse motion-reduce:animate-none" />
+                                            <div className="relative space-y-2">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <p className="text-[11px] uppercase tracking-widest text-fuchsia-100 font-black flex items-center gap-1.5">
+                                                        <span className="relative inline-flex h-2 w-2">
+                                                            <span className="absolute inline-flex h-full w-full rounded-full bg-fuchsia-300 opacity-75 animate-ping motion-reduce:animate-none" />
+                                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-fuchsia-200" />
+                                                        </span>
+                                                        Fact overload
                                                     </p>
-                                                ))}
+                                                    <span className="px-1.5 py-0.5 rounded border border-fuchsia-300/35 bg-fuchsia-500/15 text-[10px] font-bold text-fuchsia-100">
+                                                        LIVE
+                                                    </span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5 text-[10px]">
+                                                    <span className="px-1.5 py-0.5 rounded border border-fuchsia-300/25 bg-black/25 text-fuchsia-100/85">
+                                                        Wiki {Number(factPayload?.sources?.wikipedia) || 0}
+                                                    </span>
+                                                    <span className="px-1.5 py-0.5 rounded border border-cyan-300/25 bg-black/25 text-cyan-100/85">
+                                                        TMDB {Number(factPayload?.sources?.tmdb) || 0}
+                                                    </span>
+                                                    <span className="px-1.5 py-0.5 rounded border border-white/20 bg-black/25 text-white/80">
+                                                        Total {overloadFacts.length}
+                                                    </span>
+                                                </div>
+                                                {factLoading ? (
+                                                    <div className="rounded-lg border border-fuchsia-300/25 bg-black/30 px-2.5 py-2 text-xs text-fuchsia-100/80 animate-pulse motion-reduce:animate-none">
+                                                        Loading deep trivia from fact sources...
+                                                    </div>
+                                                ) : overloadFacts.length > 0 ? (
+                                                    <>
+                                                        <div className="rounded-lg border border-fuchsia-300/35 bg-black/35 px-2.5 py-2 shadow-[0_0_24px_rgba(217,70,239,0.25)]">
+                                                            <p className="text-[10px] uppercase tracking-widest text-fuchsia-200/90 font-bold">Spotlight</p>
+                                                            <p className="mt-1 text-xs text-white leading-relaxed">
+                                                                {overloadFacts[factSpotlightIndex] || overloadFacts[0]}
+                                                            </p>
+                                                        </div>
+                                                        <div className="space-y-1.5 max-h-52 sm:max-h-56 overflow-y-auto pr-1">
+                                                            {overloadFacts.map((fact, idx) => {
+                                                                const active = idx === factSpotlightIndex;
+                                                                return (
+                                                                    <div
+                                                                        key={`overload-${idx}`}
+                                                                        className={`rounded-md border px-2 py-1.5 text-xs leading-relaxed transition-all duration-500 ${
+                                                                            active
+                                                                                ? 'border-fuchsia-300/50 bg-fuchsia-500/18 text-white shadow-[0_0_16px_rgba(217,70,239,0.25)]'
+                                                                                : 'border-white/10 bg-black/25 text-white/80'
+                                                                        }`}
+                                                                    >
+                                                                        {active ? <span className="mr-1 text-[10px] text-fuchsia-200">★</span> : null}
+                                                                        {fact}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <p className="text-xs text-white/65">
+                                                        Fact enrichment is unavailable for this title right now.
+                                                    </p>
+                                                )}
                                             </div>
-                                        ) : (
-                                            <p className="text-xs text-white/55">
-                                                Fact enrichment is unavailable for this title right now.
-                                            </p>
-                                        )}
+                                        </div>
                                     </div>
 
                                     {mediaType === 'tv' && seasonNumber > 0 ? (
