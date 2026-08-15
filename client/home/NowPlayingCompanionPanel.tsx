@@ -56,6 +56,10 @@ type CastInsight = {
     character: string;
     profilePath: string | null;
     popularity: number;
+    knownForDepartment: string;
+    birthday: string;
+    placeOfBirth: string;
+    biographySnippet: string;
     knownFor: KnownForItem[];
 };
 
@@ -69,6 +73,14 @@ type CompanionPayload = {
 
 type PollVotes = Record<string, number>;
 type ReactionCounts = Record<string, number>;
+type DiscoveryFactPayload = {
+    facts?: string[];
+    fact?: string | null;
+    sources?: {
+        wikipedia?: number;
+        tmdb?: number;
+    };
+};
 
 const LOCAL_WATCHLIST_KEY = 'portal.companion.watchlist.v1';
 const LOCAL_ROOM_STATE_KEY = 'portal.companion.room.v1';
@@ -76,6 +88,16 @@ const LOCAL_ROOM_STATE_KEY = 'portal.companion.room.v1';
 const posterUrl = (path?: string | null, size = 'w342') => (
     path ? `https://image.tmdb.org/t/p/${size}${path}` : ''
 );
+
+const initialsForName = (name: string): string => {
+    const parts = String(name || '')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2);
+    if (!parts.length) return '?';
+    return parts.map((part) => part[0]?.toUpperCase() || '').join('');
+};
 
 const normalizedMediaType = (raw: unknown): 'movie' | 'tv' | null => {
     const value = String(raw || '').toLowerCase();
@@ -116,7 +138,7 @@ const buildKnownFor = (payload: any, currentTmdbId: number): KnownForItem[] => {
     ];
     return pool
         .map((entry) => {
-            const mediaType = normalizedMediaType(entry?.media_type);
+            const mediaType = normalizedMediaType(entry?.media_type || entry?.mediaType);
             const id = Number(entry?.id);
             if (!mediaType || !Number.isFinite(id) || id <= 0 || id === currentTmdbId) return null;
             const title = String(entry?.title || entry?.name || '').trim();
@@ -128,9 +150,14 @@ const buildKnownFor = (payload: any, currentTmdbId: number): KnownForItem[] => {
                 id,
                 mediaType,
                 title,
-                year: formatYear(entry?.release_date || entry?.first_air_date),
+                year: formatYear(
+                    entry?.release_date
+                    || entry?.first_air_date
+                    || entry?.releaseDate
+                    || entry?.firstAirDate,
+                ),
                 popularity: Number(entry?.popularity) || 0,
-                voteCount: Number(entry?.vote_count) || 0,
+                voteCount: Number(entry?.vote_count ?? entry?.voteCount) || 0,
             };
         })
         .filter(Boolean)
@@ -173,7 +200,7 @@ const extractSoundtrackPeople = (crew: any[]): string[] => {
 const normalizeRecommendations = (results: any[]): Recommendation[] => (
     (Array.isArray(results) ? results : [])
         .map((item) => {
-            const mediaType = normalizedMediaType(item?.media_type);
+            const mediaType = normalizedMediaType(item?.media_type || item?.mediaType);
             const id = Number(item?.id);
             if (!mediaType || !Number.isFinite(id) || id <= 0) return null;
             const title = String(item?.title || item?.name || '').trim();
@@ -182,8 +209,8 @@ const normalizeRecommendations = (results: any[]): Recommendation[] => (
                 id,
                 mediaType,
                 title,
-                year: formatYear(item?.release_date || item?.first_air_date),
-                posterPath: item?.poster_path || null,
+                year: formatYear(item?.release_date || item?.first_air_date || item?.releaseDate || item?.firstAirDate),
+                posterPath: item?.poster_path || item?.posterPath || null,
             };
         })
         .filter(Boolean) as Recommendation[]
@@ -216,6 +243,8 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     const [pollVotes, setPollVotes] = useState<PollVotes>({});
     const [reactions, setReactions] = useState<ReactionCounts>({});
     const [ratings, setRatings] = useState<CombinedRatings | null>(null);
+    const [factPayload, setFactPayload] = useState<DiscoveryFactPayload | null>(null);
+    const [factLoading, setFactLoading] = useState(false);
 
     const title = String(payload?.details?.title || payload?.details?.name || session?.title || 'Now playing').trim();
     const year = formatYear(payload?.details?.release_date || payload?.details?.first_air_date);
@@ -286,10 +315,10 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                 return;
             }
 
-            const topCast = Array.isArray(details?.credits?.cast) ? details.credits.cast.slice(0, 6) : [];
+            const topCast = Array.isArray(details?.credits?.cast) ? details.credits.cast.slice(0, 10) : [];
             const castInsights = await Promise.all(topCast.map(async (actor: any) => {
                 const personId = Number(actor?.id);
-                const profilePath = actor?.profile_path || null;
+                const profilePath = actor?.profile_path || actor?.profilePath || null;
                 if (!Number.isFinite(personId) || personId <= 0) {
                     return {
                         id: Number(actor?.id || 0),
@@ -297,16 +326,37 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                         character: String(actor?.character || '').trim(),
                         profilePath,
                         popularity: Number(actor?.popularity) || 0,
+                        knownForDepartment: String(actor?.known_for_department || actor?.knownForDepartment || '').trim(),
+                        birthday: '',
+                        placeOfBirth: '',
+                        biographySnippet: '',
                         knownFor: [],
                     } as CastInsight;
                 }
-                const credits = await apiFetch(`/api/discovery/proxy/person/${personId}/combined_credits`).catch(() => null);
+                const [credits, personDetails] = await Promise.all([
+                    apiFetch(`/api/discovery/proxy/person/${personId}/combined_credits`).catch(() => null),
+                    apiFetch(`/api/discovery/proxy/person/${personId}`).catch(() => null),
+                ]);
+                const biographyRaw = String(personDetails?.biography || '').trim();
+                const biographySnippet = biographyRaw
+                    ? biographyRaw.replace(/\s+/g, ' ').slice(0, 180)
+                    : '';
                 return {
                     id: personId,
                     name: String(actor?.name || 'Unknown'),
                     character: String(actor?.character || '').trim(),
-                    profilePath,
-                    popularity: Number(actor?.popularity) || 0,
+                    profilePath: profilePath || personDetails?.profile_path || personDetails?.profilePath || null,
+                    popularity: Number(actor?.popularity ?? personDetails?.popularity) || 0,
+                    knownForDepartment: String(
+                        actor?.known_for_department
+                        || actor?.knownForDepartment
+                        || personDetails?.known_for_department
+                        || personDetails?.knownForDepartment
+                        || '',
+                    ).trim(),
+                    birthday: String(personDetails?.birthday || '').trim(),
+                    placeOfBirth: String(personDetails?.place_of_birth || personDetails?.placeOfBirth || '').trim(),
+                    biographySnippet,
                     knownFor: buildKnownFor(credits, tmdbId),
                 } as CastInsight;
             }));
@@ -350,6 +400,32 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             .catch(() => {
                 if (cancelled) return;
                 setRatings(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [open, mediaType, tmdbId]);
+
+    useEffect(() => {
+        if (!open || !Number.isFinite(tmdbId) || tmdbId <= 0) {
+            setFactPayload(null);
+            setFactLoading(false);
+            return;
+        }
+        let cancelled = false;
+        setFactLoading(true);
+        apiFetch(`/api/discovery/fact?mediaType=${mediaType}&mediaId=${tmdbId}`)
+            .then((res) => {
+                if (cancelled) return;
+                setFactPayload(res && typeof res === 'object' ? res : null);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setFactPayload(null);
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setFactLoading(false);
             });
         return () => {
             cancelled = true;
@@ -507,6 +583,59 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         return facts.slice(0, 8);
     }, [episodeContext.current?.air_date, mediaType, normalizedDetails, payload?.castInsights]);
 
+    const crewHighlights = useMemo(() => {
+        const crew = Array.isArray(payload?.details?.credits?.crew) ? payload.details.credits.crew : [];
+        if (!crew.length) return [] as string[];
+        const byJob = new Map<string, string>();
+        for (const entry of crew) {
+            const job = String(entry?.job || '').trim();
+            const name = String(entry?.name || '').trim();
+            if (!job || !name || byJob.has(job)) continue;
+            byJob.set(job, name);
+        }
+        const preferredJobs = [
+            'Director',
+            'Screenplay',
+            'Writer',
+            'Original Music Composer',
+            'Director of Photography',
+            'Editor',
+            'Producer',
+            'Executive Producer',
+        ];
+        const picked: string[] = [];
+        for (const job of preferredJobs) {
+            const person = byJob.get(job);
+            if (!person) continue;
+            picked.push(`${job}: ${person}`);
+            if (picked.length >= 6) break;
+        }
+        if (!picked.length) {
+            for (const [job, person] of byJob.entries()) {
+                picked.push(`${job}: ${person}`);
+                if (picked.length >= 6) break;
+            }
+        }
+        return picked;
+    }, [payload?.details?.credits?.crew]);
+
+    const overloadFacts = useMemo(() => {
+        const apiFacts = Array.isArray(factPayload?.facts) ? factPayload.facts : [];
+        const combined = [...apiFacts, ...triviaFacts];
+        const seen = new Set<string>();
+        const out: string[] = [];
+        for (const raw of combined) {
+            const text = String(raw || '').trim();
+            if (!text) continue;
+            const key = text.toLowerCase().replace(/\s+/g, ' ').slice(0, 240);
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push(text);
+            if (out.length >= 14) break;
+        }
+        return out;
+    }, [factPayload?.facts, triviaFacts]);
+
     const bumpReaction = useCallback((key: string) => {
         setReactions((prev) => {
             const next = { ...prev, [key]: (Number(prev[key]) || 0) + 1 };
@@ -647,6 +776,14 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         : String(mediaServerType || '').toLowerCase() === 'emby'
             ? 'Emby'
             : 'Plex';
+    const playbackTelemetry = [
+        { label: 'State', value: String(session.state || 'playing').toUpperCase() },
+        { label: 'Progress', value: `${Math.round(Number(session.progress) || 0)}%` },
+        { label: 'Media type', value: mediaType.toUpperCase() },
+        ...(seasonNumber > 0 && episodeNumber > 0
+            ? [{ label: 'Episode', value: `S${seasonNumber}E${episodeNumber}` }]
+            : []),
+    ];
 
     return (
         <div className="glass-card mt-4 p-4 md:p-5 border border-emerald-500/25 bg-black/25">
@@ -770,17 +907,26 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                {playbackTelemetry.map((entry) => (
+                                    <div key={`telemetry-${entry.label}`} className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2">
+                                        <p className="text-[10px] uppercase tracking-wide text-white/50">{entry.label}</p>
+                                        <p className="text-xs font-bold text-white">{entry.value}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 items-start">
                                 <div className="lg:col-span-2 rounded-xl border border-white/10 bg-white/5 p-3">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                         <Users className="w-3.5 h-3.5" />
-                                        Cast gallery and where you know them from
+                                        Cast intelligence grid
                                     </p>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
                                         {payload.castInsights.map((actor) => (
-                                            <div key={`cast-${actor.id}`} className="rounded-lg border border-white/10 bg-black/30 p-2.5">
+                                            <div key={`cast-${actor.id}`} className="rounded-lg border border-white/10 bg-black/35 p-2.5">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-14 h-14 rounded-lg overflow-hidden bg-white/5 shrink-0">
+                                                    <div className="w-16 h-16 rounded-full overflow-hidden bg-white/5 shrink-0 border border-white/15">
                                                         {actor.profilePath ? (
                                                             <img
                                                                 src={posterUrl(actor.profilePath, 'w185')}
@@ -788,7 +934,9 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                                 className="w-full h-full object-cover"
                                                             />
                                                         ) : (
-                                                            <NoPosterPlaceholder compact />
+                                                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-emerald-500/35 to-cyan-500/20 text-emerald-100 text-xs font-black">
+                                                                {initialsForName(actor.name)}
+                                                            </div>
                                                         )}
                                                     </div>
                                                     <div className="min-w-0">
@@ -807,8 +955,24 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                                 Popularity {actor.popularity.toFixed(1)}
                                                             </p>
                                                         ) : null}
+                                                        {actor.knownForDepartment ? (
+                                                            <p className="text-[10px] text-white/55 truncate">
+                                                                {actor.knownForDepartment}
+                                                            </p>
+                                                        ) : null}
                                                     </div>
                                                 </div>
+                                                {actor.birthday || actor.placeOfBirth ? (
+                                                    <p className="mt-1.5 text-[10px] text-white/50">
+                                                        {[actor.birthday, actor.placeOfBirth].filter(Boolean).join(' • ')}
+                                                    </p>
+                                                ) : null}
+                                                {actor.biographySnippet ? (
+                                                    <p className="mt-1.5 text-[10px] text-white/60 leading-relaxed">
+                                                        {actor.biographySnippet}
+                                                        {actor.biographySnippet.length >= 180 ? '…' : ''}
+                                                    </p>
+                                                ) : null}
                                                 {actor.knownFor.length > 0 ? (
                                                     <div className="mt-2 flex flex-wrap gap-1">
                                                         {actor.knownFor.map((item) => (
@@ -827,6 +991,21 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                 )}
                                             </div>
                                         ))}
+                                    </div>
+                                    {payload.castInsights.length === 0 ? (
+                                        <p className="text-xs text-white/55 mt-2">No cast data was returned for this title.</p>
+                                    ) : null}
+                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
+                                        <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
+                                            Crew intelligence
+                                        </p>
+                                        {crewHighlights.length > 0 ? crewHighlights.map((entry, index) => (
+                                            <p key={`crew-${index}`} className="text-xs text-white/80">
+                                                - {entry}
+                                            </p>
+                                        )) : (
+                                            <p className="text-xs text-white/55">Crew highlights are unavailable for this title.</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -891,17 +1070,32 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
                                     <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
                                         <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
-                                            Did you know?
+                                            Fact overload
                                         </p>
-                                        {triviaFacts.length > 0 ? (
-                                            triviaFacts.map((fact, idx) => (
-                                                <p key={`trivia-${idx}`} className="text-xs text-white/80 leading-relaxed">
-                                                    - {fact}
-                                                </p>
-                                            ))
+                                        <div className="flex flex-wrap gap-1.5 text-[10px]">
+                                            <span className="px-1.5 py-0.5 rounded border border-white/15 bg-white/5 text-white/70">
+                                                Wiki facts: {Number(factPayload?.sources?.wikipedia) || 0}
+                                            </span>
+                                            <span className="px-1.5 py-0.5 rounded border border-white/15 bg-white/5 text-white/70">
+                                                TMDB facts: {Number(factPayload?.sources?.tmdb) || 0}
+                                            </span>
+                                            <span className="px-1.5 py-0.5 rounded border border-white/15 bg-white/5 text-white/70">
+                                                Total loaded: {overloadFacts.length}
+                                            </span>
+                                        </div>
+                                        {factLoading ? (
+                                            <p className="text-xs text-white/55">Loading deep trivia from fact sources...</p>
+                                        ) : overloadFacts.length > 0 ? (
+                                            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                                {overloadFacts.map((fact, idx) => (
+                                                    <p key={`overload-${idx}`} className="text-xs text-white/80 leading-relaxed">
+                                                        - {fact}
+                                                    </p>
+                                                ))}
+                                            </div>
                                         ) : (
                                             <p className="text-xs text-white/55">
-                                                Trivia is still loading for this title.
+                                                Fact enrichment is unavailable for this title right now.
                                             </p>
                                         )}
                                     </div>
