@@ -586,12 +586,22 @@ const DiscoveryDashboardInner: React.FC<{
 
             {showTabs && (
                 <>
+                    {isMobileNavOpen && (
+                        <button
+                            type="button"
+                            className={discoveryTheme.mobileNavBackdrop}
+                            aria-label="Close navigation"
+                            onClick={() => setIsMobileNavOpen(false)}
+                        />
+                    )}
                     <div className={`w-full ${discoveryTheme.tabSticky}`}>
                         <div className="sm:hidden relative">
                             <button
                                 type="button"
                                 onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
                                 className={discoveryTheme.mobileNavBtn}
+                                aria-expanded={isMobileNavOpen}
+                                aria-controls="discover-mobile-nav-menu"
                             >
                                 <span className="flex items-center gap-2 min-w-0">
                                     <ActiveIcon className="w-5 h-5 shrink-0" />
@@ -601,11 +611,12 @@ const DiscoveryDashboardInner: React.FC<{
                                 <ChevronDown className={`w-5 h-5 shrink-0 transition-transform ${isMobileNavOpen ? 'rotate-180' : ''}`} />
                             </button>
                             {isMobileNavOpen && (
-                                <div className={discoveryTheme.mobileNavMenu}>
+                                <div id="discover-mobile-nav-menu" className={discoveryTheme.mobileNavMenu} role="menu">
                                     {tabs.map(tab => (
                                         <button
                                             key={tab.id}
                                             type="button"
+                                            role="menuitem"
                                             onClick={() => { navigate(tab.path); setIsMobileNavOpen(false); }}
                                             className={`${discoveryTheme.mobileNavItem} ${tab.id === subRoute ? discoveryTheme.mobileNavItemActive : ''}`}
                                         >
