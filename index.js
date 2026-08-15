@@ -14489,7 +14489,6 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
                 const playable = list.filter((session) => !!session?.NowPlayingItem);
                 const activePlayable = playable.filter((session) => !session?.PlayState?.IsPaused);
                 if (activePlayable.length === 1) mine = activePlayable[0];
-                else if (playable.length === 1) mine = playable[0];
             }
             if (!mine) return res.json({ available: true, enabled: true, session: null, stale: !!stale });
 
