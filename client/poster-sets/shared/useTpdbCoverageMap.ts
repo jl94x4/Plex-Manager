@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { posterSetsApi } from '../api';
-import { coverageKeyForItem, type TpdbCoverageLevel } from './tpdbCacheUi';
+import { coverageKeyForItem, coverageKeysForItem, type TpdbCoverageLevel } from './tpdbCacheUi';
 
 type CoverageItem = {
     tmdbId?: string | number | null;
+    tvdbId?: string | number | null;
     title?: string;
     year?: number | null;
     mediaType?: string | null;
@@ -16,7 +17,7 @@ export const useTpdbCoverageMap = (items: CoverageItem[], enabled = true) => {
 
     const signature = useMemo(() => {
         const keys = items
-            .map((item) => coverageKeyForItem(item))
+            .flatMap((item) => coverageKeysForItem(item))
             .filter(Boolean)
             .sort();
         return keys.join('|');
@@ -33,6 +34,7 @@ export const useTpdbCoverageMap = (items: CoverageItem[], enabled = true) => {
             .slice(0, 240)
             .map((item) => ({
                 tmdbId: item.tmdbId,
+                tvdbId: item.tvdbId,
                 title: item.title,
                 year: item.year ?? null,
                 mediaType: item.mediaType || 'movie',
@@ -58,9 +60,10 @@ export const useTpdbCoverageMap = (items: CoverageItem[], enabled = true) => {
     }, [enabled, signature]);
 
     const levelFor = (item: CoverageItem): TpdbCoverageLevel | null => {
-        const key = coverageKeyForItem(item);
-        if (!key) return null;
-        return coverage[key] || null;
+        for (const key of coverageKeysForItem(item)) {
+            if (coverage[key]) return coverage[key];
+        }
+        return null;
     };
 
     return { coverage, levelFor };

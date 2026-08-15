@@ -16,17 +16,25 @@ export const coverageKeyForItem = (item: {
     tmdbId?: string | number | null;
     tvdbId?: string | number | null;
     mediaType?: string | null;
+}) => coverageKeysForItem(item)[0] || null;
+
+/** All coverage keys for a library row (TMDB and/or TVDB). */
+export const coverageKeysForItem = (item: {
+    tmdbId?: string | number | null;
+    tvdbId?: string | number | null;
+    mediaType?: string | null;
 }) => {
     const mediaType = (() => {
         const raw = String(item?.mediaType || 'movie').toLowerCase();
         if (raw === 'show' || raw === 'tv' || raw === 'series') return 'show';
         return 'movie';
     })();
+    const keys: string[] = [];
     const tmdbId = String(item?.tmdbId || '').trim();
-    if (/^\d+$/.test(tmdbId)) return `${mediaType}:${tmdbId}`;
+    if (/^\d+$/.test(tmdbId)) keys.push(`${mediaType}:${tmdbId}`);
     const tvdbId = String(item?.tvdbId || '').trim();
-    if (/^\d+$/.test(tvdbId)) return `tvdb:${mediaType}:${tvdbId}`;
-    return null;
+    if (/^\d+$/.test(tvdbId)) keys.push(`tvdb:${mediaType}:${tvdbId}`);
+    return keys;
 };
 
 export const coverageBadgeLabel = (level?: string | null) => {
