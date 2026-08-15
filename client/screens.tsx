@@ -2864,17 +2864,17 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                             const actionKey = `${item.clientId}-${item.id}`;
                             return (
                             <div key={`${item.clientId}-${item.id}`} className="rounded-xl border border-white/5 bg-background/40 p-4">
-                                <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0 flex-1">
-                                        <div className="flex items-center gap-2 min-w-0 w-full">
-                                            <p className="font-bold text-text truncate min-w-0">{item.name}</p>
-                                            <img src={downloadClientIcon(item.clientType)} alt="" className="w-4 h-4 object-contain shrink-0 opacity-80 ml-auto" />
-                                        </div>
-                                        <p className="text-xs text-muted mt-1">
-                                            {item.clientName} · {sourceLabel(item.source)}
-                                            {item.arrInstanceName ? ` · ${item.arrInstanceName}` : ''}
-                                            {' · '}
-                                            {item.state || t('downloads.status.unknown')}
+                                        <p className="font-bold text-text break-all leading-snug">{item.name}</p>
+                                        <p className="text-xs text-muted mt-1 flex items-center gap-1.5 min-w-0">
+                                            <img src={downloadClientIcon(item.clientType)} alt="" className="w-3.5 h-3.5 object-contain shrink-0 opacity-80" />
+                                            <span className="min-w-0">
+                                                {item.clientName} · {sourceLabel(item.source)}
+                                                {item.arrInstanceName ? ` · ${item.arrInstanceName}` : ''}
+                                                {' · '}
+                                                {item.state || t('downloads.status.unknown')}
+                                            </span>
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
