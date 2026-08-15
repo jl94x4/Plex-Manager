@@ -14597,11 +14597,7 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
                     username: req.user?.username || localUser?.username,
                 })
             ));
-            if (!mine && viewerIsAdmin) {
-                const playable = list.filter((session) => !!session?.NowPlayingItem);
-                const activePlayable = playable.filter((session) => !session?.PlayState?.IsPaused);
-                if (activePlayable.length === 1) mine = activePlayable[0];
-            }
+            // Never attribute another member's sole stream to the admin hero / companion.
             if (!mine) return res.json({ available: true, enabled: true, session: null, stale: !!stale });
 
             let mapped = mapJellyfinSessionToNowPlaying(mine);
