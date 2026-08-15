@@ -44,6 +44,8 @@ Object.assign(ja, { maintenance: { ...ja.maintenance,
     errors: { loadOverview: 'クリーナー概要を読み込めませんでした', loadCandidates: '候補を読み込めませんでした', loadExclusions: '除外の概要を読み込めませんでした。', loadLibrary: 'ライブラリのポスターを読み込めませんでした。', loadStorage: 'ストレージ概要を読み込めませんでした。' }
 } });
 
+Object.assign(ja, { quickActions: { menuLabel: 'クイックアクション' } });
+
 Object.assign(ja, { homeDashboard: { ...ja.homeDashboard, opsSnapshot: {
     title: '運用スナップショット',
     loading: '運用スナップショットを読み込み中…',

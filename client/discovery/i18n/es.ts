@@ -462,6 +462,8 @@ Object.assign(es, { maintenance: { ...es.maintenance,
     errors: { loadOverview: 'No se pudo cargar el resumen de limpieza', loadCandidates: 'No se pudieron cargar los candidatos', loadExclusions: 'No se pudo cargar el resumen de exclusiones.', loadLibrary: 'No se pudieron cargar los pósteres de la biblioteca.', loadStorage: 'No se pudo cargar el resumen de almacenamiento.' }
 } });
 
+Object.assign(es, { quickActions: { menuLabel: 'Acciones rápidas' } });
+
 Object.assign(es, { homeDashboard: { ...es.homeDashboard, opsSnapshot: {
     title: 'Resumen operativo',
     loading: 'Cargando resumen operativo…',

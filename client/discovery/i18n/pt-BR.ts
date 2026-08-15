@@ -44,6 +44,8 @@ Object.assign(ptBR, { maintenance: { ...ptBR.maintenance,
     errors: { loadOverview: 'Não foi possível carregar o resumo da limpeza', loadCandidates: 'Não foi possível carregar os candidatos', loadExclusions: 'Não foi possível carregar o resumo das exclusões.', loadLibrary: 'Não foi possível carregar os pôsteres da biblioteca.', loadStorage: 'Não foi possível carregar o resumo do armazenamento.' }
 } });
 
+Object.assign(ptBR, { quickActions: { menuLabel: 'Ações rápidas' } });
+
 Object.assign(ptBR, { homeDashboard: { ...ptBR.homeDashboard, opsSnapshot: {
     title: 'Resumo operacional',
     loading: 'Carregando resumo operacional…',

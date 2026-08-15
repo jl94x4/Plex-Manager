@@ -313,6 +313,7 @@ export const fr: DeepPartial<EnCatalog> = {
         openMediaAutomation: 'Ouvrir Automatisation média',
     },
     quickActions: {
+        menuLabel: 'Actions rapides',
         request: 'Demander',
         requestHint: 'Ouverture des details de demande…',
         notify: 'Notifier',

@@ -7090,6 +7090,7 @@ export const DiscoverPosterCard: React.FC<{
     posterWidth?: number;
     posterHeight?: number;
 }> = ({ item, aspect, overlay, variant = 'discover', className = 'w-full', footer, showQualityBadges = true, posterOnlyLink = false, onPosterClick, onPosterHover, quickActions, posterWidth = 300, posterHeight }) => {
+    const { t } = useDiscoverI18n();
     const resolvedAspect = aspect ?? (
         item?.mediaType === 'music' || item?.type === 'music' ? 'square' : '2/3'
     );
@@ -7169,7 +7170,7 @@ export const DiscoverPosterCard: React.FC<{
                                 setQuickActionsOpen((open) => !open);
                             }}
                             className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/65 text-white/90 border border-white/20 hover:bg-black/80 hover:text-white transition-colors"
-                            aria-label="Quick actions"
+                            aria-label={t('quickActions.menuLabel')}
                             aria-expanded={quickActionsOpen}
                         >
                             <MoreHorizontal className="w-4 h-4" />

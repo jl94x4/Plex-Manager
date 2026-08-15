@@ -44,6 +44,8 @@ Object.assign(pl, { maintenance: { ...pl.maintenance,
     errors: { loadOverview: 'Nie udało się wczytać przeglądu czyszczenia', loadCandidates: 'Nie udało się wczytać kandydatów', loadExclusions: 'Nie udało się wczytać podsumowania wykluczeń.', loadLibrary: 'Nie udało się wczytać plakatów biblioteki.', loadStorage: 'Nie udało się wczytać podsumowania pamięci.' }
 } });
 
+Object.assign(pl, { quickActions: { menuLabel: 'Szybkie akcje' } });
+
 Object.assign(pl, { homeDashboard: { ...pl.homeDashboard, opsSnapshot: {
     title: 'Podsumowanie operacyjne',
     loading: 'Wczytywanie podsumowania operacyjnego…',

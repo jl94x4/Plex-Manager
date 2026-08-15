@@ -44,6 +44,8 @@ Object.assign(nl, { maintenance: { ...nl.maintenance,
     errors: { loadOverview: 'Overzicht van opschonen kon niet worden geladen', loadCandidates: 'Kandidaten konden niet worden geladen', loadExclusions: 'Samenvatting van uitsluitingen kon niet worden geladen.', loadLibrary: 'Bibliotheekposters konden niet worden geladen.', loadStorage: 'Opslagsamenvatting kon niet worden geladen.' }
 } });
 
+Object.assign(nl, { quickActions: { menuLabel: 'Snelle acties' } });
+
 Object.assign(nl, { homeDashboard: { ...nl.homeDashboard, opsSnapshot: {
     title: 'Operationeel overzicht',
     loading: 'Operationeel overzicht laden…',
