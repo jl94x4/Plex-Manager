@@ -458,6 +458,20 @@ Object.assign(de, { maintenance: { ...de.maintenance,
     calendar: { currentRule: 'Aktuelle Regel:', graceDays: 'Karenztage', ruleAge: 'Regelalter', eligibleNow: 'Jetzt berechtigt', laterReclaim: 'Spätere Rückgewinnung', daysUntilEligible: 'Tag(e) bis zur Berechtigung', titleCount: 'Titel', laterDetail: 'Diese Titel warten noch auf das Ende der Karenzzeit.', dateTitleCount: 'Anzahl der Titel für dieses Datum.', delayedReclaimTooltip: 'Schätzung der Rückgewinnung aus verzögerten Treffern.', eligibilityDetailTooltip: 'Berechtigungsdetails des Backends.', ago: 'Tage zuvor', notAvailable: 'n/v', ...de.maintenance.calendar }
 } });
 
+Object.assign(de, { homeDashboard: { ...de.homeDashboard, opsSnapshot: {
+    title: 'Betriebsübersicht',
+    loading: 'Betriebsübersicht wird geladen…',
+    errors: { loadFailed: 'Betriebsübersicht konnte nicht geladen werden' },
+    metrics: {
+        unhealthy: '{count} Dienst fehlerhaft', unhealthy_plural: '{count} Dienste fehlerhaft', allHealthy: 'Alle Dienste sind fehlerfrei',
+        fleetUptime24h: 'Flottenverfügbarkeit (24 Std.)', requestAppConnected: 'Anfrage-App verbunden', requestAppOffline: 'Anfrage-App offline',
+        unreadNotifications: 'Ungelesene Benachrichtigungen', stored: '{count} gespeichert', stored_plural: '{count} gespeichert',
+        jobAlerts: 'Jobwarnungen', running: '{count} läuft', running_plural: '{count} laufen',
+        lastCheck: 'Letzte Prüfung', seconds: '{count} s',
+    },
+    empty: { noIncidents: 'Keine Vorfälle', unavailable: 'Betriebsübersicht nicht verfügbar.' },
+} } });
+
 Object.assign(de, { settings: { ...de.settings, homeLayout: {
     sectionShown: 'Abschnitt auf der Startseite angezeigt', sectionHidden: 'Abschnitt auf der Startseite ausgeblendet', shown: 'Angezeigt', hidden: 'Ausgeblendet', livePreview: 'Live-Vorschau', leftColumn: 'Linke Spalte', heroFixed: 'Das Hero-Banner bleibt oben und kann nicht konfiguriert werden.',
     title: 'Startseitenlayout', description: 'Ziehe Abschnitte, um die Startseite für alle neu anzuordnen. Ganze Abschnitte können ein- oder ausgeblendet werden. Das Hauptraster behält sein festes Links-rechts-Layout bei, damit die Kartenhöhen ausgewogen bleiben.', resetDefault: 'Auf Standard zurücksetzen', pageSections: 'Seitenabschnitte', reorderHint: 'Ziehe den Griff zum Neuordnen. Mit Angezeigt/Ausgeblendet schaltest du jeden Abschnitt um - standardmäßig sind alle sichtbar.', saveHintBefore: 'Klicke unten auf dieser Seite auf ', saveAction: 'Einstellungen speichern', saveHintAfter: ', um Layoutänderungen für alle zu übernehmen.', tipLabel: 'Tipp:', tipBody: 'Der Live-Portal-Editor kann einzelne Widgets auch direkt auf der Startseite verschieben, ausblenden und wieder hinzufügen. Diese Seite bleibt der abschnittsweite Layout-Editor für Administratoren.', watchHistory: 'Konfiguration des Wiedergabeverlaufs', recentlyWatchedRows: 'Zeilen kürzlich angesehen', mostWatchedRows: 'Zeilen am häufigsten angesehen', rowsPerPage: 'Anzahl der pro Seite angezeigten Zeilen.', row: 'Zeile', rows: 'Zeilen',

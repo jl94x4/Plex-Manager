@@ -2064,3 +2064,17 @@ Object.assign(en, { maintenance: {
 } });
 
 export type EnCatalog = typeof en;
+
+Object.assign(en, { homeDashboard: { ...en.homeDashboard, opsSnapshot: {
+    title: 'Ops Snapshot',
+    loading: 'Loading ops snapshot…',
+    errors: { loadFailed: 'Failed to load ops snapshot' },
+    metrics: {
+        unhealthy: '{count} unhealthy', unhealthy_plural: '{count} unhealthy', allHealthy: 'All healthy',
+        fleetUptime24h: 'Fleet Uptime (24h)', requestAppConnected: 'Request app connected', requestAppOffline: 'Request app offline',
+        unreadNotifications: 'Unread Notifications', stored: '{count} stored', stored_plural: '{count} stored',
+        jobAlerts: 'Job Alerts', running: '{count} running', running_plural: '{count} running',
+        lastCheck: 'Last Check', seconds: '{count}s',
+    },
+    empty: { noIncidents: 'No incidents', unavailable: 'Ops snapshot unavailable.' },
+} } });

@@ -44,6 +44,20 @@ Object.assign(pl, { maintenance: { ...pl.maintenance,
     errors: { loadOverview: 'Nie udało się wczytać przeglądu czyszczenia', loadCandidates: 'Nie udało się wczytać kandydatów', loadExclusions: 'Nie udało się wczytać podsumowania wykluczeń.', loadLibrary: 'Nie udało się wczytać plakatów biblioteki.', loadStorage: 'Nie udało się wczytać podsumowania pamięci.' }
 } });
 
+Object.assign(pl, { homeDashboard: { ...pl.homeDashboard, opsSnapshot: {
+    title: 'Podsumowanie operacyjne',
+    loading: 'Wczytywanie podsumowania operacyjnego…',
+    errors: { loadFailed: 'Nie udało się wczytać podsumowania operacyjnego' },
+    metrics: {
+        unhealthy: 'Usługi z problemami: {count}', unhealthy_plural: 'Usługi z problemami: {count}', allHealthy: 'Wszystkie usługi działają prawidłowo',
+        fleetUptime24h: 'Dostępność floty (24 h)', requestAppConnected: 'Aplikacja żądań jest połączona', requestAppOffline: 'Aplikacja żądań jest offline',
+        unreadNotifications: 'Nieprzeczytane powiadomienia', stored: 'Zapisane powiadomienia: {count}', stored_plural: 'Zapisane powiadomienia: {count}',
+        jobAlerts: 'Alerty zadań', running: 'Uruchomione zadania: {count}', running_plural: 'Uruchomione zadania: {count}',
+        lastCheck: 'Ostatnie sprawdzenie', seconds: '{count} s',
+    },
+    empty: { noIncidents: 'Brak incydentów', unavailable: 'Podsumowanie operacyjne jest niedostępne.' },
+} } });
+
 Object.assign(pl, { settings: { ...pl.settings, homeLayout: {
     sectionShown: 'Sekcja widoczna na stronie głównej', sectionHidden: 'Sekcja ukryta na stronie głównej', shown: 'Widoczna', hidden: 'Ukryta', livePreview: 'Podgląd na żywo', leftColumn: 'Lewa kolumna', heroFixed: 'Baner główny pozostaje u góry i nie można go konfigurować.',
     title: 'Układ strony głównej', description: 'Przeciągaj sekcje, aby zmienić układ strony głównej dla wszystkich. Możesz pokazywać lub ukrywać całe sekcje. Główna siatka pulpitu zachowuje stały układ lewo/prawo, aby wysokości kart były wyrównane.', resetDefault: 'Przywróć domyślne', pageSections: 'Sekcje strony', reorderHint: 'Przeciągnij uchwyt, aby zmienić kolejność. Użyj Widoczna/Ukryta, aby przełączać każdą sekcję; domyślnie wszystkie są widoczne.', saveHintBefore: 'Kliknij ', saveAction: 'Zapisz ustawienia', saveHintAfter: ' na dole tej strony, aby zastosować zmiany układu dla wszystkich.', tipLabel: 'Wskazówka:', tipBody: 'Edytor portalu na żywo może także przenosić, ukrywać i ponownie dodawać poszczególne widżety bezpośrednio ze strony głównej. Ta strona pozostaje edytorem układu sekcji dla administratorów.', watchHistory: 'Konfiguracja historii oglądania', recentlyWatchedRows: 'Wiersze ostatnio oglądane', mostWatchedRows: 'Wiersze najczęściej oglądane', rowsPerPage: 'Liczba wierszy wyświetlanych na stronę.', row: 'wiersz', rows: 'wiersze',

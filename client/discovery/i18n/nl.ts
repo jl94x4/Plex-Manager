@@ -44,6 +44,20 @@ Object.assign(nl, { maintenance: { ...nl.maintenance,
     errors: { loadOverview: 'Overzicht van opschonen kon niet worden geladen', loadCandidates: 'Kandidaten konden niet worden geladen', loadExclusions: 'Samenvatting van uitsluitingen kon niet worden geladen.', loadLibrary: 'Bibliotheekposters konden niet worden geladen.', loadStorage: 'Opslagsamenvatting kon niet worden geladen.' }
 } });
 
+Object.assign(nl, { homeDashboard: { ...nl.homeDashboard, opsSnapshot: {
+    title: 'Operationeel overzicht',
+    loading: 'Operationeel overzicht laden…',
+    errors: { loadFailed: 'Operationeel overzicht kon niet worden geladen' },
+    metrics: {
+        unhealthy: '{count} ongezonde service', unhealthy_plural: '{count} ongezonde services', allHealthy: 'Alle services zijn gezond',
+        fleetUptime24h: 'Beschikbaarheid van de vloot (24 uur)', requestAppConnected: 'Aanvraagapp verbonden', requestAppOffline: 'Aanvraagapp offline',
+        unreadNotifications: 'Ongelezen meldingen', stored: '{count} opgeslagen melding', stored_plural: '{count} opgeslagen meldingen',
+        jobAlerts: 'Taakwaarschuwingen', running: '{count} taak actief', running_plural: '{count} taken actief',
+        lastCheck: 'Laatste controle', seconds: '{count} s',
+    },
+    empty: { noIncidents: 'Geen incidenten', unavailable: 'Operationeel overzicht niet beschikbaar.' },
+} } });
+
 Object.assign(nl, { settings: { ...nl.settings, homeLayout: {
     sectionShown: 'Sectie zichtbaar op de startpagina', sectionHidden: 'Sectie verborgen op de startpagina', shown: 'Zichtbaar', hidden: 'Verborgen', livePreview: 'Livevoorbeeld', leftColumn: 'Linkerkolom', heroFixed: 'De hero-banner blijft bovenaan staan en kan niet worden geconfigureerd.',
     title: 'Indeling startpagina', description: 'Sleep secties om de startpagina voor iedereen opnieuw te ordenen. Toon of verberg volledige secties. Het hoofdrooster behoudt zijn vaste links/rechts-indeling zodat kaarthoogtes in balans blijven.', resetDefault: 'Standaard herstellen', pageSections: 'Paginasecties', reorderHint: 'Sleep de greep om de volgorde te wijzigen. Gebruik Zichtbaar/Verborgen om elke sectie te wisselen; standaard zijn ze allemaal zichtbaar.', saveHintBefore: 'Klik onderaan deze pagina op ', saveAction: 'Instellingen opslaan', saveHintAfter: ' om de wijzigingen in de indeling voor iedereen toe te passen.', tipLabel: 'Tip:', tipBody: 'De live portaaleditor kan afzonderlijke widgets ook rechtstreeks vanaf de startpagina verplaatsen, verbergen en opnieuw toevoegen. Deze pagina blijft de sectie-indelingseditor voor beheerders.', watchHistory: 'Configuratie kijkgeschiedenis', recentlyWatchedRows: 'Rijen onlangs bekeken', mostWatchedRows: 'Rijen meest bekeken', rowsPerPage: 'Aantal rijen dat per pagina wordt weergegeven.', row: 'rij', rows: 'rijen',

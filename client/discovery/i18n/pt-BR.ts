@@ -44,6 +44,20 @@ Object.assign(ptBR, { maintenance: { ...ptBR.maintenance,
     errors: { loadOverview: 'Não foi possível carregar o resumo da limpeza', loadCandidates: 'Não foi possível carregar os candidatos', loadExclusions: 'Não foi possível carregar o resumo das exclusões.', loadLibrary: 'Não foi possível carregar os pôsteres da biblioteca.', loadStorage: 'Não foi possível carregar o resumo do armazenamento.' }
 } });
 
+Object.assign(ptBR, { homeDashboard: { ...ptBR.homeDashboard, opsSnapshot: {
+    title: 'Resumo operacional',
+    loading: 'Carregando resumo operacional…',
+    errors: { loadFailed: 'Não foi possível carregar o resumo operacional' },
+    metrics: {
+        unhealthy: '{count} serviço com problema', unhealthy_plural: '{count} serviços com problema', allHealthy: 'Todos os serviços estão saudáveis',
+        fleetUptime24h: 'Disponibilidade da frota (24 h)', requestAppConnected: 'Aplicativo de solicitações conectado', requestAppOffline: 'Aplicativo de solicitações off-line',
+        unreadNotifications: 'Notificações não lidas', stored: '{count} notificação armazenada', stored_plural: '{count} notificações armazenadas',
+        jobAlerts: 'Alertas de tarefas', running: '{count} tarefa em execução', running_plural: '{count} tarefas em execução',
+        lastCheck: 'Última verificação', seconds: '{count} s',
+    },
+    empty: { noIncidents: 'Sem incidentes', unavailable: 'Resumo operacional indisponível.' },
+} } });
+
 Object.assign(ptBR, { settings: { ...ptBR.settings, homeLayout: {
     sectionShown: 'Seção exibida na página inicial', sectionHidden: 'Seção oculta na página inicial', shown: 'Exibida', hidden: 'Oculta', livePreview: 'Prévia ao vivo', leftColumn: 'Coluna esquerda', heroFixed: 'O banner principal permanece no topo e não pode ser configurado.',
     title: 'Layout da página inicial', description: 'Arraste as seções para reorganizar a página inicial para todos. Mostre ou oculte seções inteiras. A grade principal mantém o layout fixo esquerda/direita para equilibrar a altura dos cartões.', resetDefault: 'Restaurar padrão', pageSections: 'Seções da página', reorderHint: 'Arraste a alça para reorganizar. Use Exibida/Oculta para alternar cada seção; todas ficam visíveis por padrão.', saveHintBefore: 'Clique em ', saveAction: 'Salvar configurações', saveHintAfter: ' no fim desta página para aplicar as alterações de layout para todos.', tipLabel: 'Dica:', tipBody: 'O editor do portal também pode mover, ocultar e adicionar novamente widgets individuais diretamente pela página inicial. Esta página continua sendo o editor de layout de seções para administradores.', watchHistory: 'Configuração do histórico de exibição', recentlyWatchedRows: 'Linhas vistas recentemente', mostWatchedRows: 'Linhas mais vistas', rowsPerPage: 'Número de linhas exibidas por página.', row: 'linha', rows: 'linhas',

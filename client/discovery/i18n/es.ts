@@ -462,6 +462,20 @@ Object.assign(es, { maintenance: { ...es.maintenance,
     errors: { loadOverview: 'No se pudo cargar el resumen de limpieza', loadCandidates: 'No se pudieron cargar los candidatos', loadExclusions: 'No se pudo cargar el resumen de exclusiones.', loadLibrary: 'No se pudieron cargar los pósteres de la biblioteca.', loadStorage: 'No se pudo cargar el resumen de almacenamiento.' }
 } });
 
+Object.assign(es, { homeDashboard: { ...es.homeDashboard, opsSnapshot: {
+    title: 'Resumen operativo',
+    loading: 'Cargando resumen operativo…',
+    errors: { loadFailed: 'No se pudo cargar el resumen operativo' },
+    metrics: {
+        unhealthy: '{count} con problemas', unhealthy_plural: '{count} con problemas', allHealthy: 'Todos los servicios están en buen estado',
+        fleetUptime24h: 'Disponibilidad de la flota (24 h)', requestAppConnected: 'Aplicación de solicitudes conectada', requestAppOffline: 'Aplicación de solicitudes sin conexión',
+        unreadNotifications: 'Notificaciones sin leer', stored: '{count} notificación almacenada', stored_plural: '{count} notificaciones almacenadas',
+        jobAlerts: 'Alertas de tareas', running: '{count} tarea en ejecución', running_plural: '{count} tareas en ejecución',
+        lastCheck: 'Última comprobación', seconds: '{count} s',
+    },
+    empty: { noIncidents: 'Sin incidentes', unavailable: 'Resumen operativo no disponible.' },
+} } });
+
 Object.assign(es, { settings: { ...es.settings, homeLayout: {
     sectionShown: 'Sección mostrada en la página de inicio', sectionHidden: 'Sección oculta en la página de inicio', shown: 'Mostrada', hidden: 'Oculta', livePreview: 'Vista previa en directo', leftColumn: 'Columna izquierda', heroFixed: 'El banner principal permanece arriba y no se puede configurar.',
     title: 'Diseño de la página de inicio', description: 'Arrastra las secciones para reorganizar la página de inicio para todos. Muestra u oculta secciones completas. La cuadrícula principal conserva su diseño fijo de izquierda/derecha para equilibrar las alturas de las tarjetas.', resetDefault: 'Restablecer valores predeterminados', pageSections: 'Secciones de la página', reorderHint: 'Arrastra el controlador para reorganizar. Usa Mostrada/Oculta para alternar cada sección; todas están visibles de forma predeterminada.', saveHintBefore: 'Haz clic en ', saveAction: 'Guardar configuración', saveHintAfter: ' al final de esta página para aplicar los cambios de diseño a todos.', tipLabel: 'Consejo:', tipBody: 'El editor del portal también puede mover, ocultar y volver a añadir widgets individuales directamente desde la página de inicio. Esta página sigue siendo el editor de diseño de secciones para administradores.', watchHistory: 'Configuración del historial de visualización', recentlyWatchedRows: 'Filas vistas recientemente', mostWatchedRows: 'Filas más vistas', rowsPerPage: 'Número de filas que se muestran por página.', row: 'fila', rows: 'filas',

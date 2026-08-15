@@ -1796,6 +1796,20 @@ Object.assign(fr, { maintenance: {
             errors: { ...fr.maintenance.errors, loadOverview: 'Impossible de charger la vue d’ensemble du nettoyage', loadCandidates: 'Impossible de charger les candidats', loadExclusions: 'Impossible de charger le résumé des exclusions.', loadLibrary: 'Impossible de charger les affiches de la bibliothèque.', loadStorage: 'Impossible de charger le résumé du stockage.' }
 } });
 
+Object.assign(fr, { homeDashboard: { ...fr.homeDashboard, opsSnapshot: {
+    title: 'Aperçu des opérations',
+    loading: 'Chargement de l’aperçu des opérations…',
+    errors: { loadFailed: 'Impossible de charger l’aperçu des opérations' },
+    metrics: {
+        unhealthy: '{count} service en mauvaise santé', unhealthy_plural: '{count} services en mauvaise santé', allHealthy: 'Tous les services sont sains',
+        fleetUptime24h: 'Disponibilité globale (24 h)', requestAppConnected: 'Application de demandes connectée', requestAppOffline: 'Application de demandes hors ligne',
+        unreadNotifications: 'Notifications non lues', stored: '{count} notification enregistrée', stored_plural: '{count} notifications enregistrées',
+        jobAlerts: 'Alertes de tâches', running: '{count} tâche en cours', running_plural: '{count} tâches en cours',
+        lastCheck: 'Dernière vérification', seconds: '{count} s',
+    },
+    empty: { noIncidents: 'Aucun incident', unavailable: 'Aperçu des opérations indisponible.' },
+} } });
+
 Object.assign(fr, { settings: { ...fr.settings, homeLayout: {
     sectionShown: 'Section affichée sur l’accueil', sectionHidden: 'Section masquée sur l’accueil', shown: 'Affichée', hidden: 'Masquée', livePreview: 'Aperçu en direct', leftColumn: 'Colonne de gauche', heroFixed: 'La bannière principale reste en haut et ne peut pas être configurée.',
     title: 'Disposition de la page d’accueil', description: 'Faites glisser les sections pour réorganiser l’accueil pour tout le monde. Affichez ou masquez des sections entières. La grille principale conserve sa disposition fixe gauche/droite afin de garder des cartes équilibrées.', resetDefault: 'Rétablir la disposition par défaut', pageSections: 'Sections de la page', reorderHint: 'Faites glisser la poignée pour réorganiser. Utilisez Affichée/Masquée pour chaque section ; elles sont toutes visibles par défaut.', saveHintBefore: 'Cliquez sur ', saveAction: 'Enregistrer les paramètres', saveHintAfter: ' au bas de cette page pour appliquer les changements de disposition à tous.', tipLabel: 'Conseil :', tipBody: 'L’éditeur du portail peut aussi déplacer, masquer et réajouter des widgets directement depuis l’accueil. Cette page reste l’éditeur de disposition des sections pour tous les administrateurs.', watchHistory: 'Configuration de l’historique de visionnage', recentlyWatchedRows: 'Lignes récemment regardées', mostWatchedRows: 'Lignes les plus regardées', rowsPerPage: 'Nombre de lignes à afficher par page.', row: 'ligne', rows: 'lignes',

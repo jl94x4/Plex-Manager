@@ -44,6 +44,20 @@ Object.assign(ja, { maintenance: { ...ja.maintenance,
     errors: { loadOverview: 'クリーナー概要を読み込めませんでした', loadCandidates: '候補を読み込めませんでした', loadExclusions: '除外の概要を読み込めませんでした。', loadLibrary: 'ライブラリのポスターを読み込めませんでした。', loadStorage: 'ストレージ概要を読み込めませんでした。' }
 } });
 
+Object.assign(ja, { homeDashboard: { ...ja.homeDashboard, opsSnapshot: {
+    title: '運用スナップショット',
+    loading: '運用スナップショットを読み込み中…',
+    errors: { loadFailed: '運用スナップショットを読み込めませんでした' },
+    metrics: {
+        unhealthy: '異常なサービス: {count}', unhealthy_plural: '異常なサービス: {count}', allHealthy: 'すべてのサービスは正常です',
+        fleetUptime24h: '全体の稼働率 (24時間)', requestAppConnected: 'リクエストアプリは接続済みです', requestAppOffline: 'リクエストアプリはオフラインです',
+        unreadNotifications: '未読の通知', stored: '保存済み: {count}', stored_plural: '保存済み: {count}',
+        jobAlerts: 'ジョブアラート', running: '実行中: {count}', running_plural: '実行中: {count}',
+        lastCheck: '最終確認', seconds: '{count}秒',
+    },
+    empty: { noIncidents: 'インシデントはありません', unavailable: '運用スナップショットは利用できません。' },
+} } });
+
 Object.assign(ja, { settings: { ...ja.settings, homeLayout: {
     sectionShown: 'ホームページに表示中のセクション', sectionHidden: 'ホームページで非表示のセクション', shown: '表示', hidden: '非表示', livePreview: 'ライブプレビュー', leftColumn: '左列', heroFixed: 'ヒーローバナーは上部に固定され、設定できません。',
     title: 'ホームページのレイアウト', description: 'セクションをドラッグして、全員のホームページの順序を変更します。セクション全体を表示または非表示にできます。メインダッシュボードのグリッドは、カードの高さを整えるため左右の固定レイアウトを維持します。', resetDefault: 'デフォルトに戻す', pageSections: 'ページセクション', reorderHint: 'ハンドルをドラッグして並べ替えます。表示/非表示で各セクションを切り替えます。すべてのセクションは初期状態で表示されています。', saveHintBefore: 'このページの下部にある', saveAction: '「設定を保存」', saveHintAfter: 'をクリックすると、レイアウトの変更が全員に適用されます。', tipLabel: 'ヒント:', tipBody: 'ライブポータルエディターでは、ホームページから直接個別のウィジェットを移動、非表示、再追加することもできます。このページは管理者向けのセクションレイアウトエディターです。', watchHistory: '視聴履歴の設定', recentlyWatchedRows: '最近視聴した行数', mostWatchedRows: '最も視聴された行数', rowsPerPage: 'ページごとに表示する行数。', row: '行', rows: '行',

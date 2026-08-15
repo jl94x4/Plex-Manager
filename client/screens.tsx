@@ -9839,6 +9839,7 @@ type AdminOpsSnapshot = {
 };
 
 export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean, publicConfig?: any, mediaServerType?: string, onViewAnalytics?: (hash?: string) => void }> = ({ onBack, isAdmin, publicConfig, mediaServerType, onViewAnalytics }) => {
+    const { t } = useDiscoverI18n();
     const [dashboardData, setDashboardData] = useState<{ activeSessions: any[], recentMovies: any[], recentShows: any[], recentMusic: any[] } | null>(null);
     const [trendingStats, setTrendingStats] = useState<{ trending7Days: any[], movies30Days: any[], shows30Days: any[], top365Days: any[], allTime: any[], weekendWarriors: any[], nightOwls: any[], retroHits: any[], cultClassics: any[] } | null>(null);
     const [dashboardLoading, setDashboardLoading] = useState(true);
@@ -10081,11 +10082,11 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
             });
             setOpsError(null);
         } catch (err: any) {
-            setOpsError(err?.message || 'Failed to load ops snapshot');
+            setOpsError(err?.message || t('homeDashboard.opsSnapshot.errors.loadFailed'));
         } finally {
             if (!silent) setOpsLoading(false);
         }
-    }, [isAdmin]);
+    }, [isAdmin, t]);
 
     useEffect(() => {
         void fetchData();
@@ -10255,68 +10256,70 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                 {isAdmin && (
                     <section className="mb-8 w-full">
                         <div className="flex items-center justify-between gap-3 mb-3">
-                            <h2 className="text-plex text-sm uppercase tracking-[2px] font-bold border-b border-white/10 pb-2 w-full">OPS SNAPSHOT</h2>
+                            <h2 className="text-plex text-sm uppercase tracking-[2px] font-bold border-b border-white/10 pb-2 w-full">{t('homeDashboard.opsSnapshot.title')}</h2>
                             <button
                                 type="button"
                                 onClick={() => { void fetchOpsSnapshot(false); }}
                                 className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border border-border bg-white/5 hover:bg-white/10 transition-colors"
                             >
-                                Refresh
+                                {t('homeDashboard.admin.refresh')}
                             </button>
                         </div>
                         {opsLoading && !opsSnapshot ? (
-                            <div className="text-center text-muted p-6 border border-dashed border-border rounded-xl">Loading ops snapshot…</div>
+                            <div className="text-center text-muted p-6 border border-dashed border-border rounded-xl">{t('homeDashboard.opsSnapshot.loading')}</div>
                         ) : opsError && !opsSnapshot ? (
                             <div className="text-center text-red-300 p-6 border border-red-500/30 rounded-xl bg-red-500/10">{opsError}</div>
                         ) : opsSnapshot ? (
                             <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
                                 <div className={`rounded-xl border px-3 py-2 ${opsSnapshot.unhealthyCount > 0 ? 'border-rose-500/40 bg-rose-500/10' : 'border-emerald-500/40 bg-emerald-500/10'}`}>
-                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Services</div>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">{t('statusPage.labels.services')}</div>
                                     <div className="text-lg font-black text-white mt-0.5">{opsSnapshot.serviceCount}</div>
                                     <div className={`text-xs mt-0.5 ${opsSnapshot.unhealthyCount > 0 ? 'text-rose-200' : 'text-emerald-200'}`}>
                                         {opsSnapshot.unhealthyCount > 0
-                                            ? `${opsSnapshot.unhealthyCount} unhealthy`
-                                            : 'All healthy'}
+                                            ? t('homeDashboard.opsSnapshot.metrics.unhealthy', { count: opsSnapshot.unhealthyCount })
+                                            : t('homeDashboard.opsSnapshot.metrics.allHealthy')}
                                     </div>
                                 </div>
                                 <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Fleet Uptime (24h)</div>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">{t('homeDashboard.opsSnapshot.metrics.fleetUptime24h')}</div>
                                     <div className="text-lg font-black text-white mt-0.5">
                                         {opsSnapshot.fleetUptime24h == null ? '—' : `${opsSnapshot.fleetUptime24h.toFixed(2)}%`}
                                     </div>
-                                    <div className="text-xs text-muted mt-0.5">{opsSnapshot.offlineCount} offline</div>
+                                    <div className="text-xs text-muted mt-0.5">{t('statusPage.summary.offline', { count: opsSnapshot.offlineCount })}</div>
                                 </div>
                                 <div className={`rounded-xl border px-3 py-2 ${opsSnapshot.requestPending > 0 ? 'border-amber-500/40 bg-amber-500/10' : 'border-white/10 bg-white/5'}`}>
-                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Pending Requests</div>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">{t('homeDashboard.admin.pendingRequests')}</div>
                                     <div className="text-lg font-black text-white mt-0.5">{opsSnapshot.requestPending}</div>
                                     <div className={`text-xs mt-0.5 ${opsSnapshot.requestEngineConnected ? 'text-muted' : 'text-rose-200'}`}>
-                                        {opsSnapshot.requestEngineConnected ? 'Request app connected' : 'Request app offline'}
+                                        {opsSnapshot.requestEngineConnected
+                                            ? t('homeDashboard.opsSnapshot.metrics.requestAppConnected')
+                                            : t('homeDashboard.opsSnapshot.metrics.requestAppOffline')}
                                     </div>
                                 </div>
                                 <div className={`rounded-xl border px-3 py-2 ${opsSnapshot.notificationUnread > 0 ? 'border-sky-500/40 bg-sky-500/10' : 'border-white/10 bg-white/5'}`}>
-                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Unread Notifications</div>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">{t('homeDashboard.opsSnapshot.metrics.unreadNotifications')}</div>
                                     <div className="text-lg font-black text-white mt-0.5">{opsSnapshot.notificationUnread}</div>
-                                    <div className="text-xs text-muted mt-0.5">{opsSnapshot.notificationTotal} stored</div>
+                                    <div className="text-xs text-muted mt-0.5">{t('homeDashboard.opsSnapshot.metrics.stored', { count: opsSnapshot.notificationTotal })}</div>
                                 </div>
                                 <div className={`rounded-xl border px-3 py-2 ${opsSnapshot.failingJobs > 0 ? 'border-rose-500/40 bg-rose-500/10' : 'border-white/10 bg-white/5'}`}>
-                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Job Alerts</div>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">{t('homeDashboard.opsSnapshot.metrics.jobAlerts')}</div>
                                     <div className="text-lg font-black text-white mt-0.5">{opsSnapshot.failingJobs}</div>
-                                    <div className="text-xs text-muted mt-0.5">{opsSnapshot.runningJobs} running</div>
+                                    <div className="text-xs text-muted mt-0.5">{t('homeDashboard.opsSnapshot.metrics.running', { count: opsSnapshot.runningJobs })}</div>
                                 </div>
                                 <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">Last Check</div>
+                                    <div className="text-[10px] uppercase tracking-wider text-muted font-bold">{t('homeDashboard.opsSnapshot.metrics.lastCheck')}</div>
                                     <div className="text-lg font-black text-white mt-0.5">
-                                        {Math.max(0, Math.round((Date.now() - opsSnapshot.checkedAt) / 1000))}s
+                                        {t('homeDashboard.opsSnapshot.metrics.seconds', { count: Math.max(0, Math.round((Date.now() - opsSnapshot.checkedAt) / 1000)) })}
                                     </div>
                                     <div className="text-xs text-muted mt-0.5">
                                         {opsSnapshot.unhealthyNames.length
                                             ? opsSnapshot.unhealthyNames.join(', ')
-                                            : 'No incidents'}
+                                            : t('homeDashboard.opsSnapshot.empty.noIncidents')}
                                     </div>
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-center text-muted p-6 border border-dashed border-border rounded-xl">Ops snapshot unavailable.</div>
+                            <div className="text-center text-muted p-6 border border-dashed border-border rounded-xl">{t('homeDashboard.opsSnapshot.empty.unavailable')}</div>
                         )}
                     </section>
                 )}
