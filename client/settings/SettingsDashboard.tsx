@@ -662,8 +662,16 @@ export const SettingsDashboard: React.FC = () => {
     const [autoBackupRetentionCount, setAutoBackupRetentionCount] = useState(10);
     const [backupFiles, setBackupFiles] = useState<any[]>([]);
     const [auditLogEntries, setAuditLogEntries] = useState<any[]>([]);
+    const [auditLogEvents, setAuditLogEvents] = useState<string[]>([]);
+    const [auditLogTotal, setAuditLogTotal] = useState(0);
+    const [auditLogTotalAll, setAuditLogTotalAll] = useState(0);
+    const [auditFilterEvent, setAuditFilterEvent] = useState('');
+    const [auditFilterUser, setAuditFilterUser] = useState('');
+    const [auditFilterFrom, setAuditFilterFrom] = useState('');
+    const [auditFilterTo, setAuditFilterTo] = useState('');
     const [isLoadingAuditLog, setIsLoadingAuditLog] = useState(false);
     const [isExportingAuditLog, setIsExportingAuditLog] = useState(false);
+    const [isExportingAuditCsv, setIsExportingAuditCsv] = useState(false);
     const [refreshingDiscoveryCache, setRefreshingDiscoveryCache] = useState(false);
     const [auditLogPage, setAuditLogPage] = useState(1);
     const [deletedUsersLog, setDeletedUsersLog] = useState<any[]>([]);
@@ -757,11 +765,25 @@ export const SettingsDashboard: React.FC = () => {
         }
     };
 
+    const buildAuditLogQuery = useCallback((limit = 500) => {
+        const params = new URLSearchParams();
+        if (auditFilterEvent) params.set('event', auditFilterEvent);
+        if (auditFilterUser.trim()) params.set('user', auditFilterUser.trim());
+        if (auditFilterFrom) params.set('from', auditFilterFrom);
+        if (auditFilterTo) params.set('to', auditFilterTo);
+        params.set('limit', String(limit));
+        return params.toString();
+    }, [auditFilterEvent, auditFilterFrom, auditFilterTo, auditFilterUser]);
+
     const fetchAuditLog = async () => {
         setIsLoadingAuditLog(true);
         try {
-            const data = await apiFetch('/api/audit-log');
-            setAuditLogEntries(Array.isArray(data) ? data : []);
+            const data = await apiFetch(`/api/audit-log?${buildAuditLogQuery(500)}`);
+            const entries = Array.isArray(data?.entries) ? data.entries : (Array.isArray(data) ? data : []);
+            setAuditLogEntries(entries);
+            setAuditLogEvents(Array.isArray(data?.events) ? data.events : []);
+            setAuditLogTotal(Number(data?.total) || entries.length);
+            setAuditLogTotalAll(Number(data?.totalAll) || entries.length);
             setAuditLogPage(1);
             setEmailLogPage(1);
         } catch (e) {
@@ -789,6 +811,38 @@ export const SettingsDashboard: React.FC = () => {
             addToast(e instanceof Error ? e.message : t('settings.logs.errors.exportAuditLog'), 'error');
         } finally {
             setIsExportingAuditLog(false);
+        }
+    };
+
+    const exportAuditLogCsv = async () => {
+        setIsExportingAuditCsv(true);
+        try {
+            const response = await fetch(portalUrl(`/api/audit-log/export.csv?${buildAuditLogQuery(2000)}`), {
+                credentials: 'same-origin',
+                headers: { [PORTAL_CSRF_HEADER]: PORTAL_CSRF_VALUE },
+            });
+            if (!response.ok) {
+                let message = t('settings.logs.errors.exportAuditCsv');
+                try {
+                    const body = await response.json();
+                    if (body?.error) message = String(body.error);
+                } catch { /* ignore */ }
+                throw new Error(message);
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `portal-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(url);
+            addToast(t('settings.logs.toasts.auditCsvExported'), 'success');
+        } catch (e) {
+            addToast(e instanceof Error ? e.message : t('settings.logs.errors.exportAuditCsv'), 'error');
+        } finally {
+            setIsExportingAuditCsv(false);
         }
     };
 
@@ -4682,9 +4736,16 @@ export const SettingsDashboard: React.FC = () => {
                             </section>
 
                             <section className="space-y-4 mb-8">
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between gap-3 flex-wrap">
                                     <h4 className="font-bold text-text">{t('settings.logs.audit.viewerTitle')}</h4>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <button
+                                            className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80 disabled:opacity-50"
+                                            disabled={isExportingAuditCsv}
+                                            onClick={() => void exportAuditLogCsv()}
+                                        >
+                                            {isExportingAuditCsv ? t('settings.logs.actions.exportingCsv') : t('settings.logs.actions.exportCsv')}
+                                        </button>
                                         <button
                                             className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80 disabled:opacity-50"
                                             disabled={isExportingAuditLog}
@@ -4692,8 +4753,77 @@ export const SettingsDashboard: React.FC = () => {
                                         >
                                             {isExportingAuditLog ? t('settings.logs.actions.exporting') : t('settings.logs.actions.exportAll')}
                                         </button>
-                                        <button className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80" onClick={fetchAuditLog}>
+                                        <button className="px-3 py-1.5 bg-border text-text rounded-md font-semibold hover:bg-opacity-80" onClick={() => void fetchAuditLog()}>
                                             {isLoadingAuditLog ? t('settings.logs.actions.refreshing') : t('settings.logs.actions.refresh')}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-muted">
+                                        {t('settings.logs.filters.event')}
+                                        <select
+                                            value={auditFilterEvent}
+                                            onChange={(e) => setAuditFilterEvent(e.target.value)}
+                                            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text"
+                                        >
+                                            <option value="">{t('settings.logs.filters.allEvents')}</option>
+                                            {auditLogEvents.map((eventKey) => (
+                                                <option key={eventKey} value={eventKey}>{formatEventName(eventKey)}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-muted">
+                                        {t('settings.logs.filters.user')}
+                                        <input
+                                            type="text"
+                                            value={auditFilterUser}
+                                            onChange={(e) => setAuditFilterUser(e.target.value)}
+                                            placeholder={t('settings.logs.filters.userPlaceholder')}
+                                            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text"
+                                        />
+                                    </label>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-muted">
+                                        {t('settings.logs.filters.from')}
+                                        <input
+                                            type="date"
+                                            value={auditFilterFrom}
+                                            onChange={(e) => setAuditFilterFrom(e.target.value)}
+                                            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text"
+                                        />
+                                    </label>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-muted">
+                                        {t('settings.logs.filters.to')}
+                                        <input
+                                            type="date"
+                                            value={auditFilterTo}
+                                            onChange={(e) => setAuditFilterTo(e.target.value)}
+                                            className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text"
+                                        />
+                                    </label>
+                                </div>
+                                <div className="flex items-center justify-between gap-3 flex-wrap">
+                                    <p className="text-xs text-muted">
+                                        {t('settings.logs.filters.matched', { matched: auditLogTotal, total: auditLogTotalAll })}
+                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className="px-3 py-1.5 rounded-md border border-border text-xs font-semibold text-muted hover:text-text"
+                                            onClick={() => {
+                                                setAuditFilterEvent('');
+                                                setAuditFilterUser('');
+                                                setAuditFilterFrom('');
+                                                setAuditFilterTo('');
+                                            }}
+                                        >
+                                            {t('settings.logs.filters.clear')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="px-3 py-1.5 rounded-md bg-plex text-background text-xs font-bold"
+                                            onClick={() => void fetchAuditLog()}
+                                        >
+                                            {t('settings.logs.filters.apply')}
                                         </button>
                                     </div>
                                 </div>

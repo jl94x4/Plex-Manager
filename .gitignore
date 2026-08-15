@@ -75,6 +75,8 @@ static/index.js
 static/chunk-*.js
 static/*Dashboard-*.js
 static/RequestsAdminPanel-*.js
+static/PreferencesPage-*.js
+static/SupportInbox-*.js
 static/tailwind.css
 static/release-notes.json
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { SlidersHorizontal } from 'lucide-react';
+import { MonitorSmartphone, SlidersHorizontal } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { DashboardHero, DashboardPageShell, DashboardPanel } from '../shared/dashboard/DashboardChrome';
@@ -46,6 +46,12 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
     const isAdmin = !!(sessionInfo?.session?.isAdmin || user?.isAdmin);
     const [toast, setToast] = useState<ToastMessage | null>(null);
     const [busy, setBusy] = useState(false);
+    const [isInstalledApp, setIsInstalledApp] = useState(() => (
+        typeof window !== 'undefined'
+        && (window.matchMedia?.('(display-mode: standalone)').matches
+            || window.matchMedia?.('(display-mode: fullscreen)').matches
+            || (navigator as any).standalone === true)
+    ));
 
     const [optOutNewsletter, setOptOutNewsletter] = useState(user?.optOutNewsletter || false);
     const [notifyRequestAvailableEmail, setNotifyRequestAvailableEmail] = useState(user?.notifyRequestAvailableEmail !== false);
@@ -144,6 +150,23 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
     ]);
 
     useEffect(() => {
+        const syncInstalledState = () => {
+            const installed = window.matchMedia?.('(display-mode: standalone)').matches
+                || window.matchMedia?.('(display-mode: fullscreen)').matches
+                || (navigator as any).standalone === true;
+            setIsInstalledApp(!!installed);
+        };
+        syncInstalledState();
+        window.addEventListener('appinstalled', syncInstalledState);
+        const standaloneMq = window.matchMedia?.('(display-mode: standalone)');
+        standaloneMq?.addEventListener?.('change', syncInstalledState);
+        return () => {
+            window.removeEventListener('appinstalled', syncInstalledState);
+            standaloneMq?.removeEventListener?.('change', syncInstalledState);
+        };
+    }, []);
+
+    useEffect(() => {
         let cancelled = false;
         (async () => {
             if (!browserPushSupportedFlag) return;
@@ -202,6 +225,30 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
                 <div className="space-y-4">
                     <DashboardPanel title={t('common.language')}>
                         <DiscoverLocaleSelect />
+                    </DashboardPanel>
+                    <DashboardPanel title={t('preferencesPage.installTitle')} subtitle={t('preferencesPage.installSubtitle')}>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <div className="w-10 h-10 rounded-xl bg-plex/15 border border-plex/30 flex items-center justify-center text-plex shrink-0">
+                                    <MonitorSmartphone className="w-5 h-5" />
+                                </div>
+                                <p className="text-sm text-muted leading-relaxed">
+                                    {isInstalledApp
+                                        ? t('preferencesPage.installInstalled')
+                                        : t('preferencesPage.installSubtitle')}
+                                </p>
+                            </div>
+                            {!isInstalledApp && (
+                                <button
+                                    type="button"
+                                    onClick={() => window.dispatchEvent(new CustomEvent('portal-open-install'))}
+                                    className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-4 py-2.5 text-sm font-bold text-background hover:bg-plex-hover"
+                                >
+                                    <MonitorSmartphone className="w-4 h-4" />
+                                    {t('preferencesPage.installButton')}
+                                </button>
+                            )}
+                        </div>
                     </DashboardPanel>
                     <DashboardPanel title={t('preferencesPage.newsletterTitle')} subtitle={t('preferencesPage.newsletterSubtitle')}>
                         <PrefToggle

@@ -3742,6 +3742,7 @@ const ItemViewersModal: React.FC<{ item: { title: string, viewers: Record<string
 };
 
 export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }> = ({ isAdmin, sessionInfo }) => {
+    const { t } = useDiscoverI18n();
     const [analyticsData, setAnalyticsData] = useState<{
         topUsers: any[],
         topLibraries: any[],
@@ -3787,6 +3788,10 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         requestedPeriodDays?: string | number,
         cachePeriodDays?: string | number | null,
         cacheFallback?: boolean,
+        source?: string | null,
+        fallback?: string | null,
+        degraded?: boolean,
+        sourceLabel?: string | null,
     } | null>(null);
     const [tautulliData, setTautulliData] = useState<{ streamsRecord: number, transcodeRecord: number, directPlayRecord: number, directStreamRecord: number, totalPlays: number, tvPlays: number, moviePlays: number, musicPlays: number, totalTimeStr: string } | null>(null);
     const [isLoading, setLoading] = useState(true);
@@ -3807,7 +3812,23 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
     const [viewTab, setViewTab] = useState<'overview' | 'graphs'>('overview');
     const mediaServerType = String(sessionInfo?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
-    const analyticsSourceLabel = isJellyfinPortal ? (mediaServerType === 'emby' ? 'Emby Analytics' : 'Jellystat') : 'Tautulli';
+    const analyticsSourceLabel = (() => {
+        const stamped = String(analyticsData?.sourceLabel || '').trim();
+        if (stamped) return stamped;
+        const source = String(analyticsData?.source || '').toLowerCase();
+        if (source === 'tautulli') return t('analytics.source.tautulli');
+        if (source === 'plex') {
+            return analyticsData?.degraded
+                ? t('analytics.source.plexDegraded')
+                : t('analytics.source.plex');
+        }
+        if (source === 'jellystat') return t('analytics.source.jellystat');
+        if (source === 'jellyglance') return t('analytics.source.jellyglance');
+        if (source === 'emby') return t('analytics.source.emby');
+        if (isJellyfinPortal) return mediaServerType === 'emby' ? t('analytics.source.emby') : t('analytics.source.jellystat');
+        return t('analytics.source.plex');
+    })();
+    const analyticsSourceDegraded = !!analyticsData?.degraded;
     const libraryDeltas = (analyticsData?.libraryHealth as any)?.deltas || {};
 
     const resolveUserAvatar = (thumb: string | null | undefined, width = 80, height = 80) => {
@@ -4128,6 +4149,13 @@ return (
                 description={(
                     <>
                         {totalPlaybacks.toLocaleString()} playbacks · {uniqueActiveViewers} active viewers · {analyticsPeriodLabel.toLowerCase()}
+                        <span className={`ml-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide align-middle ${
+                            analyticsSourceDegraded
+                                ? 'border-amber-400/40 bg-amber-500/10 text-amber-200'
+                                : 'border-white/15 bg-white/5 text-muted'
+                        }`}>
+                            {t('analytics.source.badge', { source: analyticsSourceLabel })}
+                        </span>
                     </>
                 )}
                 icon={<BarChart3 className="h-3.5 w-3.5" />}
@@ -4195,6 +4223,11 @@ return (
                     {analyticsData.cacheFallback && (
                         <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
                             Analytics cache for this period is still building. Showing cached data from the last {analyticsData.cachePeriodDays} day period instead.
+                        </div>
+                    )}
+                    {analyticsSourceDegraded && (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                            {t('analytics.source.degradedHint')}
                         </div>
                     )}
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
@@ -4729,7 +4762,7 @@ export const LogsDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) 
                 apiFetch('/api/audit-log')
             ]);
             setDeletedUsers(deletedUsersData);
-            setAuditEntries(auditLogData);
+            setAuditEntries(Array.isArray(auditLogData?.entries) ? auditLogData.entries : (Array.isArray(auditLogData) ? auditLogData : []));
         } catch (error: any) {
             addToast(error instanceof Error ? error.message : 'Failed to fetch logs.', 'error');
         } finally {
@@ -5126,7 +5159,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 apiFetch('/api/audit-log')
             ]);
             setDeletedUsers(deletedUsersData);
-            setAuditEntries(auditLogData);
+            setAuditEntries(Array.isArray(auditLogData?.entries) ? auditLogData.entries : (Array.isArray(auditLogData) ? auditLogData : []));
         } catch (error) {
             addToast(error instanceof Error ? error.message : t('usersAdmin.errors.fetchSecurity'), 'error');
         }
@@ -11865,6 +11898,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         && /Android/i.test(navigator.userAgent)
         && /Chrome|CriOS|EdgA|SamsungBrowser/i.test(navigator.userAgent)
         && !/Firefox/i.test(navigator.userAgent);
+    const isIosSafari = typeof navigator !== 'undefined'
+        && /iPhone|iPad|iPod/i.test(navigator.userAgent)
+        && /WebKit/i.test(navigator.userAgent)
+        && !/CriOS|FxiOS|EdgiOS|OPiOS|Chrome|Android/i.test(navigator.userAgent);
+    const showInstallNudge = !isInstalledApp && !installBannerDismissed && (!!installPrompt || isIosSafari || isFirefoxMobile);
     const [installDiag, setInstallDiag] = useState<string[] | null>(null);
 
     useEffect(() => {
@@ -11983,9 +12021,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const handleInstallApp = async () => {
         if (isInstalledApp) return;
-        // Firefox (and most non-Chromium browsers) never fire beforeinstallprompt —
+        // Firefox / iOS / most non-Chromium browsers never fire beforeinstallprompt —
         // always show manual install steps instead of appearing to do nothing.
-        if (!installPrompt || isFirefoxMobile) {
+        if (!installPrompt || isFirefoxMobile || isIosSafari) {
             setInstallHelpOpen(true);
             return;
         }
@@ -12002,6 +12040,14 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             setInstallHelpOpen(true);
         }
     };
+    const handleInstallAppRef = useRef(handleInstallApp);
+    handleInstallAppRef.current = handleInstallApp;
+
+    useEffect(() => {
+        const onOpenInstall = () => { void handleInstallAppRef.current(); };
+        window.addEventListener('portal-open-install', onOpenInstall);
+        return () => window.removeEventListener('portal-open-install', onOpenInstall);
+    }, []);
 
     useEffect(() => {
         if (!mobileThemeOpen) { setMobileThemePos(null); return; }
@@ -12248,17 +12294,17 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     {!isInstalledApp && (
                         <button
                             type="button"
-                            onClick={(e) => { e.preventDefault(); handleInstallApp(); }}
+                            onClick={(e) => { e.preventDefault(); void handleInstallApp(); }}
                             className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
                                 installPrompt
                                     ? 'border-plex/50 bg-plex/15 text-plex'
                                     : 'border-border text-muted hover:border-plex/40 hover:text-text'
                             }`}
-                            title="Install app"
-                            aria-label="Install app"
+                            title={t('pwa.install.button')}
+                            aria-label={t('pwa.install.button')}
                         >
                             <MonitorSmartphone className="w-3.5 h-3.5 shrink-0" />
-                            Install
+                            {t('pwa.install.button')}
                         </button>
                     )}
                     <button onClick={(e) => { e.preventDefault(); onLogout(); }} className="text-muted hover:text-red-500 transition-colors">
@@ -12435,7 +12481,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     <button
                         type="button"
                         className="absolute inset-0 cursor-default"
-                        aria-label="Close install help"
+                        aria-label={t('pwa.install.closeHelp')}
                         onClick={() => setInstallHelpOpen(false)}
                     />
                     <div className="relative w-full max-w-sm rounded-2xl border border-border bg-card shadow-2xl p-5">
@@ -12445,36 +12491,27 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     <MonitorSmartphone className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-black text-text">Install App</h3>
-                                    <p className="text-xs text-muted">{serverName} Portal</p>
+                                    <h3 className="text-lg font-black text-text">{t('pwa.install.helpTitle')}</h3>
+                                    <p className="text-xs text-muted">{t('pwa.install.helpSubtitle', { server: serverName })}</p>
                                 </div>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setInstallHelpOpen(false)}
                                 className="p-2 rounded-lg text-muted hover:text-text hover:bg-white/5 transition-colors"
-                                aria-label="Close install help"
+                                aria-label={t('pwa.install.closeHelp')}
                             >
                                 <X className="w-4 h-4" />
                             </button>
                         </div>
                         <p className="text-sm text-muted leading-relaxed">
-                            {isFirefoxMobile ? (
-                                <>
-                                    Tap the Firefox menu <span className="text-text font-semibold">(⋮)</span>, then choose{' '}
-                                    <span className="text-text font-semibold">Install</span>.
-                                    Use your public <span className="text-text font-semibold">HTTPS</span> URL — not a plain http://IP address.
-                                </>
-                            ) : isAndroidChrome ? (
-                                <>
-                                    Open <span className="text-text font-semibold">More → Install App</span> in the portal, or Chrome’s menu <span className="text-text font-semibold">(⋮) → Install app</span>.
-                                    You must use <span className="text-text font-semibold">HTTPS</span> (not http://IP). If Install is missing, stay on this page ~30s, tap once, reload, then try again.
-                                </>
-                            ) : (
-                                <>
-                                    Use your browser menu and choose <span className="text-text font-semibold">Install app</span> or <span className="text-text font-semibold">Add to Home Screen</span>.
-                                </>
-                            )}
+                            {isIosSafari
+                                ? t('pwa.install.helpIos')
+                                : isFirefoxMobile
+                                    ? t('pwa.install.helpFirefox')
+                                    : isAndroidChrome
+                                        ? t('pwa.install.helpAndroidChrome')
+                                        : t('pwa.install.helpGeneric')}
                         </p>
                         {installDiag && (
                             <ul className="mt-4 space-y-2 rounded-xl border border-border bg-background/40 p-3 text-xs text-muted">
@@ -12484,7 +12521,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                             </ul>
                         )}
                         {!installDiag && installHelpOpen && (
-                            <p className="mt-4 text-xs text-muted">Checking install requirements…</p>
+                            <p className="mt-4 text-xs text-muted">{t('pwa.install.checking')}</p>
                         )}
                         {isFirefoxMobile && (
                             <button
@@ -12504,7 +12541,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 }}
                                 className="mt-3 w-full inline-flex items-center justify-center rounded-xl border border-border px-4 py-3 text-sm font-bold text-text hover:bg-white/5 transition-colors"
                             >
-                                Reset install data & reload
+                                {t('pwa.install.resetReload')}
                             </button>
                         )}
                         <button
@@ -12512,14 +12549,14 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                             onClick={() => setInstallHelpOpen(false)}
                             className="mt-3 w-full inline-flex items-center justify-center rounded-xl bg-plex px-4 py-3 text-sm font-bold text-background hover:bg-plex-hover transition-colors"
                         >
-                            Done
+                            {t('pwa.install.done')}
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* Mobile install nudge — beforeinstallprompt suppresses Chrome’s mini-infobar, so surface Install here. */}
-            {!isInstalledApp && installPrompt && !installBannerDismissed && (
+            {/* Mobile install nudge — Chromium prompt or iOS/Firefox A2HS guidance. */}
+            {showInstallNudge && (
                 <div className="md:hidden fixed left-3 right-3 z-[90] rounded-2xl border border-plex/40 bg-card/95 shadow-2xl backdrop-blur-md px-3 py-2.5 flex items-center gap-2"
                     style={{ bottom: 'calc(4.25rem + env(safe-area-inset-bottom, 0px))' }}
                 >
@@ -12527,21 +12564,21 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         <MonitorSmartphone className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-text truncate">Install {serverName}</p>
-                        <p className="text-[11px] text-muted">Add the portal to your home screen</p>
+                        <p className="text-sm font-bold text-text truncate">{t('pwa.install.bannerTitle', { server: serverName })}</p>
+                        <p className="text-[11px] text-muted">{t('pwa.install.bannerSubtitle')}</p>
                     </div>
                     <button
                         type="button"
                         onClick={() => void handleInstallApp()}
                         className="shrink-0 rounded-xl bg-plex px-3 py-2 text-xs font-bold text-background"
                     >
-                        Install
+                        {installPrompt ? t('pwa.install.button') : t('pwa.install.howTo')}
                     </button>
                     <button
                         type="button"
                         onClick={() => setInstallBannerDismissed(true)}
                         className="shrink-0 p-1.5 rounded-lg text-muted hover:text-text"
-                        aria-label="Dismiss install banner"
+                        aria-label={t('pwa.install.dismiss')}
                     >
                         <X className="w-4 h-4" />
                     </button>
@@ -12652,6 +12689,21 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     );
                                 });
                             })()}
+                            {!isInstalledApp && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setMobileMoreOpen(false);
+                                        void handleInstallApp();
+                                    }}
+                                    className="flex flex-col items-center gap-2 relative bg-transparent border-0"
+                                >
+                                    <div className="w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors bg-background/50 text-text hover:bg-white/10 border border-white/5">
+                                        <MonitorSmartphone className="w-6 h-6" />
+                                    </div>
+                                    <span className="text-[10px] text-center w-full truncate px-1 text-muted">{t('pwa.install.button')}</span>
+                                </button>
+                            )}
                         </div>
                         <div className="pb-[calc(env(safe-area-inset-bottom)+1rem)]"></div>
                     </div>

@@ -12514,9 +12514,112 @@ app.delete('/api/deleted-users/:blockId', requireAdmin, async (req, res) => {
     res.status(204).send();
 });
 
+const parseAuditLogDateBound = (value, endOfDay = false) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const iso = endOfDay ? `${raw}T23:59:59.999Z` : `${raw}T00:00:00.000Z`;
+        const parsed = Date.parse(iso);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    const parsed = Date.parse(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+
+const auditPartyMatchesUser = (party, needle) => {
+    if (!party || !needle) return false;
+    const fields = [party.username, party.email, party.id, party.plexId]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean);
+    return fields.some((field) => field.includes(needle));
+};
+
+const filterPortalAuditLog = (auditLog, query = {}) => {
+    const list = Array.isArray(auditLog) ? auditLog : [];
+    const event = String(query.event || '').trim();
+    const user = String(query.user || '').trim().toLowerCase();
+    const fromMs = parseAuditLogDateBound(query.from, false);
+    const toMs = parseAuditLogDateBound(query.to, true);
+    const limitRaw = Number.parseInt(String(query.limit ?? '200'), 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(2000, Math.max(1, limitRaw)) : 200;
+
+    const filtered = list.filter((entry) => {
+        if (event && String(entry?.event || '') !== event) return false;
+        if (user && !auditPartyMatchesUser(entry?.actor, user) && !auditPartyMatchesUser(entry?.target, user)) {
+            return false;
+        }
+        if (fromMs != null || toMs != null) {
+            const ts = Date.parse(String(entry?.timestamp || ''));
+            if (!Number.isFinite(ts)) return false;
+            if (fromMs != null && ts < fromMs) return false;
+            if (toMs != null && ts > toMs) return false;
+        }
+        return true;
+    });
+
+    const events = [...new Set(list.map((entry) => String(entry?.event || '').trim()).filter(Boolean))].sort();
+    return {
+        entries: filtered.slice(0, limit),
+        total: filtered.length,
+        totalAll: list.length,
+        events,
+        filters: {
+            event: event || null,
+            user: user || null,
+            from: query.from ? String(query.from).trim() : null,
+            to: query.to ? String(query.to).trim() : null,
+            limit,
+        },
+    };
+};
+
+const csvEscapeCell = (value) => {
+    const text = value == null ? '' : String(value);
+    if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+    return text;
+};
+
+const formatAuditPartyCsv = (party) => {
+    if (!party) return '';
+    return party.username || party.email || party.id || party.plexId || '';
+};
+
+const portalAuditEntriesToCsv = (entries) => {
+    const header = ['timestamp', 'event', 'actor', 'target', 'details'];
+    const rows = (Array.isArray(entries) ? entries : []).map((entry) => ([
+        entry?.timestamp || '',
+        entry?.event || '',
+        formatAuditPartyCsv(entry?.actor),
+        formatAuditPartyCsv(entry?.target),
+        entry?.details != null ? JSON.stringify(entry.details) : '',
+    ].map(csvEscapeCell).join(',')));
+    return `${header.join(',')}\n${rows.join('\n')}\n`;
+};
+
 app.get('/api/audit-log', requireAdmin, async (req, res) => {
-    const auditLog = await loadFile(AUDIT_LOG_PATH, []);
-    res.json(auditLog.slice(0, 200));
+    try {
+        const auditLog = await loadFile(AUDIT_LOG_PATH, []);
+        res.json(filterPortalAuditLog(auditLog, req.query || {}));
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to load audit logs' });
+    }
+});
+
+app.get('/api/audit-log/export.csv', requireAdmin, async (req, res) => {
+    try {
+        const auditLog = await loadFile(AUDIT_LOG_PATH, []);
+        const result = filterPortalAuditLog(auditLog, {
+            ...(req.query || {}),
+            limit: req.query?.limit || '2000',
+        });
+        const csv = portalAuditEntriesToCsv(result.entries);
+        const stamp = new Date().toISOString().slice(0, 10);
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="portal-audit-${stamp}.csv"`);
+        res.send(csv);
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to export audit CSV' });
+    }
 });
 
 app.get('/api/audit-log/export', requireAdmin, async (req, res) => {
@@ -14987,6 +15090,122 @@ const fetchTautulliUserHistoryItems = async (config, {
     return items;
 };
 
+const fetchTautulliServerHistoryItems = async (config, { maxItems = 75000 } = {}) => {
+    if (!config?.tautulliUrl || !config?.tautulliApiKey) return [];
+    const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
+    if (!tUrl) return [];
+
+    const items = [];
+    let offset = 0;
+    let done = false;
+
+    while (!done && items.length < maxItems) {
+        const length = Math.min(TAUTULLI_HISTORY_PAGE_SIZE, maxItems - items.length);
+        const params = new URLSearchParams({
+            apikey: config.tautulliApiKey,
+            cmd: 'get_history',
+            order_column: 'started',
+            order_dir: 'desc',
+            start: String(offset),
+            length: String(length),
+            grouping: '0',
+        });
+
+        const response = await fetch(`${tUrl}/api/v2?${params.toString()}`, { headers: { Accept: 'application/json' } })
+            .then((r) => r.json())
+            .catch(() => null);
+
+        const rows = response?.response?.data?.data;
+        if (!Array.isArray(rows) || rows.length === 0) break;
+
+        for (const row of rows) {
+            const started = Number(row.started || row.date || 0);
+            if (!started) continue;
+            items.push(mapTautulliHistoryRowToPlexItem(row));
+            if (items.length >= maxItems) {
+                done = true;
+                break;
+            }
+        }
+
+        if (rows.length < length) break;
+        offset += rows.length;
+    }
+
+    return items;
+};
+
+/** Map Tautulli user_id accountIDs on history rows onto Plex account ids (or synthetic tautulli:* keys). */
+const remapTautulliHistoryAccountIds = (historyItems, tautulliUsers, accountsMap) => {
+    if (!Array.isArray(historyItems) || !historyItems.length) return;
+    const norm = (v) => String(v || '').trim().toLowerCase();
+    const compact = (v) => norm(v).replace(/[\s._-]+/g, '');
+    const plexAccounts = Object.entries(accountsMap || {}).map(([id, info]) => ({
+        id: String(id),
+        name: info?.name || '',
+        thumb: info?.thumb || null,
+    }));
+    const tautulliIdToAccountId = {};
+
+    for (const tu of Array.isArray(tautulliUsers) ? tautulliUsers : []) {
+        const tid = tu?.user_id != null && tu.user_id !== '' ? String(tu.user_id) : null;
+        if (!tid) continue;
+        const candidates = [];
+        for (const raw of [tu.username, tu.friendly_name, tu.email].filter(Boolean)) {
+            candidates.push(norm(raw));
+            if (String(raw).includes('@')) candidates.push(norm(String(raw).split('@')[0]));
+        }
+        const uniqueCandidates = [...new Set(candidates.filter(Boolean))];
+        let matched = null;
+        for (const candidate of uniqueCandidates) {
+            matched = plexAccounts.find((a) =>
+                norm(a.name) === candidate || compact(a.name) === compact(candidate),
+            );
+            if (matched) break;
+        }
+        if (matched) {
+            tautulliIdToAccountId[tid] = matched.id;
+        } else {
+            const synId = `tautulli:${tid}`;
+            tautulliIdToAccountId[tid] = synId;
+            if (!accountsMap[synId]) {
+                accountsMap[synId] = {
+                    name: tu.friendly_name || tu.username || `Tautulli ${tid}`,
+                    thumb: tu.thumb || tu.user_thumb || null,
+                };
+            }
+        }
+    }
+
+    for (const item of historyItems) {
+        const tid = item?.accountID != null && item.accountID !== '' ? String(item.accountID) : null;
+        if (!tid) continue;
+        if (tautulliIdToAccountId[tid]) {
+            item.accountID = tautulliIdToAccountId[tid];
+            continue;
+        }
+        // Unlisted Tautulli user_id — keep a stable synthetic key so top-users still groups.
+        if (!accountsMap[tid] && !tid.startsWith('tautulli:')) {
+            const synId = `tautulli:${tid}`;
+            item.accountID = synId;
+            if (!accountsMap[synId]) accountsMap[synId] = { name: `User ${tid}`, thumb: null };
+        }
+    }
+};
+
+const analyticsSourceLabelFor = (source, { degraded = false, fallback = null } = {}) => {
+    const normalized = String(source || '').toLowerCase();
+    if (normalized === 'tautulli') return 'Tautulli';
+    if (normalized === 'jellystat') return 'Jellystat';
+    if (normalized === 'jellyglance') return 'JellyGlance';
+    if (normalized === 'emby') return 'Emby Analytics';
+    if (normalized === 'plex') {
+        if (degraded && fallback === 'tautulli_unavailable') return 'Plex (Tautulli unavailable)';
+        return 'Plex';
+    }
+    return source ? String(source) : 'Unknown';
+};
+
 const tautulliHourStatsMatchPlexPlays = (tautulliCount, plexCount) => {
     if (!tautulliCount || !plexCount) return false;
     if (tautulliCount === plexCount) return true;
@@ -15726,6 +15945,9 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
             cachePeriodDays: requestedDays,
             cacheFallback: false,
             source: analyticsProvider.provider,
+            fallback: null,
+            degraded: false,
+            sourceLabel: analyticsSourceLabelFor(analyticsProvider.provider),
             jellystatInsights: {
                 activeStreams,
                 streamsRecord: null,
@@ -15994,6 +16216,15 @@ app.get('/api/plex/analytics', requireAuth, requireMember, async (req, res) => {
             requestedPeriodDays: reqDays,
             cachePeriodDays: cachedPeriod,
             cacheFallback: cachedPeriod != null && String(cachedPeriod) !== String(reqDays),
+            source: statsData.source || cachedData.source || 'plex',
+            fallback: statsData.fallback ?? cachedData.fallback ?? null,
+            degraded: !!(statsData.degraded ?? cachedData.degraded),
+            sourceLabel: statsData.sourceLabel
+                || cachedData.sourceLabel
+                || analyticsSourceLabelFor(statsData.source || cachedData.source || 'plex', {
+                    degraded: !!(statsData.degraded ?? cachedData.degraded),
+                    fallback: statsData.fallback ?? cachedData.fallback ?? null,
+                }),
         };
         
         // attach max stats dynamically
@@ -16104,6 +16335,9 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                         : 30000;
 
         let historyItems = [];
+        let historySource = 'plex';
+        let historyFallback = null;
+        let historyDegraded = false;
         if (useTautulliHistory) {
             historyItems = await fetchTautulliUserHistoryItems(config, {
                 username: req.user?.username || portalUserForHistory?.username,
@@ -16112,12 +16346,17 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                 afterUnixSec: historyAfterUnixSec,
                 maxItems: historyMaxItems,
             });
-            if (!historyItems.length) {
+            if (historyItems.length) {
+                historySource = 'tautulli';
+            } else {
                 // Fall back to Plex if Tautulli has no matching user/history.
                 historyItems = await fetchPlexAccountHistory(uri, config, accountID, {
                     afterUnixSec: historyAfterUnixSec,
                     maxItems: historyMaxItems,
                 });
+                historySource = 'plex';
+                historyFallback = 'tautulli_unavailable';
+                historyDegraded = true;
             }
         } else {
             historyItems = await fetchPlexAccountHistory(uri, config, accountID, {
@@ -16128,7 +16367,17 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         const sectionsRes = await fetch(`${uri}/library/sections?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
 
         if (!historyItems.length) {
-            return { totalPlays: 0, topLibraries: [], topWatched: [], topMusic: [], recentHistory: [] };
+            return {
+                totalPlays: 0,
+                topLibraries: [],
+                topWatched: [],
+                topMusic: [],
+                recentHistory: [],
+                source: historySource,
+                fallback: historyFallback,
+                degraded: historyDegraded,
+                sourceLabel: analyticsSourceLabelFor(historySource, { degraded: historyDegraded, fallback: historyFallback }),
+            };
         }
 
         const sectionsMap = buildLibrarySectionsMap(sectionsRes);
@@ -16488,7 +16737,11 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             recentHistory: recentHistory.map(h => {
                 if (h.thumb) h.thumbUrl = plexImageUrl(h.thumb);
                 return h;
-            })
+            }),
+            source: historySource,
+            fallback: historyFallback,
+            degraded: historyDegraded,
+            sourceLabel: analyticsSourceLabelFor(historySource, { degraded: historyDegraded, fallback: historyFallback }),
         };
 
         return payload;
@@ -19867,23 +20120,49 @@ async function calculateAnalyticsStats() {
         const pageSize = 5000;
         const maxHistoryItems = 75000;
         let historyItems = [];
-        let start = 0;
+        let sourceMeta = { source: 'plex', fallback: null, degraded: false };
 
-        while (start < maxHistoryItems) {
-            const pageRes = await fetch(
-                `${uri}/status/sessions/history/all?X-Plex-Token=${config.plexToken}&sort=viewedAt:desc&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`,
-                { headers: plexClientHeaders(config.plexToken) }
-            ).then(r => r.json()).catch(() => null);
+        const preferTautulli = isTautulliWatchHistorySource(config);
+        if (preferTautulli) {
+            try {
+                historyItems = await fetchTautulliServerHistoryItems(config, { maxItems: maxHistoryItems });
+                if (historyItems.length) {
+                    sourceMeta = { source: 'tautulli', fallback: null, degraded: false };
+                    log(`Analytics cache using Tautulli history (${historyItems.length} items).`);
+                } else {
+                    log('Tautulli history empty for analytics cache; falling back to Plex.');
+                    sourceMeta = { source: 'plex', fallback: 'tautulli_unavailable', degraded: true };
+                }
+            } catch (tautulliError) {
+                log(`Tautulli analytics history failed (${tautulliError.message}); falling back to Plex.`);
+                historyItems = [];
+                sourceMeta = { source: 'plex', fallback: 'tautulli_unavailable', degraded: true };
+            }
+        }
 
-            const pageContainer = pageRes && pageRes.MediaContainer ? pageRes.MediaContainer : null;
-            const pageItems = pageContainer && Array.isArray(pageContainer.Metadata) ? pageContainer.Metadata : [];
-            if (pageItems.length === 0) break;
+        if (!historyItems.length) {
+            let start = 0;
+            while (start < maxHistoryItems) {
+                const pageRes = await fetch(
+                    `${uri}/status/sessions/history/all?X-Plex-Token=${config.plexToken}&sort=viewedAt:desc&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`,
+                    { headers: plexClientHeaders(config.plexToken) }
+                ).then(r => r.json()).catch(() => null);
 
-            historyItems = historyItems.concat(slimPlexHistoryPage(pageItems));
-            start += pageItems.length;
+                const pageContainer = pageRes && pageRes.MediaContainer ? pageRes.MediaContainer : null;
+                const pageItems = pageContainer && Array.isArray(pageContainer.Metadata) ? pageContainer.Metadata : [];
+                if (pageItems.length === 0) break;
 
-            const totalSize = Number(pageContainer.totalSize || 0);
-            if ((totalSize > 0 && start >= totalSize) || pageItems.length < pageSize) break;
+                historyItems = historyItems.concat(slimPlexHistoryPage(pageItems));
+                start += pageItems.length;
+
+                const totalSize = Number(pageContainer.totalSize || 0);
+                if ((totalSize > 0 && start >= totalSize) || pageItems.length < pageSize) break;
+            }
+            if (!preferTautulli) {
+                sourceMeta = { source: 'plex', fallback: null, degraded: false };
+            } else if (!sourceMeta.degraded) {
+                sourceMeta = { source: 'plex', fallback: 'tautulli_unavailable', degraded: true };
+            }
         }
 
         if (historyItems.length >= maxHistoryItems) {
@@ -19903,6 +20182,15 @@ async function calculateAnalyticsStats() {
         const accountsMap = {};
         if (accountsRes && accountsRes.MediaContainer && accountsRes.MediaContainer.Account) {
             accountsRes.MediaContainer.Account.forEach(acc => accountsMap[acc.id] = { name: acc.name, thumb: acc.thumb });
+        }
+
+        if (sourceMeta.source === 'tautulli') {
+            try {
+                const tautulliUsers = await fetchTautulliUsers(config);
+                remapTautulliHistoryAccountIds(historyItems, tautulliUsers, accountsMap);
+            } catch (remapError) {
+                log(`Tautulli analytics account remap failed: ${remapError.message}`);
+            }
         }
 
         const sectionsMap = buildLibrarySectionsMap(sectionsRes);
@@ -19978,8 +20266,12 @@ async function calculateAnalyticsStats() {
         }
 
         statsData.lastUpdated = Date.now();
+        statsData.source = sourceMeta.source;
+        statsData.fallback = sourceMeta.fallback;
+        statsData.degraded = !!sourceMeta.degraded;
+        statsData.sourceLabel = analyticsSourceLabelFor(sourceMeta.source, sourceMeta);
         await saveFile(ANALYTICS_CACHE_PATH, statsData);
-        log('Successfully calculated and cached Plex Analytics Stats.');
+        log(`Successfully calculated and cached Plex Analytics Stats (source=${statsData.source}, degraded=${statsData.degraded}).`);
         markTaskEnd(systemJobs.analyticsCache, null);
 
     } catch (e) {

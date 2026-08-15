@@ -224,6 +224,18 @@ export const fr: DeepPartial<EnCatalog> = {
             hoursWatched: 'Heures regardées',
         },
     },
+    analytics: {
+        source: {
+            badge: 'Source : {source}',
+            plex: 'Plex',
+            plexDegraded: 'Plex (Tautulli indisponible)',
+            tautulli: 'Tautulli',
+            jellystat: 'Jellystat',
+            jellyglance: 'JellyGlance',
+            emby: 'Analyses Emby',
+            degradedHint: 'La source d’analyses préférée était indisponible, donc cette vue utilise un fournisseur de secours. Les totaux peuvent différer de la source principale.',
+        },
+    },
     userAnalytics: {
         page: { loadingStats: 'Chargement des statistiques…', totalPlays: '{count} lectures au total',
             loadError: 'Échec du chargement des statistiques de cet utilisateur.' },
@@ -383,6 +395,29 @@ export const fr: DeepPartial<EnCatalog> = {
         pushEnabled: 'Notifications push activées sur cet appareil.',
         pushDisabled: 'Notifications push désactivées sur cet appareil.',
         pushFailed: 'Échec de la mise à jour du push navigateur',
+        installTitle: 'Installer l’application',
+        installSubtitle: 'Ajoutez ce portail à votre écran d’accueil pour une expérience plus rapide, proche d’une app.',
+        installButton: 'Installer / Ajouter à l’écran d’accueil',
+        installInstalled: 'Déjà installé sur cet appareil',
+    },
+    pwa: {
+        install: {
+            button: 'Installer',
+            howTo: 'Comment',
+            dismiss: 'Fermer la bannière d’installation',
+            bannerTitle: 'Installer {server}',
+            bannerSubtitle: 'Ajoutez le portail à votre écran d’accueil',
+            helpTitle: 'Installer l’application',
+            helpSubtitle: 'Portail {server}',
+            closeHelp: 'Fermer l’aide d’installation',
+            helpIos: 'Sur iPhone ou iPad, touchez Partager dans Safari, puis Ajouter à l’écran d’accueil. Ouvrez le portail en HTTPS, puis lancez-le depuis cette icône.',
+            helpFirefox: 'Touchez le menu Firefox (⋮), puis choisissez Installer. Utilisez votre URL HTTPS publique — pas une adresse http://IP.',
+            helpAndroidChrome: 'Ouvrez Plus → Installer dans le portail, ou le menu Chrome (⋮) → Installer l’application. HTTPS est obligatoire (pas http://IP). Si Installer manque, restez sur cette page environ 30 s, touchez une fois, rechargez, puis réessayez.',
+            helpGeneric: 'Utilisez le menu de votre navigateur et choisissez Installer l’application ou Ajouter à l’écran d’accueil.',
+            checking: 'Vérification des prérequis d’installation…',
+            resetReload: 'Réinitialiser les données d’installation et recharger',
+            done: 'Terminé',
+        },
     },
     homeDashboard: {
         accessStatus: 'Statut d’accès',
@@ -1842,12 +1877,23 @@ live:{title:'Activité en direct',description:'File des webhooks et résultats r
 } } });
 
 Object.assign(fr, { settings: { ...fr.settings, logs: {
-    actions: { refresh: 'Actualiser', refreshing: 'Actualisation...', exportAll: 'Tout exporter', exporting: 'Exportation…', unblock: 'Débloquer' },
+    actions: { refresh: 'Actualiser', refreshing: 'Actualisation...', exportAll: 'Tout exporter (JSON)', exporting: 'Exportation…', exportCsv: 'Exporter CSV', exportingCsv: 'Exportation CSV…', unblock: 'Débloquer' },
+    filters: {
+        event: 'Événement',
+        allEvents: 'Tous les événements',
+        user: 'Utilisateur',
+        userPlaceholder: 'Auteur ou cible',
+        from: 'Du',
+        to: 'Au',
+        apply: 'Appliquer les filtres',
+        clear: 'Effacer',
+        matched: '{matched} correspondance(s) sur {total}',
+    },
     audit: { viewerTitle: 'Visionneuse du journal d’audit', empty: 'Aucun événement d’audit trouvé.', target: 'Cible', system: 'Système', actor: 'Auteur', field: 'Champ', before: 'Avant', after: 'Après', value: 'Valeur', unknownEvent: 'Événement' },
     blocklist: { title: 'Liste de blocage des utilisateurs supprimés', empty: 'Aucun utilisateur supprimé n’est actuellement bloqué.', unknownUser: 'Utilisateur inconnu', noIdentifier: 'Aucun identifiant', deletedBy: 'Supprimé le {date} par {actor}', defaultActor: 'administrateur' },
     email: { title: 'Journal des e-mails', empty: 'Aucun e-mail système n’a encore été enregistré.', systemEmail: 'E-mail système', to: 'À' },
     pagination: { previous: 'Précédent', next: 'Suivant', pageOf: 'Page {page} sur {total}' }, dialogs: { unblockUser: 'Autoriser {name} à utiliser à nouveau le portail ? Cela ne l’invite pas automatiquement.' }, fallbacks: { thisUser: 'cet utilisateur', notAvailable: 'N/D' },
-    errors: { loadAuditLog: 'Échec du chargement du journal d’audit', exportAuditLog: 'Échec de l’exportation du journal d’audit', loadDeletedUsers: 'Échec du chargement du journal des utilisateurs supprimés', unblockUser: 'Échec du déblocage de l’utilisateur.' }, toasts: { auditExported: 'Journal d’audit exporté (portail + Poster Sets + Upgrader).', userUnblocked: 'Utilisateur supprimé débloqué.' },
+    errors: { loadAuditLog: 'Échec du chargement du journal d’audit', exportAuditLog: 'Échec de l’exportation du journal d’audit', exportAuditCsv: 'Échec de l’exportation CSV du journal d’audit', loadDeletedUsers: 'Échec du chargement du journal des utilisateurs supprimés', unblockUser: 'Échec du déblocage de l’utilisateur.' }, toasts: { auditExported: 'Journal d’audit exporté (portail + Poster Sets + Upgrader).', auditCsvExported: 'CSV du journal d’audit exporté.', userUnblocked: 'Utilisateur supprimé débloqué.' },
 } } });
 
 Object.assign(fr, { maintenance: { ...fr.maintenance,
