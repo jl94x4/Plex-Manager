@@ -3,10 +3,8 @@ import { createPortal } from 'react-dom';
 import { Search, Loader2, Sparkles, X, Film, Tv, TrendingUp, Laugh, Skull, Drama, Zap } from 'lucide-react';
 import { SlideshowBackground } from '../shared/theme';
 import { apiFetch } from '../shared/api';
-import { useNowPlaying } from '../shared/useNowPlaying';
 import { discoveryTheme } from './discoveryThemeClasses';
 import { useDiscoverI18n } from './i18n';
-import { DiscoverNowPlayingStrip } from './DiscoverNowPlayingStrip';
 
 type SearchResultProps = {
     query: string;
@@ -23,8 +21,6 @@ type SearchResultProps = {
     formatItem: (item: any) => any;
     navigate?: (path: string) => void;
     searchInputRef?: React.RefObject<HTMLInputElement | null>;
-    /** Site + user allow the Discover hero now-playing strip. */
-    nowPlayingEnabled?: boolean;
 };
 
 const SearchDropdown: React.FC<SearchResultProps & { anchorRect: DOMRect | null }> = ({
@@ -123,14 +119,13 @@ const QUICK_CHIPS = [
 ] as const;
 
 export const DiscoverHeroHeader: React.FC<SearchResultProps> = (props) => {
-    const { query, onClear, onQueryChange, onFocus, navigate, searchInputRef, nowPlayingEnabled = true } = props;
+    const { query, onClear, onQueryChange, onFocus, navigate, searchInputRef } = props;
     const { t } = useDiscoverI18n();
     const [backgrounds, setBackgrounds] = useState<string[]>([]);
     const [intervalSeconds, setIntervalSeconds] = useState(12);
     const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
     const searchWrapRef = useRef<HTMLDivElement>(null);
     const localInputRef = useRef<HTMLInputElement>(null);
-    const { session: nowPlaying } = useNowPlaying(nowPlayingEnabled);
 
     const setInputRef = (node: HTMLInputElement | null) => {
         localInputRef.current = node;
@@ -219,7 +214,7 @@ export const DiscoverHeroHeader: React.FC<SearchResultProps> = (props) => {
                     <div className="absolute inset-0 bg-background/20 pointer-events-none" />
                 </div>
 
-                <div className={`relative z-10 p-6 sm:p-10 flex flex-col items-center justify-center text-center gap-4 sm:gap-5 ${nowPlaying ? 'pb-12 sm:pb-14' : ''}`}>
+                <div className="relative z-10 p-6 sm:p-10 flex flex-col items-center justify-center text-center gap-4 sm:gap-5">
                     <Sparkles className="w-10 h-10 sm:w-12 sm:h-12 text-plex opacity-90 drop-shadow-lg" />
                     <div className="flex flex-col gap-1.5">
                         <h1 className={discoveryTheme.heroTitle}>
@@ -273,9 +268,6 @@ export const DiscoverHeroHeader: React.FC<SearchResultProps> = (props) => {
                     )}
                 </div>
 
-                {nowPlaying ? (
-                    <DiscoverNowPlayingStrip session={nowPlaying} onNavigate={navigate} />
-                ) : null}
             </div>
 
             <SearchDropdown {...props} anchorRect={anchorRect} />
