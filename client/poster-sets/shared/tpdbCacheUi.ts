@@ -18,7 +18,11 @@ export const coverageKeyForItem = (item: {
 }) => {
     const tmdbId = String(item?.tmdbId || '').trim();
     if (!/^\d+$/.test(tmdbId)) return null;
-    const mediaType = String(item?.mediaType || 'movie').toLowerCase() === 'show' ? 'show' : 'movie';
+    const mediaType = (() => {
+        const raw = String(item?.mediaType || 'movie').toLowerCase();
+        if (raw === 'show' || raw === 'tv' || raw === 'series') return 'show';
+        return 'movie';
+    })();
     return `${mediaType}:${tmdbId}`;
 };
 
