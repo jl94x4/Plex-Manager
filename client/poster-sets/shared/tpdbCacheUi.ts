@@ -14,16 +14,19 @@ export const formatTpdbEta = (etaMs?: number | null) => {
 
 export const coverageKeyForItem = (item: {
     tmdbId?: string | number | null;
+    tvdbId?: string | number | null;
     mediaType?: string | null;
 }) => {
-    const tmdbId = String(item?.tmdbId || '').trim();
-    if (!/^\d+$/.test(tmdbId)) return null;
     const mediaType = (() => {
         const raw = String(item?.mediaType || 'movie').toLowerCase();
         if (raw === 'show' || raw === 'tv' || raw === 'series') return 'show';
         return 'movie';
     })();
-    return `${mediaType}:${tmdbId}`;
+    const tmdbId = String(item?.tmdbId || '').trim();
+    if (/^\d+$/.test(tmdbId)) return `${mediaType}:${tmdbId}`;
+    const tvdbId = String(item?.tvdbId || '').trim();
+    if (/^\d+$/.test(tvdbId)) return `tvdb:${mediaType}:${tvdbId}`;
+    return null;
 };
 
 export const coverageBadgeLabel = (level?: string | null) => {

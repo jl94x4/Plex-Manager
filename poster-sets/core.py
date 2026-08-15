@@ -4752,7 +4752,7 @@ def search_catalog(
         user_title_url = title_url_value
         take = max(1, min(500, int(limit or 500)))
         resolved_page: Optional[dict] = None
-        if not title_url_value and tmdb_id:
+        if not title_url_value and (tmdb_id or tvdb_id or imdb_id):
             resolved_page = resolve_posterdb_title_page(
                 query=title_hint or query,
                 title=title_hint or query,
@@ -4767,9 +4767,13 @@ def search_catalog(
             )
             title_url_value = str(resolved_page.get("url") or "").strip() if resolved_page else ""
             if not title_url_value and _posterdb_should_use_login(config):
+                id_label = (
+                    f"TMDB {tmdb_id}" if tmdb_id
+                    else (f"TVDB {tvdb_id}" if tvdb_id else f"IMDb {imdb_id}")
+                )
                 emit(
                     progress,
-                    f"ThePosterDB could not resolve a /posters/ page for TMDB {tmdb_id} "
+                    f"ThePosterDB could not resolve a /posters/ page for {id_label} "
                     "(advanced search empty — trying public text search).",
                 )
         if title_url_value:
@@ -4955,7 +4959,7 @@ def warm_library_titles(
 
     results: list[dict] = []
     for index, raw in enumerate(rows):
-        tmdb_id = str(raw.get("tmdbId") or raw.get("tmdb_id") or raw.get("id") or "").strip()
+        tmdb_id = str(raw.get("tmdbId") or raw.get("tmdb_id") or "").strip()
         title = str(raw.get("title") or "").strip()
         media_type = str(raw.get("mediaType") or raw.get("media_type") or "movie").strip().lower()
         if media_type in {"tv", "series", "show", "shows"}:
@@ -4969,13 +4973,20 @@ def warm_library_titles(
             except Exception:
                 year_hint = None
         imdb_id = str(raw.get("imdbId") or raw.get("imdb_id") or "").strip() or None
-        tvdb_id = raw.get("tvdbId") if raw.get("tvdbId") is not None else raw.get("tvdb_id")
-        label = f"{title} ({year_hint})" if title and year_hint is not None else (title or f"tmdb {tmdb_id}")
+        tvdb_raw = raw.get("tvdbId") if raw.get("tvdbId") is not None else raw.get("tvdb_id")
+        tvdb_id = str(tvdb_raw or "").strip() or None
+        if not tmdb_id:
+            tmdb_id = None
+        label = (
+            f"{title} ({year_hint})" if title and year_hint is not None
+            else (title or (f"tmdb {tmdb_id}" if tmdb_id else f"tvdb {tvdb_id}"))
+        )
         emit(progress, f"Cache [{index + 1}/{len(rows)}]: resolving {label}")
 
         entry: dict = {
             "ok": False,
             "tmdbId": tmdb_id,
+            "tvdbId": tvdb_id,
             "title": title,
             "year": year_hint,
             "mediaType": media_type,
@@ -4984,9 +4995,9 @@ def warm_library_titles(
             "softSkip": False,
             "softError": None,
         }
-        if not tmdb_id:
+        if not tmdb_id and not tvdb_id:
             entry["softSkip"] = True
-            entry["softError"] = "Missing TMDB id"
+            entry["softError"] = "Missing TMDB and TVDB id"
             results.append(entry)
             if on_title:
                 on_title({"phase": "warm-title", **entry})
