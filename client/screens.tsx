@@ -3792,6 +3792,7 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         fallback?: string | null,
         degraded?: boolean,
         sourceLabel?: string | null,
+        lastUpdated?: number | null,
     } | null>(null);
     const [tautulliData, setTautulliData] = useState<{ streamsRecord: number, transcodeRecord: number, directPlayRecord: number, directStreamRecord: number, totalPlays: number, tvPlays: number, moviePlays: number, musicPlays: number, totalTimeStr: string } | null>(null);
     const [isLoading, setLoading] = useState(true);
@@ -3810,8 +3811,13 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
     const [viewerPage, setViewerPage] = useState(1);
     const viewersPerPage = 10;
     const [viewTab, setViewTab] = useState<'overview' | 'graphs'>('overview');
+    const [analyticsToasts, setAnalyticsToasts] = useState<ToastMessage[]>([]);
+    const [isRebuildingAnalytics, setIsRebuildingAnalytics] = useState(false);
     const mediaServerType = String(sessionInfo?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
+    const addAnalyticsToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+        setAnalyticsToasts((prev) => pushToast(prev, message, type));
+    }, []);
     const analyticsSourceLabel = (() => {
         const stamped = String(analyticsData?.sourceLabel || '').trim();
         if (stamped) return stamped;
@@ -3829,6 +3835,15 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         return t('analytics.source.plex');
     })();
     const analyticsSourceDegraded = !!analyticsData?.degraded;
+    const analyticsLastUpdatedLabel = (() => {
+        const ts = Number(analyticsData?.lastUpdated);
+        if (!Number.isFinite(ts) || ts <= 0) return t('analytics.source.updatedUnknown');
+        try {
+            return t('analytics.source.updated', { time: new Date(ts).toLocaleString() });
+        } catch {
+            return t('analytics.source.updatedUnknown');
+        }
+    })();
     const libraryDeltas = (analyticsData?.libraryHealth as any)?.deltas || {};
 
     const resolveUserAvatar = (thumb: string | null | undefined, width = 80, height = 80) => {
@@ -4006,6 +4021,28 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         return () => { cancelled = true; };
     }, [days, isJellyfinPortal]);
 
+    const handleRebuildAnalyticsCache = useCallback(async () => {
+        if (!isAdmin || isJellyfinPortal || isRebuildingAnalytics) return;
+        setIsRebuildingAnalytics(true);
+        try {
+            const result = await apiFetch('/api/plex/analytics/rebuild', { method: 'POST' });
+            if (result?.status === 'already_running') {
+                addAnalyticsToast(t('analytics.source.rebuildRunning'), 'error');
+            } else {
+                addAnalyticsToast(result?.message || t('analytics.source.rebuildStarted'), 'success');
+            }
+            window.setTimeout(() => {
+                void apiFetch(`/api/plex/analytics?days=${days}`)
+                    .then((data) => setAnalyticsData(data))
+                    .catch(() => { /* keep current */ });
+            }, 8000);
+        } catch (err: any) {
+            addAnalyticsToast(err?.message || t('analytics.source.rebuildFailed'), 'error');
+        } finally {
+            setIsRebuildingAnalytics(false);
+        }
+    }, [addAnalyticsToast, days, isAdmin, isJellyfinPortal, isRebuildingAnalytics, t]);
+
     // Tautulli/Jellystat extras must not block the main analytics page (slow Tautulli = endless spinner).
     useEffect(() => {
         if (!isAdmin || isLoading) {
@@ -4142,6 +4179,7 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
 
 return (
         <DashboardPageShell>
+            <ToastContainer toasts={analyticsToasts} setToasts={setAnalyticsToasts} />
             <DashboardHero
                 accent="violet"
                 eyebrow="Analytics"
@@ -4156,28 +4194,46 @@ return (
                         }`}>
                             {t('analytics.source.badge', { source: analyticsSourceLabel })}
                         </span>
+                        <span className="ml-2 inline-flex items-center rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-semibold text-muted align-middle normal-case tracking-normal">
+                            {analyticsLastUpdatedLabel}
+                        </span>
                     </>
                 )}
                 icon={<BarChart3 className="h-3.5 w-3.5" />}
                 secondaryBlob
-                actions={viewTab === 'overview' ? (
-                    <div className="w-[140px] md:w-48 shrink-0">
-                        <CustomSelect
-                            value={days}
-                            onChange={(val) => setDays(val as string)}
-                            compact={true}
-                            options={[
-                                { label: 'Last 24 Hours', value: '1' },
-                                { label: 'Last 7 Days', value: '7' },
-                                { label: 'Last 30 Days', value: '30' },
-                                { label: 'Last 60 Days', value: '60' },
-                                { label: 'Last 1 Year', value: '365' },
-                                { label: 'Last 5 Years', value: '1825' },
-                                { label: 'All Time', value: 'all' },
-                            ]}
-                        />
+                actions={(
+                    <div className="flex items-center gap-2 shrink-0">
+                        {isAdmin && !isJellyfinPortal && (
+                            <button
+                                type="button"
+                                onClick={() => void handleRebuildAnalyticsCache()}
+                                disabled={isRebuildingAnalytics}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs font-bold text-text hover:bg-white/5 disabled:opacity-50"
+                            >
+                                <RefreshCw className={`h-3.5 w-3.5 ${isRebuildingAnalytics ? 'animate-spin' : ''}`} />
+                                {isRebuildingAnalytics ? t('analytics.source.rebuilding') : t('analytics.source.rebuild')}
+                            </button>
+                        )}
+                        {viewTab === 'overview' ? (
+                            <div className="w-[140px] md:w-48">
+                                <CustomSelect
+                                    value={days}
+                                    onChange={(val) => setDays(val as string)}
+                                    compact={true}
+                                    options={[
+                                        { label: 'Last 24 Hours', value: '1' },
+                                        { label: 'Last 7 Days', value: '7' },
+                                        { label: 'Last 30 Days', value: '30' },
+                                        { label: 'Last 60 Days', value: '60' },
+                                        { label: 'Last 1 Year', value: '365' },
+                                        { label: 'Last 5 Years', value: '1825' },
+                                        { label: 'All Time', value: 'all' },
+                                    ]}
+                                />
+                            </div>
+                        ) : null}
                     </div>
-                ) : undefined}
+                )}
             />
 
             <div className="md:hidden">
@@ -5133,7 +5189,14 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
     const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
 
     // Filters and Sorting States
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState(() => {
+        if (typeof window === 'undefined') return '';
+        try {
+            return new URLSearchParams(window.location.search).get('q')?.trim() || '';
+        } catch {
+            return '';
+        }
+    });
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'trial' | 'expiring' | 'expired' | 'revoked'>('all');
     const [sortBy, setSortBy] = useState<'username-asc' | 'username-desc' | 'expiry-asc' | 'expiry-desc' | 'joined-desc'>('username-asc');
     const mediaServerType = String(configSettings.mediaServerType || 'plex').toLowerCase();
@@ -5141,6 +5204,20 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
 
     const addToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts(t => pushToast(t, message, type));
+    }, []);
+
+    useEffect(() => {
+        const syncSearchFromUrl = () => {
+            try {
+                const q = new URLSearchParams(window.location.search).get('q')?.trim() || '';
+                if (q) setSearchQuery(q);
+            } catch {
+                /* ignore */
+            }
+        };
+        syncSearchFromUrl();
+        window.addEventListener('popstate', syncSearchFromUrl);
+        return () => window.removeEventListener('popstate', syncSearchFromUrl);
     }, []);
 
     const fetchUsers = useCallback(async () => {
@@ -11881,13 +11958,23 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [profileAchievements, setProfileAchievements] = useState<any>(null);
     const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
     const [installHelpOpen, setInstallHelpOpen] = useState(false);
-    const [installBannerDismissed, setInstallBannerDismissed] = useState(false);
+    const [installBannerDismissed, setInstallBannerDismissed] = useState(() => {
+        try {
+            return localStorage.getItem('portal.pwa.installBannerDismissed.v1') === '1';
+        } catch {
+            return false;
+        }
+    });
     const [isInstalledApp, setIsInstalledApp] = useState(() => (
         typeof window !== 'undefined'
         && (window.matchMedia?.('(display-mode: standalone)').matches
             || window.matchMedia?.('(display-mode: fullscreen)').matches
             || (navigator as any).standalone === true)
     ));
+    const [installToasts, setInstallToasts] = useState<ToastMessage[]>([]);
+    const addInstallToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+        setInstallToasts((prev) => pushToast(prev, message, type));
+    }, []);
     useFirefoxMobileNavShell({ barRef: firefoxNavBarRef, enabled: firefoxMobileNav });
     const mobileThemeRef = useRef<HTMLDivElement>(null);
     const [mobileThemePos, setMobileThemePos] = useState<{ top: number; right: number } | null>(null);
@@ -11904,6 +11991,24 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         && !/CriOS|FxiOS|EdgiOS|OPiOS|Chrome|Android/i.test(navigator.userAgent);
     const showInstallNudge = !isInstalledApp && !installBannerDismissed && (!!installPrompt || isIosSafari || isFirefoxMobile);
     const [installDiag, setInstallDiag] = useState<string[] | null>(null);
+
+    const dismissInstallBanner = useCallback(() => {
+        setInstallBannerDismissed(true);
+        try {
+            localStorage.setItem('portal.pwa.installBannerDismissed.v1', '1');
+        } catch {
+            /* ignore */
+        }
+    }, []);
+
+    const clearInstallBannerDismiss = useCallback(() => {
+        setInstallBannerDismissed(false);
+        try {
+            localStorage.removeItem('portal.pwa.installBannerDismissed.v1');
+        } catch {
+            /* ignore */
+        }
+    }, []);
 
     useEffect(() => {
         if (!profileOpen) return;
@@ -11931,12 +12036,15 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             setIsInstalledApp(true);
             setInstallPrompt(null);
             setInstallHelpOpen(false);
+            dismissInstallBanner();
+            addInstallToast(t('pwa.install.successBody', { server: serverName }), 'success');
         };
         const syncInstalledState = () => {
             const installed = window.matchMedia?.('(display-mode: standalone)').matches
                 || window.matchMedia?.('(display-mode: fullscreen)').matches
                 || (navigator as any).standalone === true;
             setIsInstalledApp(!!installed);
+            if (installed) dismissInstallBanner();
         };
         syncInstalledState();
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -11948,7 +12056,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             window.removeEventListener('appinstalled', handleInstalled);
             standaloneMq?.removeEventListener?.('change', syncInstalledState);
         };
-    }, []);
+    }, [addInstallToast, dismissInstallBanner, serverName, t]);
 
     useEffect(() => {
         if (!installHelpOpen) {
@@ -12020,7 +12128,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     }, [installHelpOpen, installPrompt, isAndroidChrome]);
 
     const handleInstallApp = async () => {
-        if (isInstalledApp) return;
+        if (isInstalledApp) {
+            addInstallToast(t('pwa.install.openInstalled'), 'success');
+            return;
+        }
         // Firefox / iOS / most non-Chromium browsers never fire beforeinstallprompt —
         // always show manual install steps instead of appearing to do nothing.
         if (!installPrompt || isFirefoxMobile || isIosSafari) {
@@ -12029,12 +12140,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         }
         const promptEvent = installPrompt;
         setInstallPrompt(null);
-        setInstallBannerDismissed(true);
+        dismissInstallBanner();
         try {
             await promptEvent.prompt();
             const choice = await promptEvent.userChoice;
             if (choice.outcome === 'accepted') {
                 setIsInstalledApp(true);
+                addInstallToast(t('pwa.install.successBody', { server: serverName }), 'success');
+            } else {
+                // User dismissed the browser prompt — keep banner quiet for this device.
+                dismissInstallBanner();
             }
         } catch {
             setInstallHelpOpen(true);
@@ -12222,6 +12337,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     return (
         <>
+            <ToastContainer toasts={installToasts} setToasts={setInstallToasts} />
 
             {/* Mobile Top Nav — height grows with safe-area so content clears the iOS status bar in PWA */}
             <div className="md:hidden fixed top-0 left-0 right-0 z-50 nav-shell border-b shadow-lg pt-[env(safe-area-inset-top,0px)] overflow-visible">
@@ -12527,6 +12643,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                             <button
                                 type="button"
                                 onClick={async () => {
+                                    clearInstallBannerDismiss();
                                     try {
                                         if ('serviceWorker' in navigator) {
                                             const regs = await navigator.serviceWorker.getRegistrations();
@@ -12576,7 +12693,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     </button>
                     <button
                         type="button"
-                        onClick={() => setInstallBannerDismissed(true)}
+                        onClick={dismissInstallBanner}
                         className="shrink-0 p-1.5 rounded-lg text-muted hover:text-text"
                         aria-label={t('pwa.install.dismiss')}
                     >

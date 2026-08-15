@@ -27,6 +27,8 @@ import {
     Image as ImageIcon,
     Trophy,
     Film,
+    Bookmark,
+    ExternalLink,
 } from 'lucide-react';
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -283,6 +285,47 @@ const SETTINGS_TAB_TRANSLATION_KEYS: Record<string, string> = {
     editions: 'settings.navigation.tabs.editions',
     system: 'settings.navigation.tabs.system',
     logs: 'settings.navigation.tabs.logs',
+};
+
+const AUDIT_FILTER_PRESETS_KEY = 'portal.auditLog.filterPresets.v1';
+
+type AuditFilterPreset = {
+    id: string;
+    name: string;
+    event: string;
+    user: string;
+    from: string;
+    to: string;
+};
+
+const readAuditFilterPresets = (): AuditFilterPreset[] => {
+    try {
+        const raw = localStorage.getItem(AUDIT_FILTER_PRESETS_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .filter((entry) => entry && typeof entry === 'object' && typeof entry.name === 'string')
+            .map((entry) => ({
+                id: String(entry.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
+                name: String(entry.name).trim() || 'Preset',
+                event: String(entry.event || ''),
+                user: String(entry.user || ''),
+                from: String(entry.from || ''),
+                to: String(entry.to || ''),
+            }))
+            .slice(0, 20);
+    } catch {
+        return [];
+    }
+};
+
+const writeAuditFilterPresets = (presets: AuditFilterPreset[]) => {
+    try {
+        localStorage.setItem(AUDIT_FILTER_PRESETS_KEY, JSON.stringify(presets.slice(0, 20)));
+    } catch {
+        /* ignore quota / private mode */
+    }
 };
 
 export const SettingsDashboard: React.FC = () => {
@@ -669,6 +712,8 @@ export const SettingsDashboard: React.FC = () => {
     const [auditFilterUser, setAuditFilterUser] = useState('');
     const [auditFilterFrom, setAuditFilterFrom] = useState('');
     const [auditFilterTo, setAuditFilterTo] = useState('');
+    const [auditFilterPresets, setAuditFilterPresets] = useState<AuditFilterPreset[]>(() => readAuditFilterPresets());
+    const [selectedAuditPresetId, setSelectedAuditPresetId] = useState('');
     const [isLoadingAuditLog, setIsLoadingAuditLog] = useState(false);
     const [isExportingAuditLog, setIsExportingAuditLog] = useState(false);
     const [isExportingAuditCsv, setIsExportingAuditCsv] = useState(false);
@@ -774,6 +819,61 @@ export const SettingsDashboard: React.FC = () => {
         params.set('limit', String(limit));
         return params.toString();
     }, [auditFilterEvent, auditFilterFrom, auditFilterTo, auditFilterUser]);
+
+    const applyAuditFilterPreset = useCallback((presetId: string) => {
+        setSelectedAuditPresetId(presetId);
+        const preset = auditFilterPresets.find((entry) => entry.id === presetId);
+        if (!preset) return;
+        setAuditFilterEvent(preset.event || '');
+        setAuditFilterUser(preset.user || '');
+        setAuditFilterFrom(preset.from || '');
+        setAuditFilterTo(preset.to || '');
+    }, [auditFilterPresets]);
+
+    const saveAuditFilterPreset = useCallback(() => {
+        const name = window.prompt(t('settings.logs.filters.savePresetPrompt'))?.trim();
+        if (!name) {
+            if (name === '') addToast(t('settings.logs.filters.presetNameRequired'), 'error');
+            return;
+        }
+        const next: AuditFilterPreset = {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            name,
+            event: auditFilterEvent,
+            user: auditFilterUser,
+            from: auditFilterFrom,
+            to: auditFilterTo,
+        };
+        const presets = [next, ...auditFilterPresets.filter((entry) => entry.name.toLowerCase() !== name.toLowerCase())].slice(0, 20);
+        setAuditFilterPresets(presets);
+        writeAuditFilterPresets(presets);
+        setSelectedAuditPresetId(next.id);
+        addToast(t('settings.logs.filters.presetSaved'), 'success');
+    }, [addToast, auditFilterEvent, auditFilterFrom, auditFilterPresets, auditFilterTo, auditFilterUser, t]);
+
+    const deleteSelectedAuditFilterPreset = useCallback(() => {
+        if (!selectedAuditPresetId) return;
+        const presets = auditFilterPresets.filter((entry) => entry.id !== selectedAuditPresetId);
+        setAuditFilterPresets(presets);
+        writeAuditFilterPresets(presets);
+        setSelectedAuditPresetId('');
+        addToast(t('settings.logs.filters.presetDeleted'), 'success');
+    }, [addToast, auditFilterPresets, selectedAuditPresetId, t]);
+
+    const auditSubjectLabel = (party?: { username?: string | null; email?: string | null } | null) =>
+        String(party?.username || party?.email || '').trim();
+
+    const openAuditSubjectUsers = (party?: { username?: string | null; email?: string | null } | null) => {
+        const label = auditSubjectLabel(party);
+        if (!label) return;
+        window.location.assign(portalUrl(`/users?q=${encodeURIComponent(label)}`));
+    };
+
+    const openAuditSubjectAnalytics = (party?: { username?: string | null; email?: string | null } | null) => {
+        const label = String(party?.username || '').trim();
+        if (!label) return;
+        window.location.assign(portalUrl(`/analytics#user=${encodeURIComponent(label)}`));
+    };
 
     const fetchAuditLog = async () => {
         setIsLoadingAuditLog(true);
@@ -4805,11 +4905,48 @@ export const SettingsDashboard: React.FC = () => {
                                     <p className="text-xs text-muted">
                                         {t('settings.logs.filters.matched', { matched: auditLogTotal, total: auditLogTotalAll })}
                                     </p>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <label className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-muted">
+                                            <Bookmark className="w-3.5 h-3.5" />
+                                            <span className="sr-only">{t('settings.logs.filters.presets')}</span>
+                                            <select
+                                                value={selectedAuditPresetId}
+                                                onChange={(e) => {
+                                                    const id = e.target.value;
+                                                    if (!id) {
+                                                        setSelectedAuditPresetId('');
+                                                        return;
+                                                    }
+                                                    applyAuditFilterPreset(id);
+                                                }}
+                                                className="rounded-md border border-border bg-background px-2 py-1.5 text-xs font-semibold normal-case tracking-normal text-text"
+                                            >
+                                                <option value="">{t('settings.logs.filters.presetsPlaceholder')}</option>
+                                                {auditFilterPresets.map((preset) => (
+                                                    <option key={preset.id} value={preset.id}>{preset.name}</option>
+                                                ))}
+                                            </select>
+                                        </label>
+                                        <button
+                                            type="button"
+                                            className="px-3 py-1.5 rounded-md border border-border text-xs font-semibold text-muted hover:text-text"
+                                            onClick={saveAuditFilterPreset}
+                                        >
+                                            {t('settings.logs.filters.savePreset')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="px-3 py-1.5 rounded-md border border-border text-xs font-semibold text-muted hover:text-text disabled:opacity-40"
+                                            disabled={!selectedAuditPresetId}
+                                            onClick={deleteSelectedAuditFilterPreset}
+                                        >
+                                            {t('settings.logs.filters.deletePreset')}
+                                        </button>
                                         <button
                                             type="button"
                                             className="px-3 py-1.5 rounded-md border border-border text-xs font-semibold text-muted hover:text-text"
                                             onClick={() => {
+                                                setSelectedAuditPresetId('');
                                                 setAuditFilterEvent('');
                                                 setAuditFilterUser('');
                                                 setAuditFilterFrom('');
@@ -4836,6 +4973,10 @@ export const SettingsDashboard: React.FC = () => {
                                             const detailKeys = entry.details && typeof entry.details === 'object'
                                                 ? Object.entries(entry.details).filter(([key]) => !diffRows.some(row => key.toLowerCase().includes(row.field.toLowerCase())))
                                                 : [];
+                                            const targetLabel = entry.target?.username || entry.target?.email || t('settings.logs.audit.system');
+                                            const actorLabel = entry.actor?.username || entry.actor?.email || '';
+                                            const targetJump = auditSubjectLabel(entry.target);
+                                            const actorJump = auditSubjectLabel(entry.actor);
                                             return (
                                                 <details key={entry.id} className="py-3 border-b border-border/40 last:border-b-0">
                                                     <summary className="cursor-pointer list-none">
@@ -4844,11 +4985,47 @@ export const SettingsDashboard: React.FC = () => {
                                                             <span className="text-[11px] text-muted">{formatDateTime(entry.timestamp)}</span>
                                                         </div>
                                                         <p className="text-xs text-muted mt-1">
-                                                            {t('settings.logs.audit.target')}: {entry.target?.username || entry.target?.email || t('settings.logs.audit.system')}
-                                                            {entry.actor?.username || entry.actor?.email ? ` · ${t('settings.logs.audit.actor')}: ${entry.actor.username || entry.actor.email}` : ''}
+                                                            {t('settings.logs.audit.target')}: {targetLabel}
+                                                            {actorLabel ? ` · ${t('settings.logs.audit.actor')}: ${actorLabel}` : ''}
                                                         </p>
                                                     </summary>
                                                     <div className="mt-3 space-y-2">
+                                                        {(targetJump || actorJump) && (
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {targetJump && (
+                                                                    <>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[11px] font-semibold text-muted hover:text-text"
+                                                                            onClick={() => openAuditSubjectUsers(entry.target)}
+                                                                        >
+                                                                            <ExternalLink className="w-3 h-3" />
+                                                                            {t('settings.logs.audit.openUser')}: {targetJump}
+                                                                        </button>
+                                                                        {entry.target?.username && (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[11px] font-semibold text-muted hover:text-text"
+                                                                                onClick={() => openAuditSubjectAnalytics(entry.target)}
+                                                                            >
+                                                                                <ExternalLink className="w-3 h-3" />
+                                                                                {t('settings.logs.audit.openAnalytics')}
+                                                                            </button>
+                                                                        )}
+                                                                    </>
+                                                                )}
+                                                                {actorJump && actorJump !== targetJump && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-[11px] font-semibold text-muted hover:text-text"
+                                                                        onClick={() => openAuditSubjectUsers(entry.actor)}
+                                                                    >
+                                                                        <ExternalLink className="w-3 h-3" />
+                                                                        {t('settings.logs.audit.actor')}: {actorJump}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                         {diffRows.length > 0 && (
                                                             <div className="overflow-x-auto">
                                                                 <table className="w-full text-xs border border-border/60 rounded-lg overflow-hidden">

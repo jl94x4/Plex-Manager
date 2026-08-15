@@ -15948,6 +15948,7 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
             fallback: null,
             degraded: false,
             sourceLabel: analyticsSourceLabelFor(analyticsProvider.provider),
+            lastUpdated: Date.now(),
             jellystatInsights: {
                 activeStreams,
                 streamsRecord: null,
@@ -16225,6 +16226,7 @@ app.get('/api/plex/analytics', requireAuth, requireMember, async (req, res) => {
                     degraded: !!(statsData.degraded ?? cachedData.degraded),
                     fallback: statsData.fallback ?? cachedData.fallback ?? null,
                 }),
+            lastUpdated: statsData.lastUpdated || null,
         };
         
         // attach max stats dynamically
@@ -16259,6 +16261,16 @@ app.get('/api/plex/analytics', requireAuth, requireMember, async (req, res) => {
         log(`Error fetching analytics: ${e.message}`);
         res.status(500).json({ error: 'Analytics error' });
     }
+});
+
+app.post('/api/plex/analytics/rebuild', requireAdmin, async (req, res) => {
+    if (isBuildingAnalyticsStats) {
+        return res.json({ status: 'already_running', message: 'Analytics cache rebuild is already in progress.' });
+    }
+    calculateAnalyticsStats().catch((error) => {
+        log(`Manual analytics rebuild failed: ${error.message}`);
+    });
+    return res.json({ status: 'started', message: 'Analytics cache rebuild started in the background.' });
 });
 
 app.get('/api/plex/analytics/day', requireAuth, requireMember, async (req, res) => {
