@@ -113,6 +113,35 @@ const STATUS_SERVICE_ICONS: Record<string, string> = {
     ombi: `${STATUS_ICON_BASE}/ombi.svg`,
 };
 
+const NOW_PLAYING_COMPANION_PREF_KEY = 'portal.home.nowPlayingCompanion.v1';
+const readNowPlayingCompanionEnabled = (subjectId: string): boolean => {
+    try {
+        const raw = localStorage.getItem(NOW_PLAYING_COMPANION_PREF_KEY);
+        if (!raw) return true;
+        const parsed = JSON.parse(raw);
+        const key = String(subjectId || '');
+        if (!parsed || typeof parsed !== 'object' || !key) return true;
+        if (!(key in parsed)) return true;
+        return parsed[key] !== false;
+    } catch {
+        return true;
+    }
+};
+
+const writeNowPlayingCompanionEnabled = (subjectId: string, enabled: boolean): void => {
+    try {
+        const key = String(subjectId || '');
+        if (!key) return;
+        const raw = localStorage.getItem(NOW_PLAYING_COMPANION_PREF_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        const next = parsed && typeof parsed === 'object' ? parsed : {};
+        next[key] = !!enabled;
+        localStorage.setItem(NOW_PLAYING_COMPANION_PREF_KEY, JSON.stringify(next));
+    } catch {
+        // Ignore persistence failures.
+    }
+};
+
 const getStatusServiceIconKey = (service: any) => {
     if (service?.clientType) return String(service.clientType).toLowerCase();
     const id = String(service?.id || '').toLowerCase();
@@ -7587,6 +7616,9 @@ export const UserDashboard: React.FC<{
         || sessionInfo?.session?.username
         || 'anon',
     );
+    const [showNowPlayingCompanion, setShowNowPlayingCompanion] = useState<boolean>(() => (
+        readNowPlayingCompanionEnabled(wrapUpSubjectId)
+    ));
     // Admin home hero should always attempt now-playing; members can opt out per preference.
     const nowPlayingEnabled = sessionInfo?.session?.isAdmin
         ? true
@@ -7595,6 +7627,15 @@ export const UserDashboard: React.FC<{
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
+
+    useEffect(() => {
+        setShowNowPlayingCompanion(readNowPlayingCompanionEnabled(wrapUpSubjectId));
+    }, [wrapUpSubjectId]);
+
+    const toggleNowPlayingCompanion = useCallback((enabled: boolean) => {
+        setShowNowPlayingCompanion(enabled);
+        writeNowPlayingCompanionEnabled(wrapUpSubjectId, enabled);
+    }, [wrapUpSubjectId]);
 
     useEffect(() => {
         setDashboardLayoutDraft(normalizeSectionLayout(publicConfig?.dashboardLayout));
@@ -8362,18 +8403,30 @@ export const UserDashboard: React.FC<{
                 ) : null}
             </div>
 
-            {nowPlaying ? (
+            {nowPlaying && showNowPlayingCompanion ? (
                 <NowPlayingCompanionPanel
                     session={nowPlaying}
                     userKey={wrapUpSubjectId}
                     mediaServerType={mediaServerType}
                     onNavigate={(path) => onNavigate?.('discovery', { path })}
+                    onDisable={() => toggleNowPlayingCompanion(false)}
                     onToast={(message, type = 'success') => setToast({
                         id: Date.now(),
                         message,
                         type,
                     })}
                 />
+            ) : null}
+            {nowPlaying && !showNowPlayingCompanion ? (
+                <div className="mt-3 flex justify-end">
+                    <button
+                        type="button"
+                        onClick={() => toggleNowPlayingCompanion(true)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-400/30 bg-emerald-500/15 text-emerald-100 text-xs font-bold hover:bg-emerald-500/25 transition-colors"
+                    >
+                        Enable second-screen companion
+                    </button>
+                </div>
             ) : null}
 
             {selectedMetric && analytics && (

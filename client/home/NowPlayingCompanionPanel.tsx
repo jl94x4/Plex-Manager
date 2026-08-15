@@ -17,6 +17,12 @@ import {
 import { apiFetch } from '../shared/api';
 import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import type { NowPlayingSession } from '../shared/useNowPlaying';
+import {
+    buildExternalLinks,
+    buildMediaFactRows,
+    fetchCombinedRatings,
+    type CombinedRatings,
+} from '../discovery/mediaDetailUtils';
 
 type CompanionToastType = 'success' | 'error';
 
@@ -26,6 +32,7 @@ type Props = {
     mediaServerType?: string;
     onNavigate?: (path: string) => void;
     onToast?: (message: string, type?: CompanionToastType) => void;
+    onDisable?: () => void;
 };
 
 type Recommendation = {
@@ -48,6 +55,7 @@ type CastInsight = {
     name: string;
     character: string;
     profilePath: string | null;
+    popularity: number;
     knownFor: KnownForItem[];
 };
 
@@ -187,6 +195,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     mediaServerType = 'plex',
     onNavigate,
     onToast,
+    onDisable,
 }) => {
     const tmdbId = Number(session?.tmdbId || 0);
     const mediaType = session?.mediaType === 'tv' ? 'tv' : 'movie';
@@ -206,6 +215,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     const [pollChoice, setPollChoice] = useState<string | null>(null);
     const [pollVotes, setPollVotes] = useState<PollVotes>({});
     const [reactions, setReactions] = useState<ReactionCounts>({});
+    const [ratings, setRatings] = useState<CombinedRatings | null>(null);
 
     const title = String(payload?.details?.title || payload?.details?.name || session?.title || 'Now playing').trim();
     const year = formatYear(payload?.details?.release_date || payload?.details?.first_air_date);
@@ -286,6 +296,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                         name: String(actor?.name || 'Unknown'),
                         character: String(actor?.character || '').trim(),
                         profilePath,
+                        popularity: Number(actor?.popularity) || 0,
                         knownFor: [],
                     } as CastInsight;
                 }
@@ -295,6 +306,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                     name: String(actor?.name || 'Unknown'),
                     character: String(actor?.character || '').trim(),
                     profilePath,
+                    popularity: Number(actor?.popularity) || 0,
                     knownFor: buildKnownFor(credits, tmdbId),
                 } as CastInsight;
             }));
@@ -323,6 +335,54 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             cancelled = true;
         };
     }, [open, mediaType, tmdbId, seasonNumber]);
+
+    useEffect(() => {
+        if (!open || !Number.isFinite(tmdbId) || tmdbId <= 0) {
+            setRatings(null);
+            return;
+        }
+        let cancelled = false;
+        fetchCombinedRatings(mediaType, tmdbId)
+            .then((res) => {
+                if (cancelled) return;
+                setRatings(res || null);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setRatings(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [open, mediaType, tmdbId]);
+
+    const normalizedDetails = useMemo(() => {
+        const details = payload?.details;
+        if (!details || typeof details !== 'object') return null;
+        return {
+            ...details,
+            releaseDate: details.releaseDate || details.release_date || null,
+            firstAirDate: details.firstAirDate || details.first_air_date || null,
+            lastAirDate: details.lastAirDate || details.last_air_date || null,
+            originalLanguage: details.originalLanguage || details.original_language || null,
+            productionCountries: details.productionCountries || details.production_countries || [],
+            productionCompanies: details.productionCompanies || details.production_companies || [],
+            originalTitle: details.originalTitle || details.original_title || null,
+            originalName: details.originalName || details.original_name || null,
+            episodeRunTime: details.episodeRunTime || details.episode_run_time || [],
+            createdBy: details.createdBy || details.created_by || [],
+            externalIds: details.externalIds || details.external_ids || null,
+            imdbId: details.imdbId || details.imdb_id || null,
+        };
+    }, [payload?.details]);
+
+    const productionFacts = useMemo(() => (
+        normalizedDetails ? buildMediaFactRows(mediaType, normalizedDetails).slice(0, 8) : []
+    ), [mediaType, normalizedDetails]);
+
+    const externalLinks = useMemo(() => (
+        normalizedDetails ? buildExternalLinks(mediaType, normalizedDetails, ratings) : []
+    ), [mediaType, normalizedDetails, ratings]);
 
     const episodeContext = useMemo(() => {
         if (mediaType !== 'tv' || !payload?.seasonDetails || !seasonNumber || !episodeNumber) {
@@ -383,6 +443,70 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         return [source.slice(0, 160)];
     }, [episodeContext.current?.overview, payload?.details?.overview]);
 
+    const triviaFacts = useMemo(() => {
+        const details = normalizedDetails;
+        if (!details) return [] as string[];
+        const facts: string[] = [];
+        const voteAverage = Number(details.voteAverage ?? details.vote_average ?? 0);
+        const voteCount = Number(details.voteCount ?? details.vote_count ?? 0);
+        const popularity = Number(details.popularity || 0);
+        const runtime = Number(details.runtime || 0);
+        const episodeRunTime = Number(Array.isArray(details.episodeRunTime) ? details.episodeRunTime[0] : 0);
+        const seasonCount = Number(details.numberOfSeasons ?? details.number_of_seasons ?? 0);
+        const episodeCount = Number(details.numberOfEpisodes ?? details.number_of_episodes ?? 0);
+        const originCountries = Array.isArray(details.originCountry || details.origin_country)
+            ? (details.originCountry || details.origin_country)
+            : [];
+        const studios = Array.isArray(details.productionCompanies)
+            ? details.productionCompanies.map((studio: any) => String(studio?.name || '').trim()).filter(Boolean)
+            : [];
+        const topCast = payload?.castInsights?.slice(0, 3) || [];
+        const budget = Number(details.budget || 0);
+        const revenue = Number(details.revenue || 0);
+
+        if (voteAverage > 0 && voteCount > 0) {
+            facts.push(`TMDB community score is ${voteAverage.toFixed(1)}/10 from ${voteCount.toLocaleString()} votes.`);
+        }
+        if (popularity > 0) {
+            facts.push(`Current popularity index sits at ${popularity.toFixed(1)} on TMDB trends.`);
+        }
+        if (mediaType === 'movie' && runtime > 0) {
+            facts.push(`Runtime is about ${runtime} minutes.`);
+        }
+        if (mediaType === 'tv' && episodeRunTime > 0) {
+            facts.push(`Typical episode runtime is around ${episodeRunTime} minutes.`);
+        }
+        if (mediaType === 'tv' && seasonCount > 0) {
+            facts.push(`This show currently has ${seasonCount} season${seasonCount === 1 ? '' : 's'} and ${episodeCount > 0 ? episodeCount : 'multiple'} episodes.`);
+        }
+        if (originCountries.length) {
+            facts.push(`Origin country: ${originCountries.join(', ')}.`);
+        }
+        if (studios.length) {
+            facts.push(`Produced by ${studios.slice(0, 2).join(' and ')}${studios.length > 2 ? ` (+${studios.length - 2} more)` : ''}.`);
+        }
+        if (mediaType === 'movie' && budget > 0) {
+            facts.push(`Reported budget is about $${budget.toLocaleString()}.`);
+        }
+        if (mediaType === 'movie' && revenue > 0) {
+            facts.push(`Reported box office revenue is roughly $${revenue.toLocaleString()}.`);
+        }
+        if (mediaType === 'movie' && budget > 0 && revenue > 0) {
+            const ratio = revenue / budget;
+            if (Number.isFinite(ratio) && ratio > 1) {
+                facts.push(`Estimated return is about ${ratio.toFixed(1)}x the production budget.`);
+            }
+        }
+        if (topCast.length) {
+            facts.push(`Top billed: ${topCast.map((person) => person.name).join(', ')}.`);
+        }
+        if (episodeContext.current?.air_date) {
+            facts.push(`Current episode first aired on ${episodeContext.current.air_date}.`);
+        }
+
+        return facts.slice(0, 8);
+    }, [episodeContext.current?.air_date, mediaType, normalizedDetails, payload?.castInsights]);
+
     const bumpReaction = useCallback((key: string) => {
         setReactions((prev) => {
             const next = { ...prev, [key]: (Number(prev[key]) || 0) + 1 };
@@ -430,11 +554,6 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     const goToPath = (path: string) => {
         if (!path || !onNavigate) return;
         onNavigate(path);
-    };
-
-    const requestCurrent = () => {
-        if (!basePath || !onNavigate) return;
-        onNavigate(`${basePath}?request=1`);
     };
 
     const requestSimilar = (item?: Recommendation | null) => {
@@ -542,21 +661,32 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                         {year ? ` (${year})` : ''} - only on Home hero.
                     </p>
                 </div>
-                <button
-                    type="button"
-                    onClick={() => setOpen((prev) => !prev)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/20 bg-white/5 text-xs font-bold text-white hover:bg-white/10 transition-colors"
-                >
-                    {open ? (
-                        <>
-                            Collapse <ChevronUp className="w-3.5 h-3.5" />
-                        </>
-                    ) : (
-                        <>
-                            Expand <ChevronDown className="w-3.5 h-3.5" />
-                        </>
-                    )}
-                </button>
+                <div className="flex items-center gap-2">
+                    {onDisable ? (
+                        <button
+                            type="button"
+                            onClick={onDisable}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-300/30 bg-amber-500/15 text-xs font-bold text-amber-100 hover:bg-amber-500/25 transition-colors"
+                        >
+                            Disable companion
+                        </button>
+                    ) : null}
+                    <button
+                        type="button"
+                        onClick={() => setOpen((prev) => !prev)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/20 bg-white/5 text-xs font-bold text-white hover:bg-white/10 transition-colors"
+                    >
+                        {open ? (
+                            <>
+                                Collapse <ChevronUp className="w-3.5 h-3.5" />
+                            </>
+                        ) : (
+                            <>
+                                Expand <ChevronDown className="w-3.5 h-3.5" />
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
 
             {!open ? null : (
@@ -617,13 +747,6 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                             <div className="flex flex-wrap gap-2">
                                 <button
                                     type="button"
-                                    onClick={requestCurrent}
-                                    className="px-3 py-2 rounded-lg text-xs font-bold border border-emerald-400/50 bg-emerald-500/20 text-emerald-100 hover:bg-emerald-500/30 transition-colors"
-                                >
-                                    Request this title
-                                </button>
-                                <button
-                                    type="button"
                                     onClick={toggleLocalWatchlist}
                                     className="px-3 py-2 rounded-lg text-xs font-bold border border-white/20 bg-white/5 text-white hover:bg-white/10 transition-colors"
                                 >
@@ -651,13 +774,13 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                 <div className="lg:col-span-2 rounded-xl border border-white/10 bg-white/5 p-3">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                         <Users className="w-3.5 h-3.5" />
-                                        Cast and where you know them from
+                                        Cast gallery and where you know them from
                                     </p>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                         {payload.castInsights.map((actor) => (
                                             <div key={`cast-${actor.id}`} className="rounded-lg border border-white/10 bg-black/30 p-2.5">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-10 h-10 rounded-md overflow-hidden bg-white/5 shrink-0">
+                                                    <div className="w-14 h-14 rounded-lg overflow-hidden bg-white/5 shrink-0">
                                                         {actor.profilePath ? (
                                                             <img
                                                                 src={posterUrl(actor.profilePath, 'w185')}
@@ -678,6 +801,11 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                         </button>
                                                         {actor.character ? (
                                                             <p className="text-[11px] text-white/60 truncate">{actor.character}</p>
+                                                        ) : null}
+                                                        {actor.popularity > 0 ? (
+                                                            <p className="text-[10px] text-emerald-200/80">
+                                                                Popularity {actor.popularity.toFixed(1)}
+                                                            </p>
                                                         ) : null}
                                                     </div>
                                                 </div>
@@ -723,6 +851,60 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                             No soundtrack credits were found for this item.
                                         </p>
                                     )}
+
+                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                                        <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
+                                            Ratings and links
+                                        </p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
+                                                <p className="text-[10px] uppercase tracking-wide text-white/50">IMDb</p>
+                                                <p className="text-xs font-bold text-white">
+                                                    {ratings?.imdb?.criticsScore ? `${ratings.imdb.criticsScore.toFixed(1)}/10` : 'N/A'}
+                                                </p>
+                                            </div>
+                                            <div className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
+                                                <p className="text-[10px] uppercase tracking-wide text-white/50">Rotten Tomatoes</p>
+                                                <p className="text-xs font-bold text-white">
+                                                    {Number.isFinite(Number(ratings?.rt?.criticsScore))
+                                                        ? `${Number(ratings?.rt?.criticsScore)}%`
+                                                        : 'N/A'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {externalLinks.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {externalLinks.slice(0, 4).map((link) => (
+                                                    <a
+                                                        key={`link-${link.key}`}
+                                                        href={link.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border border-white/15 bg-white/5 text-white/80 hover:bg-white/10"
+                                                    >
+                                                        {link.label} <ExternalLink className="w-3 h-3" />
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        ) : null}
+                                    </div>
+
+                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
+                                        <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
+                                            Did you know?
+                                        </p>
+                                        {triviaFacts.length > 0 ? (
+                                            triviaFacts.map((fact, idx) => (
+                                                <p key={`trivia-${idx}`} className="text-xs text-white/80 leading-relaxed">
+                                                    - {fact}
+                                                </p>
+                                            ))
+                                        ) : (
+                                            <p className="text-xs text-white/55">
+                                                Trivia is still loading for this title.
+                                            </p>
+                                        )}
+                                    </div>
 
                                     {mediaType === 'tv' && seasonNumber > 0 ? (
                                         <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
@@ -825,6 +1007,26 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     {!timelineFacts.length ? (
                                         <p className="text-xs text-white/55">No timeline facts available yet.</p>
                                     ) : null}
+                                </div>
+                            </div>
+
+                            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                                <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
+                                    <Clapperboard className="w-3.5 h-3.5" />
+                                    Production facts
+                                </p>
+                                <div className="space-y-2">
+                                    {productionFacts.length > 0 ? productionFacts.map((fact) => (
+                                        <div
+                                            key={`prod-${fact.key}`}
+                                            className="flex items-start gap-2 text-xs text-white/85 border-b border-white/5 pb-1.5 last:border-b-0 last:pb-0"
+                                        >
+                                            <span className="text-violet-200 font-bold min-w-28">{fact.label}</span>
+                                            <span>{fact.value}</span>
+                                        </div>
+                                    )) : (
+                                        <p className="text-xs text-white/55">No production facts were returned for this title.</p>
+                                    )}
                                 </div>
                             </div>
 
