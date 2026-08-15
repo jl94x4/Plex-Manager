@@ -6995,7 +6995,7 @@ export const DiscoverPosterCard: React.FC<{
                     ref={quickActionsRef}
                     className="absolute inset-0 z-30 pointer-events-none"
                 >
-                    <div className="absolute top-1.5 right-1.5 pointer-events-auto">
+                    <div className="absolute top-1.5 left-1.5 pointer-events-auto">
                         <button
                             type="button"
                             onClick={(event) => {
