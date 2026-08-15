@@ -12422,7 +12422,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                             const item = navItemsConfig[key];
                             if (!item) return null;
                             const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                            const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                            const labelOverride = key === 'mediastack' ? t('navigation.calendar') : key === 'request' ? t('navigation.request') : item.label;
                             return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
                         })}
                         {showMore && (
@@ -12436,7 +12436,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 <span className="relative shrink-0">
                                     <MoreHorizontal className="w-5 h-5" />
                                 </span>
-                                <span>More</span>
+                                <span>{t('navigation.more')}</span>
                             </button>
                         )}
                     </>
@@ -12479,7 +12479,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 <div className="md:hidden fixed inset-0 z-[320] bg-black/60 backdrop-blur-sm animate-fade-in flex flex-col justify-end" onClick={() => setMobileMoreOpen(false)}>
                     <div className="bg-card border-t border-border rounded-t-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between p-4 border-b border-white/5">
-                            <h3 className="font-bold text-text">More Menu</h3>
+                            <h3 className="font-bold text-text">{t('navigation.moreMenu')}</h3>
                             <button className="text-muted hover:text-text p-1 bg-white/5 rounded-full" onClick={() => setMobileMoreOpen(false)}><X className="w-5 h-5" /></button>
                         </div>
                         <div className="p-5 grid grid-cols-4 gap-4">
@@ -12490,7 +12490,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     const item = navItemsConfig[key];
                                     if (!item) return null;
                                     const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
-                                    const labelOverride = key === 'mediastack' ? 'Calendar' : key === 'request' ? 'Request' : item.label;
+                                    const labelOverride = key === 'mediastack' ? t('navigation.calendar') : key === 'request' ? t('navigation.request') : item.label;
                                     const handleActivate = () => {
                                         setMobileMoreOpen(false);
                                         if (item.href) window.open(item.href, '_blank');
