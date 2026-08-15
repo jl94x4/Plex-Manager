@@ -84,6 +84,7 @@ import {
     type MainGridWidgetId,
     type RecentlyAddedWidgetId,
 } from './shared/dashboardLayout';
+import { NowPlayingCompanionPanel } from './home/NowPlayingCompanionPanel';
 
 const JELLYFIN_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/jellyfin.svg';
 const EMBY_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/emby.svg';
@@ -8360,6 +8361,20 @@ export const UserDashboard: React.FC<{
                     />
                 ) : null}
             </div>
+
+            {nowPlaying ? (
+                <NowPlayingCompanionPanel
+                    session={nowPlaying}
+                    userKey={wrapUpSubjectId}
+                    mediaServerType={mediaServerType}
+                    onNavigate={(path) => onNavigate?.('discovery', { path })}
+                    onToast={(message, type = 'success') => setToast({
+                        id: Date.now(),
+                        message,
+                        type,
+                    })}
+                />
+            ) : null}
 
             {selectedMetric && analytics && (
                 <WrapUpModal metric={selectedMetric} analytics={analytics} days={analyticsDays} onClose={() => setSelectedMetric(null)} />
