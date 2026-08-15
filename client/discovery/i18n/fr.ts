@@ -1846,6 +1846,82 @@ Object.assign(fr, { homeDashboard: { ...fr.homeDashboard, opsSnapshot: {
     empty: { noIncidents: 'Aucun incident', unavailable: 'Aperçu des opérations indisponible.' },
 } } });
 
+Object.assign(fr, { homeDashboard: { ...fr.homeDashboard, nowPlayingCompanion: {
+    ...fr.homeDashboard.nowPlayingCompanion,
+    timeline: {
+        release: 'Sortie', runtime: 'Durée', episodeRuntime: 'Durée de l’épisode', genres: 'Genres',
+        tmdbScore: 'Note TMDB', status: 'Statut', currentEpisode: 'Épisode en cours', episodeAirDate: 'Date de diffusion de l’épisode',
+    },
+    loading: { context: 'Chargement du contexte du compagnon...', facts: 'Chargement des anecdotes depuis les sources...' },
+    errors: {
+        noTmdbContext: 'Le contexte TMDB est indisponible pour cette session active.',
+        detailsUnavailable: 'Les détails du compagnon ne sont pas encore disponibles.', loadFailed: 'Échec du chargement des données du compagnon.',
+        providerLinkUnavailable: 'Lien vers la bibliothèque indisponible', providerOpenFailed: 'Impossible d’ouvrir le lien du fournisseur.',
+    },
+    toasts: {
+        watchlistRemoved: 'Retiré de la liste rapide.', watchlistSaved: 'Ajouté à la liste rapide sur cet appareil.',
+        openedDiscoverContext: 'Contexte ouvert dans les détails Discover.', summaryCopied: 'Résumé du salon copié.',
+        clipboardUnavailable: 'Presse-papiers indisponible sur ce client.',
+    },
+    fallbacks: { nowPlaying: 'En cours de lecture' },
+    sections: {
+        nextBestAction: 'Meilleure action suivante', castIntelligence: 'Aperçu de la distribution', crewIntelligence: 'Aperçu de l’équipe',
+        soundtrackCues: 'Repères de la bande originale', ratingsAndLinks: 'Notes et liens', factOverload: 'Surdose d’anecdotes',
+        episodeContext: 'Contexte de l’épisode', similarPicks: 'Suggestions similaires', liveTriviaTimeline: 'Chronologie des anecdotes',
+        productionFacts: 'Informations de production', actorGraph: 'Liens entre acteurs', subtitleQuoteContext: 'Contexte des citations de sous-titres',
+        sharedReactions: 'Réactions partagées', quickPoll: 'Sondage rapide',
+    },
+    empty: {
+        noKnownFor: 'Aucun lien de filmographie disponible.', noCastData: 'Aucune donnée de distribution renvoyée pour ce titre.',
+        noCrewHighlights: 'Aucun membre notable de l’équipe n’est disponible pour ce titre.', noSoundtrackCredits: 'Aucun crédit de bande originale trouvé pour cet élément.',
+        factsUnavailable: 'Les anecdotes ne sont pas disponibles pour ce titre actuellement.', noTimelineFacts: 'Aucune anecdote chronologique disponible.',
+        noProductionFacts: 'Aucune information de production renvoyée pour ce titre.', noLinkedCredits: 'Aucun crédit associé',
+        noContextualLines: 'Aucune ligne contextuelle disponible.', notAvailable: 'N/D', unknownYear: 'Année inconnue',
+    },
+    cast: { popularity: 'Popularité {value}' },
+    episode: { previous: 'Précédent : {name}', current: 'En cours : {name}', next: 'Suivant : {name}' },
+    nextAction: {
+        continueTitle: 'Continuer avec l’épisode suivant',
+        continueHintWithName: 'Accéder directement à S{season}E{episode} — {name}.',
+        continueHint: 'Accéder directement à S{season}E{episode}.',
+        queueSimilarTitle: 'Ajouter un titre similaire à la file', queueSimilarHint: 'Demander {title} ({year}) en un clic.',
+        exploreActorTitle: 'Explorer l’acteur principal', exploreActorHint: 'Ouvrir la filmographie et les titres associés de {name}.',
+        saveForLaterTitle: 'Enregistrer cette session pour plus tard', saveForLaterHint: 'Conserver ce titre dans votre liste rapide sur cet appareil.',
+        diveDetailsTitle: 'Voir les détails complets', diveDetailsHint: 'Ouvrir les détails Discover pour plus de métadonnées et de contrôles de demande.',
+    },
+    factOverload: { live: 'EN DIRECT', total: 'Total : {total}', spotlight: 'À la une' },
+    reactions: { like: 'J’aime', fire: 'Génial', laugh: 'Rire', wow: 'Waouh' },
+    poll: {
+        bestPacing: 'Meilleur rythme', strongActing: 'Interprétation remarquable', visualHighlight: 'Temps fort visuel', greatSoundtrack: 'Excellente bande originale',
+        totalVotes: 'Total des votes : {total}', summaryHint: 'Copiez un résumé rapide du salon pour le partager avec vos proches.',
+    },
+    facts: {
+        communityScore: 'La communauté TMDB attribue la note de {score}/10 sur {votes} votes.',
+        popularity: 'L’indice de popularité actuel est de {value} dans les tendances TMDB.',
+        movieRuntime: 'La durée est d’environ {value} minutes.', episodeRuntime: 'La durée habituelle d’un épisode est d’environ {value} minutes.',
+        seriesSummary: 'Cette série compte actuellement {seasons} saisons et {episodes} épisodes.', multipleEpisodes: 'plusieurs',
+        originCountry: 'Pays d’origine : {countries}.', producedBy: 'Produit par {studios}{count}.',
+        budget: 'Le budget annoncé est d’environ ${value}.', revenue: 'Les recettes annoncées sont d’environ ${value}.',
+        returnOnBudget: 'Le rendement estimé est d’environ {ratio} fois le budget de production.', topBilled: 'En tête d’affiche : {names}.',
+        currentEpisodeAired: 'L’épisode en cours a été diffusé pour la première fois le {date}.',
+    },
+    header: {
+        title: 'Compagnon second écran',
+        subtitle: 'Contexte en direct pour {title} — uniquement dans le héros Accueil.',
+        subtitleWithYear: 'Contexte en direct pour {title} ({year}) — uniquement dans le héros Accueil.',
+    },
+    tabs: { companion: 'Compagnon', deepDive: 'Analyse', watchRoom: 'Salon de visionnage' },
+    actions: {
+        enableCompanion: 'Activer le compagnon second écran', collapse: 'Réduire', expand: 'Développer',
+        savedToWatchlist: 'Ajouté à la liste', saveToWatchlist: 'Ajouter à la liste',
+        openingProvider: 'Ouverture dans {provider}...', openInProvider: 'Ouvrir dans {provider}',
+        requestTitle: 'Demander {title}', noSimilarTitles: 'Aucun titre similaire à demander',
+        openNextEpisode: 'Ouvrir l’épisode suivant', requestSimilar: 'Demander un titre similaire',
+        openActorProfile: 'Ouvrir le profil de l’acteur', openDetails: 'Ouvrir les détails', copySummary: 'Copier le résumé',
+    },
+    telemetry: { state: 'État', progress: 'Progression', mediaType: 'Type de média', episode: 'Épisode', playing: 'En lecture' },
+} } });
+
 Object.assign(fr, { settings: { ...fr.settings, homeLayout: {
     sectionShown: 'Section affichée sur l’accueil', sectionHidden: 'Section masquée sur l’accueil', shown: 'Affichée', hidden: 'Masquée', livePreview: 'Aperçu en direct', leftColumn: 'Colonne de gauche', heroFixed: 'La bannière principale reste en haut et ne peut pas être configurée.',
     title: 'Disposition de la page d’accueil', description: 'Faites glisser les sections pour réorganiser l’accueil pour tout le monde. Affichez ou masquez des sections entières. La grille principale conserve sa disposition fixe gauche/droite afin de garder des cartes équilibrées.', resetDefault: 'Rétablir la disposition par défaut', pageSections: 'Sections de la page', reorderHint: 'Faites glisser la poignée pour réorganiser. Utilisez Affichée/Masquée pour chaque section ; elles sont toutes visibles par défaut.', saveHintBefore: 'Cliquez sur ', saveAction: 'Enregistrer les paramètres', saveHintAfter: ' au bas de cette page pour appliquer les changements de disposition à tous.', tipLabel: 'Conseil :', tipBody: 'L’éditeur du portail peut aussi déplacer, masquer et réajouter des widgets directement depuis l’accueil. Cette page reste l’éditeur de disposition des sections pour tous les administrateurs.', watchHistory: 'Configuration de l’historique de visionnage', recentlyWatchedRows: 'Lignes récemment regardées', mostWatchedRows: 'Lignes les plus regardées', rowsPerPage: 'Nombre de lignes à afficher par page.', row: 'ligne', rows: 'lignes',
