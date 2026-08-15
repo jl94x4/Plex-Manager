@@ -23,6 +23,12 @@ import {
     fetchCombinedRatings,
     type CombinedRatings,
 } from '../discovery/mediaDetailUtils';
+import { enrichDiscoverItemsWithAvailability } from '../discovery/discoverAvailabilityEnrich';
+import {
+    resolveMediaAvailabilityState,
+    shouldHideAvailableItem,
+    shouldHideRequestedItem,
+} from '../discovery/discoverAvailability';
 
 type CompanionToastType = 'success' | 'error';
 
@@ -36,10 +42,12 @@ type Props = {
 
 type Recommendation = {
     id: number;
+    tmdbId?: number;
     mediaType: 'movie' | 'tv';
     title: string;
     year: string;
     posterPath: string | null;
+    mediaInfo?: any;
 };
 
 type KnownForItem = {
@@ -215,6 +223,7 @@ const normalizeRecommendations = (results: any[]): Recommendation[] => (
             return {
                 id,
                 mediaType,
+                tmdbId: id,
                 title,
                 year: formatYear(item?.release_date || item?.first_air_date || item?.releaseDate || item?.firstAirDate),
                 posterPath: item?.poster_path || item?.posterPath || null,
@@ -222,6 +231,12 @@ const normalizeRecommendations = (results: any[]): Recommendation[] => (
         })
         .filter(Boolean) as Recommendation[]
 );
+
+const isRequestableRecommendation = (item: Recommendation): boolean => {
+    const kind = resolveMediaAvailabilityState(item).kind;
+    if (kind === 'blacklisted') return false;
+    return !shouldHideAvailableItem(item) && !shouldHideRequestedItem(item);
+};
 
 export const NowPlayingCompanionPanel: React.FC<Props> = ({
     session,
@@ -369,9 +384,15 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             }));
 
             if (cancelled) return;
+            const rawRecommendations = normalizeRecommendations(recRes?.results || []).slice(0, 20);
+            const enrichedRecommendations = await enrichDiscoverItemsWithAvailability(rawRecommendations);
+            const requestableRecommendations = enrichedRecommendations
+                .filter(isRequestableRecommendation)
+                .slice(0, 6);
+            if (cancelled) return;
             setPayload({
                 details,
-                recommendations: normalizeRecommendations(recRes?.results || []),
+                recommendations: requestableRecommendations,
                 castInsights,
                 soundtrackPeople: extractSoundtrackPeople(Array.isArray(details?.credits?.crew) ? details.credits.crew : []),
                 seasonDetails,
@@ -1013,11 +1034,11 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => requestSimilar(payload.recommendations[0] || null)}
-                                    disabled={!payload.recommendations[0]}
+                                    onClick={() => requestSimilar(firstRecommendation)}
+                                    disabled={!firstRecommendation}
                                     className="w-full px-3 py-2 rounded-lg text-xs font-bold border border-violet-400/40 bg-violet-500/20 text-violet-100 hover:bg-violet-500/30 transition-colors disabled:opacity-60"
                                 >
-                                    Request a similar title
+                                    {firstRecommendation ? `Request ${firstRecommendation.title}` : 'No similar titles to request'}
                                 </button>
                             </div>
 
@@ -1030,7 +1051,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                 ))}
                             </div>
 
-                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 items-start">
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 items-stretch">
                                 <div className="xl:col-span-2 rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                         <Users className="w-3.5 h-3.5" />
@@ -1161,8 +1182,8 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     </div>
                                 </div>
 
-                                <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3">
-                                    <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
+                                <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3 flex flex-col min-h-0">
+                                    <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5 shrink-0">
                                         <Music2 className="w-3.5 h-3.5" />
                                         Soundtrack cues
                                     </p>
@@ -1183,7 +1204,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         </p>
                                     )}
 
-                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2 shrink-0">
                                         <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
                                             Ratings and links
                                         </p>
@@ -1220,11 +1241,11 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         ) : null}
                                     </div>
 
-                                    <div className="mt-3 pt-3 border-t border-white/10">
-                                        <div className="relative overflow-hidden rounded-xl border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-500/10 via-violet-500/10 to-cyan-500/10 p-2.5">
+                                    <div className="mt-3 pt-3 border-t border-white/10 flex-1 min-h-0 flex flex-col">
+                                        <div className="relative overflow-hidden rounded-xl border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-500/10 via-violet-500/10 to-cyan-500/10 p-2.5 flex-1 min-h-0 flex flex-col">
                                             <div className="pointer-events-none absolute -top-10 right-0 w-28 h-28 rounded-full bg-fuchsia-400/20 blur-2xl animate-pulse motion-reduce:animate-none" />
                                             <div className="pointer-events-none absolute -bottom-12 -left-6 w-32 h-32 rounded-full bg-cyan-400/15 blur-2xl animate-pulse motion-reduce:animate-none" />
-                                            <div className="relative space-y-2">
+                                            <div className="relative space-y-2 flex-1 min-h-0 flex flex-col">
                                                 <div className="flex items-center justify-between gap-2">
                                                     <p className="text-[11px] uppercase tracking-widest text-fuchsia-100 font-black flex items-center gap-1.5">
                                                         <span className="relative inline-flex h-2 w-2">
@@ -1260,7 +1281,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                                 {overloadFacts[factSpotlightIndex] || overloadFacts[0]}
                                                             </p>
                                                         </div>
-                                                        <div className="space-y-1.5 max-h-52 sm:max-h-56 overflow-y-auto pr-1">
+                                                        <div className="space-y-1.5 flex-1 min-h-[12rem] overflow-y-auto pr-1">
                                                             {overloadFacts.map((fact, idx) => {
                                                                 const active = idx === factSpotlightIndex;
                                                                 return (
@@ -1289,7 +1310,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     </div>
 
                                     {mediaType === 'tv' && seasonNumber > 0 ? (
-                                        <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                                        <div className="mt-3 pt-3 border-t border-white/10 space-y-2 shrink-0">
                                             <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold flex items-center gap-1.5">
                                                 <Clapperboard className="w-3.5 h-3.5" />
                                                 Episode context
