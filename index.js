@@ -14470,13 +14470,20 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
             }
             const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
             const { sessions, stale } = await getJellyfinSessionsSwr(config);
-            const mine = plexSessionAsArray(sessions).find((session) => (
+            const list = plexSessionAsArray(sessions);
+            let mine = list.find((session) => (
                 session?.NowPlayingItem
                 && sessionBelongsToJellyfinUser(session, {
                     jellyfinId: req.user?.jellyfinId || localUser?.jellyfinId,
                     username: req.user?.username || localUser?.username,
                 })
             ));
+            if (!mine && viewerIsAdmin) {
+                const playable = list.filter((session) => !!session?.NowPlayingItem);
+                const activePlayable = playable.filter((session) => !session?.PlayState?.IsPaused);
+                if (activePlayable.length === 1) mine = activePlayable[0];
+                else if (playable.length === 1) mine = playable[0];
+            }
             if (!mine) return res.json({ available: true, enabled: true, session: null, stale: !!stale });
 
             let mapped = mapJellyfinSessionToNowPlaying(mine);
