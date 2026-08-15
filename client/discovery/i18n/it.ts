@@ -44,6 +44,20 @@ Object.assign(it, { maintenance: { ...it.maintenance,
     errors: { loadOverview: 'Impossibile caricare il riepilogo della pulizia', loadCandidates: 'Impossibile caricare i candidati', loadExclusions: 'Impossibile caricare il riepilogo delle esclusioni.', loadLibrary: 'Impossibile caricare i poster della libreria.', loadStorage: 'Impossibile caricare il riepilogo dello spazio.' }
 } });
 
+Object.assign(it, { homeDashboard: { ...it.homeDashboard, opsSnapshot: {
+    title: 'Riepilogo operativo',
+    loading: 'Caricamento del riepilogo operativo…',
+    errors: { loadFailed: 'Impossibile caricare il riepilogo operativo' },
+    metrics: {
+        unhealthy: '{count} servizio non integro', unhealthy_plural: '{count} servizi non integri', allHealthy: 'Tutti i servizi sono integri',
+        fleetUptime24h: 'Disponibilità della flotta (24 h)', requestAppConnected: 'App delle richieste connessa', requestAppOffline: 'App delle richieste non in linea',
+        unreadNotifications: 'Notifiche non lette', stored: '{count} notifica memorizzata', stored_plural: '{count} notifiche memorizzate',
+        jobAlerts: 'Avvisi dei processi', running: '{count} processo in esecuzione', running_plural: '{count} processi in esecuzione',
+        lastCheck: 'Ultimo controllo', seconds: '{count} s',
+    },
+    empty: { noIncidents: 'Nessun incidente', unavailable: 'Riepilogo operativo non disponibile.' },
+} } });
+
 Object.assign(it, { settings: { ...it.settings, homeLayout: {
     sectionShown: 'Sezione mostrata nella Home', sectionHidden: 'Sezione nascosta nella Home', shown: 'Mostrata', hidden: 'Nascosta', livePreview: 'Anteprima dal vivo', leftColumn: 'Colonna sinistra', heroFixed: 'Il banner principale rimane in alto e non è configurabile.',
     title: 'Layout della Home', description: 'Trascina le sezioni per riordinare la Home per tutti. Mostra o nascondi intere sezioni. La griglia principale mantiene il layout fisso sinistra/destra per bilanciare l’altezza delle schede.', resetDefault: 'Ripristina predefinito', pageSections: 'Sezioni della pagina', reorderHint: 'Trascina la maniglia per riordinare. Usa Mostrata/Nascosta per attivare ogni sezione; per impostazione predefinita sono tutte visibili.', saveHintBefore: 'Fai clic su ', saveAction: 'Salva impostazioni', saveHintAfter: ' in fondo a questa pagina per applicare le modifiche al layout per tutti.', tipLabel: 'Suggerimento:', tipBody: 'L’editor del portale può anche spostare, nascondere e aggiungere di nuovo singoli widget direttamente dalla Home. Questa pagina resta l’editor del layout delle sezioni per gli amministratori.', watchHistory: 'Configurazione cronologia di visione', recentlyWatchedRows: 'Righe guardate di recente', mostWatchedRows: 'Righe più guardate', rowsPerPage: 'Numero di righe da visualizzare per pagina.', row: 'riga', rows: 'righe',
