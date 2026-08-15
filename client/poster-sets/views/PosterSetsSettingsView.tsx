@@ -411,7 +411,13 @@ export const PosterSetsSettingsView: React.FC = () => {
             inFlight = true;
             void posterSetsApi.tpdbCacheStatus()
                 .then((status) => {
-                    if (!cancelled) setTpdbCacheStatus(status);
+                    if (!cancelled) {
+                        setTpdbCacheStatus((prev) => (
+                            prev?.audit && !status.audit
+                                ? { ...status, audit: prev.audit }
+                                : status
+                        ));
+                    }
                 })
                 .catch(() => {
                     // Keep the last snapshot so the live panel does not blank out.
@@ -772,6 +778,51 @@ export const PosterSetsSettingsView: React.FC = () => {
                                             With <span className="text-text/80">Prefetch</span>, set pages and images rise live too
                                             (otherwise when you open a title).
                                         </p>
+                                        {tpdbCacheStatus.audit ? (
+                                            <div className="mt-3 space-y-1.5 rounded-md border border-white/10 bg-black/30 px-2.5 py-2 text-[11px] text-muted">
+                                                <p className="font-semibold uppercase tracking-wide text-text/80">
+                                                    Disk audit
+                                                    {tpdbCacheStatus.audit.elapsedMs != null
+                                                        ? ` · ${tpdbCacheStatus.audit.elapsedMs}ms`
+                                                        : ''}
+                                                </p>
+                                                <p>
+                                                    Titles: {tpdbCacheStatus.audit.titles?.files ?? 0} file(s)
+                                                    {typeof tpdbCacheStatus.audit.titles?.unique === 'number'
+                                                        ? ` · ${tpdbCacheStatus.audit.titles.unique} unique`
+                                                        : ''}
+                                                    {(tpdbCacheStatus.audit.titles?.aliasExtra || 0) > 0
+                                                        ? ` · ${tpdbCacheStatus.audit.titles?.aliasExtra} TMDB/TVDB alias file(s)`
+                                                        : ''}
+                                                    {(tpdbCacheStatus.audit.titles?.invalid || 0) > 0
+                                                        ? ` · ${tpdbCacheStatus.audit.titles?.invalid} empty/invalid`
+                                                        : ''}
+                                                </p>
+                                                <p>
+                                                    Sets: {tpdbCacheStatus.audit.sets?.files ?? 0} file(s)
+                                                    {(tpdbCacheStatus.audit.sets?.orphan || 0) > 0
+                                                        ? ` · ${tpdbCacheStatus.audit.sets?.orphan} orphan (not linked from any title page)`
+                                                        : ' · none orphaned'}
+                                                    {(tpdbCacheStatus.audit.sets?.missingFromDisk || 0) > 0
+                                                        ? ` · ${tpdbCacheStatus.audit.sets?.missingFromDisk} referenced but missing`
+                                                        : ''}
+                                                </p>
+                                                <p>
+                                                    Images: {tpdbCacheStatus.audit.images?.files ?? 0} file(s)
+                                                    {(tpdbCacheStatus.audit.images?.orphan || 0) > 0
+                                                        ? ` · ${tpdbCacheStatus.audit.images?.orphan} orphan (not linked from set pages)`
+                                                        : ' · none orphaned'}
+                                                </p>
+                                                {(tpdbCacheStatus.audit.proxyThumbs?.files || 0) > 0 ? (
+                                                    <p>
+                                                        UI thumb proxy ({tpdbCacheStatus.audit.folders?.proxyThumbs || 'image-cache/'}):
+                                                        {' '}{tpdbCacheStatus.audit.proxyThumbs?.files} file(s)
+                                                        {' · '}{formatBytes(tpdbCacheStatus.audit.proxyThumbs?.bytes || 0)}
+                                                        {' '}(not in Image disk)
+                                                    </p>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-2 rounded-lg border border-dashed border-white/10 px-3 py-3 text-[11px] text-muted lg:col-span-8">
@@ -1089,11 +1140,29 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         disabled={busy !== null}
                                         onClick={async () => {
                                             try {
-                                                const status = await posterSetsApi.tpdbCacheStatus();
+                                                const status = await posterSetsApi.tpdbCacheAuditDisk();
                                                 setTpdbCacheStatus(status);
-                                                toast('Cache usage refreshed.');
+                                                const audit = status.audit;
+                                                const orphanSets = audit?.sets?.orphan || 0;
+                                                const orphanImages = audit?.images?.orphan || 0;
+                                                const aliases = audit?.titles?.aliasExtra || 0;
+                                                const invalid = audit?.titles?.invalid || 0;
+                                                const parts = [
+                                                    `Titles ${status.titles ?? 0}`,
+                                                    `sets ${status.sets ?? 0}`,
+                                                    `images ${status.images ?? 0}`,
+                                                ];
+                                                if (aliases) parts.push(`${aliases} alias file(s)`);
+                                                if (invalid) parts.push(`${invalid} invalid title(s)`);
+                                                if (orphanSets) parts.push(`${orphanSets} orphan set(s)`);
+                                                if (orphanImages) parts.push(`${orphanImages} orphan image(s)`);
+                                                toast(
+                                                    orphanSets || orphanImages || invalid
+                                                        ? `Disk audit: ${parts.join(' · ')}`
+                                                        : `Disk audit OK — ${parts.join(' · ')}`,
+                                                );
                                             } catch (error) {
-                                                toast(error instanceof Error ? error.message : 'Status failed', 'error');
+                                                toast(error instanceof Error ? error.message : 'Disk audit failed', 'error');
                                             }
                                         }}
                                     >
@@ -1104,6 +1173,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 <p className="px-1 text-[11px] text-muted">
                                     Build walks the full library (not just the first 1,000 titles) and keeps going in the background
                                     until every title is attempted. Stop turns catch-up off; Pause only waits.
+                                    Refresh usage force-rescans title/set/image folders and reports orphans vs the counters.
                                 </p>
                             </div>
 

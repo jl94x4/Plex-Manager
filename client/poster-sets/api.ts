@@ -21,6 +21,46 @@ import type {
 
 const ROOT = '/api/poster-sets';
 
+export type TpdbCacheDiskAudit = {
+    scannedAt?: string;
+    elapsedMs?: number;
+    counts?: {
+        titles?: number;
+        sets?: number;
+        images?: number;
+        imageBytes?: number;
+    };
+    folders?: {
+        titles?: string;
+        sets?: string;
+        images?: string;
+        proxyThumbs?: string;
+    };
+    titles?: {
+        files?: number;
+        valid?: number;
+        invalid?: number;
+        unique?: number;
+        aliasExtra?: number;
+    };
+    sets?: {
+        files?: number;
+        referenced?: number;
+        orphan?: number;
+        missingFromDisk?: number;
+    };
+    images?: {
+        files?: number;
+        referenced?: number;
+        orphan?: number;
+    };
+    proxyThumbs?: {
+        files?: number;
+        bytes?: number;
+        note?: string;
+    };
+};
+
 const json = (body: unknown) => ({
     method: 'POST' as const,
     headers: { 'Content-Type': 'application/json' },
@@ -379,11 +419,21 @@ export const posterSetsApi = {
             hourLocal?: number;
             intervalHours?: number;
             running?: boolean;
-            busy?: boolean;
             lastRunAt?: string | null;
             nextRunAt?: string | null;
-            lastResult?: Record<string, unknown> | null;
+            lastResult?: unknown;
+            busy?: boolean;
         };
+        audit?: TpdbCacheDiskAudit;
+    }>,
+    tpdbCacheAuditDisk: () => apiFetch(`${ROOT}/tpdb-cache/audit-disk`, json({})) as Promise<{
+        ok: boolean;
+        titles?: number;
+        sets?: number;
+        images?: number;
+        imageBytes?: number;
+        audit?: TpdbCacheDiskAudit;
+        [key: string]: unknown;
     }>,
     clearTpdbCache: () => apiFetch(`${ROOT}/tpdb-cache/clear`, json({})) as Promise<{
         ok: boolean;
