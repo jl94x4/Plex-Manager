@@ -3204,13 +3204,6 @@ export const SettingsDashboard: React.FC = () => {
                                         <SettingsToggleRow title="Show recently added on Discover home" checked={portalShowRecentlyAdded} onChange={setPortalShowRecentlyAdded} border={false} />
                                         <SettingsToggleRow title="Show Plex watchlist on Discover home" checked={portalShowWatchlist} onChange={setPortalShowWatchlist} border={false} />
                                         <SettingsToggleRow title="Show Now Playing strip on Home & Discover heroes" checked={discoverNowPlayingEnabled} onChange={setDiscoverNowPlayingEnabled} border={false} />
-                                        <SettingsToggleRow
-                                            title="Enable Home second-screen companion panel"
-                                            description="Global admin switch. When off, the Home now-playing banner remains but the companion panel is hidden for everyone."
-                                            checked={homeNowPlayingCompanionEnabled}
-                                            onChange={setHomeNowPlayingCompanionEnabled}
-                                            border={false}
-                                        />
                                     </div>
 
                                     <div id={getSettingsSectionElementId('auto-approve')} className="scroll-mt-24 space-y-3">
@@ -3939,6 +3932,14 @@ export const SettingsDashboard: React.FC = () => {
                                                         </div>
                                                     </SettingsToggleRow>
                                                 </div>
+                                                <SettingsToggleRow
+                                                    title="Enable Home second-screen companion panel"
+                                                    description="Global admin switch for the Home hero companion. When off, the now-playing strip remains but companion details are hidden for everyone."
+                                                    hint={<SettingHint>Settings {'>'} Portal UI controls this experience for all users.</SettingHint>}
+                                                    checked={homeNowPlayingCompanionEnabled}
+                                                    onChange={setHomeNowPlayingCompanionEnabled}
+                                                    border={false}
+                                                />
                                             </div>
                                         </div>
                                     </section>
