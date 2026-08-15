@@ -456,7 +456,7 @@ export const PosterSetsSettingsView: React.FC = () => {
 
 
 
-        <section className={`${cardClass} space-y-5 p-5`}>
+        <section className={`${cardClass} w-full min-w-0 overflow-visible space-y-5 p-5 [overflow-wrap:anywhere]`}>
                     <div>
                         <h2 className={sectionTitleClass}>Poster Sets config</h2>
                         <p className={sectionBodyClass}>
@@ -718,7 +718,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                 value: String(option.bytes),
                                                 label: option.label,
                                             }))}
-                                            className="w-full min-w-[180px]"
+                                            className="w-full sm:min-w-[180px]"
                                         />
                                     </div>
                                     <span className="mt-1.5 block text-[11px] text-muted">
@@ -782,7 +782,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                             </div>
 
                             <div className={`space-y-3 border-t border-white/10 pt-5 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none opacity-50'}`}>
-                                <div className="overflow-hidden rounded-lg border border-white/10 bg-black/25">
+                                <div className="overflow-visible rounded-lg border border-white/10 bg-black/25">
                                     <div className="border-b border-white/10 px-3 py-2 sm:px-4">
                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
@@ -846,7 +846,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                             </div>
 
                             <div className={`space-y-3 border-t border-white/10 pt-5 ${configDraft.tpdbLocalCacheEnabled === true ? '' : 'pointer-events-none opacity-50'}`}>
-                                <div className="overflow-hidden rounded-lg border border-white/10 bg-black/25">
+                                <div className="overflow-visible rounded-lg border border-white/10 bg-black/25">
                                     <div className="border-b border-white/10 px-3 py-2 sm:px-4">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Build scope</p>
                                         <p className="mt-0.5 text-[11px] text-muted">Save settings to keep Media, library source, skip-cached, and followed-only for later builds.</p>
@@ -1334,7 +1334,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 value={libraryDetailLayout}
                                 onChange={(value) => setLibraryDetailLayout(value === 'modal' ? 'modal' : 'drawer')}
                                 options={[...LIBRARY_DETAIL_LAYOUT_OPTIONS]}
-                                className="w-full min-w-[180px] sm:w-auto"
+                                className="w-full sm:min-w-[180px] sm:w-auto"
                             />
                         </div>
                     </div>
@@ -1354,7 +1354,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     { value: 'posterdb', label: 'Prefer ThePosterDB' },
                                     { value: 'mediux', label: 'Prefer MediUX' },
                                 ]}
-                                className="w-full min-w-[180px] sm:w-auto"
+                                className="w-full sm:min-w-[180px] sm:w-auto"
                             />
                         </div>
                     </div>
@@ -1378,7 +1378,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     { value: 'jellyfin', label: 'Jellyfin Images API' },
                                     { value: 'emby', label: 'Emby Images API' },
                                 ]}
-                                className="w-full min-w-[180px] sm:w-auto"
+                                className="w-full sm:min-w-[180px] sm:w-auto"
                             />
                         </div>
                     </div>
@@ -1402,7 +1402,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                                     { value: 'jellyfin', label: 'Jellyfin Images API' },
                                     { value: 'emby', label: 'Emby Images API' },
                                 ]}
-                                className="w-full min-w-[180px] sm:w-auto"
+                                className="w-full sm:min-w-[180px] sm:w-auto"
                             />
                         </div>
                     </div>
