@@ -540,12 +540,41 @@ export const PosterSetsSettingsView: React.FC = () => {
                             <p className="text-xs font-semibold text-text">Import TPDB browser cookies</p>
                             <p className="text-[11px] leading-relaxed text-muted">
                                 Cloudflare often blocks password login from servers. On your PC/phone browser: log into theposterdb.com,
-                                export cookies with Cookie-Editor (JSON) or copy the Cookie header from DevTools, paste below, then Import.
+                                then upload a cookies.txt export (Get cookies.txt LOCALLY), paste Cookie-Editor JSON, or paste a DevTools Cookie header.
                                 Include <code className="text-text/80">cf_clearance</code> if present. Cookies expire — re-import when login stops working.
                             </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <label className={`${buttonClass} cursor-pointer`}>
+                                    <input
+                                        type="file"
+                                        accept=".txt,.json,text/plain,application/json"
+                                        className="sr-only"
+                                        disabled={busy !== null}
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0];
+                                            event.target.value = '';
+                                            if (!file) return;
+                                            const reader = new FileReader();
+                                            reader.onload = () => {
+                                                const text = typeof reader.result === 'string' ? reader.result : '';
+                                                if (!text.trim()) {
+                                                    toast('Cookie file was empty', 'error');
+                                                    return;
+                                                }
+                                                setTpdbCookiePaste(text);
+                                                toast(`Loaded ${file.name} — click Import cookies`, 'success');
+                                            };
+                                            reader.onerror = () => toast('Could not read cookie file', 'error');
+                                            reader.readAsText(file);
+                                        }}
+                                    />
+                                    Choose cookies.txt
+                                </label>
+                                <span className="text-[11px] text-muted">or paste below</span>
+                            </div>
                             <textarea
                                 className={`${fieldClass} mt-1 min-h-[88px] font-mono text-[11px]`}
-                                placeholder='[{"name":"cf_clearance","value":"...","domain":".theposterdb.com"}, ...]'
+                                placeholder={'# Netscape HTTP Cookie File\nor Cookie-Editor JSON…'}
                                 value={tpdbCookiePaste}
                                 onChange={(event) => setTpdbCookiePaste(event.target.value)}
                             />

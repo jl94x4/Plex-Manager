@@ -685,8 +685,50 @@ def _posterdb_cloudflare_help() -> str:
     )
 
 
+def _parse_netscape_cookie_file(text: str) -> list[dict]:
+    """Parse Netscape / curl cookie files (Get cookies.txt LOCALLY, etc.)."""
+    out: list[dict] = []
+    for line in str(text or "").splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        http_only = False
+        if raw.startswith("#HttpOnly_"):
+            http_only = True
+            raw = raw[len("#HttpOnly_"):]
+        elif raw.startswith("#"):
+            continue
+        parts = raw.split("\t")
+        if len(parts) < 7:
+            # Some exporters use spaces; require at least domain + name + value shape.
+            parts = re.split(r"\s+", raw)
+        if len(parts) < 7:
+            continue
+        domain, _flag, path, secure_flag, expires_raw, name, value = parts[:7]
+        # Value may contain tabs in rare cases — rejoin remainder.
+        if len(parts) > 7:
+            value = "\t".join(parts[6:])
+        name = str(name or "").strip()
+        if not name:
+            continue
+        try:
+            expires = int(float(expires_raw)) if str(expires_raw).strip() not in {"", "0"} else None
+        except Exception:
+            expires = None
+        out.append({
+            "name": name,
+            "value": str(value),
+            "domain": str(domain or ".theposterdb.com").strip() or ".theposterdb.com",
+            "path": str(path or "/").strip() or "/",
+            "secure": str(secure_flag).upper() == "TRUE",
+            "expires": expires,
+            "httpOnly": http_only,
+        })
+    return out
+
+
 def _parse_posterdb_browser_cookies(raw: str | list | dict | None) -> list[dict]:
-    """Parse Cookie-Editor JSON, DevTools cookie header, or {cookies:[...]} payloads."""
+    """Parse Cookie-Editor JSON, Netscape cookies.txt, DevTools cookie header, or {cookies:[...]}."""
     if raw is None:
         return []
     if isinstance(raw, list):
@@ -700,6 +742,17 @@ def _parse_posterdb_browser_cookies(raw: str | list | dict | None) -> list[dict]
         text = str(raw or "").strip()
         if not text:
             return []
+        # Get cookies.txt LOCALLY / curl Netscape format
+        if (
+            "Netscape HTTP Cookie File" in text
+            or text.lstrip().startswith("# Netscape")
+            or ("\t" in text and any(
+                name in text for name in ("cf_clearance", "the_poster_database_session", "laravel_session")
+            ))
+        ):
+            netscape_rows = _parse_netscape_cookie_file(text)
+            if netscape_rows:
+                return netscape_rows
         if text.startswith("[") or text.startswith("{"):
             try:
                 parsed = json.loads(text)
@@ -754,7 +807,10 @@ def import_posterdb_browser_cookies(config: dict | None = None, cookies: str | l
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
     if not rows:
-        return {"ok": False, "error": "No cookies found. Paste Cookie-Editor JSON or a cookie header string."}
+        return {
+            "ok": False,
+            "error": "No cookies found. Paste Cookie-Editor JSON, a Netscape cookies.txt export, or a Cookie header string.",
+        }
     names = {str(row.get("name") or "") for row in rows}
     if "cf_clearance" not in names:
         emit(None, "ThePosterDB cookie import: no cf_clearance cookie — Cloudflare may still block this host.")
@@ -781,7 +837,7 @@ def import_posterdb_browser_cookies(config: dict | None = None, cookies: str | l
                 else (
                     "Imported cookies did not unlock TPDB advanced search. "
                     "Log in again in your browser, export fresh cookies (include cf_clearance "
-                    "and laravel_session), and use the same browser User-Agent if prompted."
+                    "and the_poster_database_session / remember_web), and use the same browser User-Agent if prompted."
                 )
             ),
             "cookieCount": len(rows),
