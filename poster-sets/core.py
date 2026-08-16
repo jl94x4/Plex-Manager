@@ -2875,7 +2875,12 @@ def _posterdb_advanced_resolve_by_ids(
                 continue
             _merge_batch(batch)
             trust_tmdb_query = "tmdb_id" in id_params and bool(target_tmdb)
-            if len(batch) == 1:
+            # Never singleton-trust a TMDB hit when a TVDB id is also in play — mapped/wrong
+            # TMDB can match a single wrong /posters/ page and poison the warm cache.
+            singleton_ok = True
+            if trust_tmdb_query and target_tvdb:
+                singleton_ok = False
+            if len(batch) == 1 and singleton_ok:
                 accepted = _accept_item(
                     batch[0],
                     trust_singleton=True,
@@ -3577,8 +3582,10 @@ def list_posterdb_sets(
     page_media_id, _ = _posterdb_page_media(soup)
 
     # Reject wrong title pages even after resolve (stale alsoOn URLs, fuzzy search).
+    # When TVDB is present, trust the resolved page even if a mapped TMDB id disagrees.
     if (
         target_tmdb
+        and not tvdb_id
         and page_media_id
         and str(page_media_id) != target_tmdb
         and not explicit_url
