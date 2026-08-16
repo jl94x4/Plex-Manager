@@ -1,13 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Loader2, RefreshCw, Send } from 'lucide-react';
+import { useDiscoverI18n } from '../discovery/i18n';
 import { apiFetch } from '../shared/api';
 import { notifyInAppNotificationsChanged } from '../shared/inAppNotificationsRefresh';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingFieldLabel, SettingHint } from './SettingHint';
 import { NotificationTemplatesPanel } from './NotificationTemplatesPanel';
 
-const formatWhen = (iso?: string | null) => {
-    if (!iso) return 'Never';
+const formatWhen = (iso: string | null | undefined, neverLabel: string) => {
+    if (!iso) return neverLabel;
     try {
         return new Date(iso).toLocaleString();
     } catch {
@@ -15,8 +16,8 @@ const formatWhen = (iso?: string | null) => {
     }
 };
 
-const formatDayKey = (iso?: string | null) => {
-    if (!iso) return 'Unknown';
+const formatDayKey = (iso: string | null | undefined, unknownLabel: string) => {
+    if (!iso) return unknownLabel;
     try {
         return new Intl.DateTimeFormat(undefined, {
             weekday: 'short',
@@ -29,7 +30,10 @@ const formatDayKey = (iso?: string | null) => {
     }
 };
 
-const RecentNotificationsHistory: React.FC<{ items: any[] }> = ({ items }) => {
+const RecentNotificationsHistory: React.FC<{
+    items: any[];
+    t: ReturnType<typeof useDiscoverI18n>['t'];
+}> = ({ items, t }) => {
     const types = useMemo(() => {
         const counts: Record<string, number> = {};
         for (const item of items) {
@@ -46,7 +50,7 @@ const RecentNotificationsHistory: React.FC<{ items: any[] }> = ({ items }) => {
     const groups = useMemo(() => {
         const map = new Map<string, any[]>();
         for (const item of filtered) {
-            const key = formatDayKey(item?.createdAt);
+            const key = formatDayKey(item?.createdAt, t('settings.notifications.common.unknownDate'));
             const list = map.get(key) || [];
             list.push(item);
             map.set(key, list);
@@ -64,7 +68,7 @@ const RecentNotificationsHistory: React.FC<{ items: any[] }> = ({ items }) => {
                         filter === 'all' ? 'border-plex text-plex bg-plex/10' : 'border-border text-muted hover:text-text'
                     }`}
                 >
-                    All ({items.length})
+                    {t('settings.notifications.common.all')} ({items.length})
                 </button>
                 {types.map(([type, count]) => (
                     <button
@@ -92,24 +96,24 @@ const RecentNotificationsHistory: React.FC<{ items: any[] }> = ({ items }) => {
                                         <p className="text-sm font-semibold text-text truncate">{item.title}</p>
                                         {!item.readAt && (
                                             <span className="text-[10px] font-bold uppercase tracking-wide text-plex bg-plex/10 border border-plex/30 px-1.5 py-0.5 rounded">
-                                                unread
+                                                {t('settings.notifications.common.unread')}
                                             </span>
                                         )}
                                     </div>
                                     <p className="text-xs text-muted mt-0.5">
-                                        {item.username || item.userId || 'Unknown user'}
+                                        {item.username || item.userId || t('settings.notifications.common.unknownUser')}
                                         {item.type ? ` · ${item.type}` : ''}
                                         {item.href ? ` · ${item.href}` : ''}
                                     </p>
                                     {item.body ? <p className="text-xs text-muted/80 mt-1 line-clamp-2">{item.body}</p> : null}
                                 </div>
-                                <p className="text-[10px] text-muted shrink-0 whitespace-nowrap">{formatWhen(item.createdAt)}</p>
+                                <p className="text-[10px] text-muted shrink-0 whitespace-nowrap">{formatWhen(item.createdAt, t('settings.notifications.common.never'))}</p>
                             </div>
                         ))}
                     </div>
                 ))}
                 {!filtered.length && (
-                    <div className="px-4 py-8 text-center text-sm text-muted">No notifications for this filter.</div>
+                    <div className="px-4 py-8 text-center text-sm text-muted">{t('settings.notifications.history.noFilterResults')}</div>
                 )}
             </div>
         </div>
@@ -228,11 +232,11 @@ type Props = {
     getSettingsSectionElementId: (id: string) => string;
 };
 
-const Pill: React.FC<{ ok: boolean; label: string; detail?: string }> = ({ ok, label, detail }) => (
+const Pill: React.FC<{ ok: boolean; label: string; detail?: string; t: ReturnType<typeof useDiscoverI18n>['t'] }> = ({ ok, label, detail, t }) => (
     <div className={`rounded-xl border px-3 py-2.5 ${ok ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/10'}`}>
         <p className="text-xs font-bold uppercase tracking-wider text-text">{label}</p>
         <p className={`text-sm font-semibold mt-0.5 ${ok ? 'text-emerald-300' : 'text-amber-200'}`}>
-            {ok ? 'Ready' : 'Needs setup'}
+            {ok ? t('settings.notifications.common.ready') : t('settings.notifications.common.needsSetup')}
         </p>
         {detail ? <p className="text-[11px] text-muted mt-1 leading-snug">{detail}</p> : null}
     </div>
@@ -293,6 +297,9 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     addToast,
     getSettingsSectionElementId,
 }) => {
+    const { t } = useDiscoverI18n();
+    const tRef = useRef(t);
+    tRef.current = t;
     const [status, setStatus] = useState<StatusPayload | null>(null);
     const [recent, setRecent] = useState<RecentItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -306,20 +313,20 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
         webhook: false,
     });
 
-    const eventLabels: Record<string, string> = {
-        available: 'Available',
-        approved: 'Approved',
-        declined: 'Declined',
-        season: 'Season',
-        episode: 'New episode',
-        admin_pending: 'Admin pending',
-        collexions_failed: 'ColleXions failed',
-        scanner_failed: 'Scanner failed',
-        status_down: 'Status down',
-        status_up: 'Status recovered',
-        media_job_failed: 'Media job failed',
-        media_job_completed: 'Media job finished',
-    };
+    const eventLabels: Record<string, string> = useMemo(() => ({
+        available: t('settings.notifications.events.available'),
+        approved: t('settings.notifications.events.approved'),
+        declined: t('settings.notifications.events.declined'),
+        season: t('settings.notifications.events.season'),
+        episode: t('settings.notifications.events.episode'),
+        admin_pending: t('settings.notifications.events.admin_pending'),
+        collexions_failed: t('settings.notifications.events.collexions_failed'),
+        scanner_failed: t('settings.notifications.events.scanner_failed'),
+        status_down: t('settings.notifications.events.status_down'),
+        status_up: t('settings.notifications.events.status_up'),
+        media_job_failed: t('settings.notifications.events.media_job_failed'),
+        media_job_completed: t('settings.notifications.events.media_job_completed'),
+    }), [t]);
 
     const refresh = useCallback(async () => {
         setLoading(true);
@@ -331,7 +338,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
             setStatus(statusData || null);
             setRecent(Array.isArray(recentData?.items) ? recentData.items : []);
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Failed to load notification status', 'error');
+            addToast(error instanceof Error ? error.message : tRef.current('settings.notifications.health.loadFailed'), 'error');
         } finally {
             setLoading(false);
         }
@@ -346,7 +353,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
             .filter(([, on]) => on)
             .map(([key]) => key);
         if (!channels.length) {
-            addToast('Pick at least one test channel.', 'error');
+            addToast(tRef.current('settings.notifications.test.pickChannelError'), 'error');
             return;
         }
         setTesting(true);
@@ -361,23 +368,23 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
             });
             const ok = !!result?.success;
             const bits = [
-                result?.results?.inApp ? 'in-app' : null,
-                result?.results?.webPush ? 'web push' : null,
-                result?.results?.email ? 'email' : null,
-                result?.results?.discord ? 'discord' : null,
+                result?.results?.inApp ? tRef.current('settings.notifications.test.results.inApp') : null,
+                result?.results?.webPush ? tRef.current('settings.notifications.test.results.webPush') : null,
+                result?.results?.email ? tRef.current('settings.notifications.test.results.email') : null,
+                result?.results?.discord ? tRef.current('settings.notifications.test.results.discord') : null,
             ].filter(Boolean);
             if (ok) {
-                addToast(`Test sent (${bits.join(', ') || 'ok'}). Check the bell.`, 'success');
+                addToast(tRef.current('settings.notifications.test.successToast', { channels: bits.join(', ') || tRef.current('settings.notifications.test.results.ok') }), 'success');
                 if (result?.results?.inApp) {
                     notifyInAppNotificationsChanged();
                 }
             } else {
-                const errors = Array.isArray(result?.results?.errors) ? result.results.errors.join('; ') : 'No channel succeeded';
+                const errors = Array.isArray(result?.results?.errors) ? result.results.errors.join('; ') : tRef.current('settings.notifications.test.noChannelSucceeded');
                 addToast(errors, 'error');
             }
             await refresh();
         } catch (error) {
-            addToast(error instanceof Error ? error.message : 'Test failed', 'error');
+            addToast(error instanceof Error ? error.message : tRef.current('settings.notifications.test.failed'), 'error');
         } finally {
             setTesting(false);
         }
@@ -394,11 +401,10 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                 <div>
                     <h3 className="text-xl font-bold text-plex mb-1 border-b border-border pb-2 inline-flex items-center gap-2">
                         <Bell className="w-5 h-5" />
-                        Notifications
+                        {t('settings.notifications.page.title')}
                     </h3>
                     <p className="text-sm text-muted max-w-2xl mt-2">
-                        Hub for request-available alerts, browser push, Discord, in-app bell history, and send-to-myself tests.
-                        SMTP and Gotify admin alerts are on this same page (above and below).
+                        {t('settings.notifications.page.description')}
                     </p>
                 </div>
                 <button
@@ -408,109 +414,118 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-background text-sm font-bold text-text hover:border-plex/40 hover:text-plex transition-colors disabled:opacity-50"
                 >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Refresh status
+                    {t('settings.notifications.actions.refreshStatus')}
                 </button>
             </div>
 
             <div id={getSettingsSectionElementId('notifications-status')} className="scroll-mt-24 space-y-3">
-                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Health</h4>
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.health.title')}</h4>
                 {loading && !status ? (
-                    <p className="text-sm text-muted flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</p>
+                    <p className="text-sm text-muted flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> {t('settings.notifications.common.loading')}</p>
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                         <Pill
                             ok={!!status?.requestAvailable?.enabled}
-                            label="Request available"
-                            detail={`Engine: ${engine}. In-app store: ${status?.inApp?.total ?? 0} total / ${status?.inApp?.unread ?? 0} unread.`}
+                            label={t('settings.notifications.health.requestAvailableLabel')}
+                            detail={t('settings.notifications.health.requestAvailableDetail', { engine, total: status?.inApp?.total ?? 0, unread: status?.inApp?.unread ?? 0 })}
+                            t={t}
                         />
                         <Pill
                             ok={!!status?.email?.smtpReady}
-                            label="Email (SMTP)"
-                            detail={status?.email?.smtpReady ? 'SMTP looks configured.' : 'Configure under SMTP above.'}
+                            label={t('settings.notifications.health.emailSmtpLabel')}
+                            detail={status?.email?.smtpReady ? t('settings.notifications.health.smtpConfigured') : t('settings.notifications.health.smtpConfigure')}
+                            t={t}
                         />
                         <Pill
                             ok={!!status?.webPush?.enabled && !!status?.webPush?.vapidReady}
-                            label="Web Push"
-                            detail={`${status?.webPush?.deviceCount ?? 0} device(s) across ${status?.webPush?.usersWithSubscriptions ?? 0} user(s).`}
+                            label={t('settings.notifications.common.webPush')}
+                            detail={t('settings.notifications.health.webPushDetail', { devices: status?.webPush?.deviceCount ?? 0, users: status?.webPush?.usersWithSubscriptions ?? 0 })}
+                            t={t}
                         />
                         <Pill
                             ok={!!status?.discord?.enabled && !!status?.discord?.webhookConfigured}
                             label="Discord"
-                            detail={status?.discord?.webhookConfigured ? 'Webhook saved.' : 'Add a Discord webhook URL below.'}
+                            detail={status?.discord?.webhookConfigured ? t('settings.notifications.health.discordWebhookSaved') : t('settings.notifications.health.discordAddWebhook')}
+                            t={t}
                         />
                         <Pill
                             ok={!!status?.gotify?.configured}
                             label="Gotify"
-                            detail={status?.gotify?.configured ? 'Admin Gotify alerts ready.' : 'Optional — configure Gotify below.'}
+                            detail={status?.gotify?.configured ? t('settings.notifications.health.gotifyReady') : t('settings.notifications.health.gotifyConfigure')}
+                            t={t}
                         />
                         <Pill
                             ok={!!status?.ntfy?.configured}
-                            label="ntfy"
-                            detail={status?.ntfy?.configured ? 'ntfy topic ready.' : 'Optional — configure ntfy below.'}
+                            label={t('settings.notifications.common.ntfy')}
+                            detail={status?.ntfy?.configured ? t('settings.notifications.health.ntfyReady') : t('settings.notifications.health.ntfyConfigure')}
+                            t={t}
                         />
                         <Pill
                             ok={!!status?.webhook?.configured}
-                            label="Webhook"
-                            detail={status?.webhook?.configured ? 'Generic webhook ready.' : 'Optional — configure webhook below.'}
+                            label={t('settings.notifications.common.webhook')}
+                            detail={status?.webhook?.configured ? t('settings.notifications.health.webhookReady') : t('settings.notifications.health.webhookConfigure')}
+                            t={t}
                         />
                         <Pill
                             ok={!notifyJob?.lastError}
-                            label={engine === 'seerr' ? 'Seerr notify job' : 'Portal status sync'}
-                            detail={`Last run: ${formatWhen(notifyJob?.lastRun)}.${notifyJob?.lastError ? ` Error: ${notifyJob.lastError}` : ''}`}
+                            label={engine === 'seerr' ? t('settings.notifications.health.seerrNotifyJob') : t('settings.notifications.health.portalStatusSync')}
+                            detail={notifyJob?.lastError
+                                ? t('settings.notifications.health.jobDetailWithError', { lastRun: formatWhen(notifyJob?.lastRun, t('settings.notifications.common.never')), error: notifyJob.lastError })
+                                : t('settings.notifications.health.jobDetail', { lastRun: formatWhen(notifyJob?.lastRun, t('settings.notifications.common.never')) })}
+                            t={t}
                         />
                     </div>
                 )}
                 {engine === 'seerr' && (
                     <p className="text-xs text-muted">
-                        Seerr snapshot tracks {status?.seerrSnapshot?.trackedRequests ?? 0} request(s)
-                        {status?.seerrSnapshot?.updatedAt ? ` · updated ${formatWhen(status.seerrSnapshot.updatedAt)}` : ''}.
+                        {t('settings.notifications.health.seerrSnapshot', { count: status?.seerrSnapshot?.trackedRequests ?? 0 })}
+                        {status?.seerrSnapshot?.updatedAt ? ` · ${t('settings.notifications.health.seerrSnapshotUpdated', { date: formatWhen(status.seerrSnapshot.updatedAt, t('settings.notifications.common.never')) })}` : ''}.
                     </p>
                 )}
                 <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={onOpenSmtp} className="text-xs font-bold text-plex hover:underline">Open SMTP settings</button>
+                    <button type="button" onClick={onOpenSmtp} className="text-xs font-bold text-plex hover:underline">{t('settings.notifications.actions.openSmtpSettings')}</button>
                     <span className="text-muted text-xs">·</span>
-                    <button type="button" onClick={onOpenGotify} className="text-xs font-bold text-plex hover:underline">Open Gotify settings</button>
+                    <button type="button" onClick={onOpenGotify} className="text-xs font-bold text-plex hover:underline">{t('settings.notifications.actions.openGotifySettings')}</button>
                 </div>
             </div>
 
             <div id={getSettingsSectionElementId('notifications-request-available')} className="scroll-mt-24 space-y-3">
-                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Request available</h4>
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.requestAvailable.title')}</h4>
                 <p className="text-xs text-muted max-w-2xl">
-                    When a request finishes downloading and becomes available, notify the requester.
-                    Same settings also appear under Request Discovery.
+                    {t('settings.notifications.requestAvailable.description')}
                 </p>
                 <SettingsToggleRow
-                    title="Enable notifications"
-                    description="Master switch for request-available alerts (portal or Seerr engine)."
+                    title={t('settings.notifications.requestAvailable.enableTitle')}
+                    description={t('settings.notifications.requestAvailable.enableDescription')}
                     checked={requestAvailableNotifyEnabled}
                     onChange={setRequestAvailableNotifyEnabled}
                     border={false}
                 />
                 <div className={requestAvailableNotifyEnabled ? 'space-y-0' : 'space-y-0 opacity-50 pointer-events-none'}>
                     <SettingsToggleRow
-                        title="Email"
-                        description="SMTP email to the requester. Requires SMTP."
+                        title={t('settings.notifications.common.email')}
+                        description={t('settings.notifications.requestAvailable.emailDescription')}
                         checked={requestAvailableNotifyEmail}
                         onChange={setRequestAvailableNotifyEmail}
                         border={false}
                     />
                     <SettingsToggleRow
-                        title="In-app bell"
-                        description="Unread item in the portal notification bell."
+                        title={t('settings.notifications.common.inAppBell')}
+                        description={t('settings.notifications.requestAvailable.inAppDescription')}
                         checked={requestAvailableNotifyInApp}
                         onChange={setRequestAvailableNotifyInApp}
                         border={false}
                     />
                     <SettingsToggleRow
-                        title="Browser push"
-                        description="Web Push to subscribed browsers/devices."
+                        title={t('settings.notifications.common.browserPush')}
+                        description={t('settings.notifications.requestAvailable.browserPushDescription')}
                         checked={requestAvailableNotifyWebPush}
                         onChange={setRequestAvailableNotifyWebPush}
                         border={false}
                     />
                     <SettingsToggleRow
-                        title="Discord webhook"
-                        description="Post to Discord when any request becomes available."
+                        title={t('settings.notifications.requestAvailable.discordWebhookTitle')}
+                        description={t('settings.notifications.requestAvailable.discordWebhookDescription')}
                         checked={requestAvailableNotifyDiscord}
                         onChange={setRequestAvailableNotifyDiscord}
                         border={false}
@@ -518,7 +533,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                     {requestAvailableNotifyDiscord && (
                         <div className="pt-1 pb-3">
                             <SettingFieldLabel htmlFor="notificationsDiscordWebhookUrl">
-                                Discord webhook URL
+                                {t('settings.notifications.requestAvailable.discordWebhookUrl')}
                             </SettingFieldLabel>
                             <input
                                 id="notificationsDiscordWebhookUrl"
@@ -530,14 +545,14 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                                 onChange={(e) => setRequestAvailableDiscordWebhookUrl(e.target.value)}
                             />
                             <p className="text-[11px] text-muted mt-1.5">
-                                Leave as dots when editing other settings to keep the saved webhook.
+                                {t('settings.notifications.requestAvailable.discordWebhookSavedHint')}
                             </p>
                         </div>
                     )}
                 </div>
                 <SettingsToggleRow
-                    title="Enable Web Push (global)"
-                    description="Lets members subscribe their browser. Required for browser push channel above."
+                    title={t('settings.notifications.requestAvailable.webPushGlobalTitle')}
+                    description={t('settings.notifications.requestAvailable.webPushGlobalDescription')}
                     checked={webPushEnabled}
                     onChange={setWebPushEnabled}
                     border={false}
@@ -545,47 +560,46 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
             </div>
 
             <div id={getSettingsSectionElementId('notifications-not-released')} className="scroll-mt-24 space-y-3">
-                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Not released yet</h4>
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.notReleased.title')}</h4>
                 <p className="text-xs text-muted max-w-2xl">
-                    When someone requests a movie/show that isn’t out yet, tell them the expected date (defaults to digital release).
-                    Those titles also appear on the Media Stack calendar when their date falls in the viewed month.
+                    {t('settings.notifications.notReleased.description')}
                 </p>
                 <SettingsToggleRow
-                    title="Enable not-released alerts"
-                    description="Notify the requester on create when the preferred release date is still in the future."
+                    title={t('settings.notifications.notReleased.enableTitle')}
+                    description={t('settings.notifications.notReleased.enableDescription')}
                     checked={requestNotReleasedNotifyEnabled}
                     onChange={setRequestNotReleasedNotifyEnabled}
                     border={false}
                 />
                 <div className={requestNotReleasedNotifyEnabled ? 'space-y-3' : 'space-y-3 opacity-50 pointer-events-none'}>
                     <div>
-                        <SettingFieldLabel htmlFor="notifyReleaseDatePreference">Preferred release date</SettingFieldLabel>
+                        <SettingFieldLabel htmlFor="notifyReleaseDatePreference">{t('settings.notifications.notReleased.preferredReleaseDate')}</SettingFieldLabel>
                         <select
                             id="notifyReleaseDatePreference"
                             className="w-full max-w-md rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
                             value={notifyReleaseDatePreference || 'digital'}
                             onChange={(e) => setNotifyReleaseDatePreference(e.target.value)}
                         >
-                            <option value="digital">Digital (preferred)</option>
-                            <option value="theatrical">Theatrical / cinema</option>
-                            <option value="physical">Physical</option>
-                            <option value="tmdb">TMDB primary release date</option>
+                            <option value="digital">{t('settings.notifications.notReleased.options.digital')}</option>
+                            <option value="theatrical">{t('settings.notifications.notReleased.options.theatrical')}</option>
+                            <option value="physical">{t('settings.notifications.notReleased.options.physical')}</option>
+                            <option value="tmdb">{t('settings.notifications.notReleased.options.tmdb')}</option>
                         </select>
                     </div>
                     <SettingsToggleRow
-                        title="Email"
+                        title={t('settings.notifications.common.email')}
                         checked={requestNotReleasedNotifyEmail}
                         onChange={setRequestNotReleasedNotifyEmail}
                         border={false}
                     />
                     <SettingsToggleRow
-                        title="In-app bell"
+                        title={t('settings.notifications.common.inAppBell')}
                         checked={requestNotReleasedNotifyInApp}
                         onChange={setRequestNotReleasedNotifyInApp}
                         border={false}
                     />
                     <SettingsToggleRow
-                        title="Browser push"
+                        title={t('settings.notifications.common.browserPush')}
                         checked={requestNotReleasedNotifyWebPush}
                         onChange={setRequestNotReleasedNotifyWebPush}
                         border={false}
@@ -594,20 +608,20 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
             </div>
 
             <div id={getSettingsSectionElementId('notifications-ntfy')} className="scroll-mt-24 space-y-3">
-                <h4 className="text-sm font-bold text-text uppercase tracking-wider">ntfy</h4>
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.common.ntfy')}</h4>
                 <p className="text-xs text-muted max-w-2xl">
-                    Push to an ntfy topic for request lifecycle + admin pending (self-hosted or ntfy.sh).
+                    {t('settings.notifications.ntfy.description')}
                 </p>
                 <SettingsToggleRow
-                    title="Enable ntfy"
-                    description="Send selected events to your ntfy topic."
+                    title={t('settings.notifications.ntfy.enableTitle')}
+                    description={t('settings.notifications.ntfy.enableDescription')}
                     checked={ntfyEnabled}
                     onChange={setNtfyEnabled}
                     border={false}
                 />
                 <div className={ntfyEnabled ? 'space-y-3' : 'space-y-3 opacity-50 pointer-events-none'}>
                     <div>
-                        <SettingFieldLabel htmlFor="ntfyServerUrl">Server URL</SettingFieldLabel>
+                        <SettingFieldLabel htmlFor="ntfyServerUrl">{t('settings.notifications.ntfy.serverUrl')}</SettingFieldLabel>
                         <input
                             id="ntfyServerUrl"
                             className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
@@ -617,7 +631,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         />
                     </div>
                     <div>
-                        <SettingFieldLabel htmlFor="ntfyTopic">Topic</SettingFieldLabel>
+                        <SettingFieldLabel htmlFor="ntfyTopic">{t('settings.notifications.ntfy.topic')}</SettingFieldLabel>
                         <input
                             id="ntfyTopic"
                             className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
@@ -627,7 +641,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         />
                     </div>
                     <div>
-                        <SettingFieldLabel htmlFor="ntfyToken">Access token (optional)</SettingFieldLabel>
+                        <SettingFieldLabel htmlFor="ntfyToken">{t('settings.notifications.ntfy.accessTokenOptional')}</SettingFieldLabel>
                         <input
                             id="ntfyToken"
                             type="password"
@@ -638,7 +652,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         />
                     </div>
                     <div>
-                        <SettingFieldLabel htmlFor="ntfyPriority">Priority (1–5)</SettingFieldLabel>
+                        <SettingFieldLabel htmlFor="ntfyPriority">{t('settings.notifications.ntfy.priority')}</SettingFieldLabel>
                         <input
                             id="ntfyPriority"
                             type="number"
@@ -666,20 +680,20 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
             </div>
 
             <div id={getSettingsSectionElementId('notifications-webhook')} className="scroll-mt-24 space-y-3">
-                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Generic webhook</h4>
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.webhook.title')}</h4>
                 <p className="text-xs text-muted max-w-2xl">
-                    POST JSON to any HTTPS endpoint. Optional body template under Notification templates (must be valid JSON).
+                    {t('settings.notifications.webhook.description')}
                 </p>
                 <SettingsToggleRow
-                    title="Enable webhook"
-                    description="Send selected events as JSON POST requests."
+                    title={t('settings.notifications.webhook.enableTitle')}
+                    description={t('settings.notifications.webhook.enableDescription')}
                     checked={webhookEnabled}
                     onChange={setWebhookEnabled}
                     border={false}
                 />
                 <div className={webhookEnabled ? 'space-y-3' : 'space-y-3 opacity-50 pointer-events-none'}>
                     <div>
-                        <SettingFieldLabel htmlFor="webhookUrl">Webhook URL</SettingFieldLabel>
+                        <SettingFieldLabel htmlFor="webhookUrl">{t('settings.notifications.webhook.url')}</SettingFieldLabel>
                         <input
                             id="webhookUrl"
                             type="password"
@@ -691,7 +705,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         />
                     </div>
                     <div>
-                        <SettingFieldLabel htmlFor="webhookHeadersJson">Extra headers (JSON object, optional)</SettingFieldLabel>
+                        <SettingFieldLabel htmlFor="webhookHeadersJson">{t('settings.notifications.webhook.extraHeadersJson')}</SettingFieldLabel>
                         <textarea
                             id="webhookHeadersJson"
                             className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm min-h-[72px]"
@@ -714,7 +728,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         ))}
                     </div>
                     <SettingHint>
-                        Defaults: Available on, other events off. Use templates → webhook JSON body to customize the payload.
+                        {t('settings.notifications.webhook.defaultsHint')}
                     </SettingHint>
                 </div>
             </div>
@@ -729,18 +743,18 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
             />
 
             <div id={getSettingsSectionElementId('notifications-test')} className="scroll-mt-24 space-y-3">
-                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Send test to me</h4>
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.test.title')}</h4>
                 <p className="text-xs text-muted max-w-2xl">
-                    Delivers a test to your admin account only. Use this to verify the in-app bell path before chasing Seerr mapping issues.
+                    {t('settings.notifications.test.description')}
                 </p>
                 <div className="flex flex-wrap gap-4">
                     {([
-                        ['inApp', 'In-app bell'],
-                        ['webPush', 'Web Push'],
-                        ['email', 'Email'],
+                        ['inApp', t('settings.notifications.common.inAppBell')],
+                        ['webPush', t('settings.notifications.common.webPush')],
+                        ['email', t('settings.notifications.common.email')],
                         ['discord', 'Discord'],
-                        ['ntfy', 'ntfy'],
-                        ['webhook', 'Webhook'],
+                        ['ntfy', t('settings.notifications.common.ntfy')],
+                        ['webhook', t('settings.notifications.common.webhook')],
                     ] as const).map(([key, label]) => (
                         <label key={key} className="inline-flex items-center gap-2 text-sm text-text cursor-pointer">
                             <input
@@ -760,27 +774,27 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-plex text-background font-bold hover:bg-plex-hover transition-colors disabled:opacity-50"
                 >
                     {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    {testing ? 'Sending…' : 'Send test'}
+                    {testing ? t('settings.notifications.test.sending') : t('settings.notifications.test.send')}
                 </button>
             </div>
 
             <div id={getSettingsSectionElementId('notifications-recent')} className="scroll-mt-24 space-y-3">
-                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Notification history</h4>
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.history.title')}</h4>
                 <p className="text-xs text-muted">
-                    Shared in-app store across members. Filter by type to diagnose mapping / notify issues.
+                    {t('settings.notifications.history.description')}
                 </p>
                 {!recent.length ? (
                     <div className="rounded-xl border border-border bg-background/40 px-4 py-8 text-center text-sm text-muted">
-                        No in-app notifications stored yet.
+                        {t('settings.notifications.history.empty')}
                     </div>
                 ) : (
-                    <RecentNotificationsHistory items={recent} />
+                    <RecentNotificationsHistory items={recent} t={t} />
                 )}
             </div>
 
             <div className="rounded-lg border border-border bg-background/40 p-4">
-                <SettingFieldLabel hint={<SettingHint>Save via the footer button to persist channel toggles and Discord webhook.</SettingHint>}>
-                    Remember to Save Settings
+                <SettingFieldLabel hint={<SettingHint>{t('settings.notifications.saveReminder.hint')}</SettingHint>}>
+                    {t('settings.notifications.saveReminder.title')}
                 </SettingFieldLabel>
             </div>
         </div>
