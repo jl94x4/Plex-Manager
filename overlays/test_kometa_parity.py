@@ -206,4 +206,17 @@ winners2 = {
 out2 = compose_poster(poster, winners2, config={}, paths=None)
 assert out2.size == (1000, 1500)
 
+from kometa_engine import _entry_labels_to_clear, _labels_from_families
+
+assert _labels_from_families({"resolution": {"name": "4K", "weight": 130}}) == ["4K"]
+assert sorted(_entry_labels_to_clear({
+    "families": {"resolution": {"name": "4K", "weight": 130}},
+    "labeled": True,
+})) == ["4K", "Overlay"]
+assert _entry_labels_to_clear({"hasBackup": True}) == ["Overlay"]
+assert sorted(_entry_labels_to_clear({
+    "overlayLabels": ["4K-HDR"],
+    "families": {"resolution": {"name": "4K", "weight": 130}},
+})) == ["4K", "4K-HDR", "Overlay"]
+
 print("kometa smoke OK")

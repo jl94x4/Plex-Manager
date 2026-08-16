@@ -24,6 +24,7 @@ import {
     DashboardHero,
     DashboardPageShell,
     DashboardPanel,
+    DashboardStatCard,
     DashboardSubnav,
     dashboardSubnavLinkClass,
 } from '../shared/dashboard/DashboardChrome';
@@ -36,24 +37,44 @@ import { PlacementEditor } from './PlacementEditor';
 import { OverlayJobCard } from './OverlayJobCard';
 import { api as collexionsApi } from '../collexions/api';
 
-type TabId = 'overview' | 'shows' | 'collections' | 'gallery' | 'placement' | 'advanced' | 'activity';
+/** Primary tabs after UX overhaul. Legacy hashes map via parseOverlaysTab. */
+type TabId = 'home' | 'badges' | 'tracked' | 'look' | 'activity';
 type JobCardId = 'banners' | 'recently' | 'kometa' | 'collections';
 type ActionId = 'refresh' | 'stop' | 'preview' | 'previewRecently' | 'previewKometa' | 'previewCollections' | 'promote' | 'resetAll' | 'resetShows' | 'resetEpisodes' | 'run' | 'runRecently' | 'runKometa' | 'runCollections' | 'saveSettings' | 'scan' | 'reconcile' | 'reset' | 'importLog' | 'sample' | 'revertKometa';
 
-const OVERLAY_TABS: TabId[] = ['overview', 'shows', 'collections', 'gallery', 'placement', 'advanced', 'activity'];
+const TAB_ALIASES: Record<string, TabId> = {
+    home: 'home',
+    overview: 'home',
+    badges: 'badges',
+    collections: 'badges',
+    tracked: 'tracked',
+    shows: 'tracked',
+    look: 'look',
+    gallery: 'look',
+    placement: 'look',
+    activity: 'activity',
+    // Advanced folds into Home → More settings
+    advanced: 'home',
+    settings: 'home',
+};
 
 const parseOverlaysTab = (hash = typeof window !== 'undefined' ? window.location.hash : ''): TabId => {
     const raw = String(hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim().toLowerCase();
-    return OVERLAY_TABS.includes(raw as TabId) ? (raw as TabId) : 'overview';
+    return TAB_ALIASES[raw] || 'home';
 };
 
-const overlaysTabHash = (tab: TabId) => (tab === 'overview' ? '' : `#${tab}`);
+const overlaysTabHash = (tab: TabId) => (tab === 'home' ? '' : `#${tab}`);
 
 const writeOverlaysTabHash = (tab: TabId) => {
     if (typeof window === 'undefined') return;
     const desired = overlaysTabHash(tab);
     if ((window.location.hash || '') === desired) return;
     window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${desired}`);
+};
+
+const hashWantsMoreSettings = (hash = typeof window !== 'undefined' ? window.location.hash : '') => {
+    const raw = String(hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim().toLowerCase();
+    return raw === 'advanced' || raw === 'settings';
 };
 
 type SampleMeta = {
@@ -283,6 +304,8 @@ export const OverlaysDashboard: React.FC = () => {
         kometa: false,
         collections: false,
     });
+    const [moreSettingsOpen, setMoreSettingsOpen] = useState(() => hashWantsMoreSettings());
+    const [badgeWizardStep, setBadgeWizardStep] = useState(1);
     const [collectionPickerOptions, setCollectionPickerOptions] = useState<Array<{
         value: string;
         label: string;
@@ -417,17 +440,26 @@ export const OverlaysDashboard: React.FC = () => {
     }, [toast, t]);
 
     useEffect(() => {
-        if (tab !== 'advanced' && tab !== 'overview') return;
+        if (tab !== 'home' && tab !== 'look' && tab !== 'badges') return;
         if (sections.length > 0) return;
         void loadSections();
     }, [tab, sections.length, loadSections]);
+
+    useEffect(() => {
+        if (!moreSettingsOpen || tab !== 'home') return;
+        const el = document.getElementById('overlays-more-settings');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, [moreSettingsOpen, tab]);
 
     useEffect(() => {
         writeOverlaysTabHash(tab);
     }, [tab]);
 
     useEffect(() => {
-        const onHashChange = () => setTab(parseOverlaysTab());
+        const onHashChange = () => {
+            setTab(parseOverlaysTab());
+            if (hashWantsMoreSettings()) setMoreSettingsOpen(true);
+        };
         window.addEventListener('hashchange', onHashChange);
         return () => window.removeEventListener('hashchange', onHashChange);
     }, []);
@@ -691,22 +723,25 @@ export const OverlaysDashboard: React.FC = () => {
     }, [collectionSections]);
 
     const tabs = useMemo(() => ([
-        { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
+        { id: 'home' as const, label: t('overlays.tabs.home'), icon: Layers },
         {
-            id: 'shows' as const,
-            label: t('overlays.tabs.shows', { count: showCount, episodes: episodeCount, kometa: kometaOtherCount }),
-            icon: List,
-        },
-        {
-            id: 'collections' as const,
-            label: t('overlays.tabs.collections', { count: collectionTrackedCount }),
+            id: 'badges' as const,
+            label: t('overlays.tabs.badges', { count: collectionRules.length }),
             icon: FolderKanban,
         },
-        { id: 'gallery' as const, label: t('overlays.tabs.gallery'), icon: Layers },
-        { id: 'placement' as const, label: t('overlays.tabs.placement'), icon: Move },
-        { id: 'advanced' as const, label: t('overlays.tabs.advanced'), icon: Settings2 },
+        {
+            id: 'tracked' as const,
+            label: t('overlays.tabs.tracked', {
+                count: showCount,
+                episodes: episodeCount,
+                kometa: kometaOtherCount,
+                collections: collectionTrackedCount,
+            }),
+            icon: List,
+        },
+        { id: 'look' as const, label: t('overlays.tabs.look'), icon: Move },
         { id: 'activity' as const, label: t('overlays.tabs.activity'), icon: Activity },
-    ]), [showCount, episodeCount, kometaOtherCount, collectionTrackedCount, t]);
+    ]), [showCount, episodeCount, kometaOtherCount, collectionTrackedCount, collectionRules.length, t]);
 
     const toggleJobCard = useCallback((id: JobCardId) => {
         setJobCardExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -790,10 +825,12 @@ export const OverlaysDashboard: React.FC = () => {
     }, [t, sections.length, loadSections]);
 
     useEffect(() => {
-        if (jobCardExpanded.collections && collectionPickerOptions.length === 0 && !collectionPickerLoading) {
-            void loadCollectionPicker();
+        if (tab === 'badges' || jobCardExpanded.collections) {
+            if (collectionPickerOptions.length === 0 && !collectionPickerLoading) {
+                void loadCollectionPicker();
+            }
         }
-    }, [jobCardExpanded.collections, collectionPickerOptions.length, collectionPickerLoading, loadCollectionPicker]);
+    }, [tab, jobCardExpanded.collections, collectionPickerOptions.length, collectionPickerLoading, loadCollectionPicker]);
 
     const libraryPickerOptions = useMemo(() => {
         const fromSections = sections
@@ -914,11 +951,13 @@ export const OverlaysDashboard: React.FC = () => {
         setNewCollectionRuleFile(null);
         setNewCollectionSearch('');
         setNewCollectionFilePreview(null);
+        setBadgeWizardStep(1);
     }, []);
 
     const beginEditCollectionRule = useCallback((rule: CustomCollectionOverlayRule) => {
         if (!rule?.id) return;
-        // Stay on the current tab — Collections shows the same editor when editing.
+        setTab('badges');
+        setBadgeWizardStep(1);
         setJobCardExpanded((prev) => ({ ...prev, collections: true }));
         setEditingRuleId(rule.id);
         setEditingRuleImageId(String(rule.image || '').trim());
@@ -1657,6 +1696,13 @@ export const OverlaysDashboard: React.FC = () => {
         })();
     };
 
+    const badgeStepValid = {
+        1: selectedLibraries.length > 0,
+        2: selectedCollectionKeys.length > 0,
+        3: Boolean(editingRuleId || newCollectionRuleFile),
+        4: true,
+    } as const;
+
     const collectionRuleForm = (
         <div className="space-y-4 rounded-xl border border-plex/20 bg-plex/5 p-3 sm:p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1683,267 +1729,331 @@ export const OverlaysDashboard: React.FC = () => {
                 ) : null}
             </div>
 
-            <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">1</span>
-                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepLibrary')}</span>
-                    <button
-                        type="button"
-                        className="ml-auto text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
-                        disabled={collectionPickerLoading}
-                        onClick={() => void loadCollectionPicker()}
-                    >
-                        {collectionPickerLoading
-                            ? t('overlays.jobs.collections.loadingCollections')
-                            : t('overlays.jobs.collections.refreshList')}
-                    </button>
-                </div>
-                <p className="text-[10px] text-muted">{t('overlays.jobs.collections.multiLibraryHint')}</p>
-                <div className="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        className="text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
-                        disabled={!libraryPickerOptions.length}
-                        onClick={selectAllLibraries}
-                    >
-                        {t('overlays.jobs.collections.selectAllLibraries')}
-                    </button>
-                    {selectedLibraries.length ? (
+            <div className="flex flex-wrap gap-2">
+                {[
+                    { step: 1, label: t('overlays.jobs.collections.stepLibrary') },
+                    { step: 2, label: t('overlays.jobs.collections.stepCollection') },
+                    { step: 3, label: t('overlays.jobs.collections.stepBadge') },
+                    { step: 4, label: t('overlays.jobs.collections.stepName') },
+                ].map(({ step, label }) => {
+                    const active = badgeWizardStep === step;
+                    const done = badgeWizardStep > step;
+                    return (
+                        <button
+                            key={step}
+                            type="button"
+                            disabled={step > badgeWizardStep && !badgeStepValid[step as 1 | 2 | 3 | 4]}
+                            onClick={() => {
+                                if (step <= badgeWizardStep || (step === badgeWizardStep + 1 && badgeStepValid[badgeWizardStep as 1 | 2 | 3 | 4])) {
+                                    setBadgeWizardStep(step);
+                                }
+                            }}
+                            className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-semibold transition-colors ${
+                                active
+                                    ? 'border-plex/50 bg-plex/15 text-text'
+                                    : done
+                                        ? 'border-white/15 bg-white/5 text-text/90'
+                                        : 'border-white/10 text-muted'
+                            }`}
+                        >
+                            <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                                active || done ? 'bg-plex/25 text-plex' : 'bg-white/5 text-muted'
+                            }`}
+                            >
+                                {step}
+                            </span>
+                            <span className="hidden sm:inline">{label}</span>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {badgeWizardStep === 1 ? (
+                <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepLibrary')}</span>
                         <button
                             type="button"
-                            className="text-[11px] font-semibold text-muted hover:text-text hover:underline"
-                            onClick={clearLibraries}
+                            className="ml-auto text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
+                            disabled={collectionPickerLoading}
+                            onClick={() => void loadCollectionPicker()}
                         >
-                            {t('overlays.jobs.collections.clearLibraries')}
-                        </button>
-                    ) : null}
-                </div>
-                <div className="max-h-40 overflow-y-auto rounded-lg border border-border/60 bg-background/40 custom-scrollbar">
-                    {!libraryPickerOptions.length ? (
-                        <p className="px-3 py-4 text-center text-[11px] text-muted">
                             {collectionPickerLoading
                                 ? t('overlays.jobs.collections.loadingCollections')
-                                : t('overlays.jobs.collections.pickLibrary')}
-                        </p>
-                    ) : (
-                        libraryPickerOptions.map((o) => {
-                            const active = selectedLibraries.includes(o.value);
-                            return (
-                                <button
-                                    key={o.value}
-                                    type="button"
-                                    onClick={() => toggleLibrary(o.value)}
-                                    className={`flex w-full items-start gap-2 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
-                                        active
-                                            ? 'bg-plex/15 text-text'
-                                            : 'text-text/90 hover:bg-white/5'
-                                    }`}
-                                >
-                                    <span className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
-                                        active ? 'border-plex bg-plex text-[9px] text-black' : 'border-muted'
-                                    }`}
-                                    >
-                                        {active ? '✓' : ''}
-                                    </span>
-                                    <span className="min-w-0 truncate text-sm font-semibold">{o.label}</span>
-                                </button>
-                            );
-                        })
-                    )}
-                </div>
-                {selectedLibraries.length ? (
-                    <p className="text-[11px] text-plex">
-                        {t('overlays.jobs.collections.selectedLibraries', {
-                            count: selectedLibraries.length,
-                            titles: selectedLibraries.join(', '),
-                        })}
-                    </p>
-                ) : null}
-            </div>
-
-            <div className={`space-y-2 ${!selectedLibraries.length ? 'opacity-50 pointer-events-none' : ''}`}>
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">2</span>
-                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepCollection')}</span>
-                    {selectedLibraries.length && !collectionPickerLoading ? (
-                        <span className="ml-auto text-[10px] text-muted">
-                            {t('overlays.jobs.collections.collectionCount', {
-                                count: filteredCollectionOptions.length,
-                                total: collectionsInSelectedLibrariesCount,
-                            })}
-                        </span>
-                    ) : null}
-                </div>
-                <p className="text-[10px] text-muted">{t('overlays.jobs.collections.multiSelectHint')}</p>
-                <div className="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        className="text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
-                        disabled={!filteredCollectionOptions.length}
-                        onClick={selectAllFilteredCollections}
-                    >
-                        {t('overlays.jobs.collections.selectAllCollections')}
-                    </button>
-                    {selectedCollectionKeys.length ? (
+                                : t('overlays.jobs.collections.refreshList')}
+                        </button>
+                    </div>
+                    <p className="text-[10px] text-muted">{t('overlays.jobs.collections.multiLibraryHint')}</p>
+                    <div className="flex flex-wrap gap-2">
                         <button
                             type="button"
-                            className="text-[11px] font-semibold text-muted hover:text-text hover:underline"
-                            onClick={clearSelectedCollections}
+                            className="text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
+                            disabled={!libraryPickerOptions.length}
+                            onClick={selectAllLibraries}
                         >
-                            {t('overlays.jobs.collections.clearCollections')}
+                            {t('overlays.jobs.collections.selectAllLibraries')}
                         </button>
+                        {selectedLibraries.length ? (
+                            <button
+                                type="button"
+                                className="text-[11px] font-semibold text-muted hover:text-text hover:underline"
+                                onClick={clearLibraries}
+                            >
+                                {t('overlays.jobs.collections.clearLibraries')}
+                            </button>
+                        ) : null}
+                    </div>
+                    <div className="max-h-48 overflow-y-auto rounded-lg border border-border/60 bg-background/40 custom-scrollbar">
+                        {!libraryPickerOptions.length ? (
+                            <p className="px-3 py-4 text-center text-[11px] text-muted">
+                                {collectionPickerLoading
+                                    ? t('overlays.jobs.collections.loadingCollections')
+                                    : t('overlays.jobs.collections.pickLibrary')}
+                            </p>
+                        ) : (
+                            libraryPickerOptions.map((o) => {
+                                const active = selectedLibraries.includes(o.value);
+                                return (
+                                    <button
+                                        key={o.value}
+                                        type="button"
+                                        onClick={() => toggleLibrary(o.value)}
+                                        className={`flex w-full items-start gap-2 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
+                                            active
+                                                ? 'bg-plex/15 text-text'
+                                                : 'text-text/90 hover:bg-white/5'
+                                        }`}
+                                    >
+                                        <span className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                                            active ? 'border-plex bg-plex text-[9px] text-black' : 'border-muted'
+                                        }`}
+                                        >
+                                            {active ? '✓' : ''}
+                                        </span>
+                                        <span className="min-w-0 truncate text-sm font-semibold">{o.label}</span>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                    {selectedLibraries.length ? (
+                        <p className="text-[11px] text-plex">
+                            {t('overlays.jobs.collections.selectedLibraries', {
+                                count: selectedLibraries.length,
+                                titles: selectedLibraries.join(', '),
+                            })}
+                        </p>
                     ) : null}
                 </div>
-                <div className="relative">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-                    <input
-                        className={`${fieldInputClass} pl-8`}
-                        value={newCollectionSearch}
-                        onChange={(e) => setNewCollectionSearch(e.target.value)}
-                        placeholder={t('overlays.jobs.collections.searchPlaceholder')}
-                        disabled={!selectedLibraries.length}
-                    />
-                </div>
-                <div className="max-h-48 overflow-y-auto rounded-lg border border-border/60 bg-background/40 custom-scrollbar">
-                    {!selectedLibraries.length ? (
-                        <p className="px-3 py-4 text-center text-[11px] text-muted">
-                            {t('overlays.jobs.collections.pickLibraryFirst')}
-                        </p>
-                    ) : collectionPickerLoading ? (
-                        <p className="px-3 py-4 text-center text-[11px] text-muted">
-                            {t('overlays.jobs.collections.loadingCollections')}
-                        </p>
-                    ) : filteredCollectionOptions.length === 0 ? (
-                        <p className="px-3 py-4 text-center text-[11px] text-muted">
-                            {newCollectionSearch.trim()
-                                ? t('overlays.jobs.collections.searchEmpty')
-                                : t('overlays.jobs.collections.noCollections')}
-                        </p>
-                    ) : (
-                        filteredCollectionOptions.map((o) => {
-                            const active = selectedCollectionKeys.includes(o.value);
-                            return (
-                                <button
-                                    key={o.value}
-                                    type="button"
-                                    onClick={() => toggleCollectionKey(o)}
-                                    className={`flex w-full items-start gap-2 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
-                                        active
-                                            ? 'bg-plex/15 text-text'
-                                            : 'text-text/90 hover:bg-white/5'
-                                    }`}
-                                >
-                                    <span className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
-                                        active ? 'border-plex bg-plex text-[9px] text-black' : 'border-muted'
-                                    }`}
-                                    >
-                                        {active ? '✓' : ''}
-                                    </span>
-                                    <span className="min-w-0">
-                                        <span className="block truncate text-sm font-semibold">
-                                            {o.title || o.label}
-                                        </span>
-                                        {o.library ? (
-                                            <span className="block truncate text-[10px] text-muted">
-                                                {o.library}
-                                            </span>
-                                        ) : null}
-                                    </span>
-                                </button>
-                            );
-                        })
-                    )}
-                </div>
-                {collectionPickerError ? (
-                    <p className="text-[11px] text-red-300">{collectionPickerError}</p>
-                ) : null}
-                {selectedCollectionOptions.length ? (
-                    <p className="text-[11px] text-plex">
-                        {t('overlays.jobs.collections.selectedCollections', {
-                            count: selectedCollectionOptions.length,
-                            titles: selectedCollectionOptions
-                                .map((o) => o.title || o.label)
-                                .join(', '),
-                        })}
-                    </p>
-                ) : null}
-                {missingSelectedCollectionKeys.length ? (
-                    <p className="text-[11px] text-red-300">
-                        {t('overlays.jobs.collections.missingCollectionsPruned', {
-                            count: missingSelectedCollectionKeys.length,
-                        })}
-                    </p>
-                ) : null}
-            </div>
+            ) : null}
 
-            <div className={`space-y-2 ${!selectedCollectionKeys.length ? 'opacity-50 pointer-events-none' : ''}`}>
-                <div className="flex items-center gap-2">
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">3</span>
-                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepBadge')}</span>
-                </div>
-                {editingRuleId && editingRuleImageId && !newCollectionRuleFile ? (
-                    <p className="text-[11px] text-muted">
-                        {t('overlays.jobs.collections.keepExistingBadge', { id: editingRuleImageId })}
-                    </p>
-                ) : null}
-                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/30 px-3 py-4 transition-colors hover:border-plex/40 hover:bg-plex/5">
-                    {newCollectionFilePreview ? (
-                        <img
-                            src={newCollectionFilePreview}
-                            alt=""
-                            className="h-14 max-w-[180px] object-contain"
+            {badgeWizardStep === 2 ? (
+                <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepCollection')}</span>
+                        {!collectionPickerLoading ? (
+                            <span className="ml-auto text-[10px] text-muted">
+                                {t('overlays.jobs.collections.collectionCount', {
+                                    count: filteredCollectionOptions.length,
+                                    total: collectionsInSelectedLibrariesCount,
+                                })}
+                            </span>
+                        ) : null}
+                    </div>
+                    <p className="text-[10px] text-muted">{t('overlays.jobs.collections.multiSelectHint')}</p>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            className="text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
+                            disabled={!filteredCollectionOptions.length}
+                            onClick={selectAllFilteredCollections}
+                        >
+                            {t('overlays.jobs.collections.selectAllCollections')}
+                        </button>
+                        {selectedCollectionKeys.length ? (
+                            <button
+                                type="button"
+                                className="text-[11px] font-semibold text-muted hover:text-text hover:underline"
+                                onClick={clearSelectedCollections}
+                            >
+                                {t('overlays.jobs.collections.clearCollections')}
+                            </button>
+                        ) : null}
+                    </div>
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+                        <input
+                            className={`${fieldInputClass} pl-8`}
+                            value={newCollectionSearch}
+                            onChange={(e) => setNewCollectionSearch(e.target.value)}
+                            placeholder={t('overlays.jobs.collections.searchPlaceholder')}
                         />
-                    ) : (
-                        <Upload className="h-5 w-5 text-muted" />
-                    )}
-                    <span className="text-xs font-semibold text-text">
-                        {newCollectionRuleFile
-                            ? newCollectionRuleFile.name
-                            : editingRuleId
-                                ? t('overlays.jobs.collections.replacePng')
-                                : t('overlays.jobs.collections.choosePng')}
-                    </span>
-                    <span className="text-[10px] text-muted">{t('overlays.jobs.collections.pngOnly')}</span>
-                    <input
-                        type="file"
-                        accept="image/png,.png"
-                        className="hidden"
-                        onChange={(e) => setNewCollectionRuleFile(e.target.files?.[0] || null)}
-                    />
-                </label>
-            </div>
-
-            <div className={`space-y-2 ${!selectedCollectionKeys.length || (!editingRuleId && !newCollectionRuleFile) ? 'opacity-50 pointer-events-none' : ''}`}>
-                <div className="flex items-center gap-2">
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">4</span>
-                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepName')}</span>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto rounded-lg border border-border/60 bg-background/40 custom-scrollbar">
+                        {collectionPickerLoading ? (
+                            <p className="px-3 py-4 text-center text-[11px] text-muted">
+                                {t('overlays.jobs.collections.loadingCollections')}
+                            </p>
+                        ) : filteredCollectionOptions.length === 0 ? (
+                            <p className="px-3 py-4 text-center text-[11px] text-muted">
+                                {newCollectionSearch.trim()
+                                    ? t('overlays.jobs.collections.searchEmpty')
+                                    : t('overlays.jobs.collections.noCollections')}
+                            </p>
+                        ) : (
+                            filteredCollectionOptions.map((o) => {
+                                const active = selectedCollectionKeys.includes(o.value);
+                                return (
+                                    <button
+                                        key={o.value}
+                                        type="button"
+                                        onClick={() => toggleCollectionKey(o)}
+                                        className={`flex w-full items-start gap-2 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
+                                            active
+                                                ? 'bg-plex/15 text-text'
+                                                : 'text-text/90 hover:bg-white/5'
+                                        }`}
+                                    >
+                                        <span className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                                            active ? 'border-plex bg-plex text-[9px] text-black' : 'border-muted'
+                                        }`}
+                                        >
+                                            {active ? '✓' : ''}
+                                        </span>
+                                        <span className="min-w-0">
+                                            <span className="block truncate text-sm font-semibold">
+                                                {o.title || o.label}
+                                            </span>
+                                            {o.library ? (
+                                                <span className="block truncate text-[10px] text-muted">
+                                                    {o.library}
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                    {collectionPickerError ? (
+                        <p className="text-[11px] text-red-300">{collectionPickerError}</p>
+                    ) : null}
+                    {selectedCollectionOptions.length ? (
+                        <p className="text-[11px] text-plex">
+                            {t('overlays.jobs.collections.selectedCollections', {
+                                count: selectedCollectionOptions.length,
+                                titles: selectedCollectionOptions
+                                    .map((o) => o.title || o.label)
+                                    .join(', '),
+                            })}
+                        </p>
+                    ) : null}
+                    {missingSelectedCollectionKeys.length ? (
+                        <p className="text-[11px] text-red-300">
+                            {t('overlays.jobs.collections.missingCollectionsPruned', {
+                                count: missingSelectedCollectionKeys.length,
+                            })}
+                        </p>
+                    ) : null}
                 </div>
-                <input
-                    className={fieldInputClass}
-                    value={newCollectionRuleName}
-                    onChange={(e) => setNewCollectionRuleName(e.target.value)}
-                    placeholder={t('overlays.jobs.collections.namePlaceholder')}
-                />
-                <p className="text-[10px] text-muted">{t('overlays.jobs.collections.nameHint')}</p>
-            </div>
+            ) : null}
 
-            <button
-                type="button"
-                className={primaryButtonClass}
-                disabled={
-                    busy !== null
-                    || !selectedLibraries.length
-                    || !selectedCollectionKeys.length
-                    || (!editingRuleId && !newCollectionRuleFile)
-                }
-                onClick={() => void saveCollectionOverlayRule()}
-            >
-                <Upload className="h-4 w-4" />
-                {editingRuleId
-                    ? t('overlays.jobs.collections.saveRule')
-                    : t('overlays.jobs.collections.addRule')}
-            </button>
-            <p className="text-[11px] text-muted">{t('overlays.jobs.collections.saveHint')}</p>
+            {badgeWizardStep === 3 ? (
+                <div className="space-y-2">
+                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepBadge')}</span>
+                    {editingRuleId && editingRuleImageId && !newCollectionRuleFile ? (
+                        <div className="flex flex-wrap items-center gap-3">
+                            <img
+                                src={`/api/overlays/preset-file?id=${encodeURIComponent(editingRuleImageId)}&kind=season&t=${sampleBust}`}
+                                alt=""
+                                className="h-14 max-w-[180px] object-contain"
+                            />
+                            <p className="text-[11px] text-muted">
+                                {t('overlays.jobs.collections.keepExistingBadge', { id: editingRuleImageId })}
+                            </p>
+                        </div>
+                    ) : null}
+                    <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/30 px-3 py-4 transition-colors hover:border-plex/40 hover:bg-plex/5">
+                        {newCollectionFilePreview ? (
+                            <img
+                                src={newCollectionFilePreview}
+                                alt=""
+                                className="h-14 max-w-[180px] object-contain"
+                            />
+                        ) : (
+                            <Upload className="h-5 w-5 text-muted" />
+                        )}
+                        <span className="text-xs font-semibold text-text">
+                            {newCollectionRuleFile
+                                ? newCollectionRuleFile.name
+                                : editingRuleId
+                                    ? t('overlays.jobs.collections.replacePng')
+                                    : t('overlays.jobs.collections.choosePng')}
+                        </span>
+                        <span className="text-[10px] text-muted">{t('overlays.jobs.collections.pngOnly')}</span>
+                        <input
+                            type="file"
+                            accept="image/png,.png"
+                            className="hidden"
+                            onChange={(e) => setNewCollectionRuleFile(e.target.files?.[0] || null)}
+                        />
+                    </label>
+                </div>
+            ) : null}
+
+            {badgeWizardStep === 4 ? (
+                <div className="space-y-2">
+                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepName')}</span>
+                    <input
+                        className={fieldInputClass}
+                        value={newCollectionRuleName}
+                        onChange={(e) => setNewCollectionRuleName(e.target.value)}
+                        placeholder={t('overlays.jobs.collections.namePlaceholder')}
+                    />
+                    <p className="text-[10px] text-muted">{t('overlays.jobs.collections.nameHint')}</p>
+                    <button
+                        type="button"
+                        className={primaryButtonClass}
+                        disabled={
+                            busy !== null
+                            || !selectedLibraries.length
+                            || !selectedCollectionKeys.length
+                            || (!editingRuleId && !newCollectionRuleFile)
+                        }
+                        onClick={() => void saveCollectionOverlayRule()}
+                    >
+                        <Upload className="h-4 w-4" />
+                        {editingRuleId
+                            ? t('overlays.jobs.collections.saveRule')
+                            : t('overlays.jobs.collections.addRule')}
+                    </button>
+                    <p className="text-[11px] text-muted">{t('overlays.jobs.collections.saveHint')}</p>
+                </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3">
+                <button
+                    type="button"
+                    className={buttonClass}
+                    disabled={badgeWizardStep <= 1}
+                    onClick={() => setBadgeWizardStep((s) => Math.max(1, s - 1))}
+                >
+                    {t('overlays.badges.wizardBack')}
+                </button>
+                {badgeWizardStep < 4 ? (
+                    <button
+                        type="button"
+                        className={primaryButtonClass}
+                        disabled={!badgeStepValid[badgeWizardStep as 1 | 2 | 3]}
+                        onClick={() => {
+                            if (badgeWizardStep === 1) void loadCollectionPicker();
+                            setBadgeWizardStep((s) => Math.min(4, s + 1));
+                        }}
+                    >
+                        {t('overlays.badges.wizardNext')}
+                    </button>
+                ) : null}
+            </div>
         </div>
     );
 
@@ -2000,56 +2110,56 @@ export const OverlaysDashboard: React.FC = () => {
                 )}
             />
 
-            <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
-                <div className="flex flex-col divide-y divide-white/10 sm:grid sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                    <div className="flex min-w-0 items-center gap-3 px-3.5 py-3 sm:flex-col sm:items-start sm:gap-1 sm:px-3 sm:py-3">
-                        <div className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                            {workerReady
-                                ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
-                                : <XCircle className="h-3.5 w-3.5 text-rose-300" />}
-                            <span>{t('overlays.status.worker')}</span>
-                        </div>
-                        <p className={`min-w-0 flex-1 text-sm font-semibold sm:w-full sm:flex-none sm:text-[15px] ${workerReady ? 'text-text' : 'text-amber-100'}`}>
-                            {workerReady ? t('overlays.status.ready') : t('overlays.status.missing')}
-                        </p>
-                    </div>
-                    <div className="flex min-w-0 items-center gap-3 px-3.5 py-3 sm:flex-col sm:items-start sm:gap-1 sm:px-3 sm:py-3">
-                        <div className="flex shrink-0 items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                            <Layers className="h-3.5 w-3.5 text-sky-300" />
-                            <span>{t('overlays.status.logged')}</span>
-                        </div>
-                        <p className="min-w-0 flex-1 text-sm font-semibold tabular-nums sm:w-full sm:flex-none sm:text-[15px]">
-                            {t('overlays.status.loggedCounts', {
-                                shows: status?.logCount ?? showCount,
-                                episodes: status?.episodeLogCount ?? episodeCount,
-                            })}
-                        </p>
-                    </div>
-                    <div className="flex min-w-0 items-start gap-3 px-3.5 py-3 sm:flex-col sm:gap-1 sm:px-3 sm:py-3">
-                        <div className="flex shrink-0 items-center gap-1.5 pt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted sm:pt-0">
-                            <Clock3 className="h-3.5 w-3.5 text-plex" />
-                            <span>{t('overlays.status.lastRun')}</span>
-                        </div>
-                        <div className="min-w-0 flex-1 sm:w-full sm:flex-none">
-                            <p className="text-sm font-semibold leading-snug sm:text-[15px]">
-                                {status?.lastRunAt
-                                    ? new Date(status.lastRunAt).toLocaleString()
-                                    : t('overlays.overview.never')}
-                            </p>
-                            <p className="mt-0.5 text-[11px] leading-snug text-muted">
-                                {summary
-                                    ? t('overlays.overview.lastRunHint', {
-                                        added: String(summary.added ?? 0),
-                                        removed: String(summary.removed ?? 0),
-                                        preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
-                                    })
-                                    : (configDraft.scheduleHours
-                                        ? t('overlays.status.everyHours', { hours: configDraft.scheduleHours })
-                                        : t('overlays.status.disabled'))}
-                            </p>
-                        </div>
-                    </div>
-                </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+                <DashboardStatCard
+                    label={t('overlays.status.worker')}
+                    value={jobRunning
+                        ? t('overlays.status.runningNow')
+                        : workerReady
+                            ? t('overlays.status.ready')
+                            : t('overlays.status.missing')}
+                    hint={jobRunning
+                        ? t('overlays.activity.running', { command: runningCommandLabel })
+                        : workerReady
+                            ? t('overlays.status.workerHintReady')
+                            : t('overlays.status.workerHintMissing')}
+                    icon={workerReady
+                        ? <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                        : <XCircle className="h-4 w-4 text-rose-300" />}
+                    glow={workerReady ? 'bg-emerald-400/25' : 'bg-rose-400/25'}
+                    valueClassName="text-xl md:text-2xl"
+                />
+                <DashboardStatCard
+                    label={t('overlays.status.tracked')}
+                    value={t('overlays.status.trackedValue', {
+                        shows: status?.logCount ?? showCount,
+                        episodes: status?.episodeLogCount ?? episodeCount,
+                        layer: kometaOtherCount,
+                        badges: collectionTrackedCount,
+                    })}
+                    hint={t('overlays.status.trackedHint')}
+                    icon={<Layers className="h-4 w-4 text-sky-300" />}
+                    glow="bg-sky-400/20"
+                    valueClassName="text-lg md:text-xl"
+                />
+                <DashboardStatCard
+                    label={t('overlays.status.lastRun')}
+                    value={status?.lastRunAt
+                        ? new Date(status.lastRunAt).toLocaleString()
+                        : t('overlays.overview.never')}
+                    hint={summary
+                        ? t('overlays.overview.lastRunHint', {
+                            added: String(summary.added ?? 0),
+                            removed: String(summary.removed ?? 0),
+                            preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
+                        })
+                        : (configDraft.scheduleHours
+                            ? t('overlays.status.everyHours', { hours: configDraft.scheduleHours })
+                            : t('overlays.status.disabled'))}
+                    icon={<Clock3 className="h-4 w-4 text-plex" />}
+                    glow="bg-plex/25"
+                    valueClassName="text-lg md:text-xl"
+                />
             </div>
 
             {!workerReady && (
@@ -2089,7 +2199,7 @@ export const OverlaysDashboard: React.FC = () => {
                 ))}
             </DashboardSubnav>
 
-            {tab === 'overview' && (
+            {tab === 'home' && (
                 <div className="space-y-3">
                     <div className="space-y-2">
                         <OverlayJobCard
@@ -3007,7 +3117,7 @@ export const OverlaysDashboard: React.FC = () => {
 
                         <OverlayJobCard
                             title={t('overlays.jobs.collections.title')}
-                            hint={t('overlays.jobs.collections.hint')}
+                            hint={t('overlays.jobs.collections.homeHint')}
                             statusLabel={collectionsJobActive
                                 ? t('overlays.jobs.status.running')
                                 : !collectionsEnabled
@@ -3029,92 +3139,71 @@ export const OverlaysDashboard: React.FC = () => {
                             runBusy={busy === 'runCollections' || (collectionsJobActive && runningCommand === 'run-collections')}
                             actionsDisabled={busy !== null || jobRunning || !workerReady}
                         >
-                            <p className="mb-3 text-[11px] text-muted">{t('overlays.jobs.collections.settingsHint')}</p>
-                            <SettingsToggleRow
-                                title={t('overlays.jobs.collections.title')}
-                                description={t('overlays.jobs.collections.firstWins')}
-                                checked={configDraft.customCollectionOverlaysEnabled === true}
-                                onChange={(customCollectionOverlaysEnabled) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    customCollectionOverlaysEnabled,
-                                }))}
-                            />
-                            <SettingsToggleRow
-                                title={t('overlays.jobs.collections.restampOnCollexions')}
-                                description={t('overlays.jobs.collections.restampOnCollexionsHint')}
-                                checked={configDraft.restampOnCollexionsUpdate === true}
-                                onChange={(restampOnCollexionsUpdate) => setConfigDraft((prev) => ({
-                                    ...prev,
-                                    restampOnCollexionsUpdate,
-                                }))}
-                                disabled={configDraft.customCollectionOverlaysEnabled !== true}
-                            />
-
-                            <div className="mb-3 space-y-2">
-                                {collectionRules.length === 0 ? (
-                                    <p className="text-sm text-muted">{t('overlays.jobs.collections.emptyRules')}</p>
-                                ) : (
-                                    collectionRules.map((rule) => (
-                                        <div
-                                            key={rule.id}
-                                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/30 px-3 py-2"
-                                        >
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-sm font-semibold text-text">
-                                                    {rule.name}
-                                                    {editingRuleId === rule.id ? (
-                                                        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-plex">
-                                                            {t('overlays.jobs.collections.editingBadge')}
-                                                        </span>
-                                                    ) : null}
-                                                </p>
-                                                <p className="mt-0.5 text-[11px] text-muted truncate">
-                                                    {ruleCollectionLabel(rule) || rule.collectionRatingKey}
-                                                    {ruleLibraryLabel(rule) ? ` · ${ruleLibraryLabel(rule)}` : ''}
-                                                    {ruleLibraries(rule).length > 1
-                                                        ? ` · ${t('overlays.jobs.collections.multiLibraryCount', { count: ruleLibraries(rule).length })}`
-                                                        : ''}
-                                                    {ruleCollectionKeys(rule).length > 1
-                                                        ? ` · ${t('overlays.jobs.collections.multiCount', { count: ruleCollectionKeys(rule).length })}`
-                                                        : ''}
-                                                </p>
-                                                {rule.image ? (
-                                                    <p className="mt-0.5 text-[10px] text-muted/80 truncate">
-                                                        {t('overlays.jobs.collections.badgeId', { id: rule.image })}
-                                                    </p>
-                                                ) : null}
-                                            </div>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <button
-                                                    type="button"
-                                                    className={buttonClass}
-                                                    onClick={() => beginEditCollectionRule(rule)}
-                                                >
-                                                    <Pencil className="h-3.5 w-3.5" />
-                                                    {t('overlays.jobs.collections.editRule')}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={`${buttonClass} border-red-500/40 text-red-200`}
-                                                    onClick={() => void removeCollectionOverlayRule(rule.id)}
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                    {t('overlays.jobs.collections.deleteRule')}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                                <p className="text-[11px] text-muted">{t('overlays.jobs.collections.unlimitedHint')}</p>
+                            <p className="mb-3 text-sm text-muted">{t('overlays.jobs.collections.homeManageHint')}</p>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    className={primaryButtonClass}
+                                    onClick={() => {
+                                        resetNewCollectionForm();
+                                        setBadgeWizardStep(1);
+                                        setTab('badges');
+                                    }}
+                                >
+                                    {t('overlays.jobs.collections.openBadgesTab')}
+                                </button>
+                                <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
+                                    <Save className="h-4 w-4" /> {t('overlays.actions.save')}
+                                </button>
                             </div>
-
-                            <div className="mb-3">{collectionRuleForm}</div>
-
-                            <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
-                                <Save className="h-4 w-4" /> {t('overlays.actions.save')}
-                            </button>
+                            <div className="mt-3 space-y-2">
+                                <SettingsToggleRow
+                                    title={t('overlays.jobs.collections.enableFeature')}
+                                    description={t('overlays.jobs.collections.firstWins')}
+                                    checked={configDraft.customCollectionOverlaysEnabled === true}
+                                    onChange={(customCollectionOverlaysEnabled) => setConfigDraft((prev) => ({
+                                        ...prev,
+                                        customCollectionOverlaysEnabled,
+                                    }))}
+                                />
+                                <SettingsToggleRow
+                                    title={t('overlays.jobs.collections.restampOnCollexions')}
+                                    description={t('overlays.jobs.collections.restampOnCollexionsHint')}
+                                    checked={configDraft.restampOnCollexionsUpdate === true}
+                                    onChange={(restampOnCollexionsUpdate) => setConfigDraft((prev) => ({
+                                        ...prev,
+                                        restampOnCollexionsUpdate,
+                                    }))}
+                                    disabled={configDraft.customCollectionOverlaysEnabled !== true}
+                                />
+                            </div>
                         </OverlayJobCard>
                     </div>
+
+                    {summary ? (
+                        <DashboardPanel
+                            title={t('overlays.home.lastRunTitle')}
+                            subtitle={t('overlays.home.lastRunSubtitle')}
+                        >
+                            <p className="text-sm text-text">
+                                {t('overlays.home.lastRunBody', {
+                                    command: String(summary.command || runningCommandLabel || '—'),
+                                    added: String(summary.added ?? 0),
+                                    removed: String(summary.removed ?? 0),
+                                    episodesAdded: String(summary.episodesAdded ?? 0),
+                                    episodesRemoved: String(summary.episodesRemoved ?? 0),
+                                    preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
+                                })}
+                            </p>
+                            <button
+                                type="button"
+                                className="mt-3 text-sm font-semibold text-plex hover:underline"
+                                onClick={() => setTab('activity')}
+                            >
+                                {t('overlays.home.viewActivity')}
+                            </button>
+                        </DashboardPanel>
+                    ) : null}
 
                     <div className="flex flex-col gap-2 rounded-xl border border-white/5 bg-black/20 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-wrap gap-2">
@@ -3132,20 +3221,236 @@ export const OverlaysDashboard: React.FC = () => {
                                 disabled={busy !== null || jobRunning || !workerReady}
                                 onClick={() => startBackgroundJob('reconcile', async () => {
                                     await overlaysApi.reconcile();
-                                    setTab('advanced');
+                                    setTab('home');
+                                    setMoreSettingsOpen(true);
                                 })}
                             >
                                 {t('overlays.actions.reconcileDryRun')}
+                            </button>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                onClick={() => setMoreSettingsOpen((v) => !v)}
+                            >
+                                <Settings2 className="h-4 w-4" />
+                                {moreSettingsOpen
+                                    ? t('overlays.home.hideMoreSettings')
+                                    : t('overlays.home.moreSettings')}
                             </button>
                         </div>
                         <p className="text-[11px] text-muted sm:max-w-md sm:text-right">
                             {t('overlays.quick.previewHintBeforePreviewPath')} <code>config/overlays/preview/</code>. {t('overlays.quick.previewHintBetweenPaths')} <code>overlaid_log.json</code>.
                         </p>
                     </div>
+
+                    {moreSettingsOpen ? (
+                        <div className="space-y-4" id="overlays-more-settings">
+                            <DashboardPanel title={t('overlays.settings.title')} subtitle={t('overlays.settings.subtitle')}>
+                                <SettingsToggleRow
+                                    title={t('overlays.settings.moduleEnabled')}
+                                    checked={configDraft.enabled !== false}
+                                    onChange={(enabled) => setConfigDraft((prev) => ({ ...prev, enabled }))}
+                                />
+                                <SettingsToggleRow
+                                    title={t('overlays.settings.defaultPreviewMode')}
+                                    checked={configDraft.previewMode === true}
+                                    onChange={(previewMode) => setConfigDraft((prev) => ({ ...prev, previewMode }))}
+                                />
+                                <SettingsToggleRow
+                                    title={t('overlays.settings.skipKometa')}
+                                    checked={configDraft.skipIfKometaOverlayLabel !== false}
+                                    onChange={(skipIfKometaOverlayLabel) => setConfigDraft((prev) => ({ ...prev, skipIfKometaOverlayLabel }))}
+                                />
+                                <SettingsToggleRow
+                                    title={t('overlays.settings.bannersAddOverlayLabel')}
+                                    description={t('overlays.settings.bannersAddOverlayLabelHint')}
+                                    checked={configDraft.bannersAddOverlayLabel !== false}
+                                    onChange={(bannersAddOverlayLabel) => setConfigDraft((prev) => ({ ...prev, bannersAddOverlayLabel }))}
+                                />
+
+                                <div className="border-b border-border/40 py-4">
+                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                        <div>
+                                            <span className={fieldLabelClass}>{t('overlays.settings.visualSample')}</span>
+                                            <p className="mt-1 max-w-2xl text-[11px] text-muted">
+                                                {t('overlays.settings.visualSampleHint')}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={busy !== null || jobRunning}
+                                                onClick={() => {
+                                                    setSampleShowKey('');
+                                                    void regenerateSamples({ showRatingKey: '' });
+                                                }}
+                                            >
+                                                {t('overlays.actions.randomSample')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                disabled={busy !== null || jobRunning}
+                                                onClick={() => void regenerateSamples()}
+                                            >
+                                                {busy === 'sample' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                                                {t('overlays.actions.refreshSample')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="mb-3 grid gap-3 md:grid-cols-2">
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.sampleSearch')}</span>
+                                            <input
+                                                className={fieldInputClass}
+                                                value={sampleQuery}
+                                                onChange={(e) => setSampleQuery(e.target.value)}
+                                                placeholder={t('overlays.settings.sampleSearchPlaceholder')}
+                                            />
+                                        </label>
+                                        <label className="block">
+                                            <span className={fieldLabelClass}>{t('overlays.settings.sampleShow')}</span>
+                                            <CustomSelect
+                                                className="mt-1.5"
+                                                value={sampleShowKey || ''}
+                                                onChange={(value) => setSampleShowKey(value)}
+                                                options={[
+                                                    { value: '', label: t('overlays.settings.sampleRandom') },
+                                                    ...sampleCandidates.map((s) => ({ value: s.ratingKey, label: s.title })),
+                                                ]}
+                                            />
+                                        </label>
+                                    </div>
+                                    {sampleError ? (
+                                        <p className="mb-3 text-xs text-red-400">{sampleError}</p>
+                                    ) : null}
+                                    {sampleMeta?.exists
+                                        && (sampleMeta.showSource === 'placeholder' || sampleMeta.episodeSource === 'placeholder') ? (
+                                        <p className="mb-3 text-xs text-amber-200/90">{t('overlays.settings.visualSamplePlaceholderNote')}</p>
+                                    ) : null}
+                                    {sampleMeta?.exists ? (
+                                        <div className="flex flex-wrap items-end gap-6">
+                                            <figure className="space-y-2">
+                                                <figcaption className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+                                                    {t('overlays.settings.visualSampleShow')}
+                                                </figcaption>
+                                                <img
+                                                    src={overlaysApi.sampleImageUrl('show', sampleBust)}
+                                                    alt={sampleMeta.showTitle || 'New Season sample'}
+                                                    className="h-[180px] w-[120px] rounded-md border border-border object-cover bg-background/60"
+                                                />
+                                                <figcaption className="max-w-[120px] truncate text-xs text-text" title={sampleMeta.showTitle || ''}>
+                                                    {sampleMeta.showTitle || '—'}
+                                                </figcaption>
+                                            </figure>
+                                            <figure className="space-y-2">
+                                                <figcaption className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+                                                    {t('overlays.settings.visualSampleEpisode')}
+                                                </figcaption>
+                                                <img
+                                                    src={overlaysApi.sampleImageUrl('episode', sampleBust)}
+                                                    alt={sampleMeta.episodeTitle || 'New Episode sample'}
+                                                    className="h-[135px] w-[240px] rounded-md border border-border object-cover bg-background/60"
+                                                />
+                                                <figcaption
+                                                    className="max-w-[240px] truncate text-xs text-text"
+                                                    title={[sampleMeta.showTitleForEp, sampleMeta.episodeTitle].filter(Boolean).join(' — ')}
+                                                >
+                                                    {[sampleMeta.showTitleForEp, sampleMeta.episodeTitle].filter(Boolean).join(' — ') || '—'}
+                                                </figcaption>
+                                            </figure>
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-muted">
+                                            {busy === 'sample' ? t('overlays.actionStarted', { action: actionLabel('sample') }) : t('overlays.settings.visualSampleEmpty')}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {renderLibraryPicker('librarySectionIds', 'overlays.settings.librariesHintAdvanced', 'all')}
+
+                                <div className="flex flex-wrap gap-2 border-t border-border/40 pt-4">
+                                    <button
+                                        type="button"
+                                        className={primaryButtonClass}
+                                        disabled={busy !== null}
+                                        onClick={() => void saveSettings()}
+                                    >
+                                        <Save className="h-4 w-4" /> {t('overlays.actions.saveSettings')}
+                                    </button>
+                                </div>
+                            </DashboardPanel>
+
+                            <DashboardPanel title={t('overlays.import.title')} subtitle={t('overlays.import.subtitle')}>
+                                <p className="text-sm text-muted">
+                                    {t('overlays.import.bodyBeforeLog')} <code>overlaid_log.json</code> {t('overlays.import.bodyAfterLog')}
+                                </p>
+                                <textarea
+                                    className="mt-3 min-h-[220px] w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex"
+                                    placeholder='{"12345":{"title":"Example Show","timestamp":"2025-01-15T14:30:00","preview_only":false}}'
+                                    value={importText}
+                                    onChange={(e) => setImportText(e.target.value)}
+                                />
+                                <div className="mt-4 flex flex-wrap items-center gap-3">
+                                    <CustomSelect
+                                        className="w-40"
+                                        compact
+                                        value={importMode}
+                                        onChange={(value) => setImportMode(value === 'replace' ? 'replace' : 'merge')}
+                                        options={importModeOptions}
+                                    />
+                                    <button
+                                        type="button"
+                                        className={primaryButtonClass}
+                                        disabled={busy !== null || !importText.trim()}
+                                        onClick={() => void runAction('importLog', async () => {
+                                            const parsed = JSON.parse(importText);
+                                            await overlaysApi.importLog(parsed, importMode);
+                                        })}
+                                    >
+                                        <Upload className="h-4 w-4" /> {t('overlays.actions.importLog')}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy !== null || jobRunning || !workerReady}
+                                        onClick={() => startBackgroundJob('reconcile', () => overlaysApi.reconcile())}
+                                    >
+                                        {t('overlays.actions.reconcileDryRun')}
+                                    </button>
+                                </div>
+                                {reconcile && (
+                                    <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
+                                        <p className="font-semibold">{t('overlays.reconcile.title')}</p>
+                                        <p className="mt-1 text-muted">
+                                            {t('overlays.reconcile.summary', {
+                                                add: reconcile.wouldAddCount ?? 0,
+                                                convert: reconcile.wouldConvertCount ?? 0,
+                                                remove: reconcile.wouldRemoveCount ?? 0,
+                                            })}
+                                        </p>
+                                    </div>
+                                )}
+                                {!reconcile && summary?.command === 'reconcile' && (
+                                    <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
+                                        <p className="font-semibold">{t('overlays.reconcile.title')}</p>
+                                        <p className="mt-1 text-muted">
+                                            {t('overlays.reconcile.summary', {
+                                                add: summary.wouldAddCount ?? 0,
+                                                convert: summary.wouldConvertCount ?? 0,
+                                                remove: summary.wouldRemoveCount ?? 0,
+                                            })}
+                                        </p>
+                                    </div>
+                                )}
+                            </DashboardPanel>
+                        </div>
+                    ) : null}
                 </div>
             )}
 
-            {tab === 'shows' && (
+            {tab === 'tracked' && (
                 <div className="space-y-4">
                 <DashboardPanel
                     title={t('overlays.shows.title')}
@@ -3674,9 +3979,126 @@ export const OverlaysDashboard: React.FC = () => {
                 </div>
             )}
 
-            {tab === 'collections' && (
+            {tab === 'badges' && (
                 <div className="space-y-4">
-                    {editingRuleId ? collectionRuleForm : null}
+                    <DashboardPanel
+                        title={t('overlays.badges.settingsTitle')}
+                        subtitle={t('overlays.badges.settingsSubtitle')}
+                    >
+                        <SettingsToggleRow
+                            title={t('overlays.jobs.collections.enableFeature')}
+                            description={t('overlays.jobs.collections.firstWins')}
+                            checked={configDraft.customCollectionOverlaysEnabled === true}
+                            onChange={(customCollectionOverlaysEnabled) => setConfigDraft((prev) => ({
+                                ...prev,
+                                customCollectionOverlaysEnabled,
+                            }))}
+                        />
+                        <SettingsToggleRow
+                            title={t('overlays.jobs.collections.restampOnCollexions')}
+                            description={t('overlays.jobs.collections.restampOnCollexionsHint')}
+                            checked={configDraft.restampOnCollexionsUpdate === true}
+                            onChange={(restampOnCollexionsUpdate) => setConfigDraft((prev) => ({
+                                ...prev,
+                                restampOnCollexionsUpdate,
+                            }))}
+                            disabled={configDraft.customCollectionOverlaysEnabled !== true}
+                        />
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
+                                <Save className="h-4 w-4" /> {t('overlays.actions.save')}
+                            </button>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy !== null || jobRunning || !workerReady}
+                                onClick={() => startBackgroundJob('previewCollections', () => overlaysApi.preview({ bundle: 'collections' }))}
+                            >
+                                {t('overlays.actions.previewCollections')}
+                            </button>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy !== null || jobRunning || !workerReady}
+                                onClick={() => startBackgroundJob('runCollections', () => overlaysApi.run({ preview: false, bundle: 'collections' }))}
+                            >
+                                {t('overlays.actions.runCollections')}
+                            </button>
+                        </div>
+                    </DashboardPanel>
+
+                    <DashboardPanel
+                        title={t('overlays.badges.listTitle', { count: collectionRules.length })}
+                        subtitle={t('overlays.badges.listSubtitle')}
+                    >
+                        {collectionRules.length === 0 ? (
+                            <p className="text-sm text-muted">{t('overlays.jobs.collections.emptyRules')}</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {collectionRules.map((rule) => {
+                                    const libs = ruleLibraries(rule);
+                                    const titles = ruleCollectionLabel(rule);
+                                    const thumbId = String(rule.image || '').trim();
+                                    return (
+                                        <div
+                                            key={rule.id}
+                                            className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-black/25 p-3"
+                                        >
+                                            {thumbId ? (
+                                                <img
+                                                    src={`/api/overlays/preset-file?id=${encodeURIComponent(thumbId)}&kind=season&t=${sampleBust}`}
+                                                    alt=""
+                                                    className="h-12 w-12 shrink-0 rounded-md border border-border/60 object-contain bg-background/40"
+                                                />
+                                            ) : (
+                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background/40 text-muted">
+                                                    <FolderKanban className="h-4 w-4" />
+                                                </div>
+                                            )}
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate font-semibold text-text">
+                                                    {rule.name || titles || rule.id}
+                                                </p>
+                                                <p className="mt-0.5 truncate text-xs text-muted">
+                                                    {[libs.join(', '), titles].filter(Boolean).join(' · ') || '—'}
+                                                </p>
+                                            </div>
+                                            <div className="flex shrink-0 flex-wrap gap-2">
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-1 text-xs font-semibold text-plex hover:underline disabled:opacity-50"
+                                                    disabled={busy !== null || jobRunning}
+                                                    onClick={() => beginEditCollectionRule(rule)}
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                    {t('overlays.jobs.collections.editRule')}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex items-center gap-1 text-xs font-semibold text-red-300 hover:underline disabled:opacity-50"
+                                                    disabled={busy !== null || jobRunning}
+                                                    onClick={() => void removeCollectionOverlayRule(rule.id)}
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                    {t('overlays.jobs.collections.deleteRule')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </DashboardPanel>
+
+                    <DashboardPanel
+                        title={editingRuleId
+                            ? t('overlays.jobs.collections.editTitle')
+                            : t('overlays.badges.wizardTitle')}
+                        subtitle={t('overlays.badges.wizardSubtitle')}
+                    >
+                        {collectionRuleForm}
+                    </DashboardPanel>
+
                     <DashboardPanel
                         title={t('overlays.kometa.trackedCollectionsTitle', { count: collectionTrackedCount })}
                         subtitle={t('overlays.kometa.trackedCollectionsSubtitle')}
@@ -3866,8 +4288,33 @@ export const OverlaysDashboard: React.FC = () => {
                 </div>
             )}
 
-            {tab === 'gallery' && (
-                <DashboardPanel title={t('overlays.gallery.title')} subtitle={t('overlays.gallery.subtitle')}>
+            {tab === 'look' && (
+                <div className="space-y-4">
+                    <p className="text-sm text-muted">{t('overlays.look.intro')}</p>
+                    <PlacementEditor
+                        placement={placementDraft}
+                        seasonPresetId={configDraft.overlayPresetId || 'new-season'}
+                        episodePresetId={configDraft.episodeOverlayPresetId || 'new-episode'}
+                        recentlyPresetId={configDraft.recentlyAddedPresetId || 'recently-added'}
+                        collectionPresetId={collectionPresetPreviewId}
+                        collectionRules={collectionRules.map((r) => ({
+                            id: r.id,
+                            name: r.name || r.collectionTitle || r.id,
+                            image: r.image,
+                        }))}
+                        seasonPresetOptions={seasonPresetOptions}
+                        episodePresetOptions={episodePresetOptions}
+                        recentlyPresetOptions={recentlyPresetOptions}
+                        sampleBust={sampleBust}
+                        busy={busy !== null}
+                        onChange={(next) => setConfigDraft((prev) => ({ ...prev, placement: next }))}
+                        onSeasonPresetChange={(overlayPresetId) => setConfigDraft((prev) => ({ ...prev, overlayPresetId }))}
+                        onEpisodePresetChange={(episodeOverlayPresetId) => setConfigDraft((prev) => ({ ...prev, episodeOverlayPresetId }))}
+                        onRecentlyPresetChange={(recentlyAddedPresetId) => setConfigDraft((prev) => ({ ...prev, recentlyAddedPresetId }))}
+                        onSave={() => void savePlacement()}
+                        onResetKind={resetPlacementKind}
+                    />
+                    <DashboardPanel title={t('overlays.gallery.title')} subtitle={t('overlays.gallery.subtitle')}>
                     <div className="mb-3 flex flex-wrap gap-2">
                         <button
                             type="button"
@@ -3950,236 +4397,6 @@ export const OverlaysDashboard: React.FC = () => {
                         </div>
                     )}
                 </DashboardPanel>
-            )}
-
-            {tab === 'placement' && (
-                <PlacementEditor
-                    placement={placementDraft}
-                    seasonPresetId={configDraft.overlayPresetId || 'new-season'}
-                    episodePresetId={configDraft.episodeOverlayPresetId || 'new-episode'}
-                    recentlyPresetId={configDraft.recentlyAddedPresetId || 'recently-added'}
-                    collectionPresetId={collectionPresetPreviewId}
-                    collectionRules={collectionRules.map((r) => ({
-                        id: r.id,
-                        name: r.name || r.collectionTitle || r.id,
-                        image: r.image,
-                    }))}
-                    seasonPresetOptions={seasonPresetOptions}
-                    episodePresetOptions={episodePresetOptions}
-                    recentlyPresetOptions={recentlyPresetOptions}
-                    sampleBust={sampleBust}
-                    busy={busy !== null}
-                    onChange={(next) => setConfigDraft((prev) => ({ ...prev, placement: next }))}
-                    onSeasonPresetChange={(overlayPresetId) => setConfigDraft((prev) => ({ ...prev, overlayPresetId }))}
-                    onEpisodePresetChange={(episodeOverlayPresetId) => setConfigDraft((prev) => ({ ...prev, episodeOverlayPresetId }))}
-                    onRecentlyPresetChange={(recentlyAddedPresetId) => setConfigDraft((prev) => ({ ...prev, recentlyAddedPresetId }))}
-                    onSave={() => void savePlacement()}
-                    onResetKind={resetPlacementKind}
-                />
-            )}
-
-            {tab === 'advanced' && (
-                <div className="space-y-4">
-                    <DashboardPanel title={t('overlays.settings.title')} subtitle={t('overlays.settings.subtitle')}>
-                        <SettingsToggleRow
-                            title={t('overlays.settings.moduleEnabled')}
-                            checked={configDraft.enabled !== false}
-                            onChange={(enabled) => setConfigDraft((prev) => ({ ...prev, enabled }))}
-                        />
-                        <SettingsToggleRow
-                            title={t('overlays.settings.defaultPreviewMode')}
-                            checked={configDraft.previewMode === true}
-                            onChange={(previewMode) => setConfigDraft((prev) => ({ ...prev, previewMode }))}
-                        />
-                        <SettingsToggleRow
-                            title={t('overlays.settings.skipKometa')}
-                            checked={configDraft.skipIfKometaOverlayLabel !== false}
-                            onChange={(skipIfKometaOverlayLabel) => setConfigDraft((prev) => ({ ...prev, skipIfKometaOverlayLabel }))}
-                        />
-                        <SettingsToggleRow
-                            title={t('overlays.settings.bannersAddOverlayLabel')}
-                            description={t('overlays.settings.bannersAddOverlayLabelHint')}
-                            checked={configDraft.bannersAddOverlayLabel !== false}
-                            onChange={(bannersAddOverlayLabel) => setConfigDraft((prev) => ({ ...prev, bannersAddOverlayLabel }))}
-                        />
-
-                        <div className="border-b border-border/40 py-4">
-                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                    <span className={fieldLabelClass}>{t('overlays.settings.visualSample')}</span>
-                                    <p className="mt-1 max-w-2xl text-[11px] text-muted">
-                                        {t('overlays.settings.visualSampleHint')}
-                                    </p>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <button
-                                        type="button"
-                                        className={buttonClass}
-                                        disabled={busy !== null || jobRunning}
-                                        onClick={() => {
-                                            setSampleShowKey('');
-                                            void regenerateSamples({ showRatingKey: '' });
-                                        }}
-                                    >
-                                        {t('overlays.actions.randomSample')}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className={buttonClass}
-                                        disabled={busy !== null || jobRunning}
-                                        onClick={() => void regenerateSamples()}
-                                    >
-                                        {busy === 'sample' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                                        {t('overlays.actions.refreshSample')}
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="mb-3 grid gap-3 md:grid-cols-2">
-                                <label className="block">
-                                    <span className={fieldLabelClass}>{t('overlays.settings.sampleSearch')}</span>
-                                    <input
-                                        className={fieldInputClass}
-                                        value={sampleQuery}
-                                        onChange={(e) => setSampleQuery(e.target.value)}
-                                        placeholder={t('overlays.settings.sampleSearchPlaceholder')}
-                                    />
-                                </label>
-                                <label className="block">
-                                    <span className={fieldLabelClass}>{t('overlays.settings.sampleShow')}</span>
-                                    <CustomSelect
-                                        className="mt-1.5"
-                                        value={sampleShowKey || ''}
-                                        onChange={(value) => setSampleShowKey(value)}
-                                        options={[
-                                            { value: '', label: t('overlays.settings.sampleRandom') },
-                                            ...sampleCandidates.map((s) => ({ value: s.ratingKey, label: s.title })),
-                                        ]}
-                                    />
-                                </label>
-                            </div>
-                            {sampleError ? (
-                                <p className="mb-3 text-xs text-red-400">{sampleError}</p>
-                            ) : null}
-                            {sampleMeta?.exists
-                                && (sampleMeta.showSource === 'placeholder' || sampleMeta.episodeSource === 'placeholder') ? (
-                                <p className="mb-3 text-xs text-amber-200/90">{t('overlays.settings.visualSamplePlaceholderNote')}</p>
-                            ) : null}
-                            {sampleMeta?.exists ? (
-                                <div className="flex flex-wrap items-end gap-6">
-                                    <figure className="space-y-2">
-                                        <figcaption className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                                            {t('overlays.settings.visualSampleShow')}
-                                        </figcaption>
-                                        <img
-                                            src={overlaysApi.sampleImageUrl('show', sampleBust)}
-                                            alt={sampleMeta.showTitle || 'New Season sample'}
-                                            className="h-[180px] w-[120px] rounded-md border border-border object-cover bg-background/60"
-                                        />
-                                        <figcaption className="max-w-[120px] truncate text-xs text-text" title={sampleMeta.showTitle || ''}>
-                                            {sampleMeta.showTitle || '—'}
-                                        </figcaption>
-                                    </figure>
-                                    <figure className="space-y-2">
-                                        <figcaption className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                                            {t('overlays.settings.visualSampleEpisode')}
-                                        </figcaption>
-                                        <img
-                                            src={overlaysApi.sampleImageUrl('episode', sampleBust)}
-                                            alt={sampleMeta.episodeTitle || 'New Episode sample'}
-                                            className="h-[135px] w-[240px] rounded-md border border-border object-cover bg-background/60"
-                                        />
-                                        <figcaption
-                                            className="max-w-[240px] truncate text-xs text-text"
-                                            title={[sampleMeta.showTitleForEp, sampleMeta.episodeTitle].filter(Boolean).join(' — ')}
-                                        >
-                                            {[sampleMeta.showTitleForEp, sampleMeta.episodeTitle].filter(Boolean).join(' — ') || '—'}
-                                        </figcaption>
-                                    </figure>
-                                </div>
-                            ) : (
-                                <p className="text-sm text-muted">
-                                    {busy === 'sample' ? t('overlays.actionStarted', { action: actionLabel('sample') }) : t('overlays.settings.visualSampleEmpty')}
-                                </p>
-                            )}
-                        </div>
-
-                        {renderLibraryPicker('librarySectionIds', 'overlays.settings.librariesHintAdvanced', 'all')}
-
-                        <div className="flex flex-wrap gap-2 border-t border-border/40 pt-4">
-                            <button
-                                type="button"
-                                className={primaryButtonClass}
-                                disabled={busy !== null}
-                                onClick={() => void saveSettings()}
-                            >
-                                <Save className="h-4 w-4" /> {t('overlays.actions.saveSettings')}
-                            </button>
-                        </div>
-                    </DashboardPanel>
-
-                    <DashboardPanel title={t('overlays.import.title')} subtitle={t('overlays.import.subtitle')}>
-                        <p className="text-sm text-muted">
-                            {t('overlays.import.bodyBeforeLog')} <code>overlaid_log.json</code> {t('overlays.import.bodyAfterLog')}
-                        </p>
-                        <textarea
-                            className="mt-3 min-h-[220px] w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex"
-                            placeholder='{"12345":{"title":"Example Show","timestamp":"2025-01-15T14:30:00","preview_only":false}}'
-                            value={importText}
-                            onChange={(e) => setImportText(e.target.value)}
-                        />
-                        <div className="mt-4 flex flex-wrap items-center gap-3">
-                            <CustomSelect
-                                className="w-40"
-                                compact
-                                value={importMode}
-                                onChange={(value) => setImportMode(value === 'replace' ? 'replace' : 'merge')}
-                                options={importModeOptions}
-                            />
-                            <button
-                                type="button"
-                                className={primaryButtonClass}
-                                disabled={busy !== null || !importText.trim()}
-                                onClick={() => void runAction('importLog', async () => {
-                                    const parsed = JSON.parse(importText);
-                                    await overlaysApi.importLog(parsed, importMode);
-                                })}
-                            >
-                                <Upload className="h-4 w-4" /> {t('overlays.actions.importLog')}
-                            </button>
-                            <button
-                                type="button"
-                                className={buttonClass}
-                                disabled={busy !== null || jobRunning || !workerReady}
-                                onClick={() => startBackgroundJob('reconcile', () => overlaysApi.reconcile())}
-                            >
-                                {t('overlays.actions.reconcileDryRun')}
-                            </button>
-                        </div>
-                        {reconcile && (
-                            <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
-                                <p className="font-semibold">{t('overlays.reconcile.title')}</p>
-                                <p className="mt-1 text-muted">
-                                    {t('overlays.reconcile.summary', {
-                                        add: reconcile.wouldAddCount ?? 0,
-                                        convert: reconcile.wouldConvertCount ?? 0,
-                                        remove: reconcile.wouldRemoveCount ?? 0,
-                                    })}
-                                </p>
-                            </div>
-                        )}
-                        {!reconcile && summary?.command === 'reconcile' && (
-                            <div className="mt-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
-                                <p className="font-semibold">{t('overlays.reconcile.title')}</p>
-                                <p className="mt-1 text-muted">
-                                    {t('overlays.reconcile.summary', {
-                                        add: summary.wouldAddCount ?? 0,
-                                        convert: summary.wouldConvertCount ?? 0,
-                                        remove: summary.wouldRemoveCount ?? 0,
-                                    })}
-                                </p>
-                            </div>
-                        )}
-                    </DashboardPanel>
                 </div>
             )}
 
@@ -4190,6 +4407,21 @@ export const OverlaysDashboard: React.FC = () => {
                             <Loader2 className="h-4 w-4 animate-spin" /> {t('overlays.activity.running', { command: runningCommandLabel })}
                         </p>
                     )}
+                    {!status?.running && summary ? (
+                        <div className="mb-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
+                            <p className="font-semibold">{t('overlays.home.lastRunTitle')}</p>
+                            <p className="mt-1 text-muted">
+                                {t('overlays.home.lastRunBody', {
+                                    command: String(summary.command || '—'),
+                                    added: String(summary.added ?? 0),
+                                    removed: String(summary.removed ?? 0),
+                                    episodesAdded: String(summary.episodesAdded ?? 0),
+                                    episodesRemoved: String(summary.episodesRemoved ?? 0),
+                                    preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
+                                })}
+                            </p>
+                        </div>
+                    ) : null}
                     {activity.length === 0 ? (
                         <p className="text-sm text-muted">{t('overlays.activity.empty')}</p>
                     ) : (

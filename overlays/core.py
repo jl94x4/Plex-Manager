@@ -1593,6 +1593,14 @@ def remove_show_overlay(
         # Fall back to legacy full-poster restore if stack had nothing.
         restored = _restore_from_backup(show, paths, rating_key, progress)
         if restored:
+            _sync_banner_overlay_label(
+                show,
+                paths=paths,
+                rating_key=rating_key,
+                has_overlays=False,
+                config=config,
+                progress=progress,
+            )
             return True
 
     # Fallback when no on-disk backup (e.g. migrated logs from the standalone tool).
@@ -1602,6 +1610,15 @@ def remove_show_overlay(
     latest = _latest_season(show)
     if latest:
         _reset_poster(latest)
+    if ok and paths is not None and rating_key:
+        _sync_banner_overlay_label(
+            show,
+            paths=paths,
+            rating_key=rating_key,
+            has_overlays=False,
+            config=config,
+            progress=progress,
+        )
     return ok
 
 

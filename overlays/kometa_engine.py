@@ -1145,10 +1145,7 @@ def _add_overlay_label(item) -> None:
 
 
 def _remove_overlay_label(item) -> None:
-    try:
-        item.removeLabel("Overlay")
-    except Exception:
-        pass
+    _clear_plex_labels(item, ["Overlay"])
 
 
 def _normalize_label_name(value: object) -> str:
@@ -1171,6 +1168,114 @@ def _winner_label_names(winners: dict) -> list[str]:
     return names
 
 
+def _labels_from_families(families: object) -> list[str]:
+    """Rebuild stamp labels from a kometa log families map (legacy rows)."""
+    if not isinstance(families, dict) or not families:
+        return []
+    winners: dict[str, Winner] = {}
+    for family, meta in families.items():
+        winner = winner_from_log(str(family), meta if isinstance(meta, dict) else None)
+        if winner is not None:
+            winners[str(family)] = winner
+    return _winner_label_names(winners)
+
+
+def _known_layer_stamp_label_names() -> set[str]:
+    """Display names we stamp as Plex Labels (resolution / audio / format + Overlay)."""
+    from kometa_detect import RESOLUTION_VARIANTS, _AUDIO_RE, _VIDEO_RE
+
+    names = {str(name).strip() for name, *_ in RESOLUTION_VARIANTS if str(name).strip()}
+    names.update(str(name).strip() for name, *_ in _AUDIO_RE if str(name).strip())
+    names.update(str(name).strip() for name, *_ in _VIDEO_RE if str(name).strip())
+    names.add("Overlay")
+    return names
+
+
+def _entry_labels_to_clear(entry: dict | None) -> list[str]:
+    """Labels that should disappear when a Layer stamp is fully reverted."""
+    entry = entry if isinstance(entry, dict) else {}
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def _add(value: object) -> None:
+        label = _normalize_label_name(value)
+        if not label:
+            return
+        key = label.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        names.append(label)
+
+    stored = entry.get("overlayLabels")
+    if isinstance(stored, list):
+        for value in stored:
+            _add(value)
+    for value in _labels_from_families(entry.get("families")):
+        _add(value)
+    # Always drop the Kometa-compatible Overlay marker on a full Layer revert.
+    _add("Overlay")
+    return names
+
+
+def _clear_plex_labels(
+    item,
+    labels: list[str],
+    *,
+    progress: ProgressFn | None = None,
+    also_match_known_layer: bool = False,
+) -> list[str]:
+    """Remove Plex Labels by matching live MediaTag objects (reload-safe)."""
+    want = [_normalize_label_name(name) for name in labels]
+    want = [name for name in want if name]
+    want_keys = {name.casefold() for name in want}
+
+    try:
+        item.reload()
+    except Exception:
+        pass
+
+    present = list(getattr(item, "labels", None) or [])
+    to_remove: list = []
+    removed_names: list[str] = []
+    known = _known_layer_stamp_label_names() if also_match_known_layer else set()
+    known_keys = {name.casefold() for name in known}
+
+    for lab in present:
+        tag = _normalize_label_name(getattr(lab, "tag", None) or lab)
+        if not tag:
+            continue
+        key = tag.casefold()
+        if key in want_keys or (also_match_known_layer and key in known_keys):
+            to_remove.append(lab)
+            if tag not in removed_names:
+                removed_names.append(tag)
+
+    if not to_remove and want:
+        # Local labels cache empty / missing — still ask Plex to drop by name.
+        to_remove = list(want)
+        removed_names = list(want)
+
+    if not to_remove:
+        return []
+
+    try:
+        item.removeLabel(to_remove)
+    except Exception:
+        for lab in to_remove:
+            try:
+                item.removeLabel(getattr(lab, "tag", None) or lab)
+            except Exception:
+                pass
+    try:
+        item.reload()
+    except Exception:
+        pass
+    if removed_names:
+        _progress(progress, f"Cleared Plex label(s): {', '.join(removed_names)}")
+    return removed_names
+
+
 def _sync_plex_labels(item, wanted: list[str], previous: list[str] | None = None) -> list[str]:
     """Add/remove Plex Labels so the item matches the current overlay set."""
     want = [_normalize_label_name(name) for name in wanted]
@@ -1179,18 +1284,22 @@ def _sync_plex_labels(item, wanted: list[str], previous: list[str] | None = None
     prev = [name for name in prev if name]
 
     want_keys = {name.casefold() for name in want}
-    prev_keys = {name.casefold() for name in prev}
+    to_remove = [name for name in prev if name.casefold() not in want_keys]
+    if to_remove:
+        _clear_plex_labels(item, to_remove)
 
-    for name in prev:
-        if name.casefold() in want_keys:
-            continue
-        try:
-            item.removeLabel(name)
-        except Exception:
-            pass
+    try:
+        item.reload()
+    except Exception:
+        pass
 
+    present_keys = {
+        _normalize_label_name(getattr(lab, "tag", None) or lab).casefold()
+        for lab in (getattr(item, "labels", None) or [])
+        if _normalize_label_name(getattr(lab, "tag", None) or lab)
+    }
     for name in want:
-        if name.casefold() in prev_keys:
+        if name.casefold() in present_keys:
             continue
         try:
             item.addLabel(name)
@@ -1241,11 +1350,16 @@ def _restore_item(plex, paths: dict, key: str, entry: dict, progress: ProgressFn
         ok = _reset_poster(item)
         if ok:
             _progress(progress, f"Reset poster to provider art: {entry.get('title') or key}")
-    overlay_labels = entry.get("overlayLabels") if isinstance(entry.get("overlayLabels"), list) else []
-    if overlay_labels:
-        _sync_plex_labels(item, [], previous=overlay_labels)
-    if bool(entry.get("labeled")):
-        _remove_overlay_label(item)
+    # Always scrub Overlay + stamp labels. Prefer log metadata; for orphan backups
+    # also drop known Layer stamp names still present on the item (e.g. 4K).
+    labels = _entry_labels_to_clear(entry)
+    orphan = not bool(entry.get("overlayLabels")) and not bool(entry.get("families"))
+    _clear_plex_labels(
+        item,
+        labels,
+        progress=progress,
+        also_match_known_layer=orphan,
+    )
     # Always scrub leftover backup so orphan rows cannot stick in the UI.
     if not _clear_backup(paths, key) and _backup_file(paths, key).exists():
         _progress(progress, f"Warning: Layer backup still on disk for {key} after revert")
