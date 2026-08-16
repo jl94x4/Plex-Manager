@@ -164,6 +164,9 @@ export const PlacementEditor: React.FC<Props> = ({
         orig: OverlayPlacementKind;
         artW: number;
         artH: number;
+        startBoxW?: number;
+        bannerNatW?: number;
+        bannerNatH?: number;
     } | null>(null);
 
     const kind = placementKindFromTarget(targetId);
@@ -231,6 +234,27 @@ export const PlacementEditor: React.FC<Props> = ({
         });
     }, [placement, kind, current, onChange]);
 
+    /** When maxHeight is binding, width alone cannot grow the badge — lift maxHeight too. */
+    const patchSizeForWidth = useCallback((width: number) => {
+        const nextW = Math.max(0.05, Math.min(1, width));
+        const patch: Partial<OverlayPlacementKind> = { width: nextW };
+        const maxH = current.maxHeight;
+        if (
+            typeof maxH === 'number'
+            && Number.isFinite(maxH)
+            && bannerNat.w > 0
+            && artSize.w > 0
+            && artSize.h > 0
+        ) {
+            const hAtWidth = (bannerNat.h / bannerNat.w) * (artSize.w * nextW);
+            const allowedH = artSize.h * Math.max(0.05, Math.min(1, maxH));
+            if (hAtWidth > allowedH + 0.5) {
+                patch.maxHeight = Math.max(0.05, Math.min(1, hAtWidth / artSize.h));
+            }
+        }
+        patchKind(patch);
+    }, [artSize.h, artSize.w, bannerNat.h, bannerNat.w, current.maxHeight, patchKind]);
+
     const onPointerDownMove = (e: React.PointerEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -249,6 +273,7 @@ export const PlacementEditor: React.FC<Props> = ({
         e.preventDefault();
         e.stopPropagation();
         (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+        const startBox = bannerBox(artSize.w, artSize.h, bannerNat.w, bannerNat.h, current);
         dragRef.current = {
             mode: 'resize',
             startX: e.clientX,
@@ -256,6 +281,9 @@ export const PlacementEditor: React.FC<Props> = ({
             orig: { ...current },
             artW: artSize.w,
             artH: artSize.h,
+            startBoxW: startBox.width,
+            bannerNatW: bannerNat.w,
+            bannerNatH: bannerNat.h,
         };
     };
 
@@ -271,8 +299,18 @@ export const PlacementEditor: React.FC<Props> = ({
                 patchKind({ x: nx, y: ny });
                 return;
             }
-            const nextW = Math.max(0.05, Math.min(1, drag.orig.width + dx / drag.artW));
-            patchKind({ width: nextW });
+            // Size from the visible box so maxHeight cannot swallow the drag.
+            const startBoxW = Math.max(1, drag.startBoxW || (drag.artW * (drag.orig.width || 0.2)));
+            const desiredW = Math.max(8, startBoxW + dx);
+            const natW = Math.max(1, drag.bannerNatW || 1);
+            const natH = Math.max(1, drag.bannerNatH || 1);
+            const desiredH = desiredW * (natH / natW);
+            const nextWidth = Math.max(0.05, Math.min(1, desiredW / drag.artW));
+            const patch: Partial<OverlayPlacementKind> = { width: nextWidth };
+            if (typeof drag.orig.maxHeight === 'number' && Number.isFinite(drag.orig.maxHeight)) {
+                patch.maxHeight = Math.max(0.05, Math.min(1, desiredH / drag.artH));
+            }
+            patchKind(patch);
         };
         const onUp = () => {
             dragRef.current = null;
@@ -533,7 +571,7 @@ export const PlacementEditor: React.FC<Props> = ({
                             value={Math.round((current.width || 0.5) * 100)}
                             min={5}
                             max={100}
-                            onChange={(n) => patchKind({ width: Math.max(0.05, Math.min(1, (Number.isFinite(n) ? n : 50) / 100)) })}
+                            onChange={(n) => patchSizeForWidth((Number.isFinite(n) ? n : 50) / 100)}
                         />
                         <CompactField
                             label={t('overlays.placement.maxHeight')}
