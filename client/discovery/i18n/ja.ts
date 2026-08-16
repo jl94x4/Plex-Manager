@@ -60,6 +60,25 @@ Object.assign(ja, { homeDashboard: { ...ja.homeDashboard, opsSnapshot: {
     empty: { noIncidents: 'インシデントはありません', unavailable: '運用スナップショットは利用できません。' },
 } } });
 
+Object.assign(ja, { settings: { ...ja.settings, streamKillRules: {
+    title: 'ストリーム停止ルール',
+    description: { beforeInterval: 'Plexストリームを自動停止するルールを定義します。ルールは', interval: '15秒', afterInterval: 'ごとに評価されます。条件は「', andAllMatch: '」（すべて一致）か、「', orAnyMatch: '」（いずれかが一致）で組み合わせます。', afterLogic: '停止メッセージはユーザーのPlexクライアント画面に表示されます。' },
+    fields: { isTranscoding: 'トランスコード中', videoResolution: '映像解像度', transcodeVideoDecision: '映像トランスコードの判定', mediaType: 'メディア種別', state: '再生状態', sessionLocation: '接続場所', videoCodec: '映像コーデック', audioCodec: '音声コーデック', bandwidth: '帯域幅 (Mbps)', user: 'ユーザー名', playerProduct: 'プレーヤーアプリ', playerTitle: 'プレーヤー/デバイス名' },
+    operators: { equals: '次と等しい', not_equals: '次と等しくない', contains: '次を含む', not_contains: '次を含まない', greater_than: '次より大きい', less_than: '次より小さい', is: '次である' },
+    boolean: { yesTrue: 'はい / 真', noFalse: 'いいえ / 偽' },
+    options: { transcode: 'トランスコード', copy: 'コピー', directplay: '直接再生', movie: '映画', episode: 'エピソード', track: 'トラック', playing: '再生中', paused: '一時停止中', buffering: 'バッファリング中', cellular: 'モバイル通信' },
+    placeholders: { numberExample: '例: 20', playerExample: '例: Plex Web', ruleName: 'ルール名...' },
+    empty: { title: '設定済みのルールはありません', description: '以下にルールを追加して、サーバーの自動保護を開始してください。' },
+    rule: { conditionCount: '{count} 件の条件', conditionCount_plural: '{count} 件の条件', logic: 'ロジック:' },
+    status: { active: '有効', disabled: '無効' },
+    logic: { and: 'かつ', or: 'または' },
+    match: { title: '一致', followingConditions: '以下の条件' },
+    actions: { remove: '削除', delete: '削除', addCondition: '条件を追加', addRule: '新しいルールを追加', saveRules: 'ルールを保存' },
+    editor: { killMessage: '停止メッセージ', killMessageHint: '(ユーザーのPlexクライアントに表示)', killMessagePlaceholder: 'ストリームはサーバー管理者によって停止されました。' },
+    toasts: { loadFailed: 'ルールを読み込めませんでした', saved: 'ストリームルールを保存しました。', saveFailed: 'ルールを保存できませんでした' },
+    defaults: { newRuleName: '新しいルール', killMessage: 'ストリームはサーバー管理者によって停止されました。' },
+} } });
+
 Object.assign(ja, { homeDashboard: { ...ja.homeDashboard, nowPlayingCompanion: {
     ...ja.homeDashboard.nowPlayingCompanion,
     timeline: { release: '公開日', runtime: '上映時間', episodeRuntime: 'エピソード時間', genres: 'ジャンル', tmdbScore: 'TMDBスコア', status: '状態', currentEpisode: '現在のエピソード', episodeAirDate: 'エピソードの放送日' },

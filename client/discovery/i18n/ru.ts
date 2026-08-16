@@ -60,6 +60,25 @@ Object.assign(ru, { homeDashboard: { ...ru.homeDashboard, opsSnapshot: {
     empty: { noIncidents: 'Нет инцидентов', unavailable: 'Оперативная сводка недоступна.' },
 } } });
 
+Object.assign(ru, { settings: { ...ru.settings, streamKillRules: {
+    title: 'Правила остановки потоков',
+    description: { beforeInterval: 'Настройте правила, которые автоматически останавливают потоки Plex. Правила проверяются каждые ', interval: '15 секунд', afterInterval: '. Объединяйте условия с помощью ', andAllMatch: ' (должны совпасть все) или ', orAnyMatch: ' (достаточно совпадения любого). ', afterLogic: 'Сообщение об остановке появится в клиенте Plex пользователя.' },
+    fields: { isTranscoding: 'Выполняется транскодирование', videoResolution: 'Разрешение видео', transcodeVideoDecision: 'Решение о транскодировании', mediaType: 'Тип медиа', state: 'Состояние воспроизведения', sessionLocation: 'Расположение подключения', videoCodec: 'Видеокодек', audioCodec: 'Аудиокодек', bandwidth: 'Пропускная способность (Mbps)', user: 'Имя пользователя', playerProduct: 'Приложение проигрывателя', playerTitle: 'Имя проигрывателя/устройства' },
+    operators: { equals: 'равно', not_equals: 'не равно', contains: 'содержит', not_contains: 'не содержит', greater_than: 'больше', less_than: 'меньше', is: 'является' },
+    boolean: { yesTrue: 'Да / Истина', noFalse: 'Нет / Ложь' },
+    options: { transcode: 'Транскодирование', copy: 'Копирование', directplay: 'Прямое воспроизведение', movie: 'Фильм', episode: 'Эпизод', track: 'Трек', playing: 'Воспроизводится', paused: 'Приостановлено', buffering: 'Буферизация', cellular: 'Мобильная сеть' },
+    placeholders: { numberExample: 'например, 20', playerExample: 'например, Plex Web', ruleName: 'Название правила...' },
+    empty: { title: 'Правила не настроены', description: 'Добавьте правило ниже, чтобы автоматически защищать сервер.' },
+    rule: { conditionCount: '{count} условие', conditionCount_plural: 'Количество условий: {count}', logic: 'Логика:' },
+    status: { active: 'Активно', disabled: 'Отключено' },
+    logic: { and: 'И', or: 'ИЛИ' },
+    match: { title: 'Сопоставить', followingConditions: 'со следующими условиями' },
+    actions: { remove: 'Удалить', delete: 'Удалить', addCondition: 'Добавить условие', addRule: 'Добавить новое правило', saveRules: 'Сохранить правила' },
+    editor: { killMessage: 'Сообщение об остановке', killMessageHint: '(отображается в клиенте Plex пользователя)', killMessagePlaceholder: 'Ваш поток остановлен администратором сервера.' },
+    toasts: { loadFailed: 'Не удалось загрузить правила', saved: 'Правила потоков сохранены!', saveFailed: 'Не удалось сохранить правила' },
+    defaults: { newRuleName: 'Новое правило', killMessage: 'Ваш поток остановлен администратором сервера.' },
+} } });
+
 Object.assign(ru, { homeDashboard: { ...ru.homeDashboard, nowPlayingCompanion: {
     ...ru.homeDashboard.nowPlayingCompanion,
     timeline: { release: 'Премьера', runtime: 'Длительность', episodeRuntime: 'Длительность эпизода', genres: 'Жанры', tmdbScore: 'Оценка TMDB', status: 'Статус', currentEpisode: 'Текущий эпизод', episodeAirDate: 'Дата выхода эпизода' },

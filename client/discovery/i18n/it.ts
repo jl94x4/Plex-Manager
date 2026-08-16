@@ -60,6 +60,25 @@ Object.assign(it, { homeDashboard: { ...it.homeDashboard, opsSnapshot: {
     empty: { noIncidents: 'Nessun incidente', unavailable: 'Riepilogo operativo non disponibile.' },
 } } });
 
+Object.assign(it, { settings: { ...it.settings, streamKillRules: {
+    title: 'Regole di interruzione degli streaming',
+    description: { beforeInterval: 'Definisci regole che interrompono automaticamente gli streaming Plex. Le regole vengono valutate ogni ', interval: '15 secondi', afterInterval: '. Combina le condizioni con ', andAllMatch: ' (devono corrispondere tutte) oppure ', orAnyMatch: ' (deve corrisponderne almeno una). ', afterLogic: "Il messaggio di interruzione appare nel client Plex dell'utente." },
+    fields: { isTranscoding: 'In transcodifica', videoResolution: 'Risoluzione video', transcodeVideoDecision: 'Decisione di transcodifica', mediaType: 'Tipo di contenuto', state: 'Stato di riproduzione', sessionLocation: 'Posizione della connessione', videoCodec: 'Codec video', audioCodec: 'Codec audio', bandwidth: 'Larghezza di banda (Mbps)', user: 'Nome utente', playerProduct: 'App del player', playerTitle: 'Nome del player/dispositivo' },
+    operators: { equals: 'è uguale a', not_equals: 'non è uguale a', contains: 'contiene', not_contains: 'non contiene', greater_than: 'maggiore di', less_than: 'minore di', is: 'è' },
+    boolean: { yesTrue: 'Sì / Vero', noFalse: 'No / Falso' },
+    options: { transcode: 'Transcodifica', copy: 'Copia', directplay: 'Riproduzione diretta', movie: 'Film', episode: 'Episodio', track: 'Traccia', playing: 'In riproduzione', paused: 'In pausa', buffering: 'In buffering', cellular: 'Rete cellulare' },
+    placeholders: { numberExample: 'es. 20', playerExample: 'es. Plex Web', ruleName: 'Nome regola...' },
+    empty: { title: 'Nessuna regola configurata', description: 'Aggiungi una regola qui sotto per iniziare a proteggere automaticamente il tuo server.' },
+    rule: { conditionCount: '{count} condizione', conditionCount_plural: '{count} condizioni', logic: 'Logica:' },
+    status: { active: 'Attiva', disabled: 'Disattivata' },
+    logic: { and: 'E', or: 'O' },
+    match: { title: 'Corrispondenza', followingConditions: 'delle condizioni seguenti' },
+    actions: { remove: 'Rimuovi', delete: 'Elimina', addCondition: 'Aggiungi condizione', addRule: 'Aggiungi nuova regola', saveRules: 'Salva regole' },
+    editor: { killMessage: 'Messaggio di interruzione', killMessageHint: "(mostrato nel client Plex dell'utente)", killMessagePlaceholder: "Il tuo streaming è stato interrotto dall'amministratore del server." },
+    toasts: { loadFailed: 'Impossibile caricare le regole', saved: 'Regole di streaming salvate!', saveFailed: 'Impossibile salvare le regole' },
+    defaults: { newRuleName: 'Nuova regola', killMessage: "Il tuo streaming è stato interrotto dall'amministratore del server." },
+} } });
+
 Object.assign(it, { homeDashboard: { ...it.homeDashboard, nowPlayingCompanion: {
     ...it.homeDashboard.nowPlayingCompanion,
     timeline: { release: 'Uscita', runtime: 'Durata', episodeRuntime: 'Durata dell’episodio', genres: 'Generi', tmdbScore: 'Punteggio TMDB', status: 'Stato', currentEpisode: 'Episodio corrente', episodeAirDate: 'Data di trasmissione dell’episodio' },

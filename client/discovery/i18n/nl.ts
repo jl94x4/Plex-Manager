@@ -60,6 +60,25 @@ Object.assign(nl, { homeDashboard: { ...nl.homeDashboard, opsSnapshot: {
     empty: { noIncidents: 'Geen incidenten', unavailable: 'Operationeel overzicht niet beschikbaar.' },
 } } });
 
+Object.assign(nl, { settings: { ...nl.settings, streamKillRules: {
+    title: 'Regels voor het stoppen van streams',
+    description: { beforeInterval: 'Stel regels in die Plex-streams automatisch stoppen. Regels worden elke ', interval: '15 seconden', afterInterval: ' geëvalueerd. Combineer voorwaarden met ', andAllMatch: ' (ze moeten allemaal overeenkomen) of ', orAnyMatch: ' (er moet er minstens één overeenkomen). ', afterLogic: 'Het stopbericht verschijnt op het Plex-clientsscherm van de gebruiker.' },
+    fields: { isTranscoding: 'Wordt getranscodeerd', videoResolution: 'Videoresolutie', transcodeVideoDecision: 'Transcodebeslissing', mediaType: 'Mediatype', state: 'Afspeelstatus', sessionLocation: 'Verbindingslocatie', videoCodec: 'Videocodec', audioCodec: 'Audiocodec', bandwidth: 'Bandbreedte (Mbps)', user: 'Gebruikersnaam', playerProduct: 'Speler-app', playerTitle: 'Naam speler/apparaat' },
+    operators: { equals: 'is gelijk aan', not_equals: 'is niet gelijk aan', contains: 'bevat', not_contains: 'bevat niet', greater_than: 'groter dan', less_than: 'kleiner dan', is: 'is' },
+    boolean: { yesTrue: 'Ja / Waar', noFalse: 'Nee / Onwaar' },
+    options: { transcode: 'Transcoderen', copy: 'Kopiëren', directplay: 'Direct afspelen', movie: 'Film', episode: 'Aflevering', track: 'Track', playing: 'Wordt afgespeeld', paused: 'Gepauzeerd', buffering: 'Bufferen', cellular: 'Mobiel netwerk' },
+    placeholders: { numberExample: 'bijv. 20', playerExample: 'bijv. Plex Web', ruleName: 'Regelnaam...' },
+    empty: { title: 'Geen regels geconfigureerd', description: 'Voeg hieronder een regel toe om je server automatisch te beschermen.' },
+    rule: { conditionCount: '{count} voorwaarde', conditionCount_plural: '{count} voorwaarden', logic: 'Logica:' },
+    status: { active: 'Actief', disabled: 'Uitgeschakeld' },
+    logic: { and: 'EN', or: 'OF' },
+    match: { title: 'Overeenkomen', followingConditions: 'met de volgende voorwaarden' },
+    actions: { remove: 'Verwijderen', delete: 'Verwijderen', addCondition: 'Voorwaarde toevoegen', addRule: 'Nieuwe regel toevoegen', saveRules: 'Regels opslaan' },
+    editor: { killMessage: 'Stopbericht', killMessageHint: '(weergegeven in de Plex-client van de gebruiker)', killMessagePlaceholder: 'Je stream is gestopt door de serverbeheerder.' },
+    toasts: { loadFailed: 'Regels konden niet worden geladen', saved: 'Streamregels opgeslagen!', saveFailed: 'Regels konden niet worden opgeslagen' },
+    defaults: { newRuleName: 'Nieuwe regel', killMessage: 'Je stream is gestopt door de serverbeheerder.' },
+} } });
+
 Object.assign(nl, { homeDashboard: { ...nl.homeDashboard, nowPlayingCompanion: {
     ...nl.homeDashboard.nowPlayingCompanion,
     timeline: { release: 'Uitgave', runtime: 'Speelduur', episodeRuntime: 'Speelduur aflevering', genres: 'Genres', tmdbScore: 'TMDB-score', status: 'Status', currentEpisode: 'Huidige aflevering', episodeAirDate: 'Uitzenddatum aflevering' },
