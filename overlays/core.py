@@ -961,6 +961,22 @@ def _latest_season(show):
     return max(valid, key=lambda s: s.index)
 
 
+def _season_index(season) -> int | None:
+    try:
+        idx = getattr(season, "index", None)
+        if idx is None:
+            return None
+        return int(idx)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_returning_season(season) -> bool:
+    """New Season badges are only for season 2+ — never the show's first season."""
+    idx = _season_index(season)
+    return idx is not None and idx >= 2
+
+
 def _library_title(item) -> str:
     """Best-effort library/section title for log/UI columns."""
     for attr in ("librarySectionTitle", "sectionTitle"):
@@ -990,15 +1006,14 @@ def should_have_overlay(
         if skip_kometa and _has_kometa_overlay_label(show):
             meta["reason"] = "kometa_overlay_label"
             return False, meta
-        seasons = show.seasons()
-        if len(seasons) < 2:
-            meta["reason"] = "single_season"
-            return False, meta
         latest = _latest_season(show)
         if not latest:
             meta["reason"] = "no_season"
             return False, meta
         meta["seasonIndex"] = latest.index
+        if not _is_returning_season(latest):
+            meta["reason"] = "first_season"
+            return False, meta
         episodes = latest.episodes()
         episode1 = next((ep for ep in episodes if ep.index == 1), None)
         if not episode1:
@@ -1281,6 +1296,8 @@ def discover_eligible_shows(
     """
     Return (should_have_keys, meta_by_key, show_by_key) for shows whose *latest*
     season premiere (E01) falls inside the new-season window.
+
+    Season 1 (and specials) never qualify — "New Season" means a returning season.
     """
     should_have: set[str] = set()
     meta_by_key: dict[str, dict] = {}
@@ -1336,6 +1353,9 @@ def discover_eligible_shows(
                 # Only the show's current latest season qualifies as "new season".
                 if str(latest.ratingKey) != str(season.ratingKey):
                     continue
+                # Never badge season 1 (or specials) — "New Season" means a return.
+                if not _is_returning_season(latest):
+                    continue
                 if aired is None or aired < cutoff:
                     continue
                 should_have.add(key)
@@ -1381,6 +1401,8 @@ def discover_eligible_shows(
                     except Exception:
                         continue
                     if latest is None or str(latest.ratingKey) != str(season.ratingKey):
+                        continue
+                    if not _is_returning_season(latest):
                         continue
                     aired = resolver.resolve_episode_aired(ep, show)
                     if aired is None or aired < cutoff:
@@ -1479,6 +1501,8 @@ def process_show_overlay(
     latest = _latest_season(show)
     if not latest:
         raise ValueError(f"No seasons for {show.title}")
+    if not _is_returning_season(latest):
+        raise ValueError(f"New Season skipped for first season: {show.title}")
 
     overlay_img = _load_show_overlay_image(config, paths, season_index=getattr(latest, "index", None))
     preset_id = str(config.get("overlayPresetId") or "new-season")

@@ -984,7 +984,7 @@ export const en = {
             newEpisodeEnabled: 'New Episode overlays enabled',
             newEpisodeEnabledHint: 'Stamp episode thumbs with a New Episode banner for recently aired episodes.',
             newSeasonEnabled: 'New Season overlays enabled',
-            newSeasonEnabledHint: 'Stamp show posters when a new season premiere is within the window.',
+            newSeasonEnabledHint: 'Stamp show posters when season 2+ premieres within the window. Season 1 never qualifies.',
             newSeasonWatchNowStyle: 'New Season “Watch Now” split style',
             newSeasonWatchNowStyleHint: 'Use the red|white New Season | Watch Now badge instead of the plain pill.',
             newEpisodeWatchNowStyle: 'New Episode “Watch Now” split style',

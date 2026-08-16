@@ -986,7 +986,7 @@ export const fr: DeepPartial<EnCatalog> = {
             newEpisodeEnabled: 'Overlays New Episode activés',
             newEpisodeEnabledHint: 'Applique une bannière New Episode sur les vignettes des épisodes récemment diffusés.',
             newSeasonEnabled: 'Overlays New Season activés',
-            newSeasonEnabledHint: 'Tamponne les affiches de série lorsqu’une nouvelle saison commence dans la fenêtre.',
+            newSeasonEnabledHint: 'Tamponne les affiches lorsqu’une saison 2+ commence dans la fenêtre. La saison 1 n’est jamais éligible.',
             newSeasonWatchNowStyle: 'Style New Season « Watch Now » (split)',
             newSeasonWatchNowStyleHint: 'Utilise le badge rouge|blanc New Season | Watch Now à la place de la pastille simple.',
             newEpisodeWatchNowStyle: 'Style New Episode « Watch Now » (split)',
