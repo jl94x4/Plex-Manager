@@ -1355,6 +1355,45 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
     return coll, True
 
 
+def _notify_portal_collection_updated(coll, library_name, title):
+    """Tell the portal Overlays module a managed collection changed (best-effort)."""
+    base = (
+        os.environ.get('PORTAL_CALLBACK_BASE')
+        or os.environ.get('COLLEXIONS_PORTAL_CALLBACK')
+        or ''
+    ).strip().rstrip('/')
+    service_key = str(os.environ.get('COLLEXIONS_SERVICE_KEY') or '').strip()
+    if not base or not service_key:
+        return
+    rating_key = str(getattr(coll, 'ratingKey', '') or '').strip()
+    if not rating_key and not title:
+        return
+    url = f"{base}/api/overlays/collexions-collection-updated"
+    try:
+        resp = requests.post(
+            url,
+            json={
+                'ratingKey': rating_key,
+                'title': _normalize_collection_title(title) or str(getattr(coll, 'title', '') or ''),
+                'library': str(library_name or '').strip(),
+            },
+            headers={
+                'X-Collexions-Service-Key': service_key,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            timeout=5,
+        )
+        if resp.status_code >= 400:
+            logging.debug(
+                'Portal overlays hook returned HTTP %s: %s',
+                resp.status_code,
+                (resp.text or '')[:200],
+            )
+    except Exception as exc:
+        logging.debug('Portal overlays hook failed: %s', exc)
+
+
 def _delete_plex_collection(library_name, title=None, rating_key=None):
     """
     Permanently delete Plex collection(s) and drop matching managed jobs when none remain.
@@ -1752,6 +1791,7 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
                 sort_order=sort_order,
                 label=label,
             )
+            _notify_portal_collection_updated(coll, library_name, title)
 
             art_set = _ensure_collection_art(
                 coll,
@@ -1878,6 +1918,7 @@ def run_sync_job(job_id=None):
                         sort_order=sort_order,
                         label=label,
                     )
+                    _notify_portal_collection_updated(coll, lib_name, coll_name)
                     _ensure_collection_art(
                         coll,
                         source_type=source_type,
@@ -3471,6 +3512,7 @@ def create_custom_collection():
                 sort_order=sort_order,
                 label=label,
             )
+            _notify_portal_collection_updated(collection, library_name, title)
 
             art_set = _ensure_collection_art(
                 collection,

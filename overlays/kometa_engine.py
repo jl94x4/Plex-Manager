@@ -309,16 +309,30 @@ def _rule_library_section_ids(row: dict) -> list[str]:
     return ids
 
 
-def _custom_collection_rules(config: dict) -> list[dict]:
+def _only_collection_rating_keys(config: dict) -> set[str]:
+    raw = config.get("onlyCollectionRatingKeys") or config.get("only_collection_rating_keys") or []
+    if isinstance(raw, str):
+        raw = [x.strip() for x in raw.split(",") if x.strip()]
+    if not isinstance(raw, list):
+        return set()
+    return {str(k or "").strip() for k in raw if str(k or "").strip()}
+
+
+def _custom_collection_rules(config: dict, *, respect_only_keys: bool = True) -> list[dict]:
     raw = _cfg(config, "customCollectionOverlays", "custom_collection_overlays", []) or []
     if not isinstance(raw, list):
         return []
+    only_keys = _only_collection_rating_keys(config) if respect_only_keys else set()
     out: list[dict] = []
     seen: set[str] = set()
     for row in raw:
         if not isinstance(row, dict):
             continue
         collection_keys = _rule_collection_keys(row)
+        if only_keys:
+            collection_keys = [k for k in collection_keys if k in only_keys]
+            if not collection_keys:
+                continue
         image = str(row.get("image") or row.get("presetId") or row.get("preset_id") or "").strip()
         libraries = _rule_libraries(row)
         # At least one library is required — never stamp without an explicit Plex library scope.
@@ -1469,8 +1483,15 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 should[key] = row
 
     cc_rule_members: dict[str, set[str]] = {}
+    active_cc_rule_ids: set[str] = set()
+    only_collection_keys = _only_collection_rating_keys(config)
     if "custom_collection" in families:
         _progress(progress, "Resolving custom collection badge membership…")
+        if only_collection_keys:
+            _progress(
+                progress,
+                f"Targeted collection restamp — {len(only_collection_keys)} collection key(s)",
+            )
         cc_rule_members = _apply_custom_collection_winners(
             plex,
             config,
@@ -1479,6 +1500,39 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             progress=progress,
             errors=errors,
         )
+        active_cc_rule_ids = {r["id"] for r in _custom_collection_rules(config)}
+        # Don't steal badges from higher-priority rules outside this targeted set.
+        if only_collection_keys and active_cc_rule_ids:
+            all_rules = _custom_collection_rules(config, respect_only_keys=False)
+            priority = {r["id"]: idx for idx, r in enumerate(all_rules)}
+            for key, row in list(should.items()):
+                winners = row.get("winners") if isinstance(row, dict) else None
+                if not isinstance(winners, dict) or "custom_collection" not in winners:
+                    continue
+                new_winner = winners.get("custom_collection")
+                new_rule = ""
+                if new_winner is not None and isinstance(getattr(new_winner, "extra", None), dict):
+                    new_rule = str(new_winner.extra.get("ruleId") or "").strip()
+                existing = log.get(key) if isinstance(log.get(key), dict) else {}
+                prev_meta = (existing.get("families") or {}).get("custom_collection")
+                prev_rule = ""
+                if isinstance(prev_meta, dict):
+                    prev_rule = str((prev_meta.get("extra") or {}).get("ruleId") or "").strip()
+                if (
+                    prev_rule
+                    and prev_rule not in active_cc_rule_ids
+                    and prev_rule in priority
+                    and new_rule in priority
+                    and priority[prev_rule] < priority[new_rule]
+                ):
+                    winners.pop("custom_collection", None)
+                    if not winners:
+                        should.pop(key, None)
+                    else:
+                        # Keep other Layer families; restore previous collection badge for compose.
+                        restored = winner_from_log("custom_collection", prev_meta)
+                        if restored is not None:
+                            winners["custom_collection"] = restored
         cc_queued = sum(
             1 for row in should.values()
             if isinstance(row, dict) and "custom_collection" in (row.get("winners") or {})
@@ -1690,6 +1744,22 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                     del log[key]
                     removed += 1
                 continue
+            # Targeted ColleXions restamp: only touch stamps for the updated collection rule(s).
+            if only_collection_keys and active_cc_rule_ids:
+                cc_meta = prev.get("custom_collection") if isinstance(prev.get("custom_collection"), dict) else None
+                if not cc_meta:
+                    continue
+                extra = cc_meta.get("extra") if isinstance(cc_meta.get("extra"), dict) else {}
+                rule_id = str(extra.get("ruleId") or "").strip()
+                entry_keys = {
+                    str(extra.get("collectionRatingKey") or "").strip(),
+                    *[str(k or "").strip() for k in (extra.get("collectionRatingKeys") or [])],
+                }
+                entry_keys.discard("")
+                if rule_id and rule_id not in active_cc_rule_ids and not entry_keys.intersection(only_collection_keys):
+                    continue
+                if not rule_id and not entry_keys.intersection(only_collection_keys):
+                    continue
             if scope_name != "all" and prev:
                 # Keep titles that still have badges outside this scope.
                 if any(str(fam) not in scope_set for fam in prev.keys()):

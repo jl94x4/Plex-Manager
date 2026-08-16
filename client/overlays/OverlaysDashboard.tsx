@@ -149,6 +149,7 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     mediastingerOverlayEnabled: false,
     ratingsSource: 'tmdb',
     customCollectionOverlaysEnabled: false,
+    restampOnCollexionsUpdate: false,
     customCollectionOverlays: [],
     statusOverlayEnabled: false,
     statusAiringDays: 14,
@@ -2969,6 +2970,16 @@ export const OverlaysDashboard: React.FC = () => {
                                     ...prev,
                                     customCollectionOverlaysEnabled,
                                 }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.jobs.collections.restampOnCollexions')}
+                                description={t('overlays.jobs.collections.restampOnCollexionsHint')}
+                                checked={configDraft.restampOnCollexionsUpdate === true}
+                                onChange={(restampOnCollexionsUpdate) => setConfigDraft((prev) => ({
+                                    ...prev,
+                                    restampOnCollexionsUpdate,
+                                }))}
+                                disabled={configDraft.customCollectionOverlaysEnabled !== true}
                             />
 
                             <div className="mb-3 space-y-2">

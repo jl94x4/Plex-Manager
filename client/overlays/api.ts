@@ -206,6 +206,8 @@ export type OverlaysConfig = {
     mediastingerOverlayEnabled?: boolean;
     ratingsSource?: string;
     customCollectionOverlaysEnabled?: boolean;
+    /** Restamp only linked collection overlay rules when ColleXions updates that collection. */
+    restampOnCollexionsUpdate?: boolean;
     customCollectionOverlays?: CustomCollectionOverlayRule[];
     statusOverlayEnabled?: boolean;
     statusAiringDays?: number;
