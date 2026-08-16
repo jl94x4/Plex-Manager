@@ -499,6 +499,11 @@ export const OverlaysDashboard: React.FC = () => {
     const trackedTotal = showCount + episodeCount;
     const jobRunning = !!status?.running;
     const runningCommand = String(status?.command || '');
+    const runningCommandLabel = runningCommand === 'preview-kometa'
+        ? 'preview-layer'
+        : runningCommand === 'run-kometa'
+            ? 'run-layer'
+            : (runningCommand || '…');
     const coreJobActive = jobRunning && (runningCommand === 'run' || runningCommand === 'preview');
     const recentlyJobActive = jobRunning && (runningCommand === 'run-recently' || runningCommand === 'preview-recently');
     const kometaJobActive = jobRunning && (runningCommand === 'run-kometa' || runningCommand === 'preview-kometa');
@@ -4091,7 +4096,7 @@ export const OverlaysDashboard: React.FC = () => {
                 <DashboardPanel title={t('overlays.activity.title')} subtitle={t('overlays.activity.subtitle')}>
                     {status?.running && (
                         <p className="mb-3 inline-flex items-center gap-2 text-sm text-plex">
-                            <Loader2 className="h-4 w-4 animate-spin" /> {t('overlays.activity.running', { command: status.command || '…' })}
+                            <Loader2 className="h-4 w-4 animate-spin" /> {t('overlays.activity.running', { command: runningCommandLabel })}
                         </p>
                     )}
                     {activity.length === 0 ? (

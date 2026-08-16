@@ -460,7 +460,7 @@ def prefetch_common(
     except Exception:
         pass
     if progress:
-        progress(f"Kometa bundled images: {len(ok)}/{len(rels)} common assets available")
+        progress(f"Layer bundled images: {len(ok)}/{len(rels)} common assets available")
     return ok
 
 

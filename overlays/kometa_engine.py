@@ -852,7 +852,7 @@ def migrate_legacy_logs(paths: dict, progress: ProgressFn | None = None) -> int:
                 pass
     if migrated:
         _save_log(log_path, unified)
-        _progress(progress, f"Migrated {migrated} legacy Kometa-mode log entries into the unified log")
+        _progress(progress, f"Migrated {migrated} legacy Layer-mode log entries into the unified log")
     return migrated
 
 
@@ -1251,7 +1251,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
     if not families:
         # Everything off — prune all tracked stamps.
         if log:
-            _progress(progress, "Kometa overlays disabled — restoring tracked posters…")
+            _progress(progress, "Layer overlays disabled — restoring tracked posters…")
         for key in list(log.keys()):
             entry = log.get(key) or {}
             try:
@@ -1274,7 +1274,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             "kometaErrors": errors,
         }
 
-    _progress(progress, f"Kometa parity pass — families: {', '.join(families)}")
+    _progress(progress, f"Layer pass — families: {', '.join(families)}")
     detector = KometaDetector(plex, progress=progress)
     res_allowed = _resolution_variant_allowed(config)
     allow_deny = {
@@ -1315,11 +1315,11 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
         section_families = plan["families"]
         if not section_families:
             continue
-        _progress(progress, f"Kometa scan: {getattr(section, 'title', sid)} ({', '.join(sorted(section_families))})…")
+        _progress(progress, f"Layer scan: {getattr(section, 'title', sid)} ({', '.join(sorted(section_families))})…")
         for item in _iter_section_items(section, section_families):
             scanned += 1
             if scanned % 50 == 0:
-                _progress(progress, f"Kometa scan: checked {scanned} titles, eligible {len(should)}…")
+                _progress(progress, f"Layer scan: checked {scanned} titles, eligible {len(should)}…")
             key = str(getattr(item, "ratingKey", "") or "")
             if not key:
                 continue
@@ -1380,7 +1380,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
         )
         _progress(progress, f"Custom collection badges queued for {cc_queued} title(s)")
 
-    _progress(progress, f"Kometa eligible: {len(should)} of {scanned} scanned")
+    _progress(progress, f"Layer eligible: {len(should)} of {scanned} scanned")
 
     # Stamp
     cc_stamped_ok: set[str] = set()
@@ -1534,7 +1534,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 family_counts[family] = family_counts.get(family, 0) + 1
         except Exception as exc:
             errors.append(f"kometa {getattr(item, 'title', key)}: {exc}")
-            _progress(progress, f"Kometa stamp failed for {getattr(item, 'title', key)}: {exc}")
+            _progress(progress, f"Layer stamp failed for {getattr(item, 'title', key)}: {exc}")
             # Keep the title visible in the tracked list so missing badges are obvious.
             fail_entry = {
                 **(existing if isinstance(existing, dict) else {}),
@@ -1611,7 +1611,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
     }
     _progress(
         progress,
-        f"Kometa parity done — +{added}/-{removed} (skipped {skipped}, tracked {len(log)})",
+        f"Layer pass done — +{added}/-{removed} (skipped {skipped}, tracked {len(log)})",
     )
     return summary
 
@@ -1636,7 +1636,7 @@ def revert_kometa(config: dict, rating_key: str | None = None, progress: Progres
     else:
         keys = list(log.keys())
 
-    _progress(progress, f"Reverting {len(keys)} Kometa overlay(s)…")
+    _progress(progress, f"Reverting {len(keys)} Layer overlay(s)…")
     reverted = 0
     failed: list[str] = []
     for key in keys:
@@ -1652,7 +1652,7 @@ def revert_kometa(config: dict, rating_key: str | None = None, progress: Progres
         except Exception as exc:
             failed.append(f"{entry.get('title') or key}: {exc}")
     _save_log(log_path, log)
-    _progress(progress, f"Kometa revert complete — {reverted}/{len(keys)} restored")
+    _progress(progress, f"Layer revert complete — {reverted}/{len(keys)} restored")
     return {
         "ok": True,
         "requested": len(keys),

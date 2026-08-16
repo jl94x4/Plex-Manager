@@ -88,7 +88,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'scanner', tabId: 'scanner', label: 'Scanner', group: 'Automation', keywords: ['scanner', 'autoscan', 'plex scan', 'webhook', 'sonarr', 'radarr', 'lidarr', 'triggers', 'library refresh'] },
     { id: 'media-automation', tabId: 'media-automation', label: 'Media Automation', group: 'Automation', keywords: ['media', 'automation', 'ffmpeg', 'worker', 'transcode', 'remux', 'pipeline', 'hardware', 'nvenc', 'qsv', 'vaapi', 'quiet hours', 'schedule', 'overnight', 'gotify'] },
     { id: 'poster-sets', tabId: 'poster-sets', label: 'Poster Sets', group: 'Automation', keywords: ['poster', 'sets', 'mediux', 'theposterdb', 'artwork', 'plex posters', 'title cards'] },
-    { id: 'overlays', tabId: 'overlays', label: 'Overlays', group: 'Automation', keywords: ['overlays', 'new season', 'banner', 'kometa', 'poster overlay', 'season overlay'] },
+    { id: 'overlays', tabId: 'overlays', label: 'Overlays', group: 'Automation', keywords: ['overlays', 'new season', 'banner', 'layer', 'poster overlay', 'season overlay'] },
     { id: 'editions', tabId: 'editions', label: 'Editions', group: 'Automation', keywords: ['editions', 'edition manager', 'plex edition', 'cut', 'remux', 'hdr', 'audio codec', 'webhook'] },
     { id: 'system', tabId: 'system', label: 'System', group: 'Automation', keywords: ['system', 'diagnostics', 'backup'] },
     { id: 'system/support-tickets', tabId: 'system', sectionId: 'support-tickets', label: 'Support tickets', group: 'Automation', keywords: ['support', 'tickets', 'inbox', 'messaging', 'help', 'contact admin'] },

@@ -1565,8 +1565,8 @@ export const PosterSetsSettingsView: React.FC = () => {
                     </div>
                     <div className="rounded-xl border border-white/10 bg-black/20 px-4">
                         <SettingsToggleRow
-                            title="Clear Kometa Overlay label after upload"
-                            description="Default on. Removes Kometa's Overlay label so the next Kometa run reapplies overlays on the new artwork."
+                            title="Clear Plex Overlay label after upload"
+                            description="Default on. Removes the Plex Overlay label so the next Layer run can reapply overlays on the new artwork."
                             checked={configDraft.reset_overlay !== false}
                             onChange={(next) => setConfigDraft((prev) => ({ ...prev, reset_overlay: next }))}
                             border={false}

@@ -1041,7 +1041,7 @@ def run_all_kometa_style(plex, config, paths, preview_mode, progress=None) -> di
     )
     # Images download lazily on first use — avoid blocking the run on GitHub prefetch.
     if any_enabled:
-        _progress(progress, "Kometa-style modes: scanning (images load on demand)…")
+        _progress(progress, "Layer modes: scanning (images load on demand)…")
 
     summary = {}
     summary.update(run_media_overlays(plex, config, paths, preview_mode, progress))

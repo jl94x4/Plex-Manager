@@ -234,7 +234,7 @@ export type OverlaysConfig = {
     coreLibrarySectionIds?: string[];
     /** Recently Added run. Empty = fallback. */
     recentlyAddedLibrarySectionIds?: string[];
-    /** Media / Kometa run default (family-specific lists still override). Empty = fallback. */
+    /** Media / Layer run default (family-specific lists still override). Empty = fallback. */
     kometaLibrarySectionIds?: string[];
     /** Advanced fallback when a per-run list is empty. Empty = all libraries. */
     librarySectionIds?: string[];

@@ -76,7 +76,7 @@ class KometaTmdb:
             )
             self._dirty = False
         except Exception as exc:
-            _progress(self.progress, f"Kometa TMDB cache save failed: {exc}")
+            _progress(self.progress, f"Layer TMDB cache save failed: {exc}")
 
     # -- cache helpers ------------------------------------------------------
 

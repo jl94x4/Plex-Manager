@@ -4535,7 +4535,7 @@ export const SettingsDashboard: React.FC = () => {
                             <section id={getSettingsSectionElementId('overlays')} className="space-y-3 scroll-mt-24">
                                 <SettingsToggleRow
                                     title="Enable Overlays"
-                                    hint={<SettingHint>Admin nav for New Season poster banners (and future Kometa-style overlays). Uses Plex credentials from Media Player. Import an existing overlaid_log.json from the standalone tool inside the Overlays page.</SettingHint>}
+                                    hint={<SettingHint>Admin nav for New Season poster banners (and Layer overlays). Uses Plex credentials from Media Player. Import an existing overlaid_log.json from the standalone tool inside the Overlays page.</SettingHint>}
                                     checked={overlaysEnabled}
                                     onChange={setOverlaysEnabled}
                                 />
@@ -4552,7 +4552,7 @@ export const SettingsDashboard: React.FC = () => {
                                     </button>
                                 )}
                                 <p className="text-xs text-muted mt-3">
-                                    Prefer off-hours runs if you also use Kometa or Poster Sets bulk poster uploads on the same libraries.
+                                    Prefer off-hours runs if you also use Layer overlays or Poster Sets bulk poster uploads on the same libraries.
                                 </p>
                             </section>
                         </div>
