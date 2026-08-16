@@ -809,6 +809,13 @@ export const OverlaysDashboard: React.FC = () => {
         [collectionPickerOptions, selectedCollectionKeys],
     );
 
+    /** Keys still selected in the form but gone from Plex / the picker (recreated collections). */
+    const missingSelectedCollectionKeys = useMemo(() => {
+        if (!collectionPickerOptions.length || !selectedCollectionKeys.length) return [] as string[];
+        const known = new Set(collectionPickerOptions.map((o) => o.value));
+        return selectedCollectionKeys.filter((key) => !known.has(key));
+    }, [collectionPickerOptions, selectedCollectionKeys]);
+
     const collectionsInSelectedLibrariesCount = useMemo(() => {
         const libs = new Set(selectedLibraries.map((lib) => lib.trim().toLowerCase()).filter(Boolean));
         if (!libs.size) return 0;
@@ -816,6 +823,16 @@ export const OverlaysDashboard: React.FC = () => {
             (o) => libs.has(String(o.library || '').trim().toLowerCase()),
         ).length;
     }, [collectionPickerOptions, selectedLibraries]);
+
+    // Drop stale ratingKeys after the picker loads — edit form keeps old keys that no longer exist.
+    useEffect(() => {
+        if (!collectionPickerOptions.length || !missingSelectedCollectionKeys.length) return;
+        const known = new Set(collectionPickerOptions.map((o) => o.value));
+        setSelectedCollectionKeys((prev) => {
+            const next = prev.filter((key) => known.has(key));
+            return next.length === prev.length ? prev : next;
+        });
+    }, [collectionPickerOptions, missingSelectedCollectionKeys]);
 
     useEffect(() => {
         if (!newCollectionRuleFile) {
@@ -962,10 +979,28 @@ export const OverlaysDashboard: React.FC = () => {
             return;
         }
         const allowedLibs = new Set(libraries.map((lib) => lib.toLowerCase()));
-        const pickedRows = selectedCollectionKeys.map((key) => {
+        let keysToSave = [...selectedCollectionKeys];
+        let pickedRows = keysToSave.map((key) => {
             const opt = collectionPickerOptions.find((o) => o.value === key);
             return { key, opt };
         });
+        const missingRows = pickedRows.filter((row) => !row.opt);
+        if (missingRows.length) {
+            const known = new Set(collectionPickerOptions.map((o) => o.value));
+            keysToSave = keysToSave.filter((key) => known.has(key));
+            setSelectedCollectionKeys(keysToSave);
+            if (!keysToSave.length) {
+                toast(t('overlays.jobs.collections.missingCollections'), 'error');
+                return;
+            }
+            toast(t('overlays.jobs.collections.missingCollectionsPruned', {
+                count: missingRows.length,
+            }));
+            pickedRows = keysToSave.map((key) => ({
+                key,
+                opt: collectionPickerOptions.find((o) => o.value === key),
+            }));
+        }
         for (const row of pickedRows) {
             const lib = String(row.opt?.library || '').trim().toLowerCase();
             if (!row.opt || !lib || !allowedLibs.has(lib)) {
@@ -996,14 +1031,14 @@ export const OverlaysDashboard: React.FC = () => {
                 const title = String(row.opt?.title || row.opt?.label || '').trim();
                 if (title) collectionTitles[row.key] = title;
             }
-            const firstKey = selectedCollectionKeys[0];
+            const firstKey = keysToSave[0];
             const defaultName = collectionTitles[firstKey] || firstKey || imageId;
             const rule: CustomCollectionOverlayRule = {
                 id: isEdit && editingRuleId ? editingRuleId : `cc-${Date.now().toString(36)}`,
                 name: (newCollectionRuleName || defaultName).trim(),
                 collectionRatingKey: firstKey,
                 collectionTitle: collectionTitles[firstKey] || '',
-                collectionRatingKeys: [...selectedCollectionKeys],
+                collectionRatingKeys: [...keysToSave],
                 collectionTitles,
                 library: libraries[0],
                 libraries: [...libraries],
@@ -1803,6 +1838,13 @@ export const OverlaysDashboard: React.FC = () => {
                             titles: selectedCollectionOptions
                                 .map((o) => o.title || o.label)
                                 .join(', '),
+                        })}
+                    </p>
+                ) : null}
+                {missingSelectedCollectionKeys.length ? (
+                    <p className="text-[11px] text-red-300">
+                        {t('overlays.jobs.collections.missingCollectionsPruned', {
+                            count: missingSelectedCollectionKeys.length,
                         })}
                     </p>
                 ) : null}

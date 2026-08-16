@@ -1349,8 +1349,11 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
         if removed:
             log_action(f"Removed {removed} duplicate collection(s) named '{title}'.")
 
+        # Prefer in-place membership updates so Plex ratingKeys stay stable
+        # (Overlays rules store those keys). Only smart collections need a
+        # recreate — random sort on a regular collection must not delete it.
         is_smart = getattr(coll, 'smart', False)
-        if is_smart or sort_order == 'random':
+        if is_smart:
             try:
                 coll.delete()
             except Exception as e:

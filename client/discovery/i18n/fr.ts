@@ -788,6 +788,8 @@ export const fr: DeepPartial<EnCatalog> = {
                 pickLibraryFirst: 'Choisissez une ou plusieurs bibliothèques pour parcourir leurs collections.',
                 libraryRequired: 'Sélectionnez au moins une bibliothèque — les badges doivent être liés à Plex.',
                 libraryMismatch: 'Cette collection n’est pas dans les bibliothèques sélectionnées.',
+                missingCollections: 'Ces collections Plex n’existent plus (elles ont peut‑être été recréées). Effacez la sélection et choisissez‑les à nouveau.',
+                missingCollectionsPruned: '{count} collection(s) introuvable(s) retirée(s) de cette règle — vérifiez l’étape 2, puis Enregistrer.',
                 multiLibraryHint: 'Sélectionnez une ou plusieurs bibliothèques. Leurs collections apparaissent à l’étape 2.',
                 selectAllLibraries: 'Tout sélectionner',
                 clearLibraries: 'Effacer les bibliothèques',

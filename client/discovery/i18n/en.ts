@@ -786,6 +786,8 @@ export const en = {
                 pickLibraryFirst: 'Pick one or more libraries above to browse their collections.',
                 libraryRequired: 'Select at least one library — collection badges must be scoped to Plex libraries.',
                 libraryMismatch: 'That collection is not in the selected libraries.',
+                missingCollections: 'Those Plex collections no longer exist (they may have been recreated). Clear collections and pick them again.',
+                missingCollectionsPruned: 'Removed {count} missing collection(s) from this rule — re-check step 2, then Save.',
                 multiLibraryHint: 'Select one or more libraries. Collections from all of them appear in step 2.',
                 selectAllLibraries: 'Select all libraries',
                 clearLibraries: 'Clear libraries',
