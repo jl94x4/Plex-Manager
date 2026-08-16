@@ -422,16 +422,35 @@ def _query_rating_keys(plex, path: str, *, page_size: int = 500) -> set[str]:
             data = plex.query(
                 f"{path}{sep}X-Plex-Container-Start={start}&X-Plex-Container-Size={size}"
             )
+        except Exception:
+            break
         if data is None:
             break
         batch = 0
-        for el in data:
-            rk = el.attrib.get("ratingKey")
-            if rk:
-                keys.add(str(rk))
-                batch += 1
+        # plexapi may return ElementTree root, a list of videos, or MediaContainer.
+        children = list(data) if not isinstance(data, list) else data
         try:
-            total = int(data.attrib.get("totalSize") or data.attrib.get("size") or 0)
+            # Prefer explicit Video/Directory nodes when present (avoids iterating attrs).
+            if hasattr(data, "findall"):
+                found = data.findall("Video") or data.findall("Directory") or []
+                if found:
+                    children = list(found)
+        except Exception:
+            pass
+        for el in children:
+            try:
+                attrib = getattr(el, "attrib", None) or {}
+                rk = attrib.get("ratingKey") if hasattr(attrib, "get") else None
+                if rk is None:
+                    rk = getattr(el, "ratingKey", None)
+                if rk:
+                    keys.add(str(rk))
+                    batch += 1
+            except Exception:
+                continue
+        try:
+            attrib = getattr(data, "attrib", None) or {}
+            total = int(attrib.get("totalSize") or attrib.get("size") or 0)
         except (TypeError, ValueError, AttributeError):
             total = 0
         start += size
@@ -446,13 +465,64 @@ def _query_rating_keys(plex, path: str, *, page_size: int = 500) -> set[str]:
 
 def _query_attrib_values(plex, path: str, attrib: str) -> set[str]:
     values: set[str] = set()
-    data = plex.query(path)
+    try:
+        data = plex.query(path)
+    except Exception:
+        return values
     if data is None:
         return values
-    for el in data:
-        val = el.attrib.get(attrib)
-        if val:
-            values.add(str(val))
+    children = list(data) if not isinstance(data, list) else data
+    try:
+        if hasattr(data, "findall"):
+            found = data.findall("Video") or data.findall("Directory") or []
+            if found:
+                children = list(found)
+    except Exception:
+        pass
+    for el in children:
+        try:
+            attrib_map = getattr(el, "attrib", None) or {}
+            val = attrib_map.get(attrib) if hasattr(attrib_map, "get") else None
+            if val is None:
+                val = getattr(el, attrib, None)
+            if val:
+                values.add(str(val))
+        except Exception:
+            continue
+    return values
+
+
+def _resolution_filter_values(plex, section) -> list[str]:
+    """Values to pass as resolution=… for this library (keys, titles, and canonical fallbacks)."""
+    sid = _section_numeric_id(section)
+    stype = str(getattr(section, "type", "") or "").lower()
+    qtype = 1 if stype == "movie" else 4
+    values: list[str] = []
+    seen: set[str] = set()
+
+    def _add(raw: str) -> None:
+        val = str(raw or "").strip()
+        if not val:
+            return
+        # Some PMS builds put a full filter path in `key` — keep the trailing token.
+        if "/" in val and "=" in val:
+            val = val.split("=")[-1].strip()
+        if not val or val in seen:
+            return
+        seen.add(val)
+        values.append(val)
+
+    try:
+        data = plex.query(f"/library/sections/{sid}/resolution?type={qtype}")
+        for el in data or []:
+            attrib = getattr(el, "attrib", None) or {}
+            _add(attrib.get("key") if hasattr(attrib, "get") else "")
+            _add(attrib.get("title") if hasattr(attrib, "get") else "")
+    except Exception:
+        pass
+    # Always try canonical tokens so we still index when /resolution is empty or odd.
+    for token in ("4k", "2160", "1080", "720", "576", "480"):
+        _add(token)
     return values
 
 
@@ -494,9 +564,11 @@ class SectionIndex:
         idx = cls(section_id=sid, is_show=is_show)
 
         if need_resolution:
-            choices = _resolution_choices(plex, section)
+            filter_values = _resolution_filter_values(plex, section)
             for res_key, rx in _RESOLUTION_RES_RE.items():
-                matched = [c for c, title in choices if rx.search(c) or rx.search(title)]
+                matched = [v for v in filter_values if rx.search(v)]
+                # De-dupe while preserving order
+                matched = list(dict.fromkeys(matched))
                 members: set[str] = set()
                 for choice in matched:
                     try:
@@ -513,6 +585,8 @@ class SectionIndex:
                 )
                 if counts:
                     progress(f"Section {sid}: resolution filter index — {counts}")
+                elif filter_values:
+                    progress(f"Section {sid}: resolution filter index empty (tried {len(filter_values)} values)")
 
         if need_hdr:
             try:
@@ -541,6 +615,31 @@ class SectionIndex:
 # ---------------------------------------------------------------------------
 
 
+def ensure_item_media(item):
+    """Reload metadata when media/streams are missing (common after section.all())."""
+    try:
+        medias = list(getattr(item, "media", None) or [])
+    except Exception:
+        medias = []
+    needs_reload = not medias
+    if not needs_reload:
+        try:
+            # Width/resolution often absent until a full reload.
+            sample = medias[0]
+            width = getattr(sample, "width", None)
+            vres = getattr(sample, "videoResolution", None)
+            if not width and not vres:
+                needs_reload = True
+        except Exception:
+            needs_reload = True
+    if needs_reload and hasattr(item, "reload") and callable(item.reload):
+        try:
+            item.reload()
+        except Exception:
+            pass
+    return item
+
+
 def item_filepaths(item) -> list[str]:
     """Kometa filepath semantics: movie/episode = part files, show = folder locations."""
     stype = str(getattr(item, "type", "") or "").lower()
@@ -551,6 +650,7 @@ def item_filepaths(item) -> list[str]:
             return []
     paths: list[str] = []
     try:
+        ensure_item_media(item)
         for media in getattr(item, "media", None) or []:
             for part in getattr(media, "parts", None) or []:
                 f = getattr(part, "file", None)
@@ -570,8 +670,10 @@ def item_resolution_key(item) -> str | None:
             # Sample a few recent episodes — same idea as modes_kometa._inspect_media.
             eps = list(item.episodes() or [])[-8:]
             for ep in eps:
+                ensure_item_media(ep)
                 medias.extend(list(getattr(ep, "media", None) or []))
         else:
+            ensure_item_media(item)
             medias = list(getattr(item, "media", None) or [])
     except Exception:
         medias = []
@@ -601,10 +703,45 @@ def item_resolution_key(item) -> str | None:
     return best
 
 
+def item_has_hdr_streams(item, *, reload: bool = True) -> bool:
+    """True when any video stream reports HDR / HLG (filter-index fallback)."""
+    try:
+        if reload:
+            ensure_item_media(item)
+    except Exception:
+        pass
+    try:
+        for media in getattr(item, "media", None) or []:
+            for part in getattr(media, "parts", None) or []:
+                for stream in getattr(part, "streams", None) or []:
+                    stype = getattr(stream, "streamType", None)
+                    if stype not in (1, "1") and str(getattr(stream, "type", "")).lower() != "video":
+                        continue
+                    for attr in (
+                        "colorTrc",
+                        "colorTransfer",
+                        "DOVIPresent",
+                        "extendedDisplayTitle",
+                        "displayTitle",
+                        "title",
+                    ):
+                        val = str(getattr(stream, attr, "") or "").strip().lower()
+                        if not val:
+                            continue
+                        if val in {"1", "true"} and attr == "DOVIPresent":
+                            return True
+                        if any(tok in val for tok in ("hdr", "hlg", "pq", "smpte2084", "arib-std-b67")):
+                            return True
+    except Exception:
+        pass
+    return False
+
+
 def item_audio_titles(item) -> list[str]:
     """Audio stream extendedDisplayTitle values (movies; shows have no streams)."""
     titles: list[str] = []
     try:
+        ensure_item_media(item)
         for media in getattr(item, "media", None) or []:
             for part in getattr(media, "parts", None) or []:
                 for stream in getattr(part, "streams", None) or []:
@@ -623,6 +760,7 @@ def item_audio_languages(item) -> list[str]:
     """Ordered distinct ISO 639-1 audio languages across all parts (movies)."""
     seen: list[str] = []
     try:
+        ensure_item_media(item)
         for media in getattr(item, "media", None) or []:
             for part in getattr(media, "parts", None) or []:
                 for stream in getattr(part, "streams", None) or []:
@@ -642,7 +780,7 @@ def item_has_dovi_streams(item, *, reload: bool = True) -> bool:
     """Kometa's has_dolby_vision: DOVIPresent on any video stream (movies)."""
     try:
         if reload:
-            item.reload()
+            ensure_item_media(item)
     except Exception:
         pass
     try:
@@ -715,6 +853,7 @@ class KometaDetector:
         key = str(getattr(item, "ratingKey", "") or "")
         paths = item_filepaths(item)
         inferred_res = None  # lazy — only hit media streams when filter membership misses
+        hdr_fallback = None  # lazy stream HDR when native hdr=1 filter misses
         for name, res_key, alt, weight in RESOLUTION_VARIANTS:
             if variant_allowed is not None and not variant_allowed(res_key, alt):
                 continue
@@ -729,7 +868,10 @@ class KometaDetector:
                 pass
             elif alt == "hdr":
                 if key not in idx.hdr_members:
-                    continue
+                    if hdr_fallback is None:
+                        hdr_fallback = item_has_hdr_streams(item)
+                    if not hdr_fallback:
+                        continue
             elif alt == "dv":
                 if not self._is_dv(item, idx):
                     continue

@@ -74,8 +74,9 @@ const kindBannerUrl = (
     if (kind === 'recently') {
         return `/api/overlays/preset-file?id=${encodeURIComponent(recentlyPresetId || 'recently-added')}&kind=season&t=${encodeURIComponent(String(bust))}`;
     }
-    const id = kind === 'show' ? seasonPresetId : episodePresetId;
-    const presetKind = kind === 'show' ? 'season' : 'episode';
+    // Show + season posters share the New Season preset; only episode thumbs use New Episode.
+    const id = kind === 'episode' ? episodePresetId : seasonPresetId;
+    const presetKind = kind === 'episode' ? 'episode' : 'season';
     return `/api/overlays/preset-file?id=${encodeURIComponent(id)}&kind=${presetKind}&t=${encodeURIComponent(String(bust))}`;
 };
 

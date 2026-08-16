@@ -1,9 +1,122 @@
-import React from 'react';
-import { ChevronDown, Loader2, Play } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronDown, Loader2, Play, Stamp } from 'lucide-react';
+import { CustomSelect } from '../shared/ui';
+import { overlaysApi } from './api';
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover disabled:opacity-50';
 const ghostButtonClass = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-semibold text-muted hover:bg-white/5 hover:text-text disabled:opacity-50';
+const fieldInputClass = 'mt-1.5 w-full rounded-lg border border-border bg-background p-2.5 text-sm text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
+const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
+
+export type OverlayJobTitleFilter = 'all' | 'show' | 'movie';
+
+export type OverlayJobTitleTestProps = {
+    searchLabel: string;
+    searchPlaceholder: string;
+    pickLabel: string;
+    stampLabel: string;
+    hint: string;
+    emptyPick: string;
+    disabled?: boolean;
+    busy?: boolean;
+    titleFilter?: OverlayJobTitleFilter;
+    onStamp: (ratingKey: string, title: string) => void;
+};
+
+export const OverlayJobTitleTest: React.FC<OverlayJobTitleTestProps> = ({
+    searchLabel,
+    searchPlaceholder,
+    pickLabel,
+    stampLabel,
+    hint,
+    emptyPick,
+    disabled = false,
+    busy = false,
+    titleFilter = 'all',
+    onStamp,
+}) => {
+    const [query, setQuery] = useState('');
+    const [selectedKey, setSelectedKey] = useState('');
+    const [candidates, setCandidates] = useState<Array<{ ratingKey: string; title: string; type?: string; library?: string }>>([]);
+
+    useEffect(() => {
+        const q = query.trim();
+        const timer = window.setTimeout(() => {
+            void overlaysApi.sampleCandidates(q).then((res) => {
+                const items = Array.isArray(res.items) && res.items.length
+                    ? res.items
+                    : (res.shows || []).map((s) => ({ ...s, type: s.type || 'show' }));
+                const filtered = titleFilter === 'all'
+                    ? items
+                    : items.filter((row) => String(row.type || '').toLowerCase() === titleFilter);
+                setCandidates(filtered);
+            }).catch(() => setCandidates([]));
+        }, 250);
+        return () => window.clearTimeout(timer);
+    }, [query, titleFilter]);
+
+    useEffect(() => {
+        if (selectedKey && !candidates.some((c) => c.ratingKey === selectedKey)) {
+            setSelectedKey('');
+        }
+    }, [candidates, selectedKey]);
+
+    const selected = candidates.find((c) => c.ratingKey === selectedKey);
+
+    return (
+        <div className="border-t border-white/10 bg-background/15 px-4 py-3 space-y-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className={fieldLabelClass}>{searchLabel}</p>
+                <p className="text-[11px] text-muted">{hint}</p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_auto] sm:items-end">
+                <label className="block min-w-0">
+                    <span className="sr-only">{searchLabel}</span>
+                    <input
+                        className={fieldInputClass}
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder={searchPlaceholder}
+                        disabled={disabled || busy}
+                    />
+                </label>
+                <label className="block min-w-0">
+                    <span className="sr-only">{pickLabel}</span>
+                    <CustomSelect
+                        className="mt-1.5"
+                        value={selectedKey}
+                        onChange={(value) => {
+                            if (disabled || busy) return;
+                            setSelectedKey(value);
+                        }}
+                        options={[
+                            { value: '', label: emptyPick },
+                            ...candidates.map((s) => ({
+                                value: s.ratingKey,
+                                label: s.library
+                                    ? `${s.title} · ${s.library}${s.type ? ` (${s.type})` : ''}`
+                                    : s.title,
+                            })),
+                        ]}
+                    />
+                </label>
+                <button
+                    type="button"
+                    className={primaryButtonClass}
+                    disabled={disabled || busy || !selectedKey}
+                    onClick={() => {
+                        if (!selectedKey) return;
+                        onStamp(selectedKey, selected?.title || selectedKey);
+                    }}
+                >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stamp className="h-4 w-4" />}
+                    {stampLabel}
+                </button>
+            </div>
+        </div>
+    );
+};
 
 export type OverlayJobCardProps = {
     title: string;
@@ -22,6 +135,7 @@ export type OverlayJobCardProps = {
     previewBusy?: boolean;
     runBusy?: boolean;
     actionsDisabled?: boolean;
+    titleTest?: React.ReactNode;
     children?: React.ReactNode;
 };
 
@@ -42,6 +156,7 @@ export const OverlayJobCard: React.FC<OverlayJobCardProps> = ({
     previewBusy = false,
     runBusy = false,
     actionsDisabled = false,
+    titleTest,
     children,
 }) => {
     const toneClass = statusTone === 'running'
@@ -96,6 +211,7 @@ export const OverlayJobCard: React.FC<OverlayJobCardProps> = ({
                     </button>
                 </div>
             </div>
+            {titleTest}
             {expanded && children ? (
                 <div className="border-t border-white/10 bg-background/20 p-4 space-y-3">
                     {children}

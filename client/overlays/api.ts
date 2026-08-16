@@ -310,10 +310,18 @@ export const overlaysApi = {
     sections: () => apiFetch(`${ROOT}/sections`),
     scan: () => apiFetch(`${ROOT}/scan`, json({})),
     reconcile: () => apiFetch(`${ROOT}/reconcile`, json({})),
-    run: (options?: { preview?: boolean; bundle?: 'core' | 'recently' | 'kometa' | 'collections' | 'all'; scope?: 'media' | 'collections' | 'all' }) =>
-        apiFetch(`${ROOT}/run`, json(options || {})),
-    preview: (options?: { bundle?: 'core' | 'recently' | 'kometa' | 'collections' | 'all'; scope?: 'media' | 'collections' | 'all' }) =>
-        apiFetch(`${ROOT}/preview`, json(options || {})),
+    run: (options?: {
+        preview?: boolean;
+        bundle?: 'core' | 'recently' | 'kometa' | 'collections' | 'all';
+        scope?: 'media' | 'collections' | 'all';
+        onlyRatingKeys?: string[];
+        onlyCollectionRatingKeys?: string[];
+    }) => apiFetch(`${ROOT}/run`, json(options || {})),
+    preview: (options?: {
+        bundle?: 'core' | 'recently' | 'kometa' | 'collections' | 'all';
+        scope?: 'media' | 'collections' | 'all';
+        onlyRatingKeys?: string[];
+    }) => apiFetch(`${ROOT}/preview`, json(options || {})),
     promote: () => apiFetch(`${ROOT}/promote`, json({})),
     stop: () => apiFetch(`${ROOT}/stop`, json({})),
     importLog: (log: Record<string, unknown>, mode: 'merge' | 'replace' = 'merge') => (
@@ -352,7 +360,8 @@ export const overlaysApi = {
         }>
     ),
     sampleCandidates: (q = '') => apiFetch(`${ROOT}/sample-candidates?q=${encodeURIComponent(q)}`) as Promise<{
-        shows: Array<{ ratingKey: string; title: string; library?: string }>;
+        shows: Array<{ ratingKey: string; title: string; library?: string; type?: string }>;
+        items?: Array<{ ratingKey: string; title: string; library?: string; type?: string }>;
     }>,
     sampleImageUrl: (kind: 'show' | 'episode' | 'season' | 'show-base' | 'episode-base', bust?: string | number) => (
         `${ROOT}/sample/${kind}?t=${encodeURIComponent(String(bust || Date.now()))}`

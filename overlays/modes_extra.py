@@ -258,60 +258,85 @@ TOP10_PLACEMENT = {
 
 def discover_live_shows(plex, config: dict, sections, progress: ProgressFn | None = None, resolver=None):
     """Shows whose latest episode aired within liveScheduleDays."""
-    from core import _as_datetime, _has_kometa_overlay_label
+    from core import _as_datetime, _has_kometa_overlay_label, _only_rating_keys, _fetch_plex_item, _library_title
 
     days = int(config.get("liveScheduleDays") or config.get("live_schedule_days") or 1)
     cutoff = datetime.now() - timedelta(days=max(0, days))
     skip_kometa = _as_bool(config.get("skipIfKometaOverlayLabel", config.get("skip_if_kometa_overlay_label")), True)
+    only_keys = _only_rating_keys(config)
     should: dict[str, dict] = {}
+
+    def _evaluate_show(show, library: str) -> None:
+        key = str(getattr(show, "ratingKey", "") or "")
+        if not key:
+            return
+        if skip_kometa and _has_kometa_overlay_label(show):
+            if only_keys:
+                _progress(progress, f"{getattr(show, 'title', key)}: skipped (Overlay label)")
+            return
+        try:
+            eps = list(show.episodes() or [])
+        except Exception:
+            return
+        latest = None
+        latest_dt = None
+        undated_tail: list = []
+        for ep in eps:
+            aired = _as_datetime(getattr(ep, "originallyAvailableAt", None))
+            if aired is None:
+                undated_tail.append(ep)
+                continue
+            if latest_dt is None or aired > latest_dt:
+                latest_dt = aired
+                latest = ep
+        if resolver is not None and getattr(resolver, "active", False) and undated_tail:
+            undated_tail.sort(
+                key=lambda ep: (
+                    int(getattr(ep, "parentIndex", None) or getattr(ep, "seasonNumber", None) or 0),
+                    int(getattr(ep, "index", None) or 0),
+                ),
+                reverse=True,
+            )
+            for ep in undated_tail[:8]:
+                aired = resolver.resolve_episode_aired(ep, show)
+                if aired is None:
+                    continue
+                if latest_dt is None or aired > latest_dt:
+                    latest_dt = aired
+                    latest = ep
+        if latest_dt is None or latest_dt < cutoff:
+            if only_keys:
+                _progress(
+                    progress,
+                    f"{getattr(show, 'title', key)}: not eligible for Live — nothing stamped",
+                )
+            return
+        should[key] = {
+            "show": show,
+            "library": library,
+            "airedAt": latest_dt.isoformat(),
+            "dayLabel": _weekday_label(latest_dt),
+        }
+
+    if only_keys:
+        _progress(progress, f"Scoped Live check — {len(only_keys)} title(s)…")
+        for key in sorted(only_keys):
+            item = _fetch_plex_item(plex, key)
+            if item is None:
+                _progress(progress, f"Title {key}: not found — Live skipped")
+                continue
+            itype = str(getattr(item, "type", "") or "").lower()
+            if itype != "show":
+                _progress(progress, f"{getattr(item, 'title', key)}: not a TV show — Live skipped")
+                continue
+            _evaluate_show(item, _library_title(item))
+        _progress(progress, f"Live schedule eligible (scoped): {len(should)}")
+        return should
+
     for section in sections:
         try:
             for show in section.all():
-                key = str(getattr(show, "ratingKey", "") or "")
-                if not key:
-                    continue
-                if skip_kometa and _has_kometa_overlay_label(show):
-                    continue
-                try:
-                    eps = list(show.episodes() or [])
-                except Exception:
-                    continue
-                latest = None
-                latest_dt = None
-                # Prefer dated Plex eps; only TMDB-fill a short tail of undated ones.
-                undated_tail: list = []
-                for ep in eps:
-                    aired = _as_datetime(getattr(ep, "originallyAvailableAt", None))
-                    if aired is None:
-                        undated_tail.append(ep)
-                        continue
-                    if latest_dt is None or aired > latest_dt:
-                        latest_dt = aired
-                        latest = ep
-                if resolver is not None and getattr(resolver, "active", False) and undated_tail:
-                    # Newest-looking undated first (highest season/episode index).
-                    undated_tail.sort(
-                        key=lambda ep: (
-                            int(getattr(ep, "parentIndex", None) or getattr(ep, "seasonNumber", None) or 0),
-                            int(getattr(ep, "index", None) or 0),
-                        ),
-                        reverse=True,
-                    )
-                    for ep in undated_tail[:8]:
-                        aired = resolver.resolve_episode_aired(ep, show)
-                        if aired is None:
-                            continue
-                        if latest_dt is None or aired > latest_dt:
-                            latest_dt = aired
-                            latest = ep
-                if latest_dt is None or latest_dt < cutoff:
-                    continue
-                should[key] = {
-                    "show": show,
-                    "library": section.title,
-                    "airedAt": latest_dt.isoformat(),
-                    "dayLabel": _weekday_label(latest_dt),
-                }
+                _evaluate_show(show, section.title)
         except Exception as exc:
             _progress(progress, f"Live scan failed for {getattr(section, 'title', '?')}: {exc}")
     _progress(progress, f"Live schedule eligible: {len(should)}")
@@ -369,8 +394,22 @@ def run_live_overlays(
     reserved_keys: set[str] | None = None,
     resolver=None,
 ) -> dict:
+    from core import _only_rating_keys
+
     log_path = paths["liveLog"]
+    only_keys = _only_rating_keys(config)
+    scoped_run = bool(only_keys)
     if not _as_bool(config.get("liveScheduleEnabled", config.get("live_schedule_enabled")), False):
+        if scoped_run:
+            _progress(progress, "Live overlays disabled — scoped pass leaves tracked stamps alone")
+            return {
+                "liveEnabled": False,
+                "liveAdded": 0,
+                "liveRemoved": 0,
+                "liveTotal": 0,
+                "liveErrors": [],
+                "liveKeys": [],
+            }
         removed, errors, total = _prune_mode_when_disabled(
             plex, paths, "live", log_path, preview_mode, progress, config=config
         )
@@ -441,30 +480,33 @@ def run_live_overlays(
         except Exception as exc:
             errors.append(f"live {meta['show'].title}: {exc}")
 
-    for key in list(log.keys()):
-        if key in should:
-            continue
-        entry = log.get(key) or {}
-        title = entry.get("title") or key
-        try:
-            if preview_mode:
-                if bool(entry.get("preview_only")):
-                    del log[key]
-                    removed += 1
+    if not scoped_run:
+        for key in list(log.keys()):
+            if key in should:
                 continue
+            entry = log.get(key) or {}
+            title = entry.get("title") or key
             try:
-                show = plex.fetchItem(f"/library/metadata/{key}")
-            except Exception:
+                if preview_mode:
+                    if bool(entry.get("preview_only")):
+                        del log[key]
+                        removed += 1
+                    continue
+                try:
+                    show = plex.fetchItem(f"/library/metadata/{key}")
+                except Exception:
+                    del log[key]
+                    _clear_mode_backup(paths, "live", key)
+                    removed += 1
+                    continue
+                _restore_show_mode(show, paths, "live", progress, config=config)
                 del log[key]
-                _clear_mode_backup(paths, "live", key)
                 removed += 1
-                continue
-            _restore_show_mode(show, paths, "live", progress, config=config)
-            del log[key]
-            removed += 1
-            _progress(progress, f"Removed live overlay: {title}")
-        except Exception as exc:
-            errors.append(f"live remove {key}: {exc}")
+                _progress(progress, f"Removed live overlay: {title}")
+            except Exception as exc:
+                errors.append(f"live remove {key}: {exc}")
+    else:
+        _progress(progress, "Scoped Live pass — prune of other titles skipped")
 
     _save_log(log_path, log)
     return {
@@ -479,12 +521,61 @@ def run_live_overlays(
 
 
 def discover_recently_added(plex, config: dict, sections, progress: ProgressFn | None = None):
-    from core import _as_datetime, _has_kometa_overlay_label
+    from core import _as_datetime, _has_kometa_overlay_label, _only_rating_keys, _fetch_plex_item, _library_title
 
     days = int(config.get("recentlyAddedDays") or config.get("recently_added_days") or 7)
     cutoff = datetime.now() - timedelta(days=max(1, days))
     skip_kometa = _as_bool(config.get("skipIfKometaOverlayLabel", config.get("skip_if_kometa_overlay_label")), True)
+    only_keys = _only_rating_keys(config)
     should: dict[str, dict] = {}
+
+    def _consider(show, library: str, added) -> None:
+        key = str(getattr(show, "ratingKey", "") or "")
+        if not key or key in should:
+            return
+        if skip_kometa and _has_kometa_overlay_label(show):
+            if only_keys:
+                _progress(progress, f"{getattr(show, 'title', key)}: skipped (Overlay label)")
+            return
+        if added is None or added < cutoff:
+            if only_keys:
+                _progress(
+                    progress,
+                    f"{getattr(show, 'title', key)}: not recently added — nothing stamped",
+                )
+            return
+        should[key] = {
+            "show": show,
+            "library": library,
+            "addedAt": added.isoformat(),
+        }
+
+    if only_keys:
+        _progress(progress, f"Scoped Recently Added check — {len(only_keys)} title(s)…")
+        for key in sorted(only_keys):
+            item = _fetch_plex_item(plex, key)
+            if item is None:
+                _progress(progress, f"Title {key}: not found — Recently Added skipped")
+                continue
+            show = item
+            itype = str(getattr(item, "type", "") or getattr(item, "TYPE", "") or "").lower()
+            try:
+                if itype in {"episode", "season"} or hasattr(item, "show"):
+                    show = item.show()
+            except Exception:
+                show = item
+            show_type = str(getattr(show, "type", "") or "").lower()
+            if show_type not in {"show", "movie"} and itype not in {"show", "movie"}:
+                # Prefer show-level; movies are allowed for Layer-style cards but Recently is TV-scoped.
+                pass
+            if str(getattr(show, "type", "") or "").lower() != "show":
+                _progress(progress, f"{getattr(show, 'title', key)}: not a TV show — Recently Added skipped")
+                continue
+            added = _as_datetime(getattr(item, "addedAt", None)) or _as_datetime(getattr(show, "addedAt", None))
+            _consider(show, _library_title(show), added)
+        _progress(progress, f"Recently Added eligible (scoped): {len(should)}")
+        return should
+
     for section in sections:
         try:
             # Prefer section recentlyAdded when available
@@ -502,19 +593,8 @@ def discover_recently_added(plex, config: dict, sections, progress: ProgressFn |
                         show = item.show()
                 except Exception:
                     show = item
-                key = str(getattr(show, "ratingKey", "") or "")
-                if not key or key in should:
-                    continue
-                if skip_kometa and _has_kometa_overlay_label(show):
-                    continue
                 added = _as_datetime(getattr(item, "addedAt", None)) or _as_datetime(getattr(show, "addedAt", None))
-                if added is None or added < cutoff:
-                    continue
-                should[key] = {
-                    "show": show,
-                    "library": section.title,
-                    "addedAt": added.isoformat(),
-                }
+                _consider(show, section.title, added)
         except Exception as exc:
             _progress(progress, f"Recently Added scan failed for {getattr(section, 'title', '?')}: {exc}")
     _progress(progress, f"Recently Added eligible: {len(should)}")
@@ -529,8 +609,22 @@ def run_recently_added_overlays(
     progress: ProgressFn | None,
     reserved_keys: set[str] | None = None,
 ) -> dict:
+    from core import _only_rating_keys
+
     log_path = paths["recentlyAddedLog"]
+    only_keys = _only_rating_keys(config)
+    scoped_run = bool(only_keys)
     if not _as_bool(config.get("recentlyAddedEnabled", config.get("recently_added_enabled")), False):
+        if scoped_run:
+            _progress(progress, "Recently Added overlays disabled — scoped pass leaves tracked stamps alone")
+            return {
+                "recentlyAddedEnabled": False,
+                "recentlyAdded": 0,
+                "recentlyRemoved": 0,
+                "recentlyTotal": 0,
+                "recentlyErrors": [],
+                "recentlyKeys": [],
+            }
         removed, errors, total = _prune_mode_when_disabled(
             plex, paths, "recently", log_path, preview_mode, progress, config=config
         )
@@ -554,7 +648,7 @@ def run_recently_added_overlays(
     badge = Image.open(asset)
     placement = _recently_placement(config)
     sections = list(_iter_tv_sections(plex, config, bundle="recently"))
-    if not sections:
+    if not sections and not scoped_run:
         _progress(progress, "No TV libraries in Recently Added scope (check the library selector on this card).")
     candidates = discover_recently_added(plex, config, sections, progress)
     should = {k: v for k, v in candidates.items() if k not in reserved}
@@ -607,28 +701,31 @@ def run_recently_added_overlays(
         except Exception as exc:
             errors.append(f"recently {meta['show'].title}: {exc}")
 
-    for key in list(log.keys()):
-        if key in should:
-            continue
-        entry = log.get(key) or {}
-        try:
-            if preview_mode:
-                if bool(entry.get("preview_only")):
-                    del log[key]
-                    removed += 1
+    if not scoped_run:
+        for key in list(log.keys()):
+            if key in should:
                 continue
+            entry = log.get(key) or {}
             try:
-                show = plex.fetchItem(f"/library/metadata/{key}")
-            except Exception:
+                if preview_mode:
+                    if bool(entry.get("preview_only")):
+                        del log[key]
+                        removed += 1
+                    continue
+                try:
+                    show = plex.fetchItem(f"/library/metadata/{key}")
+                except Exception:
+                    del log[key]
+                    _clear_mode_backup(paths, "recently", key)
+                    removed += 1
+                    continue
+                _restore_show_mode(show, paths, "recently", progress, config=config)
                 del log[key]
-                _clear_mode_backup(paths, "recently", key)
                 removed += 1
-                continue
-            _restore_show_mode(show, paths, "recently", progress, config=config)
-            del log[key]
-            removed += 1
-        except Exception as exc:
-            errors.append(f"recently remove {key}: {exc}")
+            except Exception as exc:
+                errors.append(f"recently remove {key}: {exc}")
+    else:
+        _progress(progress, "Scoped Recently Added pass — prune of other titles skipped")
 
     _save_log(log_path, log)
     return {
@@ -680,8 +777,21 @@ def discover_top10(plex, config: dict, sections, progress: ProgressFn | None = N
 
 
 def run_top10_overlays(plex, config: dict, paths: dict, preview_mode: bool, progress: ProgressFn | None) -> dict:
+    from core import _only_rating_keys
+
     log_path = paths["top10Log"]
+    only_keys = _only_rating_keys(config)
+    scoped_run = bool(only_keys)
     if not _as_bool(config.get("top10Enabled", config.get("top10_enabled")), False):
+        if scoped_run:
+            _progress(progress, "Top 10 overlays disabled — scoped pass leaves tracked stamps alone")
+            return {
+                "top10Enabled": False,
+                "top10Added": 0,
+                "top10Removed": 0,
+                "top10Total": 0,
+                "top10Errors": [],
+            }
         removed, errors, total = _prune_mode_when_disabled(
             plex, paths, "top10", log_path, preview_mode, progress, config=config
         )
@@ -691,6 +801,18 @@ def run_top10_overlays(plex, config: dict, paths: dict, preview_mode: bool, prog
             "top10Removed": removed,
             "top10Total": total,
             "top10Errors": errors,
+        }
+
+    if scoped_run:
+        # Ranking needs a full library scan — skip on single-title tests.
+        _progress(progress, "Top 10 skipped on scoped title pass (needs full library ranking)")
+        return {
+            "top10Enabled": True,
+            "top10Added": 0,
+            "top10Removed": 0,
+            "top10Total": 0,
+            "top10Eligible": 0,
+            "top10Errors": [],
         }
 
     from core import _iter_tv_sections

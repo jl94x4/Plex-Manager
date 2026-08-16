@@ -318,6 +318,15 @@ def _only_collection_rating_keys(config: dict) -> set[str]:
     return {str(k or "").strip() for k in raw if str(k or "").strip()}
 
 
+def _only_rating_keys(config: dict) -> set[str]:
+    raw = config.get("onlyRatingKeys") or config.get("only_rating_keys") or []
+    if isinstance(raw, str):
+        raw = [x.strip() for x in raw.split(",") if x.strip()]
+    if not isinstance(raw, list):
+        return set()
+    return {str(k or "").strip() for k in raw if str(k or "").strip()}
+
+
 def _stamp_source_collection_key(cc_meta: dict) -> str:
     """Which Plex collection ratingKey this stamp belongs to (targeted prune/skip)."""
     if not isinstance(cc_meta, dict):
@@ -697,6 +706,7 @@ def _apply_custom_collection_winners(
     *,
     progress: ProgressFn | None = None,
     errors: list[str] | None = None,
+    only_rating_keys: set[str] | None = None,
 ) -> dict[str, set[str]]:
     """Inject custom_collection winners from live Plex membership.
 
@@ -709,6 +719,7 @@ def _apply_custom_collection_winners(
     rule_members: dict[str, set[str]] = {}
     if not rules:
         return rule_members
+    title_filter = {str(k or "").strip() for k in (only_rating_keys or set()) if str(k or "").strip()}
     # ratingKey -> first matching (rule, image_path, source_collection_key)
     member_rule: dict[str, tuple[dict, Path, str]] = {}
     claimed_elsewhere: dict[str, int] = {rule["id"]: 0 for rule in rules}
@@ -747,6 +758,8 @@ def _apply_custom_collection_winners(
                 library_section_ids=section_ids,
                 progress=progress,
             )
+            if title_filter:
+                part = {k for k in part if k in title_filter}
             members.update(part)
             for rk in part:
                 if rk not in member_source:
@@ -760,7 +773,8 @@ def _apply_custom_collection_winners(
             label = title_hint or collection_key
             _progress(
                 progress,
-                f"Collection '{label}' [{lib_label}]: {len(part)} member(s)",
+                f"Collection '{label}' [{lib_label}]: {len(part)} member(s)"
+                + (" (scoped)" if title_filter else ""),
             )
         rule_members[rule["id"]] = set(members)
         _progress(
@@ -781,6 +795,15 @@ def _apply_custom_collection_winners(
                 continue
             member_rule[rk] = (rule, image_path, member_source.get(rk) or collection_keys[0])
 
+    if title_filter:
+        for key in sorted(title_filter):
+            if key not in member_rule:
+                item = _fetch_plex_item(plex, key)
+                label = getattr(item, "title", None) if item is not None else key
+                _progress(
+                    progress,
+                    f"{label}: not a member of any enabled collection overlay rule — nothing stamped",
+                )
     queued_by_rule: dict[str, int] = {rule["id"]: 0 for rule in rules}
     dropped = 0
     for rk, (rule, image_path, source_collection_key) in member_rule.items():
@@ -1510,7 +1533,18 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
     family_counts: dict[str, int] = {}
 
     if not all_families:
-        # Everything off — prune all tracked stamps.
+        # Everything off — prune all tracked stamps (never on a scoped single-title test).
+        only_title_keys_early = _only_rating_keys(config)
+        if only_title_keys_early:
+            _progress(progress, "Layer overlays disabled — scoped pass leaves tracked stamps alone")
+            return {
+                "kometaEnabled": False,
+                "kometaAdded": 0,
+                "kometaRemoved": 0,
+                "kometaTotal": len(log),
+                "kometaErrors": [],
+                "kometaScope": scope_name,
+            }
         if log:
             _progress(progress, "Layer overlays disabled — restoring tracked posters…")
         for key in list(log.keys()):
@@ -1583,41 +1617,61 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
     plans = _collect_section_plans(plex, config)
     should: dict[str, dict] = {}
     scanned = 0
+    only_title_keys = _only_rating_keys(config)
+    scoped_titles = bool(only_title_keys)
 
-    for sid, plan in plans.items():
-        section = plan["section"]
-        section_families = plan["families"]
-        if not section_families:
-            continue
-        _progress(progress, f"Layer scan: {getattr(section, 'title', sid)} ({', '.join(sorted(section_families))})…")
-        for item in _iter_section_items(section, section_families):
-            scanned += 1
-            if scanned % 50 == 0:
-                _progress(progress, f"Layer scan: checked {scanned} titles, eligible {len(should)}…")
-            key = str(getattr(item, "ratingKey", "") or "")
-            if not key:
+    if scoped_titles:
+        _progress(
+            progress,
+            f"Scoped Layer pass — {len(only_title_keys)} rating key(s); full-library scan and prune skipped",
+        )
+        # Detect media/status/etc on the requested titles only (collections inject later).
+        media_families = {f for f in families if f != "custom_collection"}
+        for key in sorted(only_title_keys):
+            item = _fetch_plex_item(plex, key)
+            if item is None:
+                _progress(progress, f"Title {key}: not found in Plex — skipped")
                 continue
+            scanned += 1
             if skip_kometa and key not in log and _has_kometa_overlay_label(item):
-                continue  # managed by a real Kometa install — leave alone
+                _progress(
+                    progress,
+                    f"{getattr(item, 'title', key)}: skipped (Overlay label / external Kometa)",
+                )
+                continue
             item_type = str(getattr(item, "type", "") or "").lower()
-            row = should.get(key) or {
+            library = _item_library_title(item)
+            row = {
                 "item": item,
-                "library": getattr(section, "title", ""),
+                "library": library,
                 "itemType": item_type,
                 "winners": {},
             }
-            for family in section_families:
-                # Episode items only get episode_info (+ optional media families that work on episodes).
+            for family in media_families:
                 if item_type == "episode" and family != "episode_info":
                     continue
                 if item_type != "episode" and family == "episode_info":
                     continue
-                allow, deny = allow_deny.get(FAMILY_SCOPE[family], ([], []))
+                # Family/library type gates (mirror _collect_section_plans).
+                if family == "edition" and item_type != "movie":
+                    continue
+                if family in {"status", "network"} and item_type != "show":
+                    continue
+                if family == "episode_info" and item_type != "episode":
+                    continue
+                if family == "mediastinger" and item_type != "movie":
+                    continue
+                if family in {"aspect", "language_count", "languages"} and item_type != "movie":
+                    continue
+                allow, deny = allow_deny.get(FAMILY_SCOPE.get(family, ""), ([], []))
                 if not _title_allowed(key, allow, deny):
                     continue
-                if family in row["winners"]:
-                    continue
                 try:
+                    section = None
+                    try:
+                        section = item.section()
+                    except Exception:
+                        section = None
                     winner = _detect_family_winner(
                         family,
                         item,
@@ -1636,6 +1690,64 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                     errors.append(f"{family} {getattr(item, 'title', key)}: {exc}")
             if row["winners"]:
                 should[key] = row
+            elif media_families:
+                _progress(
+                    progress,
+                    f"{getattr(item, 'title', key)}: no Layer family matched — waiting for collection rules if enabled",
+                )
+    else:
+        for sid, plan in plans.items():
+            section = plan["section"]
+            section_families = plan["families"]
+            if not section_families:
+                continue
+            _progress(progress, f"Layer scan: {getattr(section, 'title', sid)} ({', '.join(sorted(section_families))})…")
+            for item in _iter_section_items(section, section_families):
+                scanned += 1
+                if scanned % 50 == 0:
+                    _progress(progress, f"Layer scan: checked {scanned} titles, eligible {len(should)}…")
+                key = str(getattr(item, "ratingKey", "") or "")
+                if not key:
+                    continue
+                if skip_kometa and key not in log and _has_kometa_overlay_label(item):
+                    continue  # managed by a real Kometa install — leave alone
+                item_type = str(getattr(item, "type", "") or "").lower()
+                row = should.get(key) or {
+                    "item": item,
+                    "library": getattr(section, "title", ""),
+                    "itemType": item_type,
+                    "winners": {},
+                }
+                for family in section_families:
+                    # Episode items only get episode_info (+ optional media families that work on episodes).
+                    if item_type == "episode" and family != "episode_info":
+                        continue
+                    if item_type != "episode" and family == "episode_info":
+                        continue
+                    allow, deny = allow_deny.get(FAMILY_SCOPE[family], ([], []))
+                    if not _title_allowed(key, allow, deny):
+                        continue
+                    if family in row["winners"]:
+                        continue
+                    try:
+                        winner = _detect_family_winner(
+                            family,
+                            item,
+                            section,
+                            detector=detector,
+                            config=config,
+                            res_allowed=res_allowed,
+                            tmdb=tmdb,
+                            lists=lists,
+                            airing_days=airing_days,
+                            streaming_region=streaming_region,
+                        )
+                        if winner is not None:
+                            row["winners"][family] = winner
+                    except Exception as exc:
+                        errors.append(f"{family} {getattr(item, 'title', key)}: {exc}")
+                if row["winners"]:
+                    should[key] = row
 
     cc_rule_members: dict[str, set[str]] = {}
     active_cc_rule_ids: set[str] = set()
@@ -1648,6 +1760,11 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 f"Targeted collection sync — {len(only_collection_keys)} collection key(s) "
                 f"(add missing badges, remove leavers only)",
             )
+        if scoped_titles:
+            _progress(
+                progress,
+                f"Scoped collection stamp — only {len(only_title_keys)} title(s) will be considered",
+            )
         cc_rule_members = _apply_custom_collection_winners(
             plex,
             config,
@@ -1655,6 +1772,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             should,
             progress=progress,
             errors=errors,
+            only_rating_keys=only_title_keys if scoped_titles else None,
         )
         active_cc_rule_ids = {r["id"] for r in _custom_collection_rules(config)}
         # Don't steal badges from higher-priority rules outside this targeted set.
@@ -1931,7 +2049,10 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 _save_log(log_path, log)
 
     # Prune entries no longer eligible for this scope.
-    for key in list(log.keys()):
+    if scoped_titles:
+        _progress(progress, "Scoped Layer pass — prune of other tracked titles skipped")
+    else:
+      for key in list(log.keys()):
         if key in should:
             continue
         entry = log.get(key) or {}
