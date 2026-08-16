@@ -1037,6 +1037,8 @@ export const fr: DeepPartial<EnCatalog> = {
             languagesAllowCodesPlaceholder: 'Vide = toutes les langues audio\nUn code ISO par ligne (en, ja, de…)',
             kometaAddOverlayLabel: 'Aussi ajouter le label Plex « Overlay »',
             kometaAddOverlayLabelHint: 'Tag optionnel compatible Kometa. Les noms d’overlays appliqués (4K-HDR, Atmos, …) sont toujours écrits dans Labels Plex au tampon et retirés au rétablissement.',
+            bannersAddOverlayLabel: 'Ajouter le label Plex « Overlay » aux tampons bannières',
+            bannersAddOverlayLabelHint: 'Tag compatible Kometa. Appliqué pour Live / Nouvelle saison / Récemment ajouté / Top 10 / Nouvel épisode, et retiré quand ces overlays sont entièrement enlevés (sauf si Kometa possède encore le label).',
             windowHint: 'Durée pendant laquelle une saison reste éligible après la diffusion de S01 (1–365).',
             newEpisodeWindowHint: 'Durée pendant laquelle un épisode conserve le badge New Episode après diffusion (1–30, 6 par défaut).',
             overlayPreset: 'Préréglage New Season',

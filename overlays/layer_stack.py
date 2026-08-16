@@ -329,9 +329,10 @@ def upload_composed(
     preview_mode: bool,
     progress: ProgressFn | None,
     title: str = "",
+    config: dict | None = None,
 ) -> dict:
     """Compose current registry and upload (or write preview)."""
-    from core import _sanitize_filename
+    from core import _sanitize_filename, _sync_banner_overlay_label
 
     composed = compose_from_registry(paths, rating_key)
     label = title or getattr(show, "title", None) or rating_key
@@ -357,6 +358,15 @@ def upload_composed(
             progress,
             f"Uploaded stack ({','.join(entry['activeLayers']) or 'clean'}): {label}",
         )
+        _sync_banner_overlay_label(
+            show,
+            paths=paths,
+            rating_key=str(rating_key),
+            has_overlays=bool(layers),
+            config=config,
+            progress=progress,
+        )
+        entry["labeled"] = bool(layers)
     finally:
         if temp.exists():
             temp.unlink()
@@ -416,6 +426,7 @@ def apply_banner_layer(
         preview_mode=preview_mode,
         progress=progress,
         title=getattr(show, "title", key),
+        config=config,
     )
     now = datetime.now()
     return {
@@ -589,13 +600,24 @@ def remove_banner_layer(
             preview_mode=False,
             progress=progress,
             title=getattr(show, "title", key),
+            config=config,
         )
         return True
+
+    from core import _sync_banner_overlay_label
 
     if base.exists():
         try:
             show.uploadPoster(filepath=str(base))
             _progress(progress, f"Restored clean base: {getattr(show, 'title', key)}")
+            _sync_banner_overlay_label(
+                show,
+                paths=paths,
+                rating_key=key,
+                has_overlays=False,
+                config=config,
+                progress=progress,
+            )
             return True
         except Exception as exc:
             _progress(progress, f"Base restore failed for {key}: {exc}")
@@ -609,6 +631,14 @@ def remove_banner_layer(
         try:
             show.uploadPoster(filepath=str(legacy_file))
             _progress(progress, f"Restored legacy {mode} backup: {getattr(show, 'title', key)}")
+            _sync_banner_overlay_label(
+                show,
+                paths=paths,
+                rating_key=key,
+                has_overlays=False,
+                config=config,
+                progress=progress,
+            )
             return True
         except Exception as exc:
             _progress(progress, f"Legacy restore failed for {key}: {exc}")
@@ -622,8 +652,11 @@ def restore_clean_base(
     *,
     progress: ProgressFn | None = None,
     clear_layers: bool = True,
+    config: dict | None = None,
 ) -> bool:
     """Upload clean base and optionally wipe the layer registry (reset paths)."""
+    from core import _sync_banner_overlay_label
+
     key = str(rating_key)
     if clear_layers:
         clear_all_layers(paths, key)
@@ -637,6 +670,14 @@ def restore_clean_base(
         try:
             show.uploadPoster(filepath=str(base))
             _progress(progress, f"Restored clean base: {getattr(show, 'title', key)}")
+            _sync_banner_overlay_label(
+                show,
+                paths=paths,
+                rating_key=key,
+                has_overlays=False,
+                config=config,
+                progress=progress,
+            )
             return True
         except Exception as exc:
             _progress(progress, f"Clean base restore failed for {key}: {exc}")

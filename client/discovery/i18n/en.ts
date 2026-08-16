@@ -1035,6 +1035,8 @@ export const en = {
             languagesAllowCodesPlaceholder: 'Empty = all audio languages\nOne ISO code per line (en, ja, de…)',
             kometaAddOverlayLabel: 'Also add Plex “Overlay” label',
             kometaAddOverlayLabelHint: 'Optional Kometa-compat tag. Applied overlay names (4K-HDR, Atmos, …) are always written to Plex Labels on stamp and removed on revert.',
+            bannersAddOverlayLabel: 'Add Plex “Overlay” label on banner stamps',
+            bannersAddOverlayLabelHint: 'Kometa-compatible tag. Applied when Live / New Season / Recently / Top 10 / New Episode stamps, and cleared when those overlays are fully removed (unless Kometa still owns the label).',
             windowHint: 'How long after S01 airs a season stays eligible (1–365).',
             newEpisodeWindowHint: 'How long after an episode airs it keeps the New Episode badge (1–30, default 6).',
             overlayPreset: 'New Season overlay preset',

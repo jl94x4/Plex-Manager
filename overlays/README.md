@@ -85,5 +85,6 @@ pip install -r overlays/requirements.txt
 ## Notes
 
 - Skips items with a Kometa `Overlay` label by default (`skipIfKometaOverlayLabel`)
+- Banner / New Episode stamps add the same Plex `Overlay` label by default (`bannersAddOverlayLabel`) so Kometa can skip them; the label is cleared when no banner layers remain (unless Kometa still owns it)
 - Custom PNG uploads go to `config/overlays/presets/custom/` (`season-*` / `episode-*`)
 - Prefer off-hours if Poster Sets / Kometa also rewrite posters on the same libraries

@@ -288,6 +288,78 @@ def _has_kometa_overlay_label(item) -> bool:
     return False
 
 
+def _add_plex_overlay_label(item) -> bool:
+    """Add Kometa-compatible Plex Label \"Overlay\" (idempotent)."""
+    try:
+        if _has_kometa_overlay_label(item):
+            return True
+        item.addLabel("Overlay")
+        return True
+    except Exception:
+        return False
+
+
+def _remove_plex_overlay_label(item) -> bool:
+    """Remove Plex Label \"Overlay\" when present."""
+    try:
+        if not _has_kometa_overlay_label(item):
+            return False
+        item.removeLabel("Overlay")
+        return True
+    except Exception:
+        return False
+
+
+def _banners_add_overlay_label(config: dict | None) -> bool:
+    """Whether banner / New Episode stamps should set the Kometa-style Overlay label."""
+    if not isinstance(config, dict):
+        return True
+    if config.get("bannersAddOverlayLabel") is not None:
+        return _as_bool(config.get("bannersAddOverlayLabel"), True)
+    if config.get("banners_add_overlay_label") is not None:
+        return _as_bool(config.get("banners_add_overlay_label"), True)
+    return True
+
+
+def _kometa_log_owns_overlay_label(paths: dict | None, rating_key: str) -> bool:
+    """True when Kometa log still tracks this item as Overlay-labeled."""
+    if not paths or not rating_key:
+        return False
+    log_path = paths.get("kometaLog")
+    if not log_path:
+        return False
+    try:
+        data = _load_log(Path(log_path))
+        entry = data.get(str(rating_key)) if isinstance(data, dict) else None
+        if not isinstance(entry, dict):
+            return False
+        return entry.get("labeled") is True
+    except Exception:
+        return False
+
+
+def _sync_banner_overlay_label(
+    item,
+    *,
+    paths: dict | None,
+    rating_key: str,
+    has_overlays: bool,
+    config: dict | None,
+    progress: ProgressFn | None = None,
+) -> None:
+    """Add/remove Overlay label for banner stamps without clobbering Kometa ownership."""
+    if not _banners_add_overlay_label(config):
+        return
+    if has_overlays:
+        if _add_plex_overlay_label(item):
+            _progress(progress, f"Plex Overlay label set: {getattr(item, 'title', rating_key)}")
+        return
+    if _kometa_log_owns_overlay_label(paths, rating_key):
+        return
+    if _remove_plex_overlay_label(item):
+        _progress(progress, f"Plex Overlay label cleared: {getattr(item, 'title', rating_key)}")
+
+
 def _apply_overlay(
     base_img: Image.Image,
     overlay_img: Image.Image,
@@ -1639,27 +1711,52 @@ def process_season_new_episode_overlay(
         try:
             latest.uploadPoster(filepath=str(temp))
             _progress(progress, f"Uploaded season New Episode: {show.title} S{latest.index}")
+            _sync_banner_overlay_label(
+                latest,
+                paths=paths,
+                rating_key=str(getattr(latest, "ratingKey", "") or show_key),
+                has_overlays=True,
+                config=config,
+                progress=progress,
+            )
+            entry["labeled"] = True
         finally:
             if temp.exists():
                 temp.unlink()
     return entry
 
 
-def remove_season_new_episode_overlay(show, preview_mode: bool, progress: ProgressFn | None = None, paths: dict | None = None) -> bool:
+def remove_season_new_episode_overlay(
+    show,
+    preview_mode: bool,
+    progress: ProgressFn | None = None,
+    paths: dict | None = None,
+    config: dict | None = None,
+) -> bool:
     show_key = str(getattr(show, "ratingKey", "") or "")
     title = getattr(show, "title", show_key)
     if preview_mode:
         _progress(progress, f"[Preview] Would remove season New Episode overlay: {title}")
         return True
     _progress(progress, f"Removing season New Episode overlay: {title}")
+    latest = _latest_season(show)
+    restored = False
     if paths is not None and show_key:
         if _restore_season_episode_from_backup(show, paths, show_key, progress):
-            return True
-    latest = _latest_season(show)
-    if latest:
+            restored = True
+    if not restored and latest:
         _progress(progress, f"No season-NE backup for {title} — falling back to Plex poster list")
-        return _reset_poster(latest)
-    return False
+        restored = _reset_poster(latest)
+    if restored and latest is not None:
+        _sync_banner_overlay_label(
+            latest,
+            paths=paths,
+            rating_key=str(getattr(latest, "ratingKey", "") or show_key),
+            has_overlays=False,
+            config=config,
+            progress=progress,
+        )
+    return restored
 
 
 def _episode_backup_dir(paths: dict, rating_key: str) -> Path:
@@ -1967,6 +2064,15 @@ def process_episode_overlay(
         try:
             episode.uploadPoster(filepath=str(temp))
             _progress(progress, f"Uploaded episode thumb: {label}")
+            _sync_banner_overlay_label(
+                episode,
+                paths=paths,
+                rating_key=rating_key,
+                has_overlays=True,
+                config=config,
+                progress=progress,
+            )
+            entry["labeled"] = True
         finally:
             if temp.exists():
                 temp.unlink()
@@ -1974,18 +2080,36 @@ def process_episode_overlay(
     return entry
 
 
-def remove_episode_overlay(episode, preview_mode: bool, progress: ProgressFn | None = None, paths: dict | None = None) -> bool:
+def remove_episode_overlay(
+    episode,
+    preview_mode: bool,
+    progress: ProgressFn | None = None,
+    paths: dict | None = None,
+    config: dict | None = None,
+) -> bool:
     rating_key = str(getattr(episode, "ratingKey", "") or "")
     title = getattr(episode, "title", rating_key)
     if preview_mode:
         _progress(progress, f"[Preview] Would remove episode overlay: {title}")
         return True
     _progress(progress, f"Removing episode overlay: {title}")
+    restored = False
     if paths is not None and rating_key:
         if _restore_episode_from_backup(episode, paths, rating_key, progress):
-            return True
-    _progress(progress, f"No episode backup for {title} — falling back to Plex poster list")
-    return _reset_poster(episode)
+            restored = True
+    if not restored:
+        _progress(progress, f"No episode backup for {title} — falling back to Plex poster list")
+        restored = _reset_poster(episode)
+    if restored:
+        _sync_banner_overlay_label(
+            episode,
+            paths=paths,
+            rating_key=rating_key,
+            has_overlays=False,
+            config=config,
+            progress=progress,
+        )
+    return restored
 
 
 def run_new_episode_overlays(
@@ -2018,7 +2142,7 @@ def run_new_episode_overlays(
                         del log[key]
                         season_removed += 1
                         continue
-                    remove_season_new_episode_overlay(show, False, progress, paths=paths)
+                    remove_season_new_episode_overlay(show, False, progress, paths=paths, config=config)
                     del log[key]
                     season_removed += 1
                     continue
@@ -2028,7 +2152,7 @@ def run_new_episode_overlays(
                     del log[key]
                     removed += 1
                     continue
-                remove_episode_overlay(episode, False, progress, paths=paths)
+                remove_episode_overlay(episode, False, progress, paths=paths, config=config)
                 del log[key]
                 removed += 1
             except Exception as exc:
@@ -2180,7 +2304,7 @@ def run_new_episode_overlays(
                     _clear_season_episode_backup(paths, show_key)
                     season_removed += 1
                     continue
-                if remove_season_new_episode_overlay(show, False, progress, paths=paths):
+                if remove_season_new_episode_overlay(show, False, progress, paths=paths, config=config):
                     del log[key]
                     season_removed += 1
                 else:
@@ -2209,7 +2333,7 @@ def run_new_episode_overlays(
                     del log[key]
                     removed += 1
                     continue
-            if remove_episode_overlay(episode, False, progress, paths=paths):
+            if remove_episode_overlay(episode, False, progress, paths=paths, config=config):
                 del log[key]
                 removed += 1
             else:
@@ -2779,7 +2903,7 @@ def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None,
         log_key = _season_episode_log_key(show_key)
         show = plex.fetchItem(f"/library/metadata/{show_key}")
         had_backup = (_season_episode_backup_dir(paths, show_key) / "season.png").exists()
-        remove_season_new_episode_overlay(show, False, progress, paths=paths)
+        remove_season_new_episode_overlay(show, False, progress, paths=paths, config=config)
         _clear_season_episode_backup(paths, show_key)
         if log_key in episode_log:
             del episode_log[log_key]
@@ -2795,7 +2919,7 @@ def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None,
     if prefer_episode or (not prefer_show and key in episode_log and not _is_season_episode_log_key(key)):
         item = plex.fetchItem(f"/library/metadata/{key}")
         had_backup = (_episode_backup_dir(paths, key) / "episode.png").exists()
-        remove_episode_overlay(item, False, progress, paths=paths)
+        remove_episode_overlay(item, False, progress, paths=paths, config=config)
         _clear_episode_backup(paths, key)
         if key in episode_log:
             del episode_log[key]
@@ -2920,7 +3044,7 @@ def reset_all(config: dict, progress: ProgressFn | None = None, scope: str | Non
             had_backup = (_season_episode_backup_dir(paths, show_key) / "season.png").exists()
             try:
                 show = plex.fetchItem(f"/library/metadata/{show_key}")
-                remove_season_new_episode_overlay(show, False, progress, paths=paths)
+                remove_season_new_episode_overlay(show, False, progress, paths=paths, config=config)
                 if had_backup:
                     restored_from_backup += 1
                 episodes_removed += 1
@@ -2934,7 +3058,7 @@ def reset_all(config: dict, progress: ProgressFn | None = None, scope: str | Non
         had_backup = (_episode_backup_dir(paths, key) / "episode.png").exists()
         try:
             episode = plex.fetchItem(f"/library/metadata/{key}")
-            remove_episode_overlay(episode, False, progress, paths=paths)
+            remove_episode_overlay(episode, False, progress, paths=paths, config=config)
             if had_backup:
                 restored_from_backup += 1
             episodes_removed += 1

@@ -127,6 +127,7 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     audioCodecStyle: 'compact',
     videoFormatEnabled: false,
     kometaAddOverlayLabel: false,
+    bannersAddOverlayLabel: true,
     aspectOverlayEnabled: false,
     versionsOverlayEnabled: false,
     languageCountEnabled: false,
@@ -3627,6 +3628,12 @@ export const OverlaysDashboard: React.FC = () => {
                             title={t('overlays.settings.skipKometa')}
                             checked={configDraft.skipIfKometaOverlayLabel !== false}
                             onChange={(skipIfKometaOverlayLabel) => setConfigDraft((prev) => ({ ...prev, skipIfKometaOverlayLabel }))}
+                        />
+                        <SettingsToggleRow
+                            title={t('overlays.settings.bannersAddOverlayLabel')}
+                            description={t('overlays.settings.bannersAddOverlayLabelHint')}
+                            checked={configDraft.bannersAddOverlayLabel !== false}
+                            onChange={(bannersAddOverlayLabel) => setConfigDraft((prev) => ({ ...prev, bannersAddOverlayLabel }))}
                         />
 
                         <div className="border-b border-border/40 py-4">

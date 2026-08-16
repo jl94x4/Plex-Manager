@@ -175,6 +175,8 @@ export type OverlaysConfig = {
     audioCodecStyle?: 'compact' | 'standard';
     videoFormatEnabled?: boolean;
     kometaAddOverlayLabel?: boolean;
+    /** Add Plex “Overlay” label when banner / New Episode stamps apply (default true). */
+    bannersAddOverlayLabel?: boolean;
     aspectOverlayEnabled?: boolean;
     versionsOverlayEnabled?: boolean;
     languageCountEnabled?: boolean;
