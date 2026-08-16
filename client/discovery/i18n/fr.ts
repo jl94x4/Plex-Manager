@@ -1858,6 +1858,25 @@ Object.assign(fr, { homeDashboard: { ...fr.homeDashboard, opsSnapshot: {
     empty: { noIncidents: 'Aucun incident', unavailable: 'Aperçu des opérations indisponible.' },
 } } });
 
+Object.assign(fr, { settings: { ...fr.settings, streamKillRules: {
+    title: "Règles d'arrêt des flux",
+    description: { beforeInterval: 'Définissez des règles qui arrêtent automatiquement les flux Plex. Les règles sont évaluées toutes les ', interval: '15 secondes', afterInterval: '. Combinez les conditions avec ', andAllMatch: ' (toutes doivent correspondre) ou ', orAnyMatch: ' (au moins une doit correspondre). ', afterLogic: "Le message d'arrêt s'affiche sur le client Plex de l'utilisateur." },
+    fields: { isTranscoding: 'En cours de transcodage', videoResolution: 'Résolution vidéo', transcodeVideoDecision: 'Décision de transcodage', mediaType: 'Type de média', state: 'État de lecture', sessionLocation: 'Emplacement de connexion', videoCodec: 'Codec vidéo', audioCodec: 'Codec audio', bandwidth: 'Bande passante (Mbps)', user: "Nom d'utilisateur", playerProduct: 'Application de lecture', playerTitle: "Nom du lecteur/de l'appareil" },
+    operators: { equals: 'est égal à', not_equals: "n'est pas égal à", contains: 'contient', not_contains: 'ne contient pas', greater_than: 'supérieur à', less_than: 'inférieur à', is: 'est' },
+    boolean: { yesTrue: 'Oui / Vrai', noFalse: 'Non / Faux' },
+    options: { transcode: 'Transcoder', copy: 'Copier', directplay: 'Lecture directe', movie: 'Film', episode: 'Épisode', track: 'Piste', playing: 'En lecture', paused: 'En pause', buffering: 'Mise en mémoire tampon', cellular: 'Cellulaire' },
+    placeholders: { numberExample: 'ex. 20', playerExample: 'ex. Plex Web', ruleName: 'Nom de la règle...' },
+    empty: { title: 'Aucune règle configurée', description: 'Ajoutez une règle ci-dessous pour commencer à protéger votre serveur automatiquement.' },
+    rule: { conditionCount: '{count} condition', conditionCount_plural: '{count} conditions', logic: 'Logique :' },
+    status: { active: 'Active', disabled: 'Désactivée' },
+    logic: { and: 'ET', or: 'OU' },
+    match: { title: 'Faire correspondre', followingConditions: 'des conditions suivantes' },
+    actions: { remove: 'Retirer', delete: 'Supprimer', addCondition: 'Ajouter une condition', addRule: 'Ajouter une règle', saveRules: 'Enregistrer les règles' },
+    editor: { killMessage: "Message d'arrêt", killMessageHint: "(affiché sur le client Plex de l'utilisateur)", killMessagePlaceholder: 'Votre flux a été arrêté par l’administrateur du serveur.' },
+    toasts: { loadFailed: 'Impossible de charger les règles', saved: 'Règles de flux enregistrées !', saveFailed: 'Impossible d’enregistrer les règles' },
+    defaults: { newRuleName: 'Nouvelle règle', killMessage: 'Votre flux a été arrêté par l’administrateur du serveur.' },
+} } });
+
 Object.assign(fr, { homeDashboard: { ...fr.homeDashboard, nowPlayingCompanion: {
     ...fr.homeDashboard.nowPlayingCompanion,
     timeline: {

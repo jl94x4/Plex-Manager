@@ -2120,6 +2120,25 @@ Object.assign(en, { settings: { ...en.settings, homeLayout: {
     },
 } } });
 
+Object.assign(en, { settings: { ...en.settings, streamKillRules: {
+    title: 'Stream Kill Rules',
+    description: { beforeInterval: 'Define rules that automatically terminate Plex streams. Rules are evaluated every ', interval: '15 seconds', afterInterval: '. Combine conditions using ', andAllMatch: ' (all must match) or ', orAnyMatch: ' (any must match). ', afterLogic: "The kill message appears on the user's Plex client screen." },
+    fields: { isTranscoding: 'Is Transcoding', videoResolution: 'Video Resolution', transcodeVideoDecision: 'Transcode Decision', mediaType: 'Media Type', state: 'Playback State', sessionLocation: 'Connection Location', videoCodec: 'Video Codec', audioCodec: 'Audio Codec', bandwidth: 'Bandwidth (Mbps)', user: 'Username', playerProduct: 'Player App', playerTitle: 'Player/Device Name' },
+    operators: { equals: 'equals', not_equals: 'not equals', contains: 'contains', not_contains: "doesn't contain", greater_than: 'greater than', less_than: 'less than', is: 'is' },
+    boolean: { yesTrue: 'Yes / True', noFalse: 'No / False' },
+    options: { transcode: 'Transcode', copy: 'Copy', directplay: 'Direct Play', movie: 'Movie', episode: 'Episode', track: 'Track', playing: 'Playing', paused: 'Paused', buffering: 'Buffering', cellular: 'Cellular' },
+    placeholders: { numberExample: 'e.g. 20', playerExample: 'e.g. Plex Web', ruleName: 'Rule name...' },
+    empty: { title: 'No rules configured', description: 'Add a rule below to start protecting your server automatically.' },
+    rule: { conditionCount: '{count} condition', conditionCount_plural: '{count} conditions', logic: 'Logic:' },
+    status: { active: 'Active', disabled: 'Disabled' },
+    logic: { and: 'AND', or: 'OR' },
+    match: { title: 'Match', followingConditions: 'of the following conditions' },
+    actions: { remove: 'Remove', delete: 'Delete', addCondition: 'Add Condition', addRule: 'Add New Rule', saveRules: 'Save Rules' },
+    editor: { killMessage: 'Kill Message', killMessageHint: "(shown on user's Plex client)", killMessagePlaceholder: 'Your stream has been stopped by the server administrator.' },
+    toasts: { loadFailed: 'Failed to load rules', saved: 'Stream rules saved!', saveFailed: 'Failed to save rules' },
+    defaults: { newRuleName: 'New Rule', killMessage: 'Your stream has been stopped by the server administrator.' },
+} } });
+
 Object.assign(en, { maintenance: {
     ...en.maintenance,
     page: { title: 'Cleaner', disabledTitle: 'Cleaner Disabled', disabledDescription: 'Experimental Cleaner Mode is currently OFF.', disabledHint: 'Enable it in `Settings` → `System` under `Maintenance Experimental Mode`, then click Save Settings.', controlCenter: 'Cleaner Control Center', controlCenterDescription: 'Dedicated module for library maintenance automation: rules, collections, candidates, execution timeline, calendar, storage, and governance.' },
