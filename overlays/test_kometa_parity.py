@@ -153,6 +153,50 @@ assert cs and cs.text == "13+", cs
 ep = det.detect_episode_info(_Fake(type="episode", parentIndex=1, index=5), _Fake(type="show"))
 assert ep and ep.text == "S01E05", ep
 
+from kometa_detect import item_resolution_key, _query_rating_keys
+
+
+class _Media:
+    def __init__(self, width=0, videoResolution=""):
+        self.width = width
+        self.videoResolution = videoResolution
+        self.parts = []
+
+
+assert item_resolution_key(_Fake(type="movie", media=[_Media(width=3840, videoResolution="4k")])) == "4k"
+assert item_resolution_key(_Fake(type="movie", media=[_Media(width=1920, videoResolution="1080")])) == "1080p"
+assert item_resolution_key(_Fake(type="movie", media=[_Media(width=0, videoResolution="2160")])) == "4k"
+
+
+class _El:
+    def __init__(self, rk):
+        self.attrib = {"ratingKey": str(rk)}
+
+
+class _Container(list):
+    def __init__(self, items, total):
+        super().__init__(items)
+        self.attrib = {"totalSize": str(total), "size": str(len(items))}
+
+
+class _PlexPaginate:
+    def __init__(self):
+        self.calls = []
+
+    def query(self, path, headers=None):
+        self.calls.append((path, dict(headers or {})))
+        start = int((headers or {}).get("X-Plex-Container-Start", 0))
+        size = int((headers or {}).get("X-Plex-Container-Size", 50))
+        total = 120
+        batch = [_El(i) for i in range(start, min(start + size, total))]
+        return _Container(batch, total)
+
+
+plex_page = _PlexPaginate()
+got = _query_rating_keys(plex_page, "/library/sections/1/all?type=1&resolution=4k", page_size=50)
+assert len(got) == 120, len(got)
+assert len(plex_page.calls) >= 3, plex_page.calls
+
 # Compose with stage-4 winners
 winners2 = {
     "aspect": Winner(family="aspect", name="2.35", key="2.35", text="2.35"),

@@ -399,15 +399,48 @@ def _section_numeric_id(section) -> str:
     return str(getattr(section, "key", "") or "").rstrip("/").split("/")[-1]
 
 
-def _query_rating_keys(plex, path: str) -> set[str]:
+def _query_rating_keys(plex, path: str, *, page_size: int = 500) -> set[str]:
+    """Collect all ratingKeys for a Plex filter query (paginated).
+
+    plexapi's default container size is ~50. Without pagination, large libraries
+    (e.g. 600+ 4K movies) only get the first page indexed — most titles miss
+    resolution / HDR / DV badges.
+    """
     keys: set[str] = set()
-    data = plex.query(path)
-    if data is None:
-        return keys
-    for el in data:
-        rk = el.attrib.get("ratingKey")
-        if rk:
-            keys.add(str(rk))
+    start = 0
+    size = max(50, int(page_size) or 500)
+    while True:
+        headers = {
+            "X-Plex-Container-Start": str(start),
+            "X-Plex-Container-Size": str(size),
+        }
+        try:
+            data = plex.query(path, headers=headers)
+        except TypeError:
+            # Older plexapi builds may not accept headers= — fall back to query params.
+            sep = "&" if "?" in path else "?"
+            data = plex.query(
+                f"{path}{sep}X-Plex-Container-Start={start}&X-Plex-Container-Size={size}"
+            )
+        if data is None:
+            break
+        batch = 0
+        for el in data:
+            rk = el.attrib.get("ratingKey")
+            if rk:
+                keys.add(str(rk))
+                batch += 1
+        try:
+            total = int(data.attrib.get("totalSize") or data.attrib.get("size") or 0)
+        except (TypeError, ValueError, AttributeError):
+            total = 0
+        start += size
+        if batch == 0:
+            break
+        if total > 0 and start >= total:
+            break
+        if batch < size:
+            break
     return keys
 
 
@@ -474,6 +507,12 @@ class SectionIndex:
                     except Exception:
                         continue
                 idx.resolution_members[res_key] = members
+            if progress:
+                counts = ", ".join(
+                    f"{k}={len(v)}" for k, v in sorted(idx.resolution_members.items()) if v
+                )
+                if counts:
+                    progress(f"Section {sid}: resolution filter index — {counts}")
 
         if need_hdr:
             try:
@@ -520,6 +559,46 @@ def item_filepaths(item) -> list[str]:
     except Exception:
         pass
     return paths
+
+
+def item_resolution_key(item) -> str | None:
+    """Best-effort 4k/1080p/… from media width / videoResolution (filter-index fallback)."""
+    stype = str(getattr(item, "type", "") or "").lower()
+    medias = []
+    try:
+        if stype == "show" and hasattr(item, "episodes"):
+            # Sample a few recent episodes — same idea as modes_kometa._inspect_media.
+            eps = list(item.episodes() or [])[-8:]
+            for ep in eps:
+                medias.extend(list(getattr(ep, "media", None) or []))
+        else:
+            medias = list(getattr(item, "media", None) or [])
+    except Exception:
+        medias = []
+    best: str | None = None
+    rank = {"4k": 5, "1080p": 4, "720p": 3, "576p": 2, "480p": 1}
+    for media in medias:
+        try:
+            width = int(getattr(media, "width", None) or 0)
+        except (TypeError, ValueError):
+            width = 0
+        vres = str(getattr(media, "videoResolution", None) or "").strip().lower()
+        key = None
+        if width >= 3800 or vres in {"4k", "2160", "2160p"} or "4k" in vres or "2160" in vres:
+            key = "4k"
+        elif width >= 1800 or "1080" in vres or vres == "2k":
+            key = "1080p"
+        elif width >= 1200 or "720" in vres:
+            key = "720p"
+        elif "576" in vres:
+            key = "576p"
+        elif width > 0 or "480" in vres or vres in {"sd", "480"}:
+            key = "480p"
+        if key and (best is None or rank.get(key, 0) > rank.get(best, 0)):
+            best = key
+            if best == "4k":
+                break
+    return best
 
 
 def item_audio_titles(item) -> list[str]:
@@ -635,13 +714,17 @@ class KometaDetector:
         idx = self.index_for(section, need_resolution=True, need_hdr=True, need_dovi=True)
         key = str(getattr(item, "ratingKey", "") or "")
         paths = item_filepaths(item)
+        inferred_res = None  # lazy — only hit media streams when filter membership misses
         for name, res_key, alt, weight in RESOLUTION_VARIANTS:
             if variant_allowed is not None and not variant_allowed(res_key, alt):
                 continue
             if res_key:
                 members = idx.resolution_members.get(res_key) or set()
                 if key not in members:
-                    continue
+                    if inferred_res is None:
+                        inferred_res = item_resolution_key(item) or ""
+                    if inferred_res != res_key:
+                        continue
             if alt == "":
                 pass
             elif alt == "hdr":
