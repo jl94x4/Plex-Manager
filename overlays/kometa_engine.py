@@ -164,7 +164,16 @@ def enabled_families(config: dict) -> list[str]:
                 or str((r or {}).get("collectionRatingKey") or (r or {}).get("collection_rating_key") or "").strip()
             )
             and str((r or {}).get("image") or "").strip()
-            and str((r or {}).get("library") or (r or {}).get("libraryTitle") or "").strip()
+            and (
+                str((r or {}).get("library") or (r or {}).get("libraryTitle") or "").strip()
+                or (
+                    isinstance((r or {}).get("libraries") or (r or {}).get("libraryTitles"), list)
+                    and any(
+                        str(lib or "").strip()
+                        for lib in ((r or {}).get("libraries") or (r or {}).get("libraryTitles") or [])
+                    )
+                )
+            )
             for r in rules
             if isinstance(r, dict)
         ):
@@ -189,6 +198,51 @@ def _rule_collection_keys(row: dict) -> list[str]:
     return keys
 
 
+def _rule_libraries(row: dict) -> list[str]:
+    libs: list[str] = []
+    seen: set[str] = set()
+    raw_list = row.get("libraries") or row.get("libraryTitles") or row.get("library_titles")
+    if isinstance(raw_list, list):
+        for item in raw_list:
+            lib = str(item or "").strip()
+            if not lib:
+                continue
+            key = lib.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            libs.append(lib)
+    singular = str(
+        row.get("library") or row.get("libraryTitle") or row.get("library_title") or ""
+    ).strip()
+    if singular and singular.casefold() not in seen:
+        libs.insert(0, singular)
+    return libs
+
+
+def _rule_library_section_ids(row: dict) -> list[str]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    raw_list = row.get("librarySectionIds") or row.get("library_section_ids")
+    if isinstance(raw_list, list):
+        for item in raw_list:
+            sid = str(item or "").strip()
+            if not sid or sid in seen:
+                continue
+            seen.add(sid)
+            ids.append(sid)
+    singular = str(
+        row.get("librarySectionId")
+        or row.get("library_section_id")
+        or row.get("sectionId")
+        or row.get("section_id")
+        or ""
+    ).strip()
+    if singular and singular not in seen:
+        ids.insert(0, singular)
+    return ids
+
+
 def _custom_collection_rules(config: dict) -> list[dict]:
     raw = _cfg(config, "customCollectionOverlays", "custom_collection_overlays", []) or []
     if not isinstance(raw, list):
@@ -200,9 +254,9 @@ def _custom_collection_rules(config: dict) -> list[dict]:
             continue
         collection_keys = _rule_collection_keys(row)
         image = str(row.get("image") or row.get("presetId") or row.get("preset_id") or "").strip()
-        library = str(row.get("library") or row.get("libraryTitle") or row.get("library_title") or "").strip()
-        # Library is required — never stamp without an explicit Plex library scope.
-        if not collection_keys or not image or not library:
+        libraries = _rule_libraries(row)
+        # At least one library is required — never stamp without an explicit Plex library scope.
+        if not collection_keys or not image or not libraries:
             continue
         collection_key = collection_keys[0]
         rule_id = str(row.get("id") or "").strip() or f"rule-{collection_key}"
@@ -220,6 +274,7 @@ def _custom_collection_rules(config: dict) -> list[dict]:
         singular_title = str(row.get("collectionTitle") or row.get("collection_title") or "").strip()
         if collection_key and singular_title and collection_key not in collection_titles:
             collection_titles[collection_key] = singular_title
+        section_ids = _rule_library_section_ids(row)
         out.append({
             "id": rule_id,
             "name": str(row.get("name") or row.get("title") or "").strip() or rule_id,
@@ -227,14 +282,10 @@ def _custom_collection_rules(config: dict) -> list[dict]:
             "collectionRatingKeys": collection_keys,
             "collectionTitle": collection_titles.get(collection_key) or singular_title,
             "collectionTitles": collection_titles,
-            "library": library,
-            "librarySectionId": str(
-                row.get("librarySectionId")
-                or row.get("library_section_id")
-                or row.get("sectionId")
-                or row.get("section_id")
-                or ""
-            ).strip(),
+            "library": libraries[0],
+            "libraries": libraries,
+            "librarySectionId": section_ids[0] if section_ids else "",
+            "librarySectionIds": section_ids,
             "image": image,
         })
     return out
@@ -302,6 +353,24 @@ def _library_matches(item_or_coll, expected_library: str, *, expected_section_id
     return _library_labels_match(actual, expected)
 
 
+def _library_in_allowed(
+    item_or_coll,
+    libraries: list[str],
+    *,
+    library_section_ids: list[str] | None = None,
+) -> bool:
+    """True when item/collection belongs to any allowed library title or section id."""
+    section_ids = [str(s or "").strip() for s in (library_section_ids or []) if str(s or "").strip()]
+    if section_ids:
+        actual_id = _item_library_section_id(item_or_coll)
+        if actual_id and actual_id in section_ids:
+            return True
+    for expected in libraries or []:
+        if _library_matches(item_or_coll, expected):
+            return True
+    return False
+
+
 def _libraries_compatible(actual: str, expected: str, *, actual_id: str = "", expected_id: str = "") -> bool:
     """True when child belongs to the rule library (empty actual = unknown → allow)."""
     if expected_id and actual_id and expected_id == actual_id:
@@ -311,6 +380,25 @@ def _libraries_compatible(actual: str, expected: str, *, actual_id: str = "", ex
     if not expected or not str(expected).strip():
         return False
     return _library_labels_match(actual, expected)
+
+
+def _libraries_compatible_multi(
+    actual: str,
+    libraries: list[str],
+    *,
+    actual_id: str = "",
+    expected_ids: list[str] | None = None,
+) -> bool:
+    """True when child belongs to any allowed library (empty actual = unknown → allow)."""
+    ids = [str(s or "").strip() for s in (expected_ids or []) if str(s or "").strip()]
+    if actual_id and ids and actual_id in ids:
+        return True
+    if not actual or not str(actual).strip():
+        return True
+    for expected in libraries or []:
+        if _libraries_compatible(actual, expected, actual_id=actual_id):
+            return True
+    return False
 
 
 def _iter_collection_children(coll, *, page_size: int = 100):
@@ -377,28 +465,42 @@ def _resolve_collection_member_keys(
     plex,
     collection_rating_key: str,
     *,
-    library: str,
+    libraries: list[str] | None = None,
+    library_section_ids: list[str] | None = None,
+    library: str = "",
     library_section_id: str = "",
     progress: ProgressFn | None = None,
 ) -> set[str]:
     key = str(collection_rating_key or "").strip()
-    expected_library = str(library or "").strip()
-    expected_section_id = str(library_section_id or "").strip()
-    if not key or not expected_library:
+    allowed_libs = [str(lib or "").strip() for lib in (libraries or []) if str(lib or "").strip()]
+    if not allowed_libs and str(library or "").strip():
+        allowed_libs = [str(library).strip()]
+    allowed_sids = [
+        str(sid or "").strip()
+        for sid in (library_section_ids or [])
+        if str(sid or "").strip()
+    ]
+    if not allowed_sids and str(library_section_id or "").strip():
+        allowed_sids = [str(library_section_id).strip()]
+    if not key or not allowed_libs:
         return set()
     try:
         coll = plex.fetchItem(int(key))
     except Exception as exc:
         _progress(progress, f"Collection {key}: fetch failed ({exc})")
         return set()
-    if not _library_matches(coll, expected_library, expected_section_id=expected_section_id):
+    if not _library_in_allowed(coll, allowed_libs, library_section_ids=allowed_sids):
         actual = _item_library_title(coll) or "?"
+        expected_label = ", ".join(allowed_libs)
         _progress(
             progress,
             f"Collection {key}: skipped — library mismatch "
-            f"(expected '{expected_library}', got '{actual}')",
+            f"(expected one of [{expected_label}], got '{actual}')",
         )
         return set()
+    # Scope child filtering to the collection's own library (already validated).
+    expected_library = _item_library_title(coll) or allowed_libs[0]
+    expected_section_id = _item_library_section_id(coll) or (allowed_sids[0] if allowed_sids else "")
     members: set[str] = set()
     skipped_mismatch = 0
     skipped_empty = 0
@@ -506,12 +608,22 @@ def _apply_custom_collection_winners(
     member_rule: dict[str, tuple[dict, Path]] = {}
     claimed_elsewhere: dict[str, int] = {rule["id"]: 0 for rule in rules}
     for rule in rules:
-        if not rule.get("library"):
+        libraries = [str(lib or "").strip() for lib in (rule.get("libraries") or []) if str(lib or "").strip()]
+        if not libraries and rule.get("library"):
+            libraries = [str(rule.get("library") or "").strip()]
+        if not libraries:
             msg = f"custom_collection {rule['id']}: library is required — skipped"
             if errors is not None:
                 errors.append(msg)
             _progress(progress, msg)
             continue
+        section_ids = [
+            str(sid or "").strip()
+            for sid in (rule.get("librarySectionIds") or [])
+            if str(sid or "").strip()
+        ]
+        if not section_ids and rule.get("librarySectionId"):
+            section_ids = [str(rule.get("librarySectionId") or "").strip()]
         collection_keys = [
             str(k or "").strip()
             for k in (rule.get("collectionRatingKeys") or [rule.get("collectionRatingKey")])
@@ -520,12 +632,13 @@ def _apply_custom_collection_winners(
         if not collection_keys:
             continue
         members: set[str] = set()
+        lib_label = ", ".join(libraries)
         for collection_key in collection_keys:
             part = _resolve_collection_member_keys(
                 plex,
                 collection_key,
-                library=rule["library"],
-                library_section_id=rule.get("librarySectionId") or "",
+                libraries=libraries,
+                library_section_ids=section_ids,
                 progress=progress,
             )
             members.update(part)
@@ -538,12 +651,12 @@ def _apply_custom_collection_winners(
             label = title_hint or collection_key
             _progress(
                 progress,
-                f"Collection '{label}' [{rule['library']}]: {len(part)} member(s)",
+                f"Collection '{label}' [{lib_label}]: {len(part)} member(s)",
             )
         rule_members[rule["id"]] = set(members)
         _progress(
             progress,
-            f"Collection badge '{rule.get('name') or rule['id']}' [{rule['library']}]: "
+            f"Collection badge '{rule.get('name') or rule['id']}' [{lib_label}]: "
             f"{len(members)} unique member(s) across {len(collection_keys)} collection(s)",
         )
         image_path = _resolve_custom_preset_path(paths, rule["image"])
@@ -593,18 +706,26 @@ def _apply_custom_collection_winners(
                     row = should.get(rk)
         actual_lib = _item_library_title(item)
         actual_id = _item_library_section_id(item)
-        expected_lib = str(rule.get("library") or "").strip()
-        expected_sid = str(rule.get("librarySectionId") or "").strip()
-        if not _libraries_compatible(
+        libraries = [str(lib or "").strip() for lib in (rule.get("libraries") or []) if str(lib or "").strip()]
+        if not libraries and rule.get("library"):
+            libraries = [str(rule.get("library") or "").strip()]
+        section_ids = [
+            str(sid or "").strip()
+            for sid in (rule.get("librarySectionIds") or [])
+            if str(sid or "").strip()
+        ]
+        if not section_ids and rule.get("librarySectionId"):
+            section_ids = [str(rule.get("librarySectionId") or "").strip()]
+        if not _libraries_compatible_multi(
             actual_lib,
-            expected_lib,
+            libraries,
             actual_id=actual_id,
-            expected_id=expected_sid,
+            expected_ids=section_ids,
         ):
             title = getattr(item, "title", None) or rk
             msg = (
                 f"Collection badge skip '{title}': library "
-                f"'{actual_lib or '?'}' != '{expected_lib}'"
+                f"'{actual_lib or '?'}' not in [{', '.join(libraries)}]"
             )
             if errors is not None:
                 errors.append(msg)
@@ -625,10 +746,11 @@ def _apply_custom_collection_winners(
                 "collectionTitle": rule.get("collectionTitle") or "",
                 "collectionTitles": rule.get("collectionTitles") or {},
                 "library": rule.get("library") or "",
+                "libraries": list(libraries),
             },
         )
         if row is None:
-            library = actual_lib or expected_lib
+            library = actual_lib or (libraries[0] if libraries else "")
             row = {
                 "item": item,
                 "library": library,

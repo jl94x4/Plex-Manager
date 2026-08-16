@@ -48,13 +48,16 @@ export type CustomCollectionOverlayRule = {
     /** Primary / first collection (back-compat mirror of collectionRatingKeys[0]). */
     collectionRatingKey: string;
     collectionTitle?: string;
-    /** One or more Plex collection ratingKeys (OR membership, same library). */
+    /** One or more Plex collection ratingKeys (OR membership across selected libraries). */
     collectionRatingKeys: string[];
     /** ratingKey -> display title for UI. */
     collectionTitles?: Record<string, string>;
-    /** Required Plex library section title — badges only apply inside this library. */
+    /** Primary / first library (back-compat mirror of libraries[0]). */
     library: string;
+    /** One or more Plex library titles — badges only apply inside these libraries. */
+    libraries: string[];
     librarySectionId?: string;
+    librarySectionIds?: string[];
     image: string;
 };
 

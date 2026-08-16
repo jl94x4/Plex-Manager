@@ -272,6 +272,8 @@ export const OverlaysDashboard: React.FC = () => {
     const [sampleQuery, setSampleQuery] = useState('');
     const [sampleCandidates, setSampleCandidates] = useState<Array<{ ratingKey: string; title: string }>>([]);
     const [gallery, setGallery] = useState<Array<{ name: string; kind: string; url: string; mtime: number }>>([]);
+    const [galleryBust, setGalleryBust] = useState(0);
+    const [galleryLoading, setGalleryLoading] = useState(false);
     const [collapsedBinges, setCollapsedBinges] = useState<Record<string, boolean>>({});
     const [collapsedKometaSections, setCollapsedKometaSections] = useState<Record<string, boolean>>({});
     const [jobCardExpanded, setJobCardExpanded] = useState<Record<JobCardId, boolean>>({
@@ -289,7 +291,7 @@ export const OverlaysDashboard: React.FC = () => {
     const [collectionPickerLoading, setCollectionPickerLoading] = useState(false);
     const [collectionPickerError, setCollectionPickerError] = useState('');
     const [newCollectionRuleName, setNewCollectionRuleName] = useState('');
-    const [newCollectionRuleLibrary, setNewCollectionRuleLibrary] = useState('');
+    const [selectedLibraries, setSelectedLibraries] = useState<string[]>([]);
     const [selectedCollectionKeys, setSelectedCollectionKeys] = useState<string[]>([]);
     const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
     const [editingRuleImageId, setEditingRuleImageId] = useState('');
@@ -304,16 +306,18 @@ export const OverlaysDashboard: React.FC = () => {
     }, []);
 
     const refresh = useCallback(async (opts: { syncConfig?: boolean } = {}) => {
-        const [nextStatus, showsRes, episodesRes, kometaRes] = await Promise.all([
+        const [nextStatus, showsRes, episodesRes, kometaRes, galleryRes] = await Promise.all([
             overlaysApi.status(),
             overlaysApi.shows().catch(() => ({ shows: [] })),
             overlaysApi.episodes().catch(() => ({ episodes: [] })),
             overlaysApi.kometa().catch(() => ({ items: [] })),
+            overlaysApi.previewGallery().catch(() => ({ items: [] })),
         ]);
         setStatus(nextStatus);
         setShows(Array.isArray(showsRes?.shows) ? showsRes.shows : []);
         setEpisodes(Array.isArray(episodesRes?.episodes) ? episodesRes.episodes : []);
         setKometaItems(Array.isArray(kometaRes?.items) ? kometaRes.items : []);
+        setGallery(Array.isArray(galleryRes?.items) ? galleryRes.items : []);
         // Never clobber unsaved Overview toggles during status polls / background jobs.
         if (opts.syncConfig && nextStatus?.config) {
             setConfigDraft({ ...DEFAULT_CONFIG, ...nextStatus.config });
@@ -369,7 +373,10 @@ export const OverlaysDashboard: React.FC = () => {
             void Promise.all([
                 overlaysApi.shows().then((showsRes) => setShows(showsRes.shows || [])),
                 overlaysApi.episodes().then((episodesRes) => setEpisodes(episodesRes.episodes || [])),
-                overlaysApi.previewGallery().then((res) => setGallery(res.items || [])).catch(() => {}),
+                overlaysApi.previewGallery().then((res) => {
+                    setGallery(res.items || []);
+                    setGalleryBust((n) => n + 1);
+                }).catch(() => {}),
             ]).catch(() => {});
         }
         wasRunningRef.current = running;
@@ -596,13 +603,19 @@ export const OverlaysDashboard: React.FC = () => {
             const existing = byId.get(id);
             if (existing) {
                 if (rule.name) existing.title = rule.name;
-                if (rule.library) existing.library = rule.library;
+                const libs = Array.isArray(rule.libraries) && rule.libraries.length
+                    ? rule.libraries
+                    : (rule.library ? [rule.library] : []);
+                if (libs.length) existing.library = libs.join(' · ');
                 continue;
             }
+            const libs = Array.isArray(rule.libraries) && rule.libraries.length
+                ? rule.libraries
+                : (rule.library ? [rule.library] : []);
             byId.set(id, {
                 id,
                 title: String(rule.name || rule.collectionTitle || rule.id).trim() || rule.id,
-                library: String(rule.library || '').trim(),
+                library: libs.join(' · '),
                 kind: 'collection',
                 ruleId: rule.id,
                 rows: [],
@@ -767,21 +780,29 @@ export const OverlaysDashboard: React.FC = () => {
     }, [sections, collectionPickerOptions]);
 
     const filteredCollectionOptions = useMemo(() => {
-        const lib = newCollectionRuleLibrary.trim().toLowerCase();
-        if (!lib) return [];
+        const libs = new Set(selectedLibraries.map((lib) => lib.trim().toLowerCase()).filter(Boolean));
+        if (!libs.size) return [];
         const q = newCollectionSearch.trim().toLowerCase();
         return collectionPickerOptions.filter((o) => {
-            if (String(o.library || '').trim().toLowerCase() !== lib) return false;
+            if (!libs.has(String(o.library || '').trim().toLowerCase())) return false;
             if (!q) return true;
             const hay = `${o.title || ''} ${o.label || ''} ${o.value || ''}`.toLowerCase();
             return hay.includes(q);
         });
-    }, [collectionPickerOptions, newCollectionRuleLibrary, newCollectionSearch]);
+    }, [collectionPickerOptions, selectedLibraries, newCollectionSearch]);
 
     const selectedCollectionOptions = useMemo(
         () => collectionPickerOptions.filter((o) => selectedCollectionKeys.includes(o.value)),
         [collectionPickerOptions, selectedCollectionKeys],
     );
+
+    const collectionsInSelectedLibrariesCount = useMemo(() => {
+        const libs = new Set(selectedLibraries.map((lib) => lib.trim().toLowerCase()).filter(Boolean));
+        if (!libs.size) return 0;
+        return collectionPickerOptions.filter(
+            (o) => libs.has(String(o.library || '').trim().toLowerCase()),
+        ).length;
+    }, [collectionPickerOptions, selectedLibraries]);
 
     useEffect(() => {
         if (!newCollectionRuleFile) {
@@ -802,6 +823,22 @@ export const OverlaysDashboard: React.FC = () => {
         return singular ? [singular] : [];
     }, []);
 
+    const ruleLibraries = useCallback((rule: CustomCollectionOverlayRule | null | undefined) => {
+        if (!rule) return [] as string[];
+        if (Array.isArray(rule.libraries) && rule.libraries.length) {
+            return rule.libraries.map((lib) => String(lib || '').trim()).filter(Boolean);
+        }
+        const singular = String(rule.library || '').trim();
+        return singular ? [singular] : [];
+    }, []);
+
+    const ruleLibraryLabel = useCallback((rule: CustomCollectionOverlayRule | null | undefined) => {
+        const libs = ruleLibraries(rule);
+        if (!libs.length) return '';
+        if (libs.length <= 2) return libs.join(' · ');
+        return `${libs.slice(0, 2).join(' · ')} +${libs.length - 2}`;
+    }, [ruleLibraries]);
+
     const ruleCollectionLabel = useCallback((rule: CustomCollectionOverlayRule | null | undefined) => {
         if (!rule) return '';
         const keys = ruleCollectionKeys(rule);
@@ -816,7 +853,7 @@ export const OverlaysDashboard: React.FC = () => {
 
     const resetNewCollectionForm = useCallback(() => {
         setNewCollectionRuleName('');
-        setNewCollectionRuleLibrary('');
+        setSelectedLibraries([]);
         setSelectedCollectionKeys([]);
         setEditingRuleId(null);
         setEditingRuleImageId('');
@@ -832,12 +869,39 @@ export const OverlaysDashboard: React.FC = () => {
         setEditingRuleId(rule.id);
         setEditingRuleImageId(String(rule.image || '').trim());
         setNewCollectionRuleName(String(rule.name || '').trim());
-        setNewCollectionRuleLibrary(String(rule.library || '').trim());
+        setSelectedLibraries(ruleLibraries(rule));
         setSelectedCollectionKeys(ruleCollectionKeys(rule));
         setNewCollectionRuleFile(null);
         setNewCollectionSearch('');
         void loadCollectionPicker();
-    }, [loadCollectionPicker, ruleCollectionKeys]);
+    }, [loadCollectionPicker, ruleCollectionKeys, ruleLibraries]);
+
+    const toggleLibrary = useCallback((lib: string) => {
+        const value = String(lib || '').trim();
+        if (!value) return;
+        setSelectedLibraries((prev) => {
+            const next = prev.includes(value)
+                ? prev.filter((item) => item !== value)
+                : [...prev, value];
+            const allowed = new Set(next.map((item) => item.toLowerCase()));
+            setSelectedCollectionKeys((keys) => keys.filter((key) => {
+                const opt = collectionPickerOptions.find((o) => o.value === key);
+                return opt && allowed.has(String(opt.library || '').trim().toLowerCase());
+            }));
+            return next;
+        });
+        setNewCollectionSearch('');
+    }, [collectionPickerOptions]);
+
+    const selectAllLibraries = useCallback(() => {
+        setSelectedLibraries(libraryPickerOptions.map((o) => o.value).filter(Boolean));
+    }, [libraryPickerOptions]);
+
+    const clearLibraries = useCallback(() => {
+        setSelectedLibraries([]);
+        setSelectedCollectionKeys([]);
+        setNewCollectionSearch('');
+    }, []);
 
     const toggleCollectionKey = useCallback((opt: { value: string; title?: string; label?: string }) => {
         const key = String(opt.value || '').trim();
@@ -851,9 +915,27 @@ export const OverlaysDashboard: React.FC = () => {
         });
     }, []);
 
+    const selectAllFilteredCollections = useCallback(() => {
+        const keys = filteredCollectionOptions.map((o) => o.value).filter(Boolean);
+        setSelectedCollectionKeys((prev) => {
+            const next = new Set(prev);
+            keys.forEach((key) => next.add(key));
+            return [...next];
+        });
+        setNewCollectionRuleName((prev) => {
+            if (prev.trim()) return prev;
+            const first = filteredCollectionOptions[0];
+            return String(first?.title || first?.label || '').trim();
+        });
+    }, [filteredCollectionOptions]);
+
+    const clearSelectedCollections = useCallback(() => {
+        setSelectedCollectionKeys([]);
+    }, []);
+
     const saveCollectionOverlayRule = useCallback(async () => {
-        const library = newCollectionRuleLibrary.trim();
-        if (!library) {
+        const libraries = selectedLibraries.map((lib) => lib.trim()).filter(Boolean);
+        if (!libraries.length) {
             toast(t('overlays.jobs.collections.libraryRequired'), 'error');
             return;
         }
@@ -866,12 +948,14 @@ export const OverlaysDashboard: React.FC = () => {
             toast(t('overlays.jobs.collections.saveHint'), 'error');
             return;
         }
+        const allowedLibs = new Set(libraries.map((lib) => lib.toLowerCase()));
         const pickedRows = selectedCollectionKeys.map((key) => {
             const opt = collectionPickerOptions.find((o) => o.value === key);
             return { key, opt };
         });
         for (const row of pickedRows) {
-            if (!row.opt || String(row.opt.library || '').trim().toLowerCase() !== library.toLowerCase()) {
+            const lib = String(row.opt?.library || '').trim().toLowerCase();
+            if (!row.opt || !lib || !allowedLibs.has(lib)) {
                 toast(t('overlays.jobs.collections.libraryMismatch'), 'error');
                 return;
             }
@@ -889,9 +973,11 @@ export const OverlaysDashboard: React.FC = () => {
                 toast(t('overlays.jobs.collections.saveHint'), 'error');
                 return;
             }
-            const sectionMeta = libraryPickerOptions.find(
-                (o) => o.value.toLowerCase() === library.toLowerCase(),
-            );
+            const librarySectionIds = libraries
+                .map((lib) => libraryPickerOptions.find(
+                    (o) => o.value.toLowerCase() === lib.toLowerCase(),
+                )?.sectionId || '')
+                .filter(Boolean);
             const collectionTitles: Record<string, string> = {};
             for (const row of pickedRows) {
                 const title = String(row.opt?.title || row.opt?.label || '').trim();
@@ -906,8 +992,10 @@ export const OverlaysDashboard: React.FC = () => {
                 collectionTitle: collectionTitles[firstKey] || '',
                 collectionRatingKeys: [...selectedCollectionKeys],
                 collectionTitles,
-                library,
-                librarySectionId: sectionMeta?.sectionId || '',
+                library: libraries[0],
+                libraries: [...libraries],
+                librarySectionId: librarySectionIds[0] || '',
+                librarySectionIds,
                 image: imageId,
             };
             const prev = configDraftRef.current;
@@ -945,7 +1033,7 @@ export const OverlaysDashboard: React.FC = () => {
             toast(e?.message || t('overlays.jobs.collections.uploadFailed'), 'error');
         }
     }, [
-        newCollectionRuleLibrary,
+        selectedLibraries,
         selectedCollectionKeys,
         editingRuleId,
         editingRuleImageId,
@@ -1231,9 +1319,15 @@ export const OverlaysDashboard: React.FC = () => {
         }
     };
 
-    const loadGallery = useCallback(async () => {
-        const res = await overlaysApi.previewGallery();
-        setGallery(res.items || []);
+    const loadGallery = useCallback(async (opts: { bust?: boolean } = {}) => {
+        setGalleryLoading(true);
+        try {
+            const res = await overlaysApi.previewGallery();
+            setGallery(res.items || []);
+            if (opts.bust) setGalleryBust((n) => n + 1);
+        } finally {
+            setGalleryLoading(false);
+        }
     }, []);
 
     useEffect(() => {
@@ -1516,7 +1610,7 @@ export const OverlaysDashboard: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">1</span>
                     <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepLibrary')}</span>
                     <button
@@ -1530,37 +1624,102 @@ export const OverlaysDashboard: React.FC = () => {
                             : t('overlays.jobs.collections.refreshList')}
                     </button>
                 </div>
-                <CustomSelect
-                    value={newCollectionRuleLibrary}
-                    onChange={(next) => {
-                        setNewCollectionRuleLibrary(next);
-                        setSelectedCollectionKeys([]);
-                        setNewCollectionSearch('');
-                    }}
-                    options={[
-                        { value: '', label: t('overlays.jobs.collections.pickLibrary') },
-                        ...libraryPickerOptions.map((o) => ({ value: o.value, label: o.label })),
-                    ]}
-                />
+                <p className="text-[10px] text-muted">{t('overlays.jobs.collections.multiLibraryHint')}</p>
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        className="text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
+                        disabled={!libraryPickerOptions.length}
+                        onClick={selectAllLibraries}
+                    >
+                        {t('overlays.jobs.collections.selectAllLibraries')}
+                    </button>
+                    {selectedLibraries.length ? (
+                        <button
+                            type="button"
+                            className="text-[11px] font-semibold text-muted hover:text-text hover:underline"
+                            onClick={clearLibraries}
+                        >
+                            {t('overlays.jobs.collections.clearLibraries')}
+                        </button>
+                    ) : null}
+                </div>
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-border/60 bg-background/40 custom-scrollbar">
+                    {!libraryPickerOptions.length ? (
+                        <p className="px-3 py-4 text-center text-[11px] text-muted">
+                            {collectionPickerLoading
+                                ? t('overlays.jobs.collections.loadingCollections')
+                                : t('overlays.jobs.collections.pickLibrary')}
+                        </p>
+                    ) : (
+                        libraryPickerOptions.map((o) => {
+                            const active = selectedLibraries.includes(o.value);
+                            return (
+                                <button
+                                    key={o.value}
+                                    type="button"
+                                    onClick={() => toggleLibrary(o.value)}
+                                    className={`flex w-full items-start gap-2 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
+                                        active
+                                            ? 'bg-plex/15 text-text'
+                                            : 'text-text/90 hover:bg-white/5'
+                                    }`}
+                                >
+                                    <span className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                                        active ? 'border-plex bg-plex text-[9px] text-black' : 'border-muted'
+                                    }`}
+                                    >
+                                        {active ? '✓' : ''}
+                                    </span>
+                                    <span className="min-w-0 truncate text-sm font-semibold">{o.label}</span>
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+                {selectedLibraries.length ? (
+                    <p className="text-[11px] text-plex">
+                        {t('overlays.jobs.collections.selectedLibraries', {
+                            count: selectedLibraries.length,
+                            titles: selectedLibraries.join(', '),
+                        })}
+                    </p>
+                ) : null}
             </div>
 
-            <div className={`space-y-2 ${!newCollectionRuleLibrary ? 'opacity-50 pointer-events-none' : ''}`}>
-                <div className="flex items-center gap-2">
+            <div className={`space-y-2 ${!selectedLibraries.length ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">2</span>
                     <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepCollection')}</span>
-                    {newCollectionRuleLibrary && !collectionPickerLoading ? (
+                    {selectedLibraries.length && !collectionPickerLoading ? (
                         <span className="ml-auto text-[10px] text-muted">
                             {t('overlays.jobs.collections.collectionCount', {
                                 count: filteredCollectionOptions.length,
-                                total: collectionPickerOptions.filter(
-                                    (o) => String(o.library || '').trim().toLowerCase()
-                                        === newCollectionRuleLibrary.trim().toLowerCase(),
-                                ).length,
+                                total: collectionsInSelectedLibrariesCount,
                             })}
                         </span>
                     ) : null}
                 </div>
                 <p className="text-[10px] text-muted">{t('overlays.jobs.collections.multiSelectHint')}</p>
+                <div className="flex flex-wrap gap-2">
+                    <button
+                        type="button"
+                        className="text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
+                        disabled={!filteredCollectionOptions.length}
+                        onClick={selectAllFilteredCollections}
+                    >
+                        {t('overlays.jobs.collections.selectAllCollections')}
+                    </button>
+                    {selectedCollectionKeys.length ? (
+                        <button
+                            type="button"
+                            className="text-[11px] font-semibold text-muted hover:text-text hover:underline"
+                            onClick={clearSelectedCollections}
+                        >
+                            {t('overlays.jobs.collections.clearCollections')}
+                        </button>
+                    ) : null}
+                </div>
                 <div className="relative">
                     <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
                     <input
@@ -1568,11 +1727,11 @@ export const OverlaysDashboard: React.FC = () => {
                         value={newCollectionSearch}
                         onChange={(e) => setNewCollectionSearch(e.target.value)}
                         placeholder={t('overlays.jobs.collections.searchPlaceholder')}
-                        disabled={!newCollectionRuleLibrary}
+                        disabled={!selectedLibraries.length}
                     />
                 </div>
                 <div className="max-h-48 overflow-y-auto rounded-lg border border-border/60 bg-background/40 custom-scrollbar">
-                    {!newCollectionRuleLibrary ? (
+                    {!selectedLibraries.length ? (
                         <p className="px-3 py-4 text-center text-[11px] text-muted">
                             {t('overlays.jobs.collections.pickLibraryFirst')}
                         </p>
@@ -1692,7 +1851,7 @@ export const OverlaysDashboard: React.FC = () => {
                 className={primaryButtonClass}
                 disabled={
                     busy !== null
-                    || !newCollectionRuleLibrary
+                    || !selectedLibraries.length
                     || !selectedCollectionKeys.length
                     || (!editingRuleId && !newCollectionRuleFile)
                 }
@@ -2820,7 +2979,10 @@ export const OverlaysDashboard: React.FC = () => {
                                                 </p>
                                                 <p className="mt-0.5 text-[11px] text-muted truncate">
                                                     {ruleCollectionLabel(rule) || rule.collectionRatingKey}
-                                                    {rule.library ? ` · ${rule.library}` : ''}
+                                                    {ruleLibraryLabel(rule) ? ` · ${ruleLibraryLabel(rule)}` : ''}
+                                                    {ruleLibraries(rule).length > 1
+                                                        ? ` · ${t('overlays.jobs.collections.multiLibraryCount', { count: ruleLibraries(rule).length })}`
+                                                        : ''}
                                                     {ruleCollectionKeys(rule).length > 1
                                                         ? ` · ${t('overlays.jobs.collections.multiCount', { count: ruleCollectionKeys(rule).length })}`
                                                         : ''}
@@ -3611,8 +3773,17 @@ export const OverlaysDashboard: React.FC = () => {
             {tab === 'gallery' && (
                 <DashboardPanel title={t('overlays.gallery.title')} subtitle={t('overlays.gallery.subtitle')}>
                     <div className="mb-3 flex flex-wrap gap-2">
-                        <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void loadGallery()}>
-                            <RefreshCw className="h-4 w-4" /> {t('overlays.actions.refresh')}
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            disabled={busy !== null || galleryLoading}
+                            onClick={() => void loadGallery({ bust: true }).catch((error) => {
+                                setGallery([]);
+                                toast(error instanceof Error ? error.message : t('overlays.gallery.loadFailed'), 'error');
+                            })}
+                        >
+                            <RefreshCw className={`h-4 w-4 ${galleryLoading ? 'animate-spin' : ''}`} />
+                            {t('overlays.actions.refresh')}
                         </button>
                         <button
                             type="button"
@@ -3659,9 +3830,9 @@ export const OverlaysDashboard: React.FC = () => {
                                         </h3>
                                         <div className={row.grid}>
                                             {items.map((item) => {
-                                                const src = `${item.url}${item.url.includes('?') ? '&' : '?'}t=${item.mtime}`;
+                                                const src = `${item.url}${item.url.includes('?') ? '&' : '?'}t=${item.mtime}&b=${galleryBust}`;
                                                 return (
-                                                <figure key={item.rel || item.url} className="space-y-1">
+                                                <figure key={`${item.rel || item.url}:${galleryBust}`} className="space-y-1">
                                                     <div className={`relative overflow-hidden rounded-md border border-border bg-background/60 ${row.aspect}`}>
                                                         <GalleryPreviewImage
                                                             src={src}
