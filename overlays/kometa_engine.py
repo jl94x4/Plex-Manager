@@ -119,85 +119,132 @@ def _backup_file(paths: dict, rating_key: str) -> Path:
     return _backup_dir(paths, rating_key) / "poster.png"
 
 
-def _clear_backup(paths: dict, rating_key: str) -> None:
+def _clear_backup(paths: dict, rating_key: str) -> bool:
+    """Remove backups/kometa/{ratingKey}/. Returns True when the folder is gone."""
+    import shutil
+    import time
+
     folder = _backup_dir(paths, rating_key)
     if not folder.exists():
-        return
-    for child in folder.iterdir():
+        return True
+    for _ in range(4):
         try:
-            child.unlink()
+            shutil.rmtree(folder)
         except Exception:
-            pass
-    try:
-        folder.rmdir()
-    except Exception:
-        pass
+            # Fallback: unlink children (older Windows locks / partial trees).
+            try:
+                for child in list(folder.iterdir()):
+                    try:
+                        if child.is_dir():
+                            shutil.rmtree(child, ignore_errors=True)
+                        else:
+                            child.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                folder.rmdir()
+            except Exception:
+                pass
+        if not folder.exists():
+            return True
+        time.sleep(0.15)
+    return not folder.exists()
 
 
-def enabled_families(config: dict) -> list[str]:
+def enabled_families(config: dict, scope: str | None = None) -> list[str]:
+    """Return enabled Layer families, optionally scoped to media or collections."""
     families: list[str] = []
-    if _as_bool(_cfg(config, "mediaInfoEnabled", "media_info_enabled"), False):
-        families.append("resolution")
-    if _as_bool(_cfg(config, "editionOverlayEnabled", "edition_overlay_enabled"), False):
-        families.append("edition")
-    if _as_bool(_cfg(config, "audioCodecEnabled", "audio_codec_enabled"), False):
-        families.append("audio_codec")
-    if _as_bool(_cfg(config, "videoFormatEnabled", "video_format_enabled"), False):
-        families.append("video_format")
-    if _as_bool(_cfg(config, "aspectOverlayEnabled", "aspect_overlay_enabled"), False):
-        families.append("aspect")
-    if _as_bool(_cfg(config, "versionsOverlayEnabled", "versions_overlay_enabled"), False):
-        families.append("versions")
-    if _as_bool(_cfg(config, "languageCountEnabled", "language_count_enabled"), False):
-        families.append("language_count")
-    if _as_bool(_cfg(config, "languagesOverlayEnabled", "languages_overlay_enabled"), False):
-        families.append("languages")
-    if _as_bool(_cfg(config, "runtimesOverlayEnabled", "runtimes_overlay_enabled"), False):
-        families.append("runtimes")
-    if _as_bool(_cfg(config, "directPlayOverlayEnabled", "direct_play_overlay_enabled"), False):
-        families.append("direct_play")
-    if _as_bool(_cfg(config, "episodeInfoOverlayEnabled", "episode_info_overlay_enabled"), False):
-        families.append("episode_info")
-    if _as_bool(_cfg(config, "contentRatingEnabled", "content_rating_enabled"), False):
-        families.append("content_rating")
-    if _as_bool(_cfg(config, "statusOverlayEnabled", "status_overlay_enabled"), False):
-        families.append("status")
-    if _as_bool(_cfg(config, "ratingsOverlayEnabled", "ratings_overlay_enabled"), False):
-        families.append("ratings")
-    if _as_bool(_cfg(config, "networkOverlayEnabled", "network_overlay_enabled"), False):
-        families.append("network")
-    if _as_bool(_cfg(config, "streamingOverlayEnabled", "streaming_overlay_enabled"), False):
-        families.append("streaming")
-    if _as_bool(_cfg(config, "ribbonOverlayEnabled", "ribbon_overlay_enabled"), False):
-        families.append("ribbon")
-    if _as_bool(_cfg(config, "mediastingerOverlayEnabled", "mediastinger_overlay_enabled"), False):
-        families.append("mediastinger")
-    if _as_bool(_cfg(config, "customCollectionOverlaysEnabled", "custom_collection_overlays_enabled"), False):
-        rules = _cfg(config, "customCollectionOverlays", "custom_collection_overlays", []) or []
-        if isinstance(rules, list) and any(
-            (
+    want = str(scope or config.get("kometaScope") or config.get("kometa_scope") or "all").strip().lower()
+    if want in {"media", "layer", "kometa-media"}:
+        want = "media"
+    elif want in {"collections", "collection", "custom_collection", "custom-collections"}:
+        want = "collections"
+    else:
+        want = "all"
+
+    if want in {"all", "media"}:
+        if _as_bool(_cfg(config, "mediaInfoEnabled", "media_info_enabled"), False):
+            families.append("resolution")
+        if _as_bool(_cfg(config, "editionOverlayEnabled", "edition_overlay_enabled"), False):
+            families.append("edition")
+        if _as_bool(_cfg(config, "audioCodecEnabled", "audio_codec_enabled"), False):
+            families.append("audio_codec")
+        if _as_bool(_cfg(config, "videoFormatEnabled", "video_format_enabled"), False):
+            families.append("video_format")
+        if _as_bool(_cfg(config, "aspectOverlayEnabled", "aspect_overlay_enabled"), False):
+            families.append("aspect")
+        if _as_bool(_cfg(config, "versionsOverlayEnabled", "versions_overlay_enabled"), False):
+            families.append("versions")
+        if _as_bool(_cfg(config, "languageCountEnabled", "language_count_enabled"), False):
+            families.append("language_count")
+        if _as_bool(_cfg(config, "languagesOverlayEnabled", "languages_overlay_enabled"), False):
+            families.append("languages")
+        if _as_bool(_cfg(config, "runtimesOverlayEnabled", "runtimes_overlay_enabled"), False):
+            families.append("runtimes")
+        if _as_bool(_cfg(config, "directPlayOverlayEnabled", "direct_play_overlay_enabled"), False):
+            families.append("direct_play")
+        if _as_bool(_cfg(config, "episodeInfoOverlayEnabled", "episode_info_overlay_enabled"), False):
+            families.append("episode_info")
+        if _as_bool(_cfg(config, "contentRatingEnabled", "content_rating_enabled"), False):
+            families.append("content_rating")
+        if _as_bool(_cfg(config, "statusOverlayEnabled", "status_overlay_enabled"), False):
+            families.append("status")
+        if _as_bool(_cfg(config, "ratingsOverlayEnabled", "ratings_overlay_enabled"), False):
+            families.append("ratings")
+        if _as_bool(_cfg(config, "networkOverlayEnabled", "network_overlay_enabled"), False):
+            families.append("network")
+        if _as_bool(_cfg(config, "streamingOverlayEnabled", "streaming_overlay_enabled"), False):
+            families.append("streaming")
+        if _as_bool(_cfg(config, "ribbonOverlayEnabled", "ribbon_overlay_enabled"), False):
+            families.append("ribbon")
+        if _as_bool(_cfg(config, "mediastingerOverlayEnabled", "mediastinger_overlay_enabled"), False):
+            families.append("mediastinger")
+
+    if want in {"all", "collections"}:
+        if _as_bool(_cfg(config, "customCollectionOverlaysEnabled", "custom_collection_overlays_enabled"), False):
+            rules = _cfg(config, "customCollectionOverlays", "custom_collection_overlays", []) or []
+            if isinstance(rules, list) and any(
                 (
-                    isinstance((r or {}).get("collectionRatingKeys") or (r or {}).get("collection_rating_keys"), list)
-                    and any(str(k or "").strip() for k in ((r or {}).get("collectionRatingKeys") or (r or {}).get("collection_rating_keys") or []))
+                    (
+                        isinstance((r or {}).get("collectionRatingKeys") or (r or {}).get("collection_rating_keys"), list)
+                        and any(str(k or "").strip() for k in ((r or {}).get("collectionRatingKeys") or (r or {}).get("collection_rating_keys") or []))
+                    )
+                    or str((r or {}).get("collectionRatingKey") or (r or {}).get("collection_rating_key") or "").strip()
                 )
-                or str((r or {}).get("collectionRatingKey") or (r or {}).get("collection_rating_key") or "").strip()
-            )
-            and str((r or {}).get("image") or "").strip()
-            and (
-                str((r or {}).get("library") or (r or {}).get("libraryTitle") or "").strip()
-                or (
-                    isinstance((r or {}).get("libraries") or (r or {}).get("libraryTitles"), list)
-                    and any(
-                        str(lib or "").strip()
-                        for lib in ((r or {}).get("libraries") or (r or {}).get("libraryTitles") or [])
+                and str((r or {}).get("image") or "").strip()
+                and (
+                    str((r or {}).get("library") or (r or {}).get("libraryTitle") or "").strip()
+                    or (
+                        isinstance((r or {}).get("libraries") or (r or {}).get("libraryTitles"), list)
+                        and any(
+                            str(lib or "").strip()
+                            for lib in ((r or {}).get("libraries") or (r or {}).get("libraryTitles") or [])
+                        )
                     )
                 )
-            )
-            for r in rules
-            if isinstance(r, dict)
-        ):
-            families.append("custom_collection")
+                for r in rules
+                if isinstance(r, dict)
+            ):
+                families.append("custom_collection")
     return families
+
+
+def winner_from_log(family: str, meta: dict | None) -> Winner | None:
+    """Rehydrate a Winner from a tracked log entry so scoped runs keep other badges."""
+    if not isinstance(meta, dict):
+        return None
+    name = str(meta.get("name") or "").strip()
+    if not name and family != "custom_collection":
+        return None
+    return Winner(
+        family=str(family),
+        name=name or str(family),
+        key=str(meta.get("key") or meta.get("extra", {}).get("ruleId") or name or family),
+        alt=str(meta.get("alt") or ""),
+        weight=int(meta.get("weight") or 0),
+        text=(str(meta["text"]) if meta.get("text") is not None else None),
+        image_rel=(str(meta["image"]) if meta.get("image") else None),
+        extra=meta.get("extra") if isinstance(meta.get("extra"), dict) else None,
+    )
 
 
 def _rule_collection_keys(row: dict) -> list[str]:
@@ -1100,27 +1147,41 @@ def _sync_plex_labels(item, wanted: list[str], previous: list[str] | None = None
 
 def _restore_item(plex, paths: dict, key: str, entry: dict, progress: ProgressFn | None) -> bool:
     """Kometa restore priority: disk backup, else fresh provider poster."""
+    import shutil
+
     from core import _reset_poster, _upload_poster_resilient
 
     try:
         item = plex.fetchItem(f"/library/metadata/{key}")
     except Exception:
+        # Item gone from Plex — still drop the orphan backup so the UI can clear.
         _clear_backup(paths, key)
         return False
     backup = _backup_file(paths, key)
     ok = False
     if backup.exists():
+        # Copy first so upload can't keep the backup file locked (Windows).
+        temp = Path(paths["preview"]) / f"restore_kometa_{key}.png"
         try:
+            temp.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(backup, temp)
             _upload_poster_resilient(
                 item,
-                backup,
+                temp,
                 progress=progress,
                 title=str(entry.get("title") or key),
             )
             ok = True
             _progress(progress, f"Restored original poster: {entry.get('title') or key}")
+            _clear_backup(paths, key)
         except Exception as exc:
             _progress(progress, f"Backup restore failed for {key}: {exc}")
+        finally:
+            try:
+                if temp.exists():
+                    temp.unlink()
+            except Exception:
+                pass
     if not ok:
         ok = _reset_poster(item)
         if ok:
@@ -1130,7 +1191,9 @@ def _restore_item(plex, paths: dict, key: str, entry: dict, progress: ProgressFn
         _sync_plex_labels(item, [], previous=overlay_labels)
     if bool(entry.get("labeled")):
         _remove_overlay_label(item)
-    _clear_backup(paths, key)
+    # Always scrub leftover backup so orphan rows cannot stick in the UI.
+    if not _clear_backup(paths, key) and _backup_file(paths, key).exists():
+        _progress(progress, f"Warning: Layer backup still on disk for {key} after revert")
     return ok
 
 
@@ -1259,7 +1322,17 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
     migrate_legacy_logs(paths, progress)
     log = _load_log(log_path)
 
-    families = enabled_families(config)
+    scope_raw = str(config.get("kometaScope") or config.get("kometa_scope") or "all").strip().lower()
+    if scope_raw in {"media", "layer", "kometa-media"}:
+        scope_name = "media"
+    elif scope_raw in {"collections", "collection", "custom_collection", "custom-collections"}:
+        scope_name = "collections"
+    else:
+        scope_name = "all"
+
+    all_families = enabled_families(config, scope="all")
+    families = enabled_families(config, scope=scope_name)
+    scope_set = set(families)
     skip_kometa = _as_bool(_cfg(config, "skipIfKometaOverlayLabel", "skip_if_kometa_overlay_label"), True)
     add_label = _as_bool(_cfg(config, "kometaAddOverlayLabel", "kometa_add_overlay_label"), False)
 
@@ -1267,7 +1340,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
     errors: list[str] = []
     family_counts: dict[str, int] = {}
 
-    if not families:
+    if not all_families:
         # Everything off — prune all tracked stamps.
         if log:
             _progress(progress, "Layer overlays disabled — restoring tracked posters…")
@@ -1291,9 +1364,22 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             "kometaRemoved": removed,
             "kometaTotal": len(log),
             "kometaErrors": errors,
+            "kometaScope": scope_name,
         }
 
-    _progress(progress, f"Layer pass — families: {', '.join(families)}")
+    if not families:
+        _progress(progress, f"Layer scope '{scope_name}' has no enabled families — nothing to do")
+        return {
+            "kometaEnabled": True,
+            "kometaAdded": 0,
+            "kometaRemoved": 0,
+            "kometaTotal": len(log),
+            "kometaErrors": [],
+            "kometaScope": scope_name,
+            "kometaSkipped": 0,
+        }
+
+    _progress(progress, f"Layer pass ({scope_name}) — families: {', '.join(families)}")
     detector = KometaDetector(plex, progress=progress)
     res_allowed = _resolution_variant_allowed(config)
     allow_deny = {
@@ -1400,6 +1486,21 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
         _progress(progress, f"Custom collection badges queued for {cc_queued} title(s)")
 
     _progress(progress, f"Layer eligible: {len(should)} of {scanned} scanned")
+
+    # Preserve out-of-scope badges so Media-only / Collections-only runs don't wipe each other.
+    if scope_name != "all":
+        for key, row in should.items():
+            existing = log.get(key)
+            if not isinstance(existing, dict):
+                continue
+            prev = existing.get("families") if isinstance(existing.get("families"), dict) else {}
+            winners = row.setdefault("winners", {})
+            for fam, meta in prev.items():
+                if fam in scope_set or fam in winners:
+                    continue
+                restored = winner_from_log(str(fam), meta if isinstance(meta, dict) else None)
+                if restored is not None:
+                    winners[fam] = restored
 
     # Stamp
     cc_stamped_ok: set[str] = set()
@@ -1577,17 +1678,80 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             if not preview_mode:
                 _save_log(log_path, log)
 
-    # Prune entries no longer eligible
+    # Prune entries no longer eligible for this scope.
     for key in list(log.keys()):
         if key in should:
             continue
         entry = log.get(key) or {}
+        prev = entry.get("families") if isinstance(entry.get("families"), dict) else {}
         try:
             if preview_mode:
                 if bool(entry.get("preview_only")):
                     del log[key]
                     removed += 1
                 continue
+            if scope_name != "all" and prev:
+                # Keep titles that still have badges outside this scope.
+                if any(str(fam) not in scope_set for fam in prev.keys()):
+                    in_scope = [str(fam) for fam in prev.keys() if str(fam) in scope_set]
+                    if not in_scope:
+                        continue
+                    # Drop only this scope's families and restamp the rest.
+                    preserved: dict[str, Winner] = {}
+                    for fam, meta in prev.items():
+                        if str(fam) in scope_set:
+                            continue
+                        restored = winner_from_log(str(fam), meta if isinstance(meta, dict) else None)
+                        if restored is not None:
+                            preserved[str(fam)] = restored
+                    if not preserved:
+                        _restore_item(plex, paths, key, entry, progress)
+                        del log[key]
+                        removed += 1
+                        continue
+                    try:
+                        item = plex.fetchItem(f"/library/metadata/{key}")
+                    except Exception:
+                        _restore_item(plex, paths, key, entry, progress)
+                        del log[key]
+                        removed += 1
+                        continue
+                    backup = _backup_file(paths, key)
+                    if backup.exists():
+                        original = Image.open(backup).convert("RGBA")
+                    else:
+                        poster = _download_original(plex, item)
+                        if poster is None:
+                            raise RuntimeError("failed to download poster for scoped prune")
+                        original = poster.convert("RGBA")
+                    result = compose_poster(original, preserved, config=config, paths=paths)
+                    safe = _sanitize(f"{entry.get('title') or key}_kometa")
+                    temp = Path(paths["preview"]) / f"temp_{safe}.png"
+                    save_with_marker(result, temp)
+                    try:
+                        from core import _upload_poster_resilient
+                        _upload_poster_resilient(
+                            item,
+                            temp,
+                            progress=progress,
+                            title=str(entry.get("title") or key),
+                        )
+                    finally:
+                        if temp.exists():
+                            temp.unlink()
+                    entry = {
+                        **entry,
+                        "families": {fam: w.as_log() for fam, w in preserved.items()},
+                        "signature": _signature(preserved, config),
+                        "timestamp": datetime.now().isoformat(),
+                        "posterThumb": _reload_item_thumb(item) or entry.get("posterThumb"),
+                    }
+                    entry.pop("needsRestamp", None)
+                    log[key] = entry
+                    if not preview_mode:
+                        _save_log(log_path, log)
+                    removed += 1
+                    continue
             _restore_item(plex, paths, key, entry, progress)
             del log[key]
             removed += 1
@@ -1675,17 +1839,29 @@ def revert_kometa(config: dict, rating_key: str | None = None, progress: Progres
     _progress(progress, f"Reverting {len(keys)} Layer overlay(s)…")
     reverted = 0
     failed: list[str] = []
+    cleared_keys: list[str] = []
+    logged_keys = set(log.keys())
     for key in keys:
         entry = log.get(key) or {"title": key, "hasBackup": True}
         try:
             ok = _restore_item(plex, paths, key, entry, progress)
             if key in log:
                 del log[key]
+            # Orphan rows are driven by backup files — force-clear even when Plex
+            # restore already happened (or failed) so the UI can drop the row.
+            _clear_backup(paths, key)
+            cleared_keys.append(key)
             if ok:
                 reverted += 1
+            elif key not in logged_keys:
+                # Stuck incomplete-run row: scrubbing the backup is enough.
+                reverted += 1
+                _progress(progress, f"Cleared stuck Layer backup for {entry.get('title') or key}")
             else:
                 failed.append(f"{entry.get('title') or key}: restore failed")
         except Exception as exc:
+            _clear_backup(paths, key)
+            cleared_keys.append(key)
             failed.append(f"{entry.get('title') or key}: {exc}")
     _save_log(log_path, log)
     _progress(progress, f"Layer revert complete — {reverted}/{len(keys)} restored")
@@ -1696,6 +1872,7 @@ def revert_kometa(config: dict, rating_key: str | None = None, progress: Progres
         "failed": failed,
         "remaining": len(log),
         "recoveredFromBackup": len(orphan_backups),
+        "clearedKeys": cleared_keys,
         "finishedAt": datetime.now().isoformat(),
     }
 

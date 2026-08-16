@@ -2379,7 +2379,9 @@ def _normalize_run_bundle(value) -> str:
         return "all"
     if raw in {"recently", "recent", "recently-added", "recentlyadded"}:
         return "recently"
-    if raw in {"kometa", "kometa-style", "media", "media-info"}:
+    if raw in {"collections", "collection", "custom-collection", "custom-collections"}:
+        return "collections"
+    if raw in {"kometa", "kometa-style", "media", "media-info", "layer"}:
         return "kometa"
     return "core"
 
@@ -2391,16 +2393,23 @@ def _run_kometa_bundle(plex, config: dict, paths: dict, preview_mode: bool, prog
         ensure_placement_preview_badges(paths["assets"], paths=paths)
     except Exception:
         pass
-    summary = run_kometa_parity(plex, config, paths, preview_mode, progress)
+    # UI can pass kometaScope=media|collections; scheduler omits it → full pass.
+    scope = str(config.get("kometaScope") or config.get("kometa_scope") or "").strip().lower()
+    if not scope:
+        bundle = _normalize_run_bundle(config.get("runBundle") or config.get("run_bundle") or "kometa")
+        scope = "collections" if bundle == "collections" else "all"
+    cfg = {**config, "kometaScope": scope}
+    summary = run_kometa_parity(plex, cfg, paths, preview_mode, progress)
     out = {
         "ok": True,
-        "runBundle": "kometa",
+        "runBundle": "collections" if scope == "collections" else "kometa",
+        "kometaScope": scope,
         "previewMode": preview_mode,
         "finishedAt": datetime.now().isoformat(),
         "errors": list(summary.get("kometaErrors") or []),
     }
     out.update(summary)
-    _progress(progress, "Done (kometa) — parity pass finished")
+    _progress(progress, f"Done (kometa/{scope}) — parity pass finished")
     return out
 
 
@@ -2461,6 +2470,14 @@ def run_overlays(
 
     if run_bundle == "kometa":
         return _run_kometa_bundle(plex, config, paths, preview_mode, progress)
+    if run_bundle == "collections":
+        return _run_kometa_bundle(
+            plex,
+            {**config, "kometaScope": "collections", "runBundle": "collections"},
+            paths,
+            preview_mode,
+            progress,
+        )
     if run_bundle == "recently":
         return _run_recently_bundle(plex, config, paths, preview_mode, progress)
 

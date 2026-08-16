@@ -308,9 +308,9 @@ export const overlaysApi = {
     sections: () => apiFetch(`${ROOT}/sections`),
     scan: () => apiFetch(`${ROOT}/scan`, json({})),
     reconcile: () => apiFetch(`${ROOT}/reconcile`, json({})),
-    run: (options?: { preview?: boolean; bundle?: 'core' | 'recently' | 'kometa' | 'all' }) =>
+    run: (options?: { preview?: boolean; bundle?: 'core' | 'recently' | 'kometa' | 'collections' | 'all'; scope?: 'media' | 'collections' | 'all' }) =>
         apiFetch(`${ROOT}/run`, json(options || {})),
-    preview: (options?: { bundle?: 'core' | 'recently' | 'kometa' | 'all' }) =>
+    preview: (options?: { bundle?: 'core' | 'recently' | 'kometa' | 'collections' | 'all'; scope?: 'media' | 'collections' | 'all' }) =>
         apiFetch(`${ROOT}/preview`, json(options || {})),
     promote: () => apiFetch(`${ROOT}/promote`, json({})),
     stop: () => apiFetch(`${ROOT}/stop`, json({})),

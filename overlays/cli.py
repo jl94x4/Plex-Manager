@@ -57,6 +57,8 @@ def main() -> int:
             "preview-recently",
             "run-kometa",
             "preview-kometa",
+            "run-collections",
+            "preview-collections",
             "cleanup",
             "reconcile",
             "reset-one",
@@ -145,6 +147,8 @@ def main() -> int:
             "preview-recently",
             "run-kometa",
             "preview-kometa",
+            "run-collections",
+            "preview-collections",
         }:
             preview_override = True if args.command.startswith("preview") else None
             if args.command == "cleanup":
@@ -153,8 +157,14 @@ def main() -> int:
             bundle = None
             if "recently" in args.command:
                 bundle = "recently"
+            elif "collections" in args.command:
+                bundle = "collections"
+                config["kometaScope"] = "collections"
             elif "kometa" in args.command:
                 bundle = "kometa"
+                # Keep scheduler full-pass unless caller set an explicit scope.
+                if not str(config.get("kometaScope") or config.get("kometa_scope") or "").strip():
+                    config["kometaScope"] = "all"
             elif args.command in {"run", "preview", "cleanup"}:
                 # Main Preview/Run stays on the fast core path unless caller sets runBundle.
                 bundle = str(config.get("runBundle") or config.get("run_bundle") or "core")

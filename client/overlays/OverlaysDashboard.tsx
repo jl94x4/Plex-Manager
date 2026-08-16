@@ -503,10 +503,15 @@ export const OverlaysDashboard: React.FC = () => {
         ? 'preview-layer'
         : runningCommand === 'run-kometa'
             ? 'run-layer'
-            : (runningCommand || '…');
+            : runningCommand === 'preview-collections'
+                ? 'preview-collections'
+                : runningCommand === 'run-collections'
+                    ? 'run-collections'
+                    : (runningCommand || '…');
     const coreJobActive = jobRunning && (runningCommand === 'run' || runningCommand === 'preview');
     const recentlyJobActive = jobRunning && (runningCommand === 'run-recently' || runningCommand === 'preview-recently');
     const kometaJobActive = jobRunning && (runningCommand === 'run-kometa' || runningCommand === 'preview-kometa');
+    const collectionsJobActive = jobRunning && (runningCommand === 'run-collections' || runningCommand === 'preview-collections');
     const bannersEnabled = configDraft.newSeasonEnabled !== false
         || configDraft.newEpisodeEnabled !== false
         || configDraft.liveScheduleEnabled === true
@@ -2360,8 +2365,8 @@ export const OverlaysDashboard: React.FC = () => {
                             collapseLabel={t('overlays.jobs.collapse')}
                             expanded={jobCardExpanded.kometa}
                             onToggleExpand={() => toggleJobCard('kometa')}
-                            onPreview={() => startBackgroundJob('previewKometa', () => overlaysApi.preview({ bundle: 'kometa' }))}
-                            onRun={() => startBackgroundJob('runKometa', () => overlaysApi.run({ preview: false, bundle: 'kometa' }))}
+                            onPreview={() => startBackgroundJob('previewKometa', () => overlaysApi.preview({ bundle: 'kometa', scope: 'media' }))}
+                            onRun={() => startBackgroundJob('runKometa', () => overlaysApi.run({ preview: false, bundle: 'kometa', scope: 'media' }))}
                             previewBusy={busy === 'previewKometa' || (kometaJobActive && runningCommand === 'preview-kometa')}
                             runBusy={busy === 'runKometa' || (kometaJobActive && runningCommand === 'run-kometa')}
                             actionsDisabled={busy !== null || jobRunning || !workerReady}
@@ -2934,25 +2939,25 @@ export const OverlaysDashboard: React.FC = () => {
                         <OverlayJobCard
                             title={t('overlays.jobs.collections.title')}
                             hint={t('overlays.jobs.collections.hint')}
-                            statusLabel={kometaJobActive
+                            statusLabel={collectionsJobActive
                                 ? t('overlays.jobs.status.running')
                                 : !collectionsEnabled
                                     ? t('overlays.jobs.status.off')
                                     : t('overlays.jobs.status.idle')}
-                            statusTone={kometaJobActive ? 'running' : !collectionsEnabled ? 'off' : 'idle'}
+                            statusTone={collectionsJobActive ? 'running' : !collectionsEnabled ? 'off' : 'idle'}
                             enabledSummary={collectionsEnabled
                                 ? t('overlays.jobs.collections.enabledOn', { count: collectionRules.length })
                                 : t('overlays.jobs.collections.enabledOff')}
-                            previewLabel={t('overlays.actions.previewKometa')}
-                            runLabel={t('overlays.actions.runKometa')}
+                            previewLabel={t('overlays.actions.previewCollections')}
+                            runLabel={t('overlays.actions.runCollections')}
                             expandLabel={t('overlays.jobs.expand')}
                             collapseLabel={t('overlays.jobs.collapse')}
                             expanded={jobCardExpanded.collections}
                             onToggleExpand={() => toggleJobCard('collections')}
-                            onPreview={() => startBackgroundJob('previewCollections', () => overlaysApi.preview({ bundle: 'kometa' }))}
-                            onRun={() => startBackgroundJob('runCollections', () => overlaysApi.run({ preview: false, bundle: 'kometa' }))}
-                            previewBusy={busy === 'previewCollections' || busy === 'previewKometa' || (kometaJobActive && runningCommand === 'preview-kometa')}
-                            runBusy={busy === 'runCollections' || busy === 'runKometa' || (kometaJobActive && runningCommand === 'run-kometa')}
+                            onPreview={() => startBackgroundJob('previewCollections', () => overlaysApi.preview({ bundle: 'collections' }))}
+                            onRun={() => startBackgroundJob('runCollections', () => overlaysApi.run({ preview: false, bundle: 'collections' }))}
+                            previewBusy={busy === 'previewCollections' || (collectionsJobActive && runningCommand === 'preview-collections')}
+                            runBusy={busy === 'runCollections' || (collectionsJobActive && runningCommand === 'run-collections')}
                             actionsDisabled={busy !== null || jobRunning || !workerReady}
                         >
                             <p className="mb-3 text-[11px] text-muted">{t('overlays.jobs.collections.settingsHint')}</p>
