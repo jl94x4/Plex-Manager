@@ -16,6 +16,7 @@ import {
     Search,
     Settings2,
     Square,
+    Trash2,
     Upload,
     XCircle,
 } from 'lucide-react';
@@ -273,8 +274,6 @@ export const OverlaysDashboard: React.FC = () => {
     const [gallery, setGallery] = useState<Array<{ name: string; kind: string; url: string; mtime: number }>>([]);
     const [collapsedBinges, setCollapsedBinges] = useState<Record<string, boolean>>({});
     const [collapsedKometaSections, setCollapsedKometaSections] = useState<Record<string, boolean>>({});
-    const [renamingRuleId, setRenamingRuleId] = useState<string | null>(null);
-    const [renameDraft, setRenameDraft] = useState('');
     const [jobCardExpanded, setJobCardExpanded] = useState<Record<JobCardId, boolean>>({
         banners: false,
         recently: false,
@@ -291,7 +290,9 @@ export const OverlaysDashboard: React.FC = () => {
     const [collectionPickerError, setCollectionPickerError] = useState('');
     const [newCollectionRuleName, setNewCollectionRuleName] = useState('');
     const [newCollectionRuleLibrary, setNewCollectionRuleLibrary] = useState('');
-    const [newCollectionRuleKey, setNewCollectionRuleKey] = useState('');
+    const [selectedCollectionKeys, setSelectedCollectionKeys] = useState<string[]>([]);
+    const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+    const [editingRuleImageId, setEditingRuleImageId] = useState('');
     const [newCollectionRuleFile, setNewCollectionRuleFile] = useState<File | null>(null);
     const [newCollectionSearch, setNewCollectionSearch] = useState('');
     const [newCollectionFilePreview, setNewCollectionFilePreview] = useState<string | null>(null);
@@ -639,43 +640,6 @@ export const OverlaysDashboard: React.FC = () => {
         return keys.size;
     }, [collectionSections]);
 
-    const renameCollectionRule = useCallback(async (ruleId: string, nextName: string) => {
-        const name = String(nextName || '').trim();
-        if (!ruleId || !name) {
-            setRenamingRuleId(null);
-            setRenameDraft('');
-            return;
-        }
-        const prevRules = Array.isArray(configDraftRef.current.customCollectionOverlays)
-            ? configDraftRef.current.customCollectionOverlays
-            : [];
-        if (!prevRules.some((r) => r.id === ruleId)) {
-            setRenamingRuleId(null);
-            setRenameDraft('');
-            toast(t('overlays.jobs.collections.renameMissing'), 'error');
-            return;
-        }
-        const customCollectionOverlays = prevRules.map((r) => (
-            r.id === ruleId ? { ...r, name } : r
-        ));
-        setConfigDraft((prev) => ({ ...prev, customCollectionOverlays }));
-        setRenamingRuleId(null);
-        setRenameDraft('');
-        try {
-            await overlaysApi.saveConfig({ customCollectionOverlays });
-            await refresh({ syncConfig: true });
-            toast(t('overlays.jobs.collections.renameSaved'));
-        } catch (e: any) {
-            toast(e?.message || t('overlays.jobs.collections.renameFailed'), 'error');
-        }
-    }, [refresh, t, toast]);
-
-    const startRenameRule = useCallback((ruleId: string, currentName: string) => {
-        if (!ruleId) return;
-        setRenamingRuleId(ruleId);
-        setRenameDraft(currentName || '');
-    }, []);
-
     const tabs = useMemo(() => ([
         { id: 'overview' as const, label: t('overlays.tabs.overview'), icon: Layers },
         {
@@ -814,9 +778,9 @@ export const OverlaysDashboard: React.FC = () => {
         });
     }, [collectionPickerOptions, newCollectionRuleLibrary, newCollectionSearch]);
 
-    const selectedCollectionOption = useMemo(
-        () => collectionPickerOptions.find((o) => o.value === newCollectionRuleKey) || null,
-        [collectionPickerOptions, newCollectionRuleKey],
+    const selectedCollectionOptions = useMemo(
+        () => collectionPickerOptions.filter((o) => selectedCollectionKeys.includes(o.value)),
+        [collectionPickerOptions, selectedCollectionKeys],
     );
 
     useEffect(() => {
@@ -829,61 +793,132 @@ export const OverlaysDashboard: React.FC = () => {
         return () => URL.revokeObjectURL(url);
     }, [newCollectionRuleFile]);
 
+    const ruleCollectionKeys = useCallback((rule: CustomCollectionOverlayRule | null | undefined) => {
+        if (!rule) return [] as string[];
+        if (Array.isArray(rule.collectionRatingKeys) && rule.collectionRatingKeys.length) {
+            return rule.collectionRatingKeys.map((k) => String(k || '').trim()).filter(Boolean);
+        }
+        const singular = String(rule.collectionRatingKey || '').trim();
+        return singular ? [singular] : [];
+    }, []);
+
+    const ruleCollectionLabel = useCallback((rule: CustomCollectionOverlayRule | null | undefined) => {
+        if (!rule) return '';
+        const keys = ruleCollectionKeys(rule);
+        const titles = keys.map((key) => {
+            const mapped = rule.collectionTitles?.[key];
+            if (mapped) return mapped;
+            if (key === rule.collectionRatingKey && rule.collectionTitle) return rule.collectionTitle;
+            return key;
+        });
+        return titles.filter(Boolean).join(' · ');
+    }, [ruleCollectionKeys]);
+
     const resetNewCollectionForm = useCallback(() => {
         setNewCollectionRuleName('');
         setNewCollectionRuleLibrary('');
-        setNewCollectionRuleKey('');
+        setSelectedCollectionKeys([]);
+        setEditingRuleId(null);
+        setEditingRuleImageId('');
         setNewCollectionRuleFile(null);
         setNewCollectionSearch('');
         setNewCollectionFilePreview(null);
     }, []);
 
-    const pickCollectionForRule = useCallback((opt: { value: string; title?: string; label?: string }) => {
-        setNewCollectionRuleKey(opt.value);
+    const beginEditCollectionRule = useCallback((rule: CustomCollectionOverlayRule) => {
+        if (!rule?.id) return;
+        setJobCardExpanded((prev) => ({ ...prev, collections: true }));
+        setTab('overview');
+        setEditingRuleId(rule.id);
+        setEditingRuleImageId(String(rule.image || '').trim());
+        setNewCollectionRuleName(String(rule.name || '').trim());
+        setNewCollectionRuleLibrary(String(rule.library || '').trim());
+        setSelectedCollectionKeys(ruleCollectionKeys(rule));
+        setNewCollectionRuleFile(null);
+        setNewCollectionSearch('');
+        void loadCollectionPicker();
+    }, [loadCollectionPicker, ruleCollectionKeys]);
+
+    const toggleCollectionKey = useCallback((opt: { value: string; title?: string; label?: string }) => {
+        const key = String(opt.value || '').trim();
+        if (!key) return;
+        setSelectedCollectionKeys((prev) => (
+            prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+        ));
         setNewCollectionRuleName((prev) => {
             if (prev.trim()) return prev;
             return String(opt.title || opt.label || '').trim();
         });
     }, []);
 
-    const addCollectionOverlayRule = useCallback(async () => {
+    const saveCollectionOverlayRule = useCallback(async () => {
         const library = newCollectionRuleLibrary.trim();
         if (!library) {
             toast(t('overlays.jobs.collections.libraryRequired'), 'error');
             return;
         }
-        if (!newCollectionRuleKey || !newCollectionRuleFile) {
+        if (!selectedCollectionKeys.length) {
             toast(t('overlays.jobs.collections.saveHint'), 'error');
             return;
         }
-        const picked = collectionPickerOptions.find((o) => o.value === newCollectionRuleKey);
-        if (!picked || String(picked.library || '').trim().toLowerCase() !== library.toLowerCase()) {
-            toast(t('overlays.jobs.collections.libraryMismatch'), 'error');
+        const isEdit = Boolean(editingRuleId);
+        if (!isEdit && !newCollectionRuleFile) {
+            toast(t('overlays.jobs.collections.saveHint'), 'error');
             return;
         }
+        const pickedRows = selectedCollectionKeys.map((key) => {
+            const opt = collectionPickerOptions.find((o) => o.value === key);
+            return { key, opt };
+        });
+        for (const row of pickedRows) {
+            if (!row.opt || String(row.opt.library || '').trim().toLowerCase() !== library.toLowerCase()) {
+                toast(t('overlays.jobs.collections.libraryMismatch'), 'error');
+                return;
+            }
+        }
         try {
-            const up = await overlaysApi.uploadPreset('collection', newCollectionRuleFile);
-            const imageId = String(up?.preset?.id || '').trim();
-            if (!imageId) throw new Error(t('overlays.jobs.collections.uploadFailed'));
+            let imageId = editingRuleImageId;
+            let previousImageId = '';
+            if (newCollectionRuleFile) {
+                const up = await overlaysApi.uploadPreset('collection', newCollectionRuleFile);
+                imageId = String(up?.preset?.id || '').trim();
+                if (!imageId) throw new Error(t('overlays.jobs.collections.uploadFailed'));
+                if (isEdit) previousImageId = editingRuleImageId;
+            }
+            if (!imageId) {
+                toast(t('overlays.jobs.collections.saveHint'), 'error');
+                return;
+            }
             const sectionMeta = libraryPickerOptions.find(
                 (o) => o.value.toLowerCase() === library.toLowerCase(),
             );
+            const collectionTitles: Record<string, string> = {};
+            for (const row of pickedRows) {
+                const title = String(row.opt?.title || row.opt?.label || '').trim();
+                if (title) collectionTitles[row.key] = title;
+            }
+            const firstKey = selectedCollectionKeys[0];
+            const defaultName = collectionTitles[firstKey] || firstKey || imageId;
             const rule: CustomCollectionOverlayRule = {
-                id: `cc-${Date.now().toString(36)}`,
-                name: (newCollectionRuleName || picked.title || imageId).trim(),
-                collectionRatingKey: newCollectionRuleKey,
-                collectionTitle: picked.title || '',
+                id: isEdit && editingRuleId ? editingRuleId : `cc-${Date.now().toString(36)}`,
+                name: (newCollectionRuleName || defaultName).trim(),
+                collectionRatingKey: firstKey,
+                collectionTitle: collectionTitles[firstKey] || '',
+                collectionRatingKeys: [...selectedCollectionKeys],
+                collectionTitles,
                 library,
                 librarySectionId: sectionMeta?.sectionId || '',
                 image: imageId,
             };
             const prev = configDraftRef.current;
-            const customCollectionOverlays = [
-                ...(Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : []),
-                rule,
-            ];
-            // Persist immediately — Add previously only patched local draft, so Preview/Run
-            // (and any syncConfig refresh) dropped rules that were never saved to disk.
+            const prevRules = Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : [];
+            const customCollectionOverlays = isEdit
+                ? prevRules.map((r) => (r.id === rule.id ? rule : r))
+                : [...prevRules, rule];
+            if (isEdit && !prevRules.some((r) => r.id === rule.id)) {
+                toast(t('overlays.jobs.collections.renameMissing'), 'error');
+                return;
+            }
             const saved = await overlaysApi.saveConfig({
                 customCollectionOverlaysEnabled: true,
                 customCollectionOverlays,
@@ -894,15 +929,26 @@ export const OverlaysDashboard: React.FC = () => {
                 customCollectionOverlaysEnabled: true,
                 customCollectionOverlays: saved?.config?.customCollectionOverlays || customCollectionOverlays,
             }));
+            if (previousImageId && previousImageId !== imageId) {
+                const stillUsed = (saved?.config?.customCollectionOverlays || customCollectionOverlays)
+                    .some((r: CustomCollectionOverlayRule) => r.image === previousImageId);
+                if (!stillUsed) {
+                    await overlaysApi.deleteCustomPreset(previousImageId).catch(() => {});
+                }
+            }
             resetNewCollectionForm();
             await refresh();
-            toast(t('overlays.jobs.collections.ruleAdded', { name: rule.name }));
+            toast(isEdit
+                ? t('overlays.jobs.collections.ruleUpdated', { name: rule.name })
+                : t('overlays.jobs.collections.ruleAdded', { name: rule.name }));
         } catch (e: any) {
             toast(e?.message || t('overlays.jobs.collections.uploadFailed'), 'error');
         }
     }, [
         newCollectionRuleLibrary,
-        newCollectionRuleKey,
+        selectedCollectionKeys,
+        editingRuleId,
+        editingRuleImageId,
         newCollectionRuleFile,
         newCollectionRuleName,
         collectionPickerOptions,
@@ -915,8 +961,33 @@ export const OverlaysDashboard: React.FC = () => {
 
     const removeCollectionOverlayRule = useCallback(async (id: string) => {
         const prev = configDraftRef.current;
-        const next = (Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : [])
-            .filter((r) => r.id !== id);
+        const prevRules = Array.isArray(prev.customCollectionOverlays) ? prev.customCollectionOverlays : [];
+        const doomed = prevRules.find((r) => r.id === id);
+        if (!doomed) {
+            toast(t('overlays.jobs.collections.renameMissing'), 'error');
+            return;
+        }
+        const stampRows = collectionSections
+            .filter((section) => section.ruleId === id)
+            .flatMap((section) => section.rows);
+        const stampCount = stampRows.length;
+        const ok = await askConfirm(
+            stampCount > 0
+                ? t('overlays.jobs.collections.deleteConfirmStamps', {
+                    name: doomed.name,
+                    count: stampCount,
+                })
+                : t('overlays.jobs.collections.deleteConfirm', { name: doomed.name }),
+            {
+                title: t('overlays.jobs.collections.deleteTitle'),
+                confirmLabel: t('overlays.jobs.collections.deleteRule'),
+                cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+                danger: true,
+            },
+        );
+        if (!ok) return;
+
+        const next = prevRules.filter((r) => r.id !== id);
         const customCollectionOverlaysEnabled = next.length > 0
             ? prev.customCollectionOverlaysEnabled !== false
             : false;
@@ -925,6 +996,7 @@ export const OverlaysDashboard: React.FC = () => {
             customCollectionOverlays: next,
             customCollectionOverlaysEnabled,
         }));
+        if (editingRuleId === id) resetNewCollectionForm();
         try {
             const saved = await overlaysApi.saveConfig({
                 customCollectionOverlays: next,
@@ -937,12 +1009,42 @@ export const OverlaysDashboard: React.FC = () => {
                     customCollectionOverlaysEnabled: saved.config.customCollectionOverlaysEnabled === true,
                 }));
             }
+            if (stampCount > 0) {
+                setBusy('revertKometa');
+                try {
+                    const seen = new Set<string>();
+                    for (const row of stampRows) {
+                        const key = String(row?.ratingKey || '').trim();
+                        if (!key || seen.has(key)) continue;
+                        seen.add(key);
+                        await overlaysApi.revertKometa(key);
+                    }
+                } finally {
+                    setBusy(null);
+                }
+            }
+            const imageId = String(doomed.image || '').trim();
+            if (imageId) {
+                const stillUsed = (saved?.config?.customCollectionOverlays || next)
+                    .some((r: CustomCollectionOverlayRule) => r.image === imageId);
+                if (!stillUsed) {
+                    await overlaysApi.deleteCustomPreset(imageId).catch(() => {});
+                }
+            }
             toast(t('overlays.jobs.collections.ruleRemoved'));
+            await refresh({ syncConfig: true });
         } catch (e: any) {
             toast(e?.message || t('overlays.jobs.collections.ruleRemoveFailed'), 'error');
             await refresh({ syncConfig: true }).catch(() => {});
         }
-    }, [refresh, t, toast]);
+    }, [
+        collectionSections,
+        editingRuleId,
+        refresh,
+        resetNewCollectionForm,
+        t,
+        toast,
+    ]);
 
     const bingeGroups = useMemo(() => {
         const map = new Map<string, any[]>();
@@ -2490,40 +2592,20 @@ export const OverlaysDashboard: React.FC = () => {
                                             className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/30 px-3 py-2"
                                         >
                                             <div className="min-w-0 flex-1">
-                                                {renamingRuleId === rule.id ? (
-                                                    <input
-                                                        className={fieldInputClass}
-                                                        value={renameDraft}
-                                                        autoFocus
-                                                        onChange={(e) => setRenameDraft(e.target.value)}
-                                                        onBlur={() => void renameCollectionRule(rule.id, renameDraft)}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') {
-                                                                e.preventDefault();
-                                                                void renameCollectionRule(rule.id, renameDraft);
-                                                            }
-                                                            if (e.key === 'Escape') {
-                                                                setRenamingRuleId(null);
-                                                                setRenameDraft('');
-                                                            }
-                                                        }}
-                                                    />
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        className="group flex max-w-full items-center gap-1.5 text-left"
-                                                        onClick={() => startRenameRule(rule.id, rule.name)}
-                                                        title={t('overlays.jobs.collections.rename')}
-                                                    >
-                                                        <p className="truncate text-sm font-semibold text-text group-hover:text-plex">
-                                                            {rule.name}
-                                                        </p>
-                                                        <Pencil className="h-3 w-3 shrink-0 text-muted opacity-60 group-hover:opacity-100" />
-                                                    </button>
-                                                )}
+                                                <p className="truncate text-sm font-semibold text-text">
+                                                    {rule.name}
+                                                    {editingRuleId === rule.id ? (
+                                                        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-plex">
+                                                            {t('overlays.jobs.collections.editingBadge')}
+                                                        </span>
+                                                    ) : null}
+                                                </p>
                                                 <p className="mt-0.5 text-[11px] text-muted truncate">
-                                                    {rule.collectionTitle || rule.collectionRatingKey}
+                                                    {ruleCollectionLabel(rule) || rule.collectionRatingKey}
                                                     {rule.library ? ` · ${rule.library}` : ''}
+                                                    {ruleCollectionKeys(rule).length > 1
+                                                        ? ` · ${t('overlays.jobs.collections.multiCount', { count: ruleCollectionKeys(rule).length })}`
+                                                        : ''}
                                                 </p>
                                                 {rule.image ? (
                                                     <p className="mt-0.5 text-[10px] text-muted/80 truncate">
@@ -2531,13 +2613,24 @@ export const OverlaysDashboard: React.FC = () => {
                                                     </p>
                                                 ) : null}
                                             </div>
-                                            <button
-                                                type="button"
-                                                className={buttonClass}
-                                                onClick={() => void removeCollectionOverlayRule(rule.id)}
-                                            >
-                                                {t('overlays.jobs.collections.removeRule')}
-                                            </button>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    className={buttonClass}
+                                                    onClick={() => beginEditCollectionRule(rule)}
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                    {t('overlays.jobs.collections.editRule')}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`${buttonClass} border-red-500/40 text-red-200`}
+                                                    onClick={() => void removeCollectionOverlayRule(rule.id)}
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                    {t('overlays.jobs.collections.deleteRule')}
+                                                </button>
+                                            </div>
                                         </div>
                                     ))
                                 )}
@@ -2545,9 +2638,28 @@ export const OverlaysDashboard: React.FC = () => {
                             </div>
 
                             <div className="mb-3 space-y-4 rounded-xl border border-plex/20 bg-plex/5 p-3 sm:p-4">
-                                <div>
-                                    <p className="text-sm font-bold text-text">{t('overlays.jobs.collections.addTitle')}</p>
-                                    <p className="mt-0.5 text-[11px] text-muted">{t('overlays.jobs.collections.addSubtitle')}</p>
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <p className="text-sm font-bold text-text">
+                                            {editingRuleId
+                                                ? t('overlays.jobs.collections.editTitle')
+                                                : t('overlays.jobs.collections.addTitle')}
+                                        </p>
+                                        <p className="mt-0.5 text-[11px] text-muted">
+                                            {editingRuleId
+                                                ? t('overlays.jobs.collections.editSubtitle')
+                                                : t('overlays.jobs.collections.addSubtitle')}
+                                        </p>
+                                    </div>
+                                    {editingRuleId ? (
+                                        <button
+                                            type="button"
+                                            className="text-[11px] font-semibold text-muted hover:text-text hover:underline"
+                                            onClick={() => resetNewCollectionForm()}
+                                        >
+                                            {t('overlays.jobs.collections.cancelEdit')}
+                                        </button>
+                                    ) : null}
                                 </div>
 
                                 <div className="space-y-2">
@@ -2569,7 +2681,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         value={newCollectionRuleLibrary}
                                         onChange={(next) => {
                                             setNewCollectionRuleLibrary(next);
-                                            setNewCollectionRuleKey('');
+                                            setSelectedCollectionKeys([]);
                                             setNewCollectionSearch('');
                                         }}
                                         options={[
@@ -2595,6 +2707,7 @@ export const OverlaysDashboard: React.FC = () => {
                                             </span>
                                         ) : null}
                                     </div>
+                                    <p className="text-[10px] text-muted">{t('overlays.jobs.collections.multiSelectHint')}</p>
                                     <div className="relative">
                                         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
                                         <input
@@ -2622,22 +2735,24 @@ export const OverlaysDashboard: React.FC = () => {
                                             </p>
                                         ) : (
                                             filteredCollectionOptions.map((o) => {
-                                                const active = newCollectionRuleKey === o.value;
+                                                const active = selectedCollectionKeys.includes(o.value);
                                                 return (
                                                     <button
                                                         key={o.value}
                                                         type="button"
-                                                        onClick={() => pickCollectionForRule(o)}
+                                                        onClick={() => toggleCollectionKey(o)}
                                                         className={`flex w-full items-start gap-2 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
                                                             active
                                                                 ? 'bg-plex/15 text-text'
                                                                 : 'text-text/90 hover:bg-white/5'
                                                         }`}
                                                     >
-                                                        <span className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border ${
-                                                            active ? 'border-plex bg-plex' : 'border-muted'
-                                                        }`} />
-                                                        <span className="min-w-0">
+                                                        <span className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                                                            active ? 'border-plex bg-plex text-[9px] text-black' : 'border-muted'
+                                                        }`}
+                                                        >
+                                                            {active ? '✓' : ''}
+                                                        </span>                                                        <span className="min-w-0">
                                                             <span className="block truncate text-sm font-semibold">
                                                                 {o.title || o.label}
                                                             </span>
@@ -2655,20 +2770,28 @@ export const OverlaysDashboard: React.FC = () => {
                                     {collectionPickerError ? (
                                         <p className="text-[11px] text-red-300">{collectionPickerError}</p>
                                     ) : null}
-                                    {selectedCollectionOption ? (
+                                    {selectedCollectionOptions.length ? (
                                         <p className="text-[11px] text-plex">
-                                            {t('overlays.jobs.collections.selectedCollection', {
-                                                title: selectedCollectionOption.title || selectedCollectionOption.label,
+                                            {t('overlays.jobs.collections.selectedCollections', {
+                                                count: selectedCollectionOptions.length,
+                                                titles: selectedCollectionOptions
+                                                    .map((o) => o.title || o.label)
+                                                    .join(', '),
                                             })}
                                         </p>
                                     ) : null}
                                 </div>
 
-                                <div className={`space-y-2 ${!newCollectionRuleKey ? 'opacity-50 pointer-events-none' : ''}`}>
+                                <div className={`space-y-2 ${!selectedCollectionKeys.length ? 'opacity-50 pointer-events-none' : ''}`}>
                                     <div className="flex items-center gap-2">
                                         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">3</span>
                                         <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepBadge')}</span>
                                     </div>
+                                    {editingRuleId && editingRuleImageId && !newCollectionRuleFile ? (
+                                        <p className="text-[11px] text-muted">
+                                            {t('overlays.jobs.collections.keepExistingBadge', { id: editingRuleImageId })}
+                                        </p>
+                                    ) : null}
                                     <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/30 px-3 py-4 transition-colors hover:border-plex/40 hover:bg-plex/5">
                                         {newCollectionFilePreview ? (
                                             <img
@@ -2682,7 +2805,9 @@ export const OverlaysDashboard: React.FC = () => {
                                         <span className="text-xs font-semibold text-text">
                                             {newCollectionRuleFile
                                                 ? newCollectionRuleFile.name
-                                                : t('overlays.jobs.collections.choosePng')}
+                                                : editingRuleId
+                                                    ? t('overlays.jobs.collections.replacePng')
+                                                    : t('overlays.jobs.collections.choosePng')}
                                         </span>
                                         <span className="text-[10px] text-muted">{t('overlays.jobs.collections.pngOnly')}</span>
                                         <input
@@ -2694,7 +2819,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     </label>
                                 </div>
 
-                                <div className={`space-y-2 ${!newCollectionRuleFile ? 'opacity-50 pointer-events-none' : ''}`}>
+                                <div className={`space-y-2 ${!selectedCollectionKeys.length || (!editingRuleId && !newCollectionRuleFile) ? 'opacity-50 pointer-events-none' : ''}`}>
                                     <div className="flex items-center gap-2">
                                         <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">4</span>
                                         <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepName')}</span>
@@ -2711,10 +2836,18 @@ export const OverlaysDashboard: React.FC = () => {
                                 <button
                                     type="button"
                                     className={primaryButtonClass}
-                                    disabled={!newCollectionRuleLibrary || !newCollectionRuleKey || !newCollectionRuleFile || busy !== null}
-                                    onClick={() => void addCollectionOverlayRule()}
+                                    disabled={
+                                        busy !== null
+                                        || !newCollectionRuleLibrary
+                                        || !selectedCollectionKeys.length
+                                        || (!editingRuleId && !newCollectionRuleFile)
+                                    }
+                                    onClick={() => void saveCollectionOverlayRule()}
                                 >
-                                    <Upload className="h-4 w-4" /> {t('overlays.jobs.collections.addRule')}
+                                    <Upload className="h-4 w-4" />
+                                    {editingRuleId
+                                        ? t('overlays.jobs.collections.saveRule')
+                                        : t('overlays.jobs.collections.addRule')}
                                 </button>
                                 <p className="text-[11px] text-muted">{t('overlays.jobs.collections.saveHint')}</p>
                             </div>
@@ -3159,50 +3292,18 @@ export const OverlaysDashboard: React.FC = () => {
                                                 >
                                                     <span className="inline-block w-3">{collapsed ? '▸' : '▾'}</span>
                                                 </button>
-                                                {section.kind === 'collection' && section.ruleId && renamingRuleId === section.ruleId ? (
-                                                    <input
-                                                        className={`${fieldInputClass} mt-0 max-w-md py-1.5`}
-                                                        value={renameDraft}
-                                                        autoFocus
-                                                        onChange={(e) => setRenameDraft(e.target.value)}
-                                                        onBlur={() => void renameCollectionRule(section.ruleId, renameDraft)}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') {
-                                                                e.preventDefault();
-                                                                void renameCollectionRule(section.ruleId, renameDraft);
-                                                            }
-                                                            if (e.key === 'Escape') {
-                                                                setRenamingRuleId(null);
-                                                                setRenameDraft('');
-                                                            }
-                                                        }}
-                                                    />
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        className="group min-w-0 flex-1 text-left"
-                                                        onClick={() => {
-                                                            if (section.kind === 'collection' && section.ruleId) {
-                                                                startRenameRule(section.ruleId, section.title);
-                                                                return;
-                                                            }
-                                                            setCollapsedKometaSections((prev) => ({
-                                                                ...prev,
-                                                                [section.id]: !collapsed,
-                                                            }));
-                                                        }}
-                                                        title={section.kind === 'collection' && section.ruleId
-                                                            ? t('overlays.jobs.collections.rename')
-                                                            : undefined}
-                                                    >
-                                                        <p className="truncate text-sm font-semibold text-text group-hover:text-plex">
-                                                            {sectionHeading(section)}
-                                                            {section.kind === 'collection' && section.ruleId ? (
-                                                                <Pencil className="ml-1.5 inline h-3 w-3 text-muted opacity-60 group-hover:opacity-100" />
-                                                            ) : null}
-                                                        </p>
-                                                    </button>
-                                                )}
+                                                <button
+                                                    type="button"
+                                                    className="group min-w-0 flex-1 text-left"
+                                                    onClick={() => setCollapsedKometaSections((prev) => ({
+                                                        ...prev,
+                                                        [section.id]: !collapsed,
+                                                    }))}
+                                                >
+                                                    <p className="truncate text-sm font-semibold text-text">
+                                                        {sectionHeading(section)}
+                                                    </p>
+                                                </button>
                                             </div>
                                             <button
                                                 type="button"
@@ -3357,59 +3458,52 @@ export const OverlaysDashboard: React.FC = () => {
                                                     >
                                                         <span className="inline-block w-3">{collapsed ? '▸' : '▾'}</span>
                                                     </button>
-                                                    {section.ruleId && renamingRuleId === section.ruleId ? (
-                                                        <input
-                                                            className={`${fieldInputClass} mt-0 max-w-md py-1.5`}
-                                                            value={renameDraft}
-                                                            autoFocus
-                                                            onChange={(e) => setRenameDraft(e.target.value)}
-                                                            onBlur={() => void renameCollectionRule(section.ruleId, renameDraft)}
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter') {
-                                                                    e.preventDefault();
-                                                                    void renameCollectionRule(section.ruleId, renameDraft);
-                                                                }
-                                                                if (e.key === 'Escape') {
-                                                                    setRenamingRuleId(null);
-                                                                    setRenameDraft('');
-                                                                }
-                                                            }}
-                                                        />
-                                                    ) : (
-                                                        <button
-                                                            type="button"
-                                                            className="group min-w-0 flex-1 text-left"
-                                                            onClick={() => {
-                                                                if (section.ruleId) {
-                                                                    startRenameRule(section.ruleId, section.title);
-                                                                    return;
-                                                                }
-                                                                setCollapsedKometaSections((prev) => ({
-                                                                    ...prev,
-                                                                    [section.id]: !collapsed,
-                                                                }));
-                                                            }}
-                                                            title={section.ruleId
-                                                                ? t('overlays.jobs.collections.rename')
-                                                                : undefined}
-                                                        >
-                                                            <p className="truncate text-sm font-semibold text-text group-hover:text-plex">
-                                                                {sectionHeading(section)}
-                                                                {section.ruleId ? (
-                                                                    <Pencil className="ml-1.5 inline h-3 w-3 text-muted opacity-60 group-hover:opacity-100" />
-                                                                ) : null}
-                                                            </p>
-                                                        </button>
-                                                    )}
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="truncate text-sm font-semibold text-text">
+                                                            {sectionHeading(section)}
+                                                        </p>
+                                                        {section.ruleId ? (() => {
+                                                            const rule = collectionRules.find((r) => r.id === section.ruleId);
+                                                            const label = rule ? ruleCollectionLabel(rule) : '';
+                                                            return label ? (
+                                                                <p className="mt-0.5 truncate text-[11px] text-muted">{label}</p>
+                                                            ) : null;
+                                                        })() : null}
+                                                    </div>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
-                                                    disabled={busy !== null || jobRunning || !workerReady || section.rows.length === 0}
-                                                    onClick={() => revertKometaSection(section)}
-                                                >
-                                                    {t('overlays.kometa.revertSection')}
-                                                </button>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {section.ruleId ? (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                className="shrink-0 text-xs font-semibold text-plex hover:underline disabled:opacity-50"
+                                                                disabled={busy !== null || jobRunning}
+                                                                onClick={() => {
+                                                                    const rule = collectionRules.find((r) => r.id === section.ruleId);
+                                                                    if (rule) beginEditCollectionRule(rule);
+                                                                }}
+                                                            >
+                                                                {t('overlays.jobs.collections.editRule')}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="shrink-0 text-xs font-semibold text-red-300 hover:underline disabled:opacity-50"
+                                                                disabled={busy !== null || jobRunning}
+                                                                onClick={() => void removeCollectionOverlayRule(section.ruleId)}
+                                                            >
+                                                                {t('overlays.jobs.collections.deleteRule')}
+                                                            </button>
+                                                        </>
+                                                    ) : null}
+                                                    <button
+                                                        type="button"
+                                                        className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
+                                                        disabled={busy !== null || jobRunning || !workerReady || section.rows.length === 0}
+                                                        onClick={() => revertKometaSection(section)}
+                                                    >
+                                                        {t('overlays.kometa.revertSection')}
+                                                    </button>
+                                                </div>
                                             </div>
                                             {!collapsed && (
                                                 section.rows.length === 0 ? (

@@ -156,7 +156,13 @@ def enabled_families(config: dict) -> list[str]:
     if _as_bool(_cfg(config, "customCollectionOverlaysEnabled", "custom_collection_overlays_enabled"), False):
         rules = _cfg(config, "customCollectionOverlays", "custom_collection_overlays", []) or []
         if isinstance(rules, list) and any(
-            str((r or {}).get("collectionRatingKey") or (r or {}).get("collection_rating_key") or "").strip()
+            (
+                (
+                    isinstance((r or {}).get("collectionRatingKeys") or (r or {}).get("collection_rating_keys"), list)
+                    and any(str(k or "").strip() for k in ((r or {}).get("collectionRatingKeys") or (r or {}).get("collection_rating_keys") or []))
+                )
+                or str((r or {}).get("collectionRatingKey") or (r or {}).get("collection_rating_key") or "").strip()
+            )
             and str((r or {}).get("image") or "").strip()
             and str((r or {}).get("library") or (r or {}).get("libraryTitle") or "").strip()
             for r in rules
@@ -164,6 +170,23 @@ def enabled_families(config: dict) -> list[str]:
         ):
             families.append("custom_collection")
     return families
+
+
+def _rule_collection_keys(row: dict) -> list[str]:
+    keys: list[str] = []
+    seen: set[str] = set()
+    raw_list = row.get("collectionRatingKeys") or row.get("collection_rating_keys")
+    if isinstance(raw_list, list):
+        for item in raw_list:
+            key = str(item or "").strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            keys.append(key)
+    singular = str(row.get("collectionRatingKey") or row.get("collection_rating_key") or "").strip()
+    if singular and singular not in seen:
+        keys.insert(0, singular)
+    return keys
 
 
 def _custom_collection_rules(config: dict) -> list[dict]:
@@ -175,21 +198,35 @@ def _custom_collection_rules(config: dict) -> list[dict]:
     for row in raw:
         if not isinstance(row, dict):
             continue
-        collection_key = str(row.get("collectionRatingKey") or row.get("collection_rating_key") or "").strip()
+        collection_keys = _rule_collection_keys(row)
         image = str(row.get("image") or row.get("presetId") or row.get("preset_id") or "").strip()
         library = str(row.get("library") or row.get("libraryTitle") or row.get("library_title") or "").strip()
         # Library is required — never stamp without an explicit Plex library scope.
-        if not collection_key or not image or not library:
+        if not collection_keys or not image or not library:
             continue
+        collection_key = collection_keys[0]
         rule_id = str(row.get("id") or "").strip() or f"rule-{collection_key}"
         if rule_id in seen:
             continue
         seen.add(rule_id)
+        titles_raw = row.get("collectionTitles") or row.get("collection_titles") or {}
+        collection_titles: dict[str, str] = {}
+        if isinstance(titles_raw, dict):
+            for k, v in titles_raw.items():
+                key = str(k or "").strip()
+                title = str(v or "").strip()
+                if key and title:
+                    collection_titles[key] = title
+        singular_title = str(row.get("collectionTitle") or row.get("collection_title") or "").strip()
+        if collection_key and singular_title and collection_key not in collection_titles:
+            collection_titles[collection_key] = singular_title
         out.append({
             "id": rule_id,
             "name": str(row.get("name") or row.get("title") or "").strip() or rule_id,
             "collectionRatingKey": collection_key,
-            "collectionTitle": str(row.get("collectionTitle") or row.get("collection_title") or "").strip(),
+            "collectionRatingKeys": collection_keys,
+            "collectionTitle": collection_titles.get(collection_key) or singular_title,
+            "collectionTitles": collection_titles,
             "library": library,
             "librarySectionId": str(
                 row.get("librarySectionId")
@@ -475,17 +512,39 @@ def _apply_custom_collection_winners(
                 errors.append(msg)
             _progress(progress, msg)
             continue
-        members = _resolve_collection_member_keys(
-            plex,
-            rule["collectionRatingKey"],
-            library=rule["library"],
-            library_section_id=rule.get("librarySectionId") or "",
-            progress=progress,
-        )
+        collection_keys = [
+            str(k or "").strip()
+            for k in (rule.get("collectionRatingKeys") or [rule.get("collectionRatingKey")])
+            if str(k or "").strip()
+        ]
+        if not collection_keys:
+            continue
+        members: set[str] = set()
+        for collection_key in collection_keys:
+            part = _resolve_collection_member_keys(
+                plex,
+                collection_key,
+                library=rule["library"],
+                library_section_id=rule.get("librarySectionId") or "",
+                progress=progress,
+            )
+            members.update(part)
+            title_hint = ""
+            titles_map = rule.get("collectionTitles") if isinstance(rule.get("collectionTitles"), dict) else {}
+            if titles_map:
+                title_hint = str(titles_map.get(collection_key) or "").strip()
+            if not title_hint and collection_key == rule.get("collectionRatingKey"):
+                title_hint = str(rule.get("collectionTitle") or "").strip()
+            label = title_hint or collection_key
+            _progress(
+                progress,
+                f"Collection '{label}' [{rule['library']}]: {len(part)} member(s)",
+            )
         rule_members[rule["id"]] = set(members)
         _progress(
             progress,
-            f"Collection badge '{rule.get('name') or rule['id']}' [{rule['library']}]: {len(members)} member(s)",
+            f"Collection badge '{rule.get('name') or rule['id']}' [{rule['library']}]: "
+            f"{len(members)} unique member(s) across {len(collection_keys)} collection(s)",
         )
         image_path = _resolve_custom_preset_path(paths, rule["image"])
         if image_path is None:
@@ -562,7 +621,9 @@ def _apply_custom_collection_winners(
             extra={
                 "ruleId": rule["id"],
                 "collectionRatingKey": rule["collectionRatingKey"],
+                "collectionRatingKeys": list(rule.get("collectionRatingKeys") or [rule["collectionRatingKey"]]),
                 "collectionTitle": rule.get("collectionTitle") or "",
+                "collectionTitles": rule.get("collectionTitles") or {},
                 "library": rule.get("library") or "",
             },
         )

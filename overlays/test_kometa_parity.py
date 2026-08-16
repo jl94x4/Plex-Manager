@@ -115,6 +115,15 @@ assert "custom_collection" in enabled_families({
         "library": "Movies",
     }],
 })
+assert "custom_collection" in enabled_families({
+    "customCollectionOverlaysEnabled": True,
+    "customCollectionOverlays": [{
+        "id": "multi",
+        "collectionRatingKeys": ["10", "11"],
+        "image": "collection-fire",
+        "library": "Movies",
+    }],
+})
 assert "custom_collection" not in enabled_families({
     "customCollectionOverlaysEnabled": True,
     "customCollectionOverlays": [],

@@ -45,8 +45,13 @@ export type OverlayPlacement = OverlaysPlacement;
 export type CustomCollectionOverlayRule = {
     id: string;
     name: string;
+    /** Primary / first collection (back-compat mirror of collectionRatingKeys[0]). */
     collectionRatingKey: string;
     collectionTitle?: string;
+    /** One or more Plex collection ratingKeys (OR membership, same library). */
+    collectionRatingKeys: string[];
+    /** ratingKey -> display title for UI. */
+    collectionTitles?: Record<string, string>;
     /** Required Plex library section title — badges only apply inside this library. */
     library: string;
     librarySectionId?: string;
