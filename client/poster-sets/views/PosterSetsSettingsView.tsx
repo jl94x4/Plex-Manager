@@ -357,6 +357,8 @@ export const PosterSetsSettingsView: React.FC = () => {
     } = usePosterSetsDashboard();
 
     const [tpdbCacheStatus, setTpdbCacheStatus] = useState<Awaited<ReturnType<typeof posterSetsApi.tpdbCacheStatus>> | null>(null);
+    const [tpdbCookiePaste, setTpdbCookiePaste] = useState('');
+    const [tpdbCookieUserAgent, setTpdbCookieUserAgent] = useState('');
     const [warmScope, setWarmScope] = useState<{
         media: 'all' | 'movie' | 'show';
         source: 'full' | 'recent';
@@ -518,13 +520,14 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 onChange={(event) => setConfigDraft((prev) => ({ ...prev, tpdb_password: event.target.value }))}
                             />
                             <span className="mt-1 block text-[11px] text-muted">
-                                Optional. Login unlocks advanced TMDB-id search. Poster pages themselves are public — if Cloudflare blocks login from your server, turn off “Use TPDB login” below and cache builds still scrape via public search.
+                                Optional. Login unlocks advanced TMDB/TVDB search. If Cloudflare blocks login from Docker/VPS,
+                                import browser cookies below (or turn off “Use TPDB login” and use public search).
                             </span>
                         </label>
                         <div className="sm:col-span-2">
                             <SettingsToggleRow
                                 title="Use TPDB login (advanced search)"
-                                description="On: try login for TMDB/IMDB/TVDB resolve. Off: public title+year search only (works when Cloudflare blocks login from Docker/VPS)."
+                                description="On: try login/saved cookies for TMDB/IMDB/TVDB resolve. Off: public title+year search only (works when Cloudflare blocks this host)."
                                 checked={configDraft.tpdbUseLogin !== false}
                                 onChange={(next) => setConfigDraft((prev) => ({
                                     ...prev,
@@ -532,6 +535,61 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 }))}
                                 border={false}
                             />
+                        </div>
+                        <div className="sm:col-span-2 space-y-2 rounded-lg border border-white/10 bg-black/20 px-3 py-3">
+                            <p className="text-xs font-semibold text-text">Import TPDB browser cookies</p>
+                            <p className="text-[11px] leading-relaxed text-muted">
+                                Cloudflare often blocks password login from servers. On your PC/phone browser: log into theposterdb.com,
+                                export cookies with Cookie-Editor (JSON) or copy the Cookie header from DevTools, paste below, then Import.
+                                Include <code className="text-text/80">cf_clearance</code> if present. Cookies expire — re-import when login stops working.
+                            </p>
+                            <textarea
+                                className={`${fieldClass} mt-1 min-h-[88px] font-mono text-[11px]`}
+                                placeholder='[{"name":"cf_clearance","value":"...","domain":".theposterdb.com"}, ...]'
+                                value={tpdbCookiePaste}
+                                onChange={(event) => setTpdbCookiePaste(event.target.value)}
+                            />
+                            <label className="block">
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Browser User-Agent (optional)</span>
+                                <input
+                                    className={`${fieldClass} mt-1 font-mono text-[11px]`}
+                                    placeholder="Same UA as the browser that exported cookies (recommended for cf_clearance)"
+                                    value={tpdbCookieUserAgent}
+                                    onChange={(event) => setTpdbCookieUserAgent(event.target.value)}
+                                />
+                            </label>
+                            <button
+                                type="button"
+                                className={buttonClass}
+                                disabled={busy !== null || !tpdbCookiePaste.trim()}
+                                onClick={async () => {
+                                    setBusy('tpdb-cookies');
+                                    try {
+                                        const result = await posterSetsApi.importTpdbCookies({
+                                            cookies: tpdbCookiePaste,
+                                            userAgent: tpdbCookieUserAgent.trim() || undefined,
+                                            tpdb_username: configDraft.tpdb_username,
+                                            tpdb_password: configDraft.tpdb_password === '********'
+                                                ? undefined
+                                                : configDraft.tpdb_password,
+                                        });
+                                        toast(
+                                            result.ok
+                                                ? `TPDB cookies imported (${result.cookieCount || 0})${result.hasCfClearance ? ' · cf_clearance OK' : ''}.`
+                                                : (result.error || 'Cookie import failed'),
+                                            result.ok ? 'success' : 'error',
+                                        );
+                                        if (result.ok) setTpdbCookiePaste('');
+                                    } catch (error) {
+                                        toast(error instanceof Error ? error.message : 'Cookie import failed', 'error');
+                                    } finally {
+                                        setBusy(null);
+                                    }
+                                }}
+                            >
+                                {busy === 'tpdb-cookies' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                Import cookies
+                            </button>
                         </div>
                         <div className="sm:col-span-2 rounded-xl border border-white/10 bg-black/20 px-4 py-4 lg:px-5 lg:py-5 space-y-5">
                             <div className="flex flex-wrap items-end justify-between gap-3">

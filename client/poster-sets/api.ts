@@ -155,6 +155,28 @@ export const posterSetsApi = {
         sections?: Array<{ title?: string; type?: string }>;
         logs?: string[];
         error?: string;
+        tpdb?: {
+            ok?: boolean;
+            error?: string;
+            warning?: string;
+            cloudflare?: boolean;
+            via?: string;
+            sampleTitle?: string;
+        };
+    }>,
+    importTpdbCookies: (payload: {
+        cookies: string;
+        userAgent?: string;
+        tpdb_username?: string;
+        tpdb_password?: string;
+    }) => apiFetch(`${ROOT}/tpdb-import-cookies`, json(payload)) as Promise<{
+        ok: boolean;
+        error?: string;
+        cloudflare?: boolean;
+        cookieCount?: number;
+        hasCfClearance?: boolean;
+        via?: string;
+        logs?: string[];
     }>,
     preview: (url: string, options?: { mediuxFilters?: string[] }) => apiFetch(`${ROOT}/preview`, json({
         url,

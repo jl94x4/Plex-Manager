@@ -859,7 +859,9 @@ export function usePosterSetsDashboardState() {
             const tpdbLine = response.tpdb?.ok
                 ? (response.tpdb.warning
                     ? `ThePosterDB login OK. ${response.tpdb.warning}`
-                    : 'ThePosterDB login OK.')
+                    : (response.tpdb.via === 'saved-session'
+                        ? 'ThePosterDB session OK (saved cookies).'
+                        : 'ThePosterDB login OK.'))
                 : response.tpdb?.error
                     ? `ThePosterDB: ${response.tpdb.error}`
                     : '';

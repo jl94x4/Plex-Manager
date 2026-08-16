@@ -11,6 +11,7 @@ import traceback
 from core import (
     apply_bulk,
     apply_url,
+    import_posterdb_browser_cookies,
     list_assets,
     parse_bulk_urls,
     preview_url,
@@ -32,7 +33,7 @@ def progress(message: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Poster Sets headless CLI")
-    parser.add_argument("command", choices=["test", "test-tpdb", "preview", "apply", "bulk", "search", "inspect", "warm"])
+    parser.add_argument("command", choices=["test", "test-tpdb", "import-tpdb-cookies", "preview", "apply", "bulk", "search", "inspect", "warm"])
     parser.add_argument("--payload", default="", help="JSON payload string (otherwise read stdin)")
     args = parser.parse_args()
 
@@ -54,6 +55,18 @@ def main() -> int:
             result = test_posterdb_login(config)
             write_event("result", **result)
             return 0
+
+        if args.command == "import-tpdb-cookies":
+            cookies = request.get("cookies")
+            if cookies is None:
+                cookies = request.get("cookieText") or request.get("cookie_text") or ""
+            user_agent = str(request.get("userAgent") or request.get("user_agent") or "").strip()
+            import_config = {**config}
+            if user_agent:
+                import_config["tpdb_browser_user_agent"] = user_agent
+            result = import_posterdb_browser_cookies(import_config, cookies)
+            write_event("result", **result)
+            return 0 if result.get("ok") else 1
 
         if args.command == "inspect":
             url = str(request.get("url") or "").strip()

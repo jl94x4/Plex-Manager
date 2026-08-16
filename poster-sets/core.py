@@ -486,7 +486,9 @@ _posterdb_last_http_at = 0.0
 # Warm metadata pass: enough sets for browsing; full crawl happens when a title is opened.
 _POSTERDB_WARM_SET_LIMIT = 48
 _POSTERDB_WARM_MAX_SET_PAGES = 1
-_POSTERDB_SESSION_MAX_AGE_S = 12 * 60 * 60
+# Browser-imported sessions (cf_clearance) often outlive password re-login, which
+# Cloudflare blocks on many VPS/Docker IPs — keep cookies longer when possible.
+_POSTERDB_SESSION_MAX_AGE_S = 7 * 24 * 60 * 60
 
 
 def _posterdb_throttle(*, authenticated: bool = False) -> None:
@@ -600,7 +602,13 @@ def _posterdb_apply_cookie_rows(session: requests.Session, rows: Sequence[dict] 
         )
 
 
-def _posterdb_save_session_file(config: dict | None, cache_key: str, session: requests.Session) -> None:
+def _posterdb_save_session_file(
+    config: dict | None,
+    cache_key: str,
+    session: requests.Session,
+    *,
+    user_agent: str | None = None,
+) -> None:
     path = _posterdb_session_path(config)
     if not path:
         return
@@ -608,9 +616,11 @@ def _posterdb_save_session_file(config: dict | None, cache_key: str, session: re
         parent = os.path.dirname(path)
         if parent:
             os.makedirs(parent, exist_ok=True)
+        ua = str(user_agent or session.headers.get("User-Agent") or _POSTERDB_UA).strip() or _POSTERDB_UA
         payload = {
             "cacheKey": cache_key,
             "savedAt": time.time(),
+            "userAgent": ua,
             "cookies": _posterdb_cookie_rows(session),
         }
         tmp = f"{path}.tmp"
@@ -638,7 +648,8 @@ def _posterdb_load_session_file(config: dict | None, cache_key: str) -> Optional
     if saved_at <= 0 or (time.time() - saved_at) > _POSTERDB_SESSION_MAX_AGE_S:
         return None
     session = requests.Session()
-    session.headers.update({"User-Agent": _POSTERDB_UA})
+    ua = str(payload.get("userAgent") or _POSTERDB_UA).strip() or _POSTERDB_UA
+    session.headers.update({"User-Agent": ua})
     _posterdb_apply_cookie_rows(session, payload.get("cookies") if isinstance(payload.get("cookies"), list) else [])
     if not _posterdb_session_looks_logged_in(session, config=config, quiet=True):
         return None
@@ -658,7 +669,135 @@ def _posterdb_page_looks_like_challenge(html: str, url: str = "") -> bool:
         return True
     if "/cdn-cgi/challenge" in lower:
         return True
+    if "attention required" in lower and "cloudflare" in lower:
+        return True
+    if "cf-error-code" in lower or "error code: 1" in lower:
+        return True
     return False
+
+
+def _posterdb_cloudflare_help() -> str:
+    return (
+        "Cloudflare is blocking login from this server IP (common on Docker/VPS). "
+        "Workaround: open theposterdb.com in your browser, log in, then paste cookies "
+        "under Poster Sets → Settings → Import TPDB browser cookies. "
+        "Or turn off “Use TPDB login” and use public search (weaker for TV)."
+    )
+
+
+def _parse_posterdb_browser_cookies(raw: str | list | dict | None) -> list[dict]:
+    """Parse Cookie-Editor JSON, DevTools cookie header, or {cookies:[...]} payloads."""
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        rows_in = raw
+    elif isinstance(raw, dict):
+        if isinstance(raw.get("cookies"), list):
+            rows_in = raw["cookies"]
+        else:
+            rows_in = [raw]
+    else:
+        text = str(raw or "").strip()
+        if not text:
+            return []
+        if text.startswith("[") or text.startswith("{"):
+            try:
+                parsed = json.loads(text)
+            except Exception as exc:
+                raise ValueError(f"Cookie JSON is invalid: {exc}") from exc
+            return _parse_posterdb_browser_cookies(parsed)
+        # Cookie header: name=value; name2=value2
+        rows_in = []
+        for part in text.split(";"):
+            chunk = part.strip()
+            if not chunk or "=" not in chunk:
+                continue
+            name, value = chunk.split("=", 1)
+            rows_in.append({"name": name.strip(), "value": value.strip(), "domain": ".theposterdb.com"})
+    out: list[dict] = []
+    for row in rows_in:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or row.get("Name") or "").strip()
+        value = row.get("value") if row.get("value") is not None else row.get("Value")
+        if not name or value is None:
+            continue
+        domain = str(row.get("domain") or row.get("Domain") or ".theposterdb.com").strip() or ".theposterdb.com"
+        path = str(row.get("path") or row.get("Path") or "/").strip() or "/"
+        out.append({
+            "name": name,
+            "value": str(value),
+            "domain": domain,
+            "path": path,
+            "secure": bool(row.get("secure") if row.get("secure") is not None else row.get("Secure", True)),
+            "expires": row.get("expires") or row.get("expirationDate") or row.get("Expires"),
+        })
+    return out
+
+
+def import_posterdb_browser_cookies(config: dict | None = None, cookies: str | list | dict | None = None) -> dict:
+    """Import browser cookies so advanced search works when Cloudflare blocks password login.
+
+    User logs into TPDB in a normal browser (passes Cloudflare), exports cookies
+    (Cookie-Editor / DevTools), and pastes them here. Prefer including cf_clearance.
+    """
+    config = config if isinstance(config, dict) else {}
+    user = str(config.get("tpdb_username") or config.get("tpdb_login") or "").strip()
+    password = str(config.get("tpdb_password") or "").strip()
+    if not user or not password or password == "********":
+        return {
+            "ok": False,
+            "error": "Save TPDB username and password in Settings first (used to key the session file), then import cookies.",
+        }
+    try:
+        rows = _parse_posterdb_browser_cookies(cookies)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    if not rows:
+        return {"ok": False, "error": "No cookies found. Paste Cookie-Editor JSON or a cookie header string."}
+    names = {str(row.get("name") or "") for row in rows}
+    if "cf_clearance" not in names:
+        emit(None, "ThePosterDB cookie import: no cf_clearance cookie — Cloudflare may still block this host.")
+
+    cache_key = _posterdb_session_cache_key(user, password)
+    user_agent = str(config.get("tpdb_browser_user_agent") or config.get("tpdbBrowserUserAgent") or "").strip() or _POSTERDB_UA
+    session = requests.Session()
+    session.headers.update({"User-Agent": user_agent})
+    _posterdb_apply_cookie_rows(session, rows)
+
+    if not _posterdb_session_looks_logged_in(session, config=config):
+        challenge = False
+        try:
+            probe = session.get("https://theposterdb.com/login", timeout=30)
+            challenge = _posterdb_page_looks_like_challenge(probe.text, str(probe.url or ""))
+        except Exception:
+            pass
+        return {
+            "ok": False,
+            "cloudflare": challenge,
+            "error": (
+                _posterdb_cloudflare_help()
+                if challenge
+                else (
+                    "Imported cookies did not unlock TPDB advanced search. "
+                    "Log in again in your browser, export fresh cookies (include cf_clearance "
+                    "and laravel_session), and use the same browser User-Agent if prompted."
+                )
+            ),
+            "cookieCount": len(rows),
+        }
+
+    _POSTERDB_SESSIONS[cache_key] = session
+    _POSTERDB_LOGIN_FAILED_UNTIL.pop(cache_key, None)
+    _posterdb_save_session_file(config, cache_key, session, user_agent=user_agent)
+    emit(None, f"ThePosterDB: imported {len(rows)} browser cookie(s) — session verified")
+    return {
+        "ok": True,
+        "username": user,
+        "cookieCount": len(rows),
+        "hasCfClearance": "cf_clearance" in names,
+        "via": "browser-cookies",
+    }
 
 
 def _posterdb_extract_login_error(html: str) -> str:
@@ -698,6 +837,16 @@ def _posterdb_xsrf_headers(session: requests.Session) -> dict[str, str]:
     return headers
 
 
+def _posterdb_session_user_agent(session: requests.Session | None) -> str:
+    if session is None:
+        return _POSTERDB_UA
+    try:
+        ua = str(session.headers.get("User-Agent") or "").strip()
+    except Exception:
+        ua = ""
+    return ua or _POSTERDB_UA
+
+
 def _posterdb_session_looks_logged_in(
     session: requests.Session,
     *,
@@ -714,7 +863,8 @@ def _posterdb_session_looks_logged_in(
                 timeout=45,
                 allow_redirects=True,
                 headers={
-                    "User-Agent": _POSTERDB_UA,
+                    # Must match the UA that obtained cf_clearance (browser cookie import).
+                    "User-Agent": _posterdb_session_user_agent(session),
                     "Referer": "https://theposterdb.com/search/advanced",
                     "Accept": "text/html,application/xhtml+xml",
                 },
@@ -773,10 +923,7 @@ def _posterdb_http_client(config: dict | None = None) -> requests.Session | type
                 },
             )
         if _posterdb_page_looks_like_challenge(login_page.text, str(login_page.url or "")):
-            msg = (
-                "ThePosterDB login blocked by Cloudflare challenge from this host. "
-                "Try again later, or log in from a residential IP / different network."
-            )
+            msg = _posterdb_cloudflare_help()
             emit(None, msg)
             _posterdb_mark_login_failed(cache_key, msg)
             return requests
@@ -785,8 +932,8 @@ def _posterdb_http_client(config: dict | None = None) -> requests.Session | type
         token = str(token_node.get("value") or "") if token_node else ""
         if not token:
             msg = (
-                "ThePosterDB login page had no CSRF token (Cloudflare interstitial or changed form). "
-                "Cannot sign in from this host right now."
+                "ThePosterDB login page had no CSRF token (Cloudflare interstitial). "
+                + _posterdb_cloudflare_help()
             )
             emit(None, msg)
             _posterdb_mark_login_failed(cache_key, msg)
@@ -812,8 +959,10 @@ def _posterdb_http_client(config: dict | None = None) -> requests.Session | type
         if still_on_login or response.status_code >= 400:
             detail = _posterdb_extract_login_error(response.text) or f"HTTP {response.status_code}"
             if _posterdb_page_looks_like_challenge(response.text, final_url):
-                detail = "Cloudflare challenge on login POST"
-            msg = f"ThePosterDB login failed — {detail}"
+                detail = _posterdb_cloudflare_help()
+                msg = detail
+            else:
+                msg = f"ThePosterDB login failed — {detail}"
             emit(None, msg)
             _posterdb_mark_login_failed(cache_key, msg)
             return requests
@@ -839,34 +988,18 @@ def _posterdb_http_client(config: dict | None = None) -> requests.Session | type
         return requests
 
 
-def test_posterdb_login(config: dict | None = None) -> dict:
-    """Verify TPDB credentials (advanced search requires an authenticated session)."""
-    config = config if isinstance(config, dict) else {}
-    user = str(config.get("tpdb_username") or config.get("tpdb_login") or "").strip()
-    password = str(config.get("tpdb_password") or "").strip()
-    if not user or not password or password == "********":
-        return {"ok": False, "configured": False, "error": "TPDB username and password are not configured."}
-    _posterdb_invalidate_sessions(user)
-    # Force a fresh login (ignore saved cookie jar) so Test is authoritative.
-    path = _posterdb_session_path(config)
-    if path and os.path.isfile(path):
-        try:
-            os.remove(path)
-        except Exception:
-            pass
-    session = _posterdb_http_client(config)
-    if not isinstance(session, requests.Session):
-        detail = _posterdb_take_login_error() or "ThePosterDB login failed — check TPDB username/password."
-        return {"ok": False, "configured": True, "error": detail}
+def _posterdb_probe_advanced_search(session: requests.Session, *, config: dict | None = None) -> dict:
+    """Run the Ted Lasso TMDB probe against an authenticated session."""
     response = session.get(
         "https://theposterdb.com/search/advanced/results",
         params={"category": "Shows", "tmdb_id": "97546"},
         timeout=60,
         allow_redirects=True,
     )
+    if _posterdb_page_looks_like_challenge(response.text, str(response.url or "")):
+        return {"ok": False, "cloudflare": True, "error": _posterdb_cloudflare_help()}
     if "theposterdb.com/login" in str(response.url or "").lower():
-        _posterdb_invalidate_sessions(user)
-        return {"ok": False, "configured": True, "error": "ThePosterDB session expired or login was rejected."}
+        return {"ok": False, "error": "ThePosterDB session expired or login was rejected."}
     soup = BeautifulSoup(response.text, "html.parser")
     titles = _parse_posterdb_title_links(soup, limit=8)
     matched = None
@@ -881,28 +1014,83 @@ def test_posterdb_login(config: dict | None = None) -> dict:
         if str(probe.get("mediaId") or "") == "97546":
             matched = item
             break
-    if not matched:
-        if titles:
-            return {
-                "ok": True,
-                "configured": True,
-                "username": user,
-                "warning": (
-                    "ThePosterDB login OK. Advanced search responded, but the Ted Lasso TMDB probe "
-                    "did not match — canonical TMDB resolve may still need TPDB Pro."
-                ),
-                "resultCount": len(titles),
-            }
+    if matched:
+        return {"ok": True, "sampleTitle": matched.get("title"), "resultCount": len(titles)}
+    if titles:
         return {
-            "ok": False,
-            "configured": True,
-            "error": (
-                "ThePosterDB login may have succeeded, but advanced TMDB search returned no title pages. "
-                "Check credentials and whether your TPDB account includes advanced search (Pro)."
+            "ok": True,
+            "warning": (
+                "ThePosterDB login OK. Advanced search responded, but the Ted Lasso TMDB probe "
+                "did not match — canonical TMDB resolve may still need TPDB Pro."
             ),
-            "resultCount": 0,
+            "resultCount": len(titles),
         }
-    return {"ok": True, "configured": True, "username": user, "sampleTitle": matched.get("title")}
+    return {
+        "ok": False,
+        "error": (
+            "ThePosterDB login may have succeeded, but advanced TMDB search returned no title pages. "
+            "Check credentials and whether your TPDB account includes advanced search (Pro)."
+        ),
+        "resultCount": 0,
+    }
+
+
+def test_posterdb_login(config: dict | None = None, *, force_fresh: bool = False) -> dict:
+    """Verify TPDB credentials / saved browser session (advanced search).
+
+    Prefer validating an existing cookie session first — forcing a password re-login
+    from Docker often hits Cloudflare and destroys a working imported session.
+    """
+    config = config if isinstance(config, dict) else {}
+    user = str(config.get("tpdb_username") or config.get("tpdb_login") or "").strip()
+    password = str(config.get("tpdb_password") or "").strip()
+    if not user or not password or password == "********":
+        return {"ok": False, "configured": False, "error": "TPDB username and password are not configured."}
+    cache_key = _posterdb_session_cache_key(user, password)
+    force_fresh = force_fresh or bool(config.get("forceFreshLogin") or config.get("force_fresh_login"))
+
+    if not force_fresh:
+        restored = _posterdb_load_session_file(config, cache_key)
+        if restored is not None:
+            _POSTERDB_SESSIONS[cache_key] = restored
+            probe = _posterdb_probe_advanced_search(restored, config=config)
+            if probe.get("ok"):
+                return {
+                    "ok": True,
+                    "configured": True,
+                    "username": user,
+                    "via": "saved-session",
+                    **{k: v for k, v in probe.items() if k != "ok"},
+                }
+
+    if force_fresh:
+        _posterdb_invalidate_sessions(user)
+        path = _posterdb_session_path(config)
+        if path and os.path.isfile(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+
+    session = _posterdb_http_client(config)
+    if not isinstance(session, requests.Session):
+        detail = _posterdb_take_login_error() or "ThePosterDB login failed — check TPDB username/password."
+        cloudflare = "cloudflare" in detail.lower()
+        return {"ok": False, "configured": True, "cloudflare": cloudflare, "error": detail}
+
+    probe = _posterdb_probe_advanced_search(session, config=config)
+    if not probe.get("ok"):
+        if probe.get("cloudflare"):
+            return {"ok": False, "configured": True, "cloudflare": True, "error": probe.get("error")}
+        _posterdb_invalidate_sessions(user)
+        return {"ok": False, "configured": True, "error": probe.get("error") or "TPDB login failed"}
+    return {
+        "ok": True,
+        "configured": True,
+        "username": user,
+        "via": "password-login",
+        **{k: v for k, v in probe.items() if k != "ok"},
+    }
 
 
 def cook_soup(
@@ -912,17 +1100,18 @@ def cook_soup(
     timeout: float | None = None,
     retries: int = 3,
 ) -> BeautifulSoup:
-    headers = {
-        "User-Agent": _POSTERDB_UA,
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": "Windows",
-    }
     wait = 20 if timeout is None and "theposterdb.com/search" in str(url or "").lower() else timeout
     if wait is None:
         wait = 60
     is_tpdb = "theposterdb.com" in str(url or "").lower()
     client = _posterdb_http_client(config) if is_tpdb else requests
     authenticated = isinstance(client, requests.Session)
+    ua = _posterdb_session_user_agent(client if authenticated else None)
+    headers = {
+        "User-Agent": ua,
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": "Windows",
+    }
     attempts = max(1, int(retries or 1))
     last_error: Exception | None = None
     for attempt in range(attempts):
