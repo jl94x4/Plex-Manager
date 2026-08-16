@@ -1,36 +1,37 @@
 import React, { useMemo, useState } from 'react';
+import { useDiscoverI18n } from '../discovery/i18n';
 import { SettingFieldLabel, SettingHint } from './SettingHint';
 
-const EVENT_LABELS: Record<string, string> = {
-    available: 'Request available',
-    approved: 'Request approved',
-    declined: 'Request declined',
-    season: 'Season available',
-    episode: 'New episode',
-    admin_pending: 'Admin — new pending request',
-    not_released: 'Not released yet',
-    collexions_failed: 'Admin — ColleXions failed',
-    scanner_failed: 'Admin — Scanner failed',
-    status_down: 'Admin — Status check down',
-    status_up: 'Admin — Status check recovered',
-    media_job_failed: 'Admin — Media Automation job failed',
-    media_job_completed: 'Admin — Media Automation job finished',
+const EVENT_LABEL_KEYS: Record<string, string> = {
+    available: 'settings.notifications.templates.events.available',
+    approved: 'settings.notifications.templates.events.approved',
+    declined: 'settings.notifications.templates.events.declined',
+    season: 'settings.notifications.templates.events.season',
+    episode: 'settings.notifications.templates.events.episode',
+    admin_pending: 'settings.notifications.templates.events.admin_pending',
+    not_released: 'settings.notifications.templates.events.not_released',
+    collexions_failed: 'settings.notifications.templates.events.collexions_failed',
+    scanner_failed: 'settings.notifications.templates.events.scanner_failed',
+    status_down: 'settings.notifications.templates.events.status_down',
+    status_up: 'settings.notifications.templates.events.status_up',
+    media_job_failed: 'settings.notifications.templates.events.media_job_failed',
+    media_job_completed: 'settings.notifications.templates.events.media_job_completed',
 };
 
-const FIELD_LABELS: Record<string, string> = {
-    emailSubject: 'Email subject',
-    emailHeadline: 'Email headline',
-    emailBody: 'Email body',
-    pushTitle: 'Push / in-app title',
-    pushBody: 'Push / in-app body',
-    discordContent: 'Discord message',
-    discordEmbedTitle: 'Discord embed title',
-    discordEmbedDescription: 'Discord embed description',
-    gotifyTitle: 'Gotify title',
-    gotifyBody: 'Gotify body',
-    ntfyTitle: 'ntfy title',
-    ntfyBody: 'ntfy body',
-    webhookBody: 'Webhook JSON body (optional template)',
+const FIELD_LABEL_KEYS: Record<string, string> = {
+    emailSubject: 'settings.notifications.templates.fields.emailSubject',
+    emailHeadline: 'settings.notifications.templates.fields.emailHeadline',
+    emailBody: 'settings.notifications.templates.fields.emailBody',
+    pushTitle: 'settings.notifications.templates.fields.pushTitle',
+    pushBody: 'settings.notifications.templates.fields.pushBody',
+    discordContent: 'settings.notifications.templates.fields.discordContent',
+    discordEmbedTitle: 'settings.notifications.templates.fields.discordEmbedTitle',
+    discordEmbedDescription: 'settings.notifications.templates.fields.discordEmbedDescription',
+    gotifyTitle: 'settings.notifications.templates.fields.gotifyTitle',
+    gotifyBody: 'settings.notifications.templates.fields.gotifyBody',
+    ntfyTitle: 'settings.notifications.templates.fields.ntfyTitle',
+    ntfyBody: 'settings.notifications.templates.fields.ntfyBody',
+    webhookBody: 'settings.notifications.templates.fields.webhookBody',
 };
 
 type Props = {
@@ -50,9 +51,12 @@ export const NotificationTemplatesPanel: React.FC<Props> = ({
     eventFields,
     getSettingsSectionElementId,
 }) => {
-    const eventList = events?.length ? events : Object.keys(EVENT_LABELS);
+    const { t } = useDiscoverI18n();
+    const eventList = events?.length ? events : Object.keys(EVENT_LABEL_KEYS);
     const [activeEvent, setActiveEvent] = useState(eventList[0] || 'available');
     const fields = eventFields?.[activeEvent] || [];
+    const eventLabel = (event: string) => EVENT_LABEL_KEYS[event] ? t(EVENT_LABEL_KEYS[event]) : event;
+    const fieldLabel = (field: string) => FIELD_LABEL_KEYS[field] ? t(FIELD_LABEL_KEYS[field]) : field;
 
     const effectiveValue = (field: string) => {
         const override = notificationTemplates?.[activeEvent]?.[field];
@@ -93,10 +97,11 @@ export const NotificationTemplatesPanel: React.FC<Props> = ({
 
     return (
         <div id={getSettingsSectionElementId('notifications-templates')} className="scroll-mt-24 space-y-3">
-            <h4 className="text-sm font-bold text-text uppercase tracking-wider">Notification templates</h4>
+            <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.templates.title')}</h4>
             <SettingHint>
-                Customize copy per event. Leave a field on the default (or clear it) to use the built-in text.
-                Variables: <code className="text-[11px]">{variableHint}</code>
+                {t('settings.notifications.templates.hint')}
+                {' '}
+                {t('settings.notifications.templates.variablesLabel')} <code className="text-[11px]">{variableHint}</code>
             </SettingHint>
 
             <div className="flex flex-wrap gap-2">
@@ -111,29 +116,29 @@ export const NotificationTemplatesPanel: React.FC<Props> = ({
                                 : 'bg-background border-border text-muted hover:text-text'
                         }`}
                     >
-                        {EVENT_LABELS[event] || event}
+                        {eventLabel(event)}
                     </button>
                 ))}
             </div>
 
             <div className="rounded-xl border border-border bg-background/40 p-4 space-y-4">
                 <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-bold text-text">{EVENT_LABELS[activeEvent] || activeEvent}</p>
+                    <p className="text-sm font-bold text-text">{eventLabel(activeEvent)}</p>
                     <button
                         type="button"
                         onClick={resetEvent}
                         className="text-xs font-semibold text-muted hover:text-plex"
                     >
-                        Reset event to defaults
+                        {t('settings.notifications.templates.resetEvent')}
                     </button>
                 </div>
 
                 {fields.map((field) => (
                     <div key={field}>
                         <SettingFieldLabel htmlFor={`notify-tpl-${activeEvent}-${field}`}>
-                            {FIELD_LABELS[field] || field}
+                            {fieldLabel(field)}
                             {isOverridden(field) ? (
-                                <span className="ml-2 text-[10px] uppercase tracking-wider text-plex">custom</span>
+                                <span className="ml-2 text-[10px] uppercase tracking-wider text-plex">{t('settings.notifications.templates.customBadge')}</span>
                             ) : null}
                         </SettingFieldLabel>
                         {field.toLowerCase().includes('body') || field.toLowerCase().includes('content') || field.toLowerCase().includes('description') ? (
