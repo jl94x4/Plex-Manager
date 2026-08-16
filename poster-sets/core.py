@@ -2801,10 +2801,12 @@ def _posterdb_advanced_resolve_by_ids(
 
     id_specs: list[tuple[str, dict[str, str]]] = []
     if _posterdb_is_show(media_type):
-        if target_tmdb:
-            id_specs.append(("tmdb", {"tmdb_id": target_tmdb}))
+        # Prefer TVDB first for shows — Plex TV libraries are TVDB-native; a guessed
+        # TMDB id can singleton-match the wrong /posters/ page and poison warm.
         if target_tvdb:
             id_specs.append(("tvdb", {"tvdb_id": target_tvdb}))
+        if target_tmdb:
+            id_specs.append(("tmdb", {"tmdb_id": target_tmdb}))
         if clean_imdb:
             id_specs.append(("imdb", {"imdb_id": clean_imdb}))
     else:
@@ -2889,6 +2891,17 @@ def _posterdb_advanced_resolve_by_ids(
                         trust_tmdb_query=trust_tmdb_query,
                     )
                     if accepted and str(accepted.get("tmdbId") or "") == target_tmdb:
+                        return accepted
+            elif target_tvdb and "tvdb_id" in id_params:
+                # TVDB advanced search often returns several poster pages for one id.
+                # Probe until one has a usable /posters/ page (do not require TMDB).
+                for item in batch:
+                    accepted = _accept_item(
+                        item,
+                        trust_singleton=False,
+                        trust_tmdb_query=False,
+                    )
+                    if accepted:
                         return accepted
             # Typed category already returned hits — don't burn another request on "All".
             break
