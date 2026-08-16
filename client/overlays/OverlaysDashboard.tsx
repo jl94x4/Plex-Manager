@@ -827,8 +827,8 @@ export const OverlaysDashboard: React.FC = () => {
 
     const beginEditCollectionRule = useCallback((rule: CustomCollectionOverlayRule) => {
         if (!rule?.id) return;
+        // Stay on the current tab — Collections shows the same editor when editing.
         setJobCardExpanded((prev) => ({ ...prev, collections: true }));
-        setTab('overview');
         setEditingRuleId(rule.id);
         setEditingRuleImageId(String(rule.image || '').trim());
         setNewCollectionRuleName(String(rule.name || '').trim());
@@ -1488,6 +1488,224 @@ export const OverlaysDashboard: React.FC = () => {
             startBackgroundJob('promote', () => overlaysApi.promote());
         })();
     };
+
+    const collectionRuleForm = (
+        <div className="space-y-4 rounded-xl border border-plex/20 bg-plex/5 p-3 sm:p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                    <p className="text-sm font-bold text-text">
+                        {editingRuleId
+                            ? t('overlays.jobs.collections.editTitle')
+                            : t('overlays.jobs.collections.addTitle')}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted">
+                        {editingRuleId
+                            ? t('overlays.jobs.collections.editSubtitle')
+                            : t('overlays.jobs.collections.addSubtitle')}
+                    </p>
+                </div>
+                {editingRuleId ? (
+                    <button
+                        type="button"
+                        className="text-[11px] font-semibold text-muted hover:text-text hover:underline"
+                        onClick={() => resetNewCollectionForm()}
+                    >
+                        {t('overlays.jobs.collections.cancelEdit')}
+                    </button>
+                ) : null}
+            </div>
+
+            <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">1</span>
+                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepLibrary')}</span>
+                    <button
+                        type="button"
+                        className="ml-auto text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
+                        disabled={collectionPickerLoading}
+                        onClick={() => void loadCollectionPicker()}
+                    >
+                        {collectionPickerLoading
+                            ? t('overlays.jobs.collections.loadingCollections')
+                            : t('overlays.jobs.collections.refreshList')}
+                    </button>
+                </div>
+                <CustomSelect
+                    value={newCollectionRuleLibrary}
+                    onChange={(next) => {
+                        setNewCollectionRuleLibrary(next);
+                        setSelectedCollectionKeys([]);
+                        setNewCollectionSearch('');
+                    }}
+                    options={[
+                        { value: '', label: t('overlays.jobs.collections.pickLibrary') },
+                        ...libraryPickerOptions.map((o) => ({ value: o.value, label: o.label })),
+                    ]}
+                />
+            </div>
+
+            <div className={`space-y-2 ${!newCollectionRuleLibrary ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="flex items-center gap-2">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">2</span>
+                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepCollection')}</span>
+                    {newCollectionRuleLibrary && !collectionPickerLoading ? (
+                        <span className="ml-auto text-[10px] text-muted">
+                            {t('overlays.jobs.collections.collectionCount', {
+                                count: filteredCollectionOptions.length,
+                                total: collectionPickerOptions.filter(
+                                    (o) => String(o.library || '').trim().toLowerCase()
+                                        === newCollectionRuleLibrary.trim().toLowerCase(),
+                                ).length,
+                            })}
+                        </span>
+                    ) : null}
+                </div>
+                <p className="text-[10px] text-muted">{t('overlays.jobs.collections.multiSelectHint')}</p>
+                <div className="relative">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
+                    <input
+                        className={`${fieldInputClass} pl-8`}
+                        value={newCollectionSearch}
+                        onChange={(e) => setNewCollectionSearch(e.target.value)}
+                        placeholder={t('overlays.jobs.collections.searchPlaceholder')}
+                        disabled={!newCollectionRuleLibrary}
+                    />
+                </div>
+                <div className="max-h-48 overflow-y-auto rounded-lg border border-border/60 bg-background/40 custom-scrollbar">
+                    {!newCollectionRuleLibrary ? (
+                        <p className="px-3 py-4 text-center text-[11px] text-muted">
+                            {t('overlays.jobs.collections.pickLibraryFirst')}
+                        </p>
+                    ) : collectionPickerLoading ? (
+                        <p className="px-3 py-4 text-center text-[11px] text-muted">
+                            {t('overlays.jobs.collections.loadingCollections')}
+                        </p>
+                    ) : filteredCollectionOptions.length === 0 ? (
+                        <p className="px-3 py-4 text-center text-[11px] text-muted">
+                            {newCollectionSearch.trim()
+                                ? t('overlays.jobs.collections.searchEmpty')
+                                : t('overlays.jobs.collections.noCollections')}
+                        </p>
+                    ) : (
+                        filteredCollectionOptions.map((o) => {
+                            const active = selectedCollectionKeys.includes(o.value);
+                            return (
+                                <button
+                                    key={o.value}
+                                    type="button"
+                                    onClick={() => toggleCollectionKey(o)}
+                                    className={`flex w-full items-start gap-2 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
+                                        active
+                                            ? 'bg-plex/15 text-text'
+                                            : 'text-text/90 hover:bg-white/5'
+                                    }`}
+                                >
+                                    <span className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                                        active ? 'border-plex bg-plex text-[9px] text-black' : 'border-muted'
+                                    }`}
+                                    >
+                                        {active ? '✓' : ''}
+                                    </span>
+                                    <span className="min-w-0">
+                                        <span className="block truncate text-sm font-semibold">
+                                            {o.title || o.label}
+                                        </span>
+                                        {o.library ? (
+                                            <span className="block truncate text-[10px] text-muted">
+                                                {o.library}
+                                            </span>
+                                        ) : null}
+                                    </span>
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+                {collectionPickerError ? (
+                    <p className="text-[11px] text-red-300">{collectionPickerError}</p>
+                ) : null}
+                {selectedCollectionOptions.length ? (
+                    <p className="text-[11px] text-plex">
+                        {t('overlays.jobs.collections.selectedCollections', {
+                            count: selectedCollectionOptions.length,
+                            titles: selectedCollectionOptions
+                                .map((o) => o.title || o.label)
+                                .join(', '),
+                        })}
+                    </p>
+                ) : null}
+            </div>
+
+            <div className={`space-y-2 ${!selectedCollectionKeys.length ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="flex items-center gap-2">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">3</span>
+                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepBadge')}</span>
+                </div>
+                {editingRuleId && editingRuleImageId && !newCollectionRuleFile ? (
+                    <p className="text-[11px] text-muted">
+                        {t('overlays.jobs.collections.keepExistingBadge', { id: editingRuleImageId })}
+                    </p>
+                ) : null}
+                <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/30 px-3 py-4 transition-colors hover:border-plex/40 hover:bg-plex/5">
+                    {newCollectionFilePreview ? (
+                        <img
+                            src={newCollectionFilePreview}
+                            alt=""
+                            className="h-14 max-w-[180px] object-contain"
+                        />
+                    ) : (
+                        <Upload className="h-5 w-5 text-muted" />
+                    )}
+                    <span className="text-xs font-semibold text-text">
+                        {newCollectionRuleFile
+                            ? newCollectionRuleFile.name
+                            : editingRuleId
+                                ? t('overlays.jobs.collections.replacePng')
+                                : t('overlays.jobs.collections.choosePng')}
+                    </span>
+                    <span className="text-[10px] text-muted">{t('overlays.jobs.collections.pngOnly')}</span>
+                    <input
+                        type="file"
+                        accept="image/png,.png"
+                        className="hidden"
+                        onChange={(e) => setNewCollectionRuleFile(e.target.files?.[0] || null)}
+                    />
+                </label>
+            </div>
+
+            <div className={`space-y-2 ${!selectedCollectionKeys.length || (!editingRuleId && !newCollectionRuleFile) ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="flex items-center gap-2">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">4</span>
+                    <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepName')}</span>
+                </div>
+                <input
+                    className={fieldInputClass}
+                    value={newCollectionRuleName}
+                    onChange={(e) => setNewCollectionRuleName(e.target.value)}
+                    placeholder={t('overlays.jobs.collections.namePlaceholder')}
+                />
+                <p className="text-[10px] text-muted">{t('overlays.jobs.collections.nameHint')}</p>
+            </div>
+
+            <button
+                type="button"
+                className={primaryButtonClass}
+                disabled={
+                    busy !== null
+                    || !newCollectionRuleLibrary
+                    || !selectedCollectionKeys.length
+                    || (!editingRuleId && !newCollectionRuleFile)
+                }
+                onClick={() => void saveCollectionOverlayRule()}
+            >
+                <Upload className="h-4 w-4" />
+                {editingRuleId
+                    ? t('overlays.jobs.collections.saveRule')
+                    : t('overlays.jobs.collections.addRule')}
+            </button>
+            <p className="text-[11px] text-muted">{t('overlays.jobs.collections.saveHint')}</p>
+        </div>
+    );
 
     return (
         <DashboardPageShell>
@@ -2637,220 +2855,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 <p className="text-[11px] text-muted">{t('overlays.jobs.collections.unlimitedHint')}</p>
                             </div>
 
-                            <div className="mb-3 space-y-4 rounded-xl border border-plex/20 bg-plex/5 p-3 sm:p-4">
-                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                    <div>
-                                        <p className="text-sm font-bold text-text">
-                                            {editingRuleId
-                                                ? t('overlays.jobs.collections.editTitle')
-                                                : t('overlays.jobs.collections.addTitle')}
-                                        </p>
-                                        <p className="mt-0.5 text-[11px] text-muted">
-                                            {editingRuleId
-                                                ? t('overlays.jobs.collections.editSubtitle')
-                                                : t('overlays.jobs.collections.addSubtitle')}
-                                        </p>
-                                    </div>
-                                    {editingRuleId ? (
-                                        <button
-                                            type="button"
-                                            className="text-[11px] font-semibold text-muted hover:text-text hover:underline"
-                                            onClick={() => resetNewCollectionForm()}
-                                        >
-                                            {t('overlays.jobs.collections.cancelEdit')}
-                                        </button>
-                                    ) : null}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">1</span>
-                                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepLibrary')}</span>
-                                        <button
-                                            type="button"
-                                            className="ml-auto text-[11px] font-semibold text-plex hover:underline disabled:opacity-50"
-                                            disabled={collectionPickerLoading}
-                                            onClick={() => void loadCollectionPicker()}
-                                        >
-                                            {collectionPickerLoading
-                                                ? t('overlays.jobs.collections.loadingCollections')
-                                                : t('overlays.jobs.collections.refreshList')}
-                                        </button>
-                                    </div>
-                                    <CustomSelect
-                                        value={newCollectionRuleLibrary}
-                                        onChange={(next) => {
-                                            setNewCollectionRuleLibrary(next);
-                                            setSelectedCollectionKeys([]);
-                                            setNewCollectionSearch('');
-                                        }}
-                                        options={[
-                                            { value: '', label: t('overlays.jobs.collections.pickLibrary') },
-                                            ...libraryPickerOptions.map((o) => ({ value: o.value, label: o.label })),
-                                        ]}
-                                    />
-                                </div>
-
-                                <div className={`space-y-2 ${!newCollectionRuleLibrary ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    <div className="flex items-center gap-2">
-                                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">2</span>
-                                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepCollection')}</span>
-                                        {newCollectionRuleLibrary && !collectionPickerLoading ? (
-                                            <span className="ml-auto text-[10px] text-muted">
-                                                {t('overlays.jobs.collections.collectionCount', {
-                                                    count: filteredCollectionOptions.length,
-                                                    total: collectionPickerOptions.filter(
-                                                        (o) => String(o.library || '').trim().toLowerCase()
-                                                            === newCollectionRuleLibrary.trim().toLowerCase(),
-                                                    ).length,
-                                                })}
-                                            </span>
-                                        ) : null}
-                                    </div>
-                                    <p className="text-[10px] text-muted">{t('overlays.jobs.collections.multiSelectHint')}</p>
-                                    <div className="relative">
-                                        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted" />
-                                        <input
-                                            className={`${fieldInputClass} pl-8`}
-                                            value={newCollectionSearch}
-                                            onChange={(e) => setNewCollectionSearch(e.target.value)}
-                                            placeholder={t('overlays.jobs.collections.searchPlaceholder')}
-                                            disabled={!newCollectionRuleLibrary}
-                                        />
-                                    </div>
-                                    <div className="max-h-48 overflow-y-auto rounded-lg border border-border/60 bg-background/40 custom-scrollbar">
-                                        {!newCollectionRuleLibrary ? (
-                                            <p className="px-3 py-4 text-center text-[11px] text-muted">
-                                                {t('overlays.jobs.collections.pickLibraryFirst')}
-                                            </p>
-                                        ) : collectionPickerLoading ? (
-                                            <p className="px-3 py-4 text-center text-[11px] text-muted">
-                                                {t('overlays.jobs.collections.loadingCollections')}
-                                            </p>
-                                        ) : filteredCollectionOptions.length === 0 ? (
-                                            <p className="px-3 py-4 text-center text-[11px] text-muted">
-                                                {newCollectionSearch.trim()
-                                                    ? t('overlays.jobs.collections.searchEmpty')
-                                                    : t('overlays.jobs.collections.noCollections')}
-                                            </p>
-                                        ) : (
-                                            filteredCollectionOptions.map((o) => {
-                                                const active = selectedCollectionKeys.includes(o.value);
-                                                return (
-                                                    <button
-                                                        key={o.value}
-                                                        type="button"
-                                                        onClick={() => toggleCollectionKey(o)}
-                                                        className={`flex w-full items-start gap-2 border-b border-border/40 px-3 py-2.5 text-left transition-colors last:border-b-0 ${
-                                                            active
-                                                                ? 'bg-plex/15 text-text'
-                                                                : 'text-text/90 hover:bg-white/5'
-                                                        }`}
-                                                    >
-                                                        <span className={`mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
-                                                            active ? 'border-plex bg-plex text-[9px] text-black' : 'border-muted'
-                                                        }`}
-                                                        >
-                                                            {active ? '✓' : ''}
-                                                        </span>                                                        <span className="min-w-0">
-                                                            <span className="block truncate text-sm font-semibold">
-                                                                {o.title || o.label}
-                                                            </span>
-                                                            {o.library ? (
-                                                                <span className="block truncate text-[10px] text-muted">
-                                                                    {o.library}
-                                                                </span>
-                                                            ) : null}
-                                                        </span>
-                                                    </button>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                    {collectionPickerError ? (
-                                        <p className="text-[11px] text-red-300">{collectionPickerError}</p>
-                                    ) : null}
-                                    {selectedCollectionOptions.length ? (
-                                        <p className="text-[11px] text-plex">
-                                            {t('overlays.jobs.collections.selectedCollections', {
-                                                count: selectedCollectionOptions.length,
-                                                titles: selectedCollectionOptions
-                                                    .map((o) => o.title || o.label)
-                                                    .join(', '),
-                                            })}
-                                        </p>
-                                    ) : null}
-                                </div>
-
-                                <div className={`space-y-2 ${!selectedCollectionKeys.length ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    <div className="flex items-center gap-2">
-                                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">3</span>
-                                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepBadge')}</span>
-                                    </div>
-                                    {editingRuleId && editingRuleImageId && !newCollectionRuleFile ? (
-                                        <p className="text-[11px] text-muted">
-                                            {t('overlays.jobs.collections.keepExistingBadge', { id: editingRuleImageId })}
-                                        </p>
-                                    ) : null}
-                                    <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/70 bg-background/30 px-3 py-4 transition-colors hover:border-plex/40 hover:bg-plex/5">
-                                        {newCollectionFilePreview ? (
-                                            <img
-                                                src={newCollectionFilePreview}
-                                                alt=""
-                                                className="h-14 max-w-[180px] object-contain"
-                                            />
-                                        ) : (
-                                            <Upload className="h-5 w-5 text-muted" />
-                                        )}
-                                        <span className="text-xs font-semibold text-text">
-                                            {newCollectionRuleFile
-                                                ? newCollectionRuleFile.name
-                                                : editingRuleId
-                                                    ? t('overlays.jobs.collections.replacePng')
-                                                    : t('overlays.jobs.collections.choosePng')}
-                                        </span>
-                                        <span className="text-[10px] text-muted">{t('overlays.jobs.collections.pngOnly')}</span>
-                                        <input
-                                            type="file"
-                                            accept="image/png,.png"
-                                            className="hidden"
-                                            onChange={(e) => setNewCollectionRuleFile(e.target.files?.[0] || null)}
-                                        />
-                                    </label>
-                                </div>
-
-                                <div className={`space-y-2 ${!selectedCollectionKeys.length || (!editingRuleId && !newCollectionRuleFile) ? 'opacity-50 pointer-events-none' : ''}`}>
-                                    <div className="flex items-center gap-2">
-                                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-plex/20 text-[10px] font-bold text-plex">4</span>
-                                        <span className={fieldLabelClass}>{t('overlays.jobs.collections.stepName')}</span>
-                                    </div>
-                                    <input
-                                        className={fieldInputClass}
-                                        value={newCollectionRuleName}
-                                        onChange={(e) => setNewCollectionRuleName(e.target.value)}
-                                        placeholder={t('overlays.jobs.collections.namePlaceholder')}
-                                    />
-                                    <p className="text-[10px] text-muted">{t('overlays.jobs.collections.nameHint')}</p>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    className={primaryButtonClass}
-                                    disabled={
-                                        busy !== null
-                                        || !newCollectionRuleLibrary
-                                        || !selectedCollectionKeys.length
-                                        || (!editingRuleId && !newCollectionRuleFile)
-                                    }
-                                    onClick={() => void saveCollectionOverlayRule()}
-                                >
-                                    <Upload className="h-4 w-4" />
-                                    {editingRuleId
-                                        ? t('overlays.jobs.collections.saveRule')
-                                        : t('overlays.jobs.collections.addRule')}
-                                </button>
-                                <p className="text-[11px] text-muted">{t('overlays.jobs.collections.saveHint')}</p>
-                            </div>
+                            <div className="mb-3">{collectionRuleForm}</div>
 
                             <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
                                 <Save className="h-4 w-4" /> {t('overlays.actions.save')}
@@ -3413,6 +3418,7 @@ export const OverlaysDashboard: React.FC = () => {
 
             {tab === 'collections' && (
                 <div className="space-y-4">
+                    {editingRuleId ? collectionRuleForm : null}
                     <DashboardPanel
                         title={t('overlays.kometa.trackedCollectionsTitle', { count: collectionTrackedCount })}
                         subtitle={t('overlays.kometa.trackedCollectionsSubtitle')}
