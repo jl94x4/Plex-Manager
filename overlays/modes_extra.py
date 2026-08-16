@@ -134,55 +134,62 @@ def _stamp_show_badge(
     progress: ProgressFn | None,
     mode: str,
     placement: dict,
-    apply_fn,
+    apply_fn=None,
     library: str = "",
     extra_meta: dict | None = None,
+    config: dict | None = None,
 ) -> dict:
-    from core import _download_poster, _library_title, _sanitize_filename
+    """Stamp via clean-base layer stack (apply_fn kept for call-site compatibility)."""
+    from core import _download_poster
+    from layer_stack import apply_banner_layer, drop_conflicting_mode_logs
 
     poster = _download_poster(plex, getattr(show, "thumb", None) or "")
     if poster is None:
         raise RuntimeError(f"Failed to download poster for {getattr(show, 'title', '')}")
 
-    key = str(show.ratingKey)
-    if not preview_mode:
-        folder = _backup_mode_dir(paths, mode, key)
-        backup = folder / "show.png"
-        if not backup.exists():
-            poster.convert("RGBA").save(backup)
-            _progress(progress, f"Backed up ({mode}): {show.title}")
-
-    result = apply_fn(poster.copy(), badge, placement)
-    safe = _sanitize_filename(f"{show.title}_{mode}")
-    now = datetime.now()
-    entry = {
-        "title": show.title,
-        "timestamp": now.isoformat(),
-        "preview_only": bool(preview_mode),
-        "mode": mode,
-        "library": (library or _library_title(show) or "").strip(),
-        "hasBackup": (_backup_mode_dir(paths, mode, key) / "show.png").exists(),
-        **(extra_meta or {}),
-    }
-    if preview_mode:
-        out = paths["preview"] / f"{safe}.png"
-        result.save(out)
-        entry["previewShow"] = str(out)
-        _progress(progress, f"[Preview] {mode}: {show.title}")
-    else:
-        temp = paths["preview"] / f"temp_{safe}.png"
-        result.save(temp)
-        try:
-            show.uploadPoster(filepath=str(temp))
-            _progress(progress, f"Uploaded {mode}: {show.title}")
-        finally:
-            if temp.exists():
-                temp.unlink()
+    entry = apply_banner_layer(
+        plex=plex,
+        show=show,
+        paths=paths,
+        mode=mode,
+        badge=badge,
+        placement=placement,
+        preview_mode=preview_mode,
+        progress=progress,
+        library=library,
+        extra_meta=extra_meta,
+        current_poster=poster,
+        config=config,
+    )
+    dropped = entry.get("droppedLayers") or []
+    if dropped and not preview_mode:
+        drop_conflicting_mode_logs(paths, str(show.ratingKey), list(dropped))
     return entry
 
 
-def _restore_show_mode(show, paths: dict, mode: str, progress: ProgressFn | None) -> bool:
+def _restore_show_mode(
+    show,
+    paths: dict,
+    mode: str,
+    progress: ProgressFn | None,
+    config: dict | None = None,
+) -> bool:
+    """Remove one banner layer and recompose, or legacy full-poster restore for other modes."""
+    from layer_stack import LAYER_DEFS, normalize_mode, remove_banner_layer
+
     key = str(getattr(show, "ratingKey", "") or "")
+    mode_n = normalize_mode(mode)
+    if mode_n in LAYER_DEFS:
+        return remove_banner_layer(
+            show=show,
+            paths=paths,
+            mode=mode_n,
+            preview_mode=False,
+            progress=progress,
+            config=config,
+        )
+
+    # Legacy Kometa-style / unused mode folders: upload mode-specific snapshot if present.
     backup = paths["backups"] / mode / key / "show.png"
     if not backup.exists():
         return False
@@ -318,6 +325,7 @@ def _prune_mode_when_disabled(
     log_path: Path,
     preview_mode: bool,
     progress: ProgressFn | None,
+    config: dict | None = None,
 ) -> tuple[int, list[str], int]:
     """Restore/remove all tracked stamps for a mode when its toggle is off."""
     log = _load_log(log_path)
@@ -342,7 +350,7 @@ def _prune_mode_when_disabled(
                 _clear_mode_backup(paths, mode, key)
                 removed += 1
                 continue
-            _restore_show_mode(show, paths, mode, progress)
+            _restore_show_mode(show, paths, mode, progress, config=config)
             del log[key]
             removed += 1
             _progress(progress, f"Removed {mode} overlay (disabled): {title}")
@@ -364,7 +372,7 @@ def run_live_overlays(
     log_path = paths["liveLog"]
     if not _as_bool(config.get("liveScheduleEnabled", config.get("live_schedule_enabled")), False):
         removed, errors, total = _prune_mode_when_disabled(
-            plex, paths, "live", log_path, preview_mode, progress
+            plex, paths, "live", log_path, preview_mode, progress, config=config
         )
         return {
             "liveEnabled": False,
@@ -402,6 +410,7 @@ def run_live_overlays(
                     apply_fn=_apply_with_explicit_placement,
                     library=meta.get("library") or "",
                     extra_meta={"dayLabel": meta["dayLabel"], "airedAt": meta.get("airedAt")},
+                    config=config,
                 )
                 if existing is None:
                     log[key] = entry
@@ -425,7 +434,8 @@ def run_live_overlays(
                 apply_fn=_apply_with_explicit_placement,
                 library=meta.get("library") or "",
                 extra_meta={"dayLabel": meta["dayLabel"], "airedAt": meta.get("airedAt")},
-            )
+                    config=config,
+                )
             log[key] = {**(existing or {}), **entry, "preview_only": False}
             added += 1
         except Exception as exc:
@@ -449,7 +459,7 @@ def run_live_overlays(
                 _clear_mode_backup(paths, "live", key)
                 removed += 1
                 continue
-            _restore_show_mode(show, paths, "live", progress)
+            _restore_show_mode(show, paths, "live", progress, config=config)
             del log[key]
             removed += 1
             _progress(progress, f"Removed live overlay: {title}")
@@ -522,7 +532,7 @@ def run_recently_added_overlays(
     log_path = paths["recentlyAddedLog"]
     if not _as_bool(config.get("recentlyAddedEnabled", config.get("recently_added_enabled")), False):
         removed, errors, total = _prune_mode_when_disabled(
-            plex, paths, "recently", log_path, preview_mode, progress
+            plex, paths, "recently", log_path, preview_mode, progress, config=config
         )
         return {
             "recentlyAddedEnabled": False,
@@ -567,6 +577,7 @@ def run_recently_added_overlays(
                     apply_fn=_apply_with_explicit_placement,
                     library=meta.get("library") or "",
                     extra_meta={"addedAt": meta.get("addedAt"), "presetId": asset.stem},
+                    config=config,
                 )
                 if existing is None:
                     log[key] = entry
@@ -589,7 +600,8 @@ def run_recently_added_overlays(
                 apply_fn=_apply_with_explicit_placement,
                 library=meta.get("library") or "",
                 extra_meta={"addedAt": meta.get("addedAt"), "presetId": asset.stem},
-            )
+                    config=config,
+                )
             log[key] = {**(existing or {}), **entry, "preview_only": False}
             added += 1
         except Exception as exc:
@@ -612,7 +624,7 @@ def run_recently_added_overlays(
                 _clear_mode_backup(paths, "recently", key)
                 removed += 1
                 continue
-            _restore_show_mode(show, paths, "recently", progress)
+            _restore_show_mode(show, paths, "recently", progress, config=config)
             del log[key]
             removed += 1
         except Exception as exc:
@@ -671,7 +683,7 @@ def run_top10_overlays(plex, config: dict, paths: dict, preview_mode: bool, prog
     log_path = paths["top10Log"]
     if not _as_bool(config.get("top10Enabled", config.get("top10_enabled")), False):
         removed, errors, total = _prune_mode_when_disabled(
-            plex, paths, "top10", log_path, preview_mode, progress
+            plex, paths, "top10", log_path, preview_mode, progress, config=config
         )
         return {
             "top10Enabled": False,
@@ -710,6 +722,7 @@ def run_top10_overlays(plex, config: dict, paths: dict, preview_mode: bool, prog
                     apply_fn=_apply_with_explicit_placement,
                     library=meta.get("library") or "",
                     extra_meta={"rank": meta.get("rank"), "score": meta.get("score")},
+                    config=config,
                 )
                 if existing is None:
                     log[key] = entry
@@ -732,7 +745,8 @@ def run_top10_overlays(plex, config: dict, paths: dict, preview_mode: bool, prog
                 apply_fn=_apply_with_explicit_placement,
                 library=meta.get("library") or "",
                 extra_meta={"rank": meta.get("rank"), "score": meta.get("score")},
-            )
+                    config=config,
+                )
             log[key] = {**(existing or {}), **entry, "preview_only": False}
             added += 1
         except Exception as exc:
@@ -755,7 +769,7 @@ def run_top10_overlays(plex, config: dict, paths: dict, preview_mode: bool, prog
                 _clear_mode_backup(paths, "top10", key)
                 removed += 1
                 continue
-            _restore_show_mode(show, paths, "top10", progress)
+            _restore_show_mode(show, paths, "top10", progress, config=config)
             del log[key]
             removed += 1
         except Exception as exc:

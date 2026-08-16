@@ -35,6 +35,7 @@ Expand each card for that job’s toggles, windows, filters, and schedule. Hero 
 - **Live | {weekday}** — latest episode aired within Live window; highest-priority bottom badge
 - **Recently Added** — Plex `addedAt` within window; skipped if Live or New Season already claimed the show
 - **TOP 10** — top-rated shows (audience/rating); corner badge, can stack with bottom badges
+- **Banner layer stack** (`layer_stack.py`) — Live / New Season / Recently / Top 10 share one **clean base** poster per show (`backups/base/{ratingKey}/`) plus weighted layers. Any add/remove **recomposes** from that base (never restores a mode-specific full-poster snapshot that might still contain another badge). Weights: Live 300, New Season 200, Recently 100 (bottom group, mutually exclusive); Top 10 50 (corner, stacks). Legacy mode backups are promoted into the clean base on first touch.
 - **TMDB air-date fallback** — when Plex lacks `originallyAvailableAt`, resolve dates via TMDB (portal API key) for recently-added undated episodes; applies to New Episode / New Season / Live
 - **Media / Kometa parity engine** (`kometa_engine.py`) — single-pass composite of every enabled family onto the original poster, EXIF `0x04BC=overlay` marker, unified `kometa_overlaid_log.json` + per-item backups (movies included), CLI/API/UI revert
   - **Resolution** — exact Kometa ladder (4K-DV-HDR-Plus → HDR) via Plex resolution/hdr/dovi filters + filepath regexes

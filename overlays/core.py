@@ -1402,80 +1402,102 @@ def process_show_overlay(
     library: str | None = None,
 ) -> dict:
     """New Season — show poster only (Phase 3). Season art is handled by New Episode."""
+    from layer_stack import apply_banner_layer, drop_conflicting_mode_logs
+
     latest = _latest_season(show)
     if not latest:
         raise ValueError(f"No seasons for {show.title}")
 
     overlay_img = _load_show_overlay_image(config, paths, season_index=getattr(latest, "index", None))
+    preset_id = str(config.get("overlayPresetId") or "new-season")
+    placement = _effective_placement(config, "show", preset_id)
 
     show_poster = _download_poster(plex, getattr(show, "thumb", None) or "")
     if show_poster is None:
         raise RuntimeError(f"Failed to download show poster for {show.title}")
 
-    # Capture show original only (live runs). Keep any legacy season.png for migration reset.
+    entry = apply_banner_layer(
+        plex=plex,
+        show=show,
+        paths=paths,
+        mode="newseason",
+        badge=overlay_img,
+        placement=placement,
+        preview_mode=preview_mode,
+        progress=progress,
+        library=(library or _library_title(show) or "").strip(),
+        extra_meta={
+            "seasonIndex": latest.index,
+            "presetId": preset_id,
+            "targets": ["show"],
+        },
+        current_poster=show_poster,
+        config=config,
+    )
+    # Mirror clean base into legacy New Season backup folder (promotion source / reset).
     if not preview_mode:
-        saved = _save_original_backups(
-            paths,
-            str(show.ratingKey),
-            show_poster,
-            None,
-            meta={
-                "title": show.title,
-                "seasonIndex": latest.index,
-                "ratingKey": str(show.ratingKey),
-                "savedAt": datetime.now().isoformat(),
-                "mode": "new-season-show-only",
-            },
-        )
-        if saved["show"]:
+        from layer_stack import base_poster_path
+        import shutil
+        key = str(show.ratingKey)
+        base = base_poster_path(paths, key)
+        legacy = _backup_dir(paths, key) / "show.png"
+        if base.exists() and not legacy.exists():
+            legacy.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(base, legacy)
             _progress(progress, f"Backed up original show poster: {show.title}")
-
-    result = _apply_show_overlay(show_poster.copy(), overlay_img, config)
-
-    safe_title = _sanitize_filename(show.title)
-    now = datetime.now()
-    entry = {
-        "title": show.title,
-        "timestamp": now.isoformat(),
-        "preview_only": bool(preview_mode),
-        "seasonIndex": latest.index,
-        "presetId": str(config.get("overlayPresetId") or "new-season"),
-        "hasBackup": (_backup_dir(paths, str(show.ratingKey)) / "show.png").exists(),
-        "targets": ["show"],
-        "library": (library or _library_title(show) or "").strip(),
-    }
-
-    if preview_mode:
-        show_path = paths["preview"] / f"{safe_title}_show.png"
-        result.save(show_path)
-        entry["previewShow"] = str(show_path)
-        _progress(progress, f"Preview saved: {show.title}")
-    else:
-        temp_show = paths["preview"] / f"temp_{safe_title}_show.png"
-        result.save(temp_show)
-        try:
-            show.uploadPoster(filepath=str(temp_show))
-            _progress(progress, f"Uploaded show poster: {show.title}")
-        finally:
-            if temp_show.exists():
-                temp_show.unlink()
-
+            meta_path = _backup_dir(paths, key) / "meta.json"
+            if not meta_path.exists():
+                meta_path.write_text(
+                    json.dumps(
+                        {
+                            "title": show.title,
+                            "seasonIndex": latest.index,
+                            "ratingKey": key,
+                            "savedAt": datetime.now().isoformat(),
+                            "mode": "new-season-show-only",
+                        },
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+    dropped = entry.get("droppedLayers") or []
+    if dropped and not preview_mode:
+        drop_conflicting_mode_logs(paths, str(show.ratingKey), list(dropped))
     return entry
 
 
-def remove_show_overlay(show, preview_mode: bool, progress: ProgressFn | None = None, paths: dict | None = None) -> bool:
+def remove_show_overlay(
+    show,
+    preview_mode: bool,
+    progress: ProgressFn | None = None,
+    paths: dict | None = None,
+    config: dict | None = None,
+) -> bool:
     rating_key = str(getattr(show, "ratingKey", "") or "")
     if preview_mode:
         _progress(progress, f"[Preview] Would remove overlay: {show.title}")
         return True
     _progress(progress, f"Removing overlay: {show.title}")
 
-    restored = False
     if paths is not None and rating_key:
-        restored = _restore_from_backup(show, paths, rating_key, progress)
+        from layer_stack import remove_banner_layer
 
-    if restored:
-        return True
+        restored = remove_banner_layer(
+            show=show,
+            paths=paths,
+            mode="newseason",
+            preview_mode=False,
+            progress=progress,
+            config=config,
+        )
+        if restored:
+            return True
+        # Fall back to legacy full-poster restore if stack had nothing.
+        restored = _restore_from_backup(show, paths, rating_key, progress)
+        if restored:
+            return True
 
     # Fallback when no on-disk backup (e.g. migrated logs from the standalone tool).
     _progress(progress, f"No backup for {show.title} — falling back to Plex poster list")
@@ -2433,7 +2455,7 @@ def run_overlays(
                         del log[key]
                         removed += 1
                         continue
-                if remove_show_overlay(show, False, progress, paths=paths):
+                if remove_show_overlay(show, False, progress, paths=paths, config=config):
                     del log[key]
                     removed += 1
                 else:
@@ -2461,7 +2483,7 @@ def run_overlays(
                     del log[key]
                     removed += 1
                     continue
-                remove_show_overlay(show, False, progress, paths=paths)
+                remove_show_overlay(show, False, progress, paths=paths, config=config)
                 del log[key]
                 removed += 1
             except Exception as exc:
@@ -2806,10 +2828,12 @@ def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None,
             if key not in extra_log and not prefer:
                 continue
             had_backup = (paths["backups"] / mode / key / "show.png").exists()
-            restored = _restore_show_mode(show, paths, mode, progress)
-            if not restored and not had_backup:
+            from layer_stack import base_poster_path
+            had_base = base_poster_path(paths, key).exists()
+            restored = _restore_show_mode(show, paths, mode, progress, config=config)
+            if not restored and not had_backup and not had_base:
                 # Fall back to New Season restore helpers when no mode backup exists.
-                remove_show_overlay(show, False, progress, paths=paths)
+                remove_show_overlay(show, False, progress, paths=paths, config=config)
             _clear_mode_backup(paths, mode, key)
             if key in extra_log:
                 del extra_log[key]
@@ -2819,11 +2843,12 @@ def reset_one(config: dict, rating_key: str, progress: ProgressFn | None = None,
                 "kind": mode,
                 "ratingKey": key,
                 "title": getattr(show, "title", key),
-                "restoredFromBackup": bool(restored or had_backup),
+                "restoredFromBackup": bool(restored or had_backup or had_base),
             }
 
-    had_backup = (_backup_dir(paths, key) / "show.png").exists()
-    remove_show_overlay(show, False, progress, paths=paths)
+    from layer_stack import base_poster_path
+    had_backup = (_backup_dir(paths, key) / "show.png").exists() or base_poster_path(paths, key).exists()
+    remove_show_overlay(show, False, progress, paths=paths, config=config)
     _clear_backup_dir(paths, key)
     if key in show_log:
         del show_log[key]
@@ -2876,7 +2901,7 @@ def reset_all(config: dict, progress: ProgressFn | None = None, scope: str | Non
         had_backup = (_backup_dir(paths, key) / "show.png").exists()
         try:
             show = plex.fetchItem(f"/library/metadata/{key}")
-            remove_show_overlay(show, False, progress, paths=paths)
+            remove_show_overlay(show, False, progress, paths=paths, config=config)
             if had_backup:
                 restored_from_backup += 1
             removed += 1
@@ -2948,7 +2973,7 @@ def reset_all(config: dict, progress: ProgressFn | None = None, scope: str | Non
                 title = entry.get("title") or key
                 try:
                     show = plex.fetchItem(f"/library/metadata/{key}")
-                    _restore_show_mode(show, paths, mode, progress)
+                    _restore_show_mode(show, paths, mode, progress, config=config)
                     extras_removed += 1
                 except Exception as exc:
                     failed.append(f"{mode} {title}: {exc}")
