@@ -1115,8 +1115,9 @@ export const fr: DeepPartial<EnCatalog> = {
         },
         activity: {
             title: 'Activité',
-            subtitle: 'Sortie récente du worker pour cette session.',
+            subtitle: 'Sortie récente du worker. Les exécutions continuent si vous rafraîchissez — rouvrez cet onglet pour suivre.',
             running: 'Exécution de {command}',
+            stillRunning: '{command} toujours en cours — suivi depuis Activité.',
             empty: 'Aucune activité pour cette session.',
         },
         footer: {

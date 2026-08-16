@@ -1113,8 +1113,9 @@ export const en = {
         },
         activity: {
             title: 'Activity',
-            subtitle: 'Recent worker output this session.',
+            subtitle: 'Recent worker output. Runs keep going if you refresh — reopen this tab to follow progress.',
             running: 'Running {command}',
+            stillRunning: '{command} still in progress — watching from Activity.',
             empty: 'No activity yet this session.',
         },
         footer: {

@@ -301,6 +301,8 @@ export const OverlaysDashboard: React.FC = () => {
     const [newCollectionFilePreview, setNewCollectionFilePreview] = useState<string | null>(null);
     const sampleLoadedRef = React.useRef(false);
     const wasRunningRef = React.useRef(false);
+    const reconnectedRunRef = React.useRef(false);
+    const intentionalStartRef = React.useRef(false);
 
     const toast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
         setToasts((prev) => pushToast(prev, message, type));
@@ -337,6 +339,28 @@ export const OverlaysDashboard: React.FC = () => {
         }, 1500);
         return () => window.clearInterval(timer);
     }, [status?.running, refresh]);
+
+    // After a page refresh, reconnect to a still-running server job.
+    useEffect(() => {
+        if (!status?.running) {
+            reconnectedRunRef.current = false;
+            return;
+        }
+        if (reconnectedRunRef.current) return;
+        reconnectedRunRef.current = true;
+        setTab('activity');
+        if (intentionalStartRef.current || busy) {
+            intentionalStartRef.current = false;
+            return;
+        }
+        const cmd = String(status.command || '').trim() || '…';
+        const label = cmd === 'preview-kometa'
+            ? 'preview-layer'
+            : cmd === 'run-kometa'
+                ? 'run-layer'
+                : cmd;
+        toast(t('overlays.activity.stillRunning', { command: label }));
+    }, [status?.running, status?.command, busy, toast, t]);
 
     useEffect(() => {
         const running = !!status?.running;
@@ -1236,6 +1260,7 @@ export const OverlaysDashboard: React.FC = () => {
     };
 
     const startBackgroundJob = (id: ActionId, fn: () => Promise<unknown>) => {
+        intentionalStartRef.current = true;
         setTab('activity');
         setBusy(id);
         const label = actionLabel(id);
@@ -1244,6 +1269,7 @@ export const OverlaysDashboard: React.FC = () => {
                 await fn();
                 toast(t('overlays.actionStarted', { action: label }));
             } catch (error) {
+                intentionalStartRef.current = false;
                 toast(error instanceof Error ? error.message : t('overlays.actionFailed', { action: label }), 'error');
             } finally {
                 setBusy(null);
