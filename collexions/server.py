@@ -1295,11 +1295,20 @@ def _delete_duplicate_collections(library, title, keep_rating_key=None):
 
 
 def _update_collection_items_in_place(coll, matched_items, label):
-    current_items = coll.items()
-    current_titles = {i.title for i in current_items}
-    target_titles = {i.title for i in matched_items}
-    to_add = [i for i in matched_items if i.title not in current_titles]
-    to_remove = [i for i in current_items if i.title not in target_titles]
+    """Sync collection membership. Returns {changed, added, removed, memberKeys}."""
+    current_items = list(coll.items() or [])
+    current_by_key = {}
+    for item in current_items:
+        rk = str(getattr(item, 'ratingKey', '') or '').strip()
+        if rk:
+            current_by_key[rk] = item
+    target_by_key = {}
+    for item in matched_items or []:
+        rk = str(getattr(item, 'ratingKey', '') or '').strip()
+        if rk:
+            target_by_key[rk] = item
+    to_add = [item for rk, item in target_by_key.items() if rk not in current_by_key]
+    to_remove = [item for rk, item in current_by_key.items() if rk not in target_by_key]
     if to_add:
         coll.addItems(to_add)
     if to_remove:
@@ -1311,13 +1320,19 @@ def _update_collection_items_in_place(coll, matched_items, label):
         coll.addLabel(label)
     except Exception:
         pass
+    return {
+        'changed': bool(to_add or to_remove),
+        'added': len(to_add),
+        'removed': len(to_remove),
+        'memberKeys': sorted(target_by_key.keys()),
+    }
 
 
 def _upsert_plex_collection(library, title, matched_items, sort_order='custom', label='Collexions'):
     """
     Create or update exactly one Plex collection for title.
     Merges duplicates by keeping the fullest collection and deleting extras.
-    Returns (collection, created_fresh).
+    Returns (collection, created_fresh, membership_delta).
     """
     title = _normalize_collection_title(title)
     if not title:
@@ -1325,6 +1340,7 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
     if not matched_items:
         raise ValueError("No matched items to add")
 
+    empty_delta = {'changed': False, 'added': 0, 'removed': 0, 'memberKeys': []}
     existing_all = _find_collections_by_title(library, title)
     if existing_all:
         coll = _pick_primary_collection(existing_all)
@@ -1341,22 +1357,52 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
                 logging.error(f"Failed to delete collection '{title}' before recreate: {e}")
                 raise RuntimeError(f"Could not replace existing collection '{title}'") from e
             coll = _create_plex_collection(library, title, matched_items, sort_order=sort_order, label=label)
-            return coll, True
+            keys = sorted({
+                str(getattr(i, 'ratingKey', '') or '').strip()
+                for i in matched_items
+                if str(getattr(i, 'ratingKey', '') or '').strip()
+            })
+            return coll, True, {
+                'changed': True,
+                'added': len(keys),
+                'removed': 0,
+                'memberKeys': keys,
+            }
 
-        _update_collection_items_in_place(coll, matched_items, label)
+        delta = _update_collection_items_in_place(coll, matched_items, label)
         if sort_order == 'release':
             try:
                 coll.sortUpdate('release')
             except Exception as e:
                 logging.warning(f"Failed to set release sort: {e}")
-        return coll, False
+        return coll, False, delta
 
     coll = _create_plex_collection(library, title, matched_items, sort_order=sort_order, label=label)
-    return coll, True
+    keys = sorted({
+        str(getattr(i, 'ratingKey', '') or '').strip()
+        for i in matched_items
+        if str(getattr(i, 'ratingKey', '') or '').strip()
+    })
+    return coll, True, {
+        'changed': True,
+        'added': len(keys),
+        'removed': 0,
+        'memberKeys': keys,
+    }
 
 
-def _notify_portal_collection_updated(coll, library_name, title):
-    """Tell the portal Overlays module a managed collection changed (best-effort)."""
+def _notify_portal_collection_updated(coll, library_name, title, membership_delta=None):
+    """Tell the portal Overlays module a managed collection changed (best-effort).
+
+    Skips the hook when membership did not change — avoids needless overlay restamps.
+    """
+    delta = membership_delta if isinstance(membership_delta, dict) else {}
+    if delta and delta.get('changed') is False:
+        logging.debug(
+            "Skipping overlays hook for '%s' — membership unchanged",
+            title or getattr(coll, 'title', ''),
+        )
+        return
     base = (
         os.environ.get('PORTAL_CALLBACK_BASE')
         or os.environ.get('COLLEXIONS_PORTAL_CALLBACK')
@@ -1376,6 +1422,9 @@ def _notify_portal_collection_updated(coll, library_name, title):
                 'ratingKey': rating_key,
                 'title': _normalize_collection_title(title) or str(getattr(coll, 'title', '') or ''),
                 'library': str(library_name or '').strip(),
+                'added': int(delta.get('added') or 0),
+                'removed': int(delta.get('removed') or 0),
+                'changed': True if not delta else bool(delta.get('changed')),
             },
             headers={
                 'X-Collexions-Service-Key': service_key,
@@ -1784,14 +1833,14 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
             if not matched_items:
                 return {"success": False, "error": "No items matched your local library", "matched": 0, "total": len(items)}
 
-            coll, created_fresh = _upsert_plex_collection(
+            coll, created_fresh, membership_delta = _upsert_plex_collection(
                 library,
                 title,
                 matched_items,
                 sort_order=sort_order,
                 label=label,
             )
-            _notify_portal_collection_updated(coll, library_name, title)
+            _notify_portal_collection_updated(coll, library_name, title, membership_delta)
 
             art_set = _ensure_collection_art(
                 coll,
@@ -1911,14 +1960,19 @@ def run_sync_job(job_id=None):
 
             try:
                 with _collection_create_lock(lib_name, coll_name):
-                    coll, recreated = _upsert_plex_collection(
+                    coll, recreated, membership_delta = _upsert_plex_collection(
                         library,
                         coll_name,
                         plex_items,
                         sort_order=sort_order,
                         label=label,
                     )
-                    _notify_portal_collection_updated(coll, lib_name, coll_name)
+                    _notify_portal_collection_updated(coll, lib_name, coll_name, membership_delta)
+                    if membership_delta.get('changed'):
+                        log_action(
+                            f"Auto-Sync: '{coll_name}' membership +"
+                            f"{membership_delta.get('added', 0)}/-{membership_delta.get('removed', 0)}"
+                        )
                     _ensure_collection_art(
                         coll,
                         source_type=source_type,
@@ -3505,14 +3559,14 @@ def create_custom_collection():
             if not items:
                 return jsonify({"success": False, "error": "No matching items found in library"}), 404
                 
-            collection, created_fresh = _upsert_plex_collection(
+            collection, created_fresh, membership_delta = _upsert_plex_collection(
                 library,
                 title,
                 items,
                 sort_order=sort_order,
                 label=label,
             )
-            _notify_portal_collection_updated(collection, library_name, title)
+            _notify_portal_collection_updated(collection, library_name, title, membership_delta)
 
             art_set = _ensure_collection_art(
                 collection,

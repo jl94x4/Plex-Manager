@@ -765,7 +765,7 @@ export const en = {
                 enabledOff: 'Disabled',
                 settingsHint: 'Preview/Run on this card only stamps collection badges (other Layer families stay intact). Titles that leave the collection lose this badge on the next run.',
                 restampOnCollexions: 'Restamp when ColleXions updates a linked collection',
-                restampOnCollexionsHint: 'Off by default. When ColleXions adds/removes titles in a collection that you already use as an overlay rule, only that rule is restamped — other collection overlays are left alone.',
+                restampOnCollexionsHint: 'Off by default. When ColleXions adds or removes titles in a collection used by an overlay rule, only that collection is synced: new members get the badge, leavers lose it. Titles already up to date are left alone.',
                 addTitle: 'Add a collection badge',
                 addSubtitle: 'Four quick steps — libraries, collections, badge PNG, then a label.',
                 editTitle: 'Edit collection badge',

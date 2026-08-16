@@ -767,7 +767,7 @@ export const fr: DeepPartial<EnCatalog> = {
                 enabledOff: 'Désactivé',
                 settingsHint: 'Aperçu/Exécuter sur cette carte ne tamponne que les badges de collection (les autres familles Layer restent intactes). Les titres qui quittent la collection perdent ce badge au prochain passage.',
                 restampOnCollexions: 'Retamper quand ColleXions met à jour une collection liée',
-                restampOnCollexionsHint: 'Désactivé par défaut. Quand ColleXions ajoute/retire des titres dans une collection déjà utilisée comme règle d’overlay, seule cette règle est retampée — les autres overlays de collection restent inchangés.',
+                restampOnCollexionsHint: 'Désactivé par défaut. Quand ColleXions ajoute ou retire des titres dans une collection liée à une règle d’overlay, seule cette collection est synchronisée : les nouveaux membres reçoivent le badge, les sortants le perdent. Les titres déjà à jour ne sont pas touchés.',
                 addTitle: 'Ajouter un badge de collection',
                 addSubtitle: 'Quatre étapes — bibliothèques, collections, PNG, puis un libellé.',
                 editTitle: 'Modifier le badge de collection',

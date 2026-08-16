@@ -318,6 +318,31 @@ def _only_collection_rating_keys(config: dict) -> set[str]:
     return {str(k or "").strip() for k in raw if str(k or "").strip()}
 
 
+def _stamp_source_collection_key(cc_meta: dict) -> str:
+    """Which Plex collection ratingKey this stamp belongs to (targeted prune/skip)."""
+    if not isinstance(cc_meta, dict):
+        return ""
+    extra = cc_meta.get("extra") if isinstance(cc_meta.get("extra"), dict) else {}
+    source = str(extra.get("sourceCollectionRatingKey") or "").strip()
+    if source:
+        return source
+    keys = []
+    singular = str(extra.get("collectionRatingKey") or "").strip()
+    if singular:
+        keys.append(singular)
+    raw_list = extra.get("collectionRatingKeys")
+    if isinstance(raw_list, list):
+        for item in raw_list:
+            key = str(item or "").strip()
+            if key and key not in keys:
+                keys.append(key)
+    # Legacy stamps stored every collection on a multi-collection rule. Those are
+    # ambiguous for targeted prune — return empty so we leave them alone.
+    if len(keys) == 1:
+        return keys[0]
+    return ""
+
+
 def _custom_collection_rules(config: dict, *, respect_only_keys: bool = True) -> list[dict]:
     raw = _cfg(config, "customCollectionOverlays", "custom_collection_overlays", []) or []
     if not isinstance(raw, list):
@@ -684,8 +709,8 @@ def _apply_custom_collection_winners(
     rule_members: dict[str, set[str]] = {}
     if not rules:
         return rule_members
-    # ratingKey -> first matching (rule, image_path)
-    member_rule: dict[str, tuple[dict, Path]] = {}
+    # ratingKey -> first matching (rule, image_path, source_collection_key)
+    member_rule: dict[str, tuple[dict, Path, str]] = {}
     claimed_elsewhere: dict[str, int] = {rule["id"]: 0 for rule in rules}
     for rule in rules:
         libraries = [str(lib or "").strip() for lib in (rule.get("libraries") or []) if str(lib or "").strip()]
@@ -712,6 +737,7 @@ def _apply_custom_collection_winners(
         if not collection_keys:
             continue
         members: set[str] = set()
+        member_source: dict[str, str] = {}
         lib_label = ", ".join(libraries)
         for collection_key in collection_keys:
             part = _resolve_collection_member_keys(
@@ -722,6 +748,9 @@ def _apply_custom_collection_winners(
                 progress=progress,
             )
             members.update(part)
+            for rk in part:
+                if rk not in member_source:
+                    member_source[rk] = collection_key
             title_hint = ""
             titles_map = rule.get("collectionTitles") if isinstance(rule.get("collectionTitles"), dict) else {}
             if titles_map:
@@ -750,11 +779,11 @@ def _apply_custom_collection_winners(
             if rk in member_rule:
                 claimed_elsewhere[rule["id"]] = claimed_elsewhere.get(rule["id"], 0) + 1
                 continue
-            member_rule[rk] = (rule, image_path)
+            member_rule[rk] = (rule, image_path, member_source.get(rk) or collection_keys[0])
 
     queued_by_rule: dict[str, int] = {rule["id"]: 0 for rule in rules}
     dropped = 0
-    for rk, (rule, image_path) in member_rule.items():
+    for rk, (rule, image_path, source_collection_key) in member_rule.items():
         row = should.get(rk)
         item = row.get("item") if row else None
         if item is None:
@@ -780,6 +809,9 @@ def _apply_custom_collection_winners(
                     if show_rk in member_rule and member_rule[show_rk][0]["id"] != rule["id"]:
                         claimed_elsewhere[rule["id"]] = claimed_elsewhere.get(rule["id"], 0) + 1
                         continue
+                    # Keep the source collection key when remapping season → show.
+                    if show_rk not in member_rule:
+                        member_rule[show_rk] = (rule, image_path, source_collection_key)
                     rk = show_rk
                     item = show_item
                     item_type = str(getattr(item, "type", "") or "").lower()
@@ -813,6 +845,14 @@ def _apply_custom_collection_winners(
             dropped += 1
             continue
 
+        source_key = str(source_collection_key or rule.get("collectionRatingKey") or "").strip()
+        titles_map = rule.get("collectionTitles") if isinstance(rule.get("collectionTitles"), dict) else {}
+        source_title = ""
+        if titles_map and source_key:
+            source_title = str(titles_map.get(source_key) or "").strip()
+        if not source_title and source_key == rule.get("collectionRatingKey"):
+            source_title = str(rule.get("collectionTitle") or "").strip()
+
         winner = Winner(
             family="custom_collection",
             name=str(rule["id"]),
@@ -821,9 +861,10 @@ def _apply_custom_collection_winners(
             image_rel=str(image_path),
             extra={
                 "ruleId": rule["id"],
-                "collectionRatingKey": rule["collectionRatingKey"],
-                "collectionRatingKeys": list(rule.get("collectionRatingKeys") or [rule["collectionRatingKey"]]),
-                "collectionTitle": rule.get("collectionTitle") or "",
+                "collectionRatingKey": source_key or rule["collectionRatingKey"],
+                "collectionRatingKeys": [source_key] if source_key else list(rule.get("collectionRatingKeys") or []),
+                "sourceCollectionRatingKey": source_key,
+                "collectionTitle": source_title or rule.get("collectionTitle") or "",
                 "collectionTitles": rule.get("collectionTitles") or {},
                 "library": rule.get("library") or "",
                 "libraries": list(libraries),
@@ -1490,7 +1531,8 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
         if only_collection_keys:
             _progress(
                 progress,
-                f"Targeted collection restamp — {len(only_collection_keys)} collection key(s)",
+                f"Targeted collection sync — {len(only_collection_keys)} collection key(s) "
+                f"(add missing badges, remove leavers only)",
             )
         cc_rule_members = _apply_custom_collection_winners(
             plex,
@@ -1539,6 +1581,44 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
         )
         _progress(progress, f"Custom collection badges queued for {cc_queued} title(s)")
 
+        # Targeted ColleXions restamp: if membership already matches tracked stamps, skip work.
+        if only_collection_keys and active_cc_rule_ids and not preview_mode:
+            expected_keys = {
+                str(k)
+                for k, row in should.items()
+                if isinstance(row, dict) and "custom_collection" in (row.get("winners") or {})
+            }
+            tracked_keys: set[str] = set()
+            for key, entry in log.items():
+                if not isinstance(entry, dict) or bool(entry.get("preview_only")):
+                    continue
+                fams = entry.get("families") if isinstance(entry.get("families"), dict) else {}
+                cc_meta = fams.get("custom_collection") if isinstance(fams.get("custom_collection"), dict) else None
+                if not cc_meta:
+                    continue
+                source = _stamp_source_collection_key(cc_meta)
+                # Only compare stamps that belong to the collection(s) being updated.
+                if source and source in only_collection_keys:
+                    tracked_keys.add(str(key))
+            if expected_keys == tracked_keys:
+                _progress(
+                    progress,
+                    f"Collection membership unchanged ({len(expected_keys)} title(s)) — skipping stamp/prune",
+                )
+                return {
+                    "kometaEnabled": True,
+                    "kometaFamilies": families,
+                    "kometaAdded": 0,
+                    "kometaSkipped": len(expected_keys),
+                    "kometaRemoved": 0,
+                    "kometaTotal": len(log),
+                    "kometaEligible": len(should),
+                    "kometaFamilyCounts": {},
+                    "kometaErrors": errors,
+                    "kometaScope": scope_name,
+                    "onlyCollectionRatingKeys": sorted(only_collection_keys),
+                }
+
     _progress(progress, f"Layer eligible: {len(should)} of {scanned} scanned")
 
     # Preserve out-of-scope badges so Media-only / Collections-only runs don't wipe each other.
@@ -1571,7 +1651,11 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             # Skip when winners are unchanged. If we already recorded a poster thumb and
             # Plex art changed (New Season / TPDB / manual), restamp. Legacy rows with no
             # posterThumb just get the token backfilled — do not force a full re-upload.
+            # ColleXions targeted sync: only add missing badges / remove leavers — never
+            # rip-and-replace posters that are already correct for this collection.
             poster_replaced = bool(tracked_thumb) and tracked_thumb != current_thumb
+            if only_collection_keys:
+                poster_replaced = False
             if (
                 existing
                 and not preview_mode
@@ -1744,21 +1828,15 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                     del log[key]
                     removed += 1
                 continue
-            # Targeted ColleXions restamp: only touch stamps for the updated collection rule(s).
-            if only_collection_keys and active_cc_rule_ids:
+            # Targeted ColleXions restamp: only prune titles that came from the
+            # updated collection key(s). Never strip sibling collections that share
+            # the same overlay rule (e.g. Reality TV when only Kids was updated).
+            if only_collection_keys:
                 cc_meta = prev.get("custom_collection") if isinstance(prev.get("custom_collection"), dict) else None
                 if not cc_meta:
                     continue
-                extra = cc_meta.get("extra") if isinstance(cc_meta.get("extra"), dict) else {}
-                rule_id = str(extra.get("ruleId") or "").strip()
-                entry_keys = {
-                    str(extra.get("collectionRatingKey") or "").strip(),
-                    *[str(k or "").strip() for k in (extra.get("collectionRatingKeys") or [])],
-                }
-                entry_keys.discard("")
-                if rule_id and rule_id not in active_cc_rule_ids and not entry_keys.intersection(only_collection_keys):
-                    continue
-                if not rule_id and not entry_keys.intersection(only_collection_keys):
+                source = _stamp_source_collection_key(cc_meta)
+                if not source or source not in only_collection_keys:
                     continue
             if scope_name != "all" and prev:
                 # Keep titles that still have badges outside this scope.
