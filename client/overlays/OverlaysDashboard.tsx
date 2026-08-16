@@ -536,11 +536,13 @@ export const OverlaysDashboard: React.FC = () => {
         && collectionRules.length > 0;
 
     const formatKometaFamilies = useCallback((row: any) => {
+        if (row?.orphanBackup) return t('overlays.kometa.orphanBackup');
         if (!row?.families || typeof row.families !== 'object') return '—';
-        return Object.entries(row.families)
+        const labels = Object.entries(row.families)
             .map(([family, meta]: [string, any]) => `${family}:${meta?.name || '?'}`)
             .join(', ');
-    }, []);
+        return labels || '—';
+    }, [t]);
 
     const kometaSections = useMemo(() => {
         type Section = {
@@ -3520,6 +3522,11 @@ export const OverlaysDashboard: React.FC = () => {
                                                                 <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
                                                                     {row.previewOnly ? t('overlays.mode.preview') : t('overlays.mode.live')}
                                                                 </span>
+                                                                {row.orphanBackup ? (
+                                                                    <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-100">
+                                                                        {t('overlays.kometa.orphanBackup')}
+                                                                    </span>
+                                                                ) : null}
                                                                 {row.timestamp ? (
                                                                     <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-muted">
                                                                         {new Date(row.timestamp).toLocaleString()}

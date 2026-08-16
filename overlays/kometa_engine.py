@@ -85,6 +85,25 @@ def _save_log(path: Path, log: dict) -> None:
     path.write_text(json.dumps(log, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def _discover_kometa_backup_keys(paths: dict) -> list[str]:
+    """ratingKeys that have a Layer poster backup on disk (even if the log never flushed)."""
+    root = Path(paths["backups"]) / "kometa"
+    if not root.is_dir():
+        return []
+    keys: list[str] = []
+    try:
+        for child in root.iterdir():
+            if not child.is_dir():
+                continue
+            if (child / "poster.png").is_file():
+                key = str(child.name or "").strip()
+                if key:
+                    keys.append(key)
+    except Exception:
+        return keys
+    return keys
+
+
 def kometa_log_path(paths: dict) -> Path:
     explicit = paths.get("kometaLog")
     if explicit:
@@ -1527,6 +1546,9 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             merged.pop("needsRestamp", None)
             merged.pop("legacyModes", None)
             log[key] = merged
+            # Flush after every stamp so a mid-run timeout/kill still leaves revertible rows.
+            if not preview_mode:
+                _save_log(log_path, log)
             added += 1
             if has_collection_badge and not preview_mode:
                 cc_stamped_ok.add(key)
@@ -1552,6 +1574,8 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             elif existing and isinstance(existing, dict) and bool(existing.get("preview_only")):
                 fail_entry["preview_only"] = True
             log[key] = fail_entry
+            if not preview_mode:
+                _save_log(log_path, log)
 
     # Prune entries no longer eligible
     for key in list(log.keys()):
@@ -1622,7 +1646,11 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
 
 
 def revert_kometa(config: dict, rating_key: str | None = None, progress: ProgressFn | None = None) -> dict:
-    """Per-item or bulk revert of every Kometa-parity overlay."""
+    """Per-item or bulk revert of every Layer overlay.
+
+    Also restores from on-disk backups under backups/kometa/ even when the JSON log
+    never flushed (timeout / kill mid-run).
+    """
     from core import _connect, _resolve_paths
 
     paths = _resolve_paths(config)
@@ -1630,17 +1658,25 @@ def revert_kometa(config: dict, rating_key: str | None = None, progress: Progres
     plex = _connect(config)
     log_path = kometa_log_path(paths)
     log = _load_log(log_path)
+    backup_keys = _discover_kometa_backup_keys(paths)
 
     if rating_key:
         keys = [str(rating_key).strip()]
     else:
-        keys = list(log.keys())
+        keys = sorted(set(list(log.keys()) + backup_keys))
+
+    orphan_backups = [k for k in keys if k not in log and k in backup_keys]
+    if orphan_backups:
+        _progress(
+            progress,
+            f"Recovering {len(orphan_backups)} stamped title(s) from Layer backups (log was incomplete)",
+        )
 
     _progress(progress, f"Reverting {len(keys)} Layer overlay(s)…")
     reverted = 0
     failed: list[str] = []
     for key in keys:
-        entry = log.get(key) or {}
+        entry = log.get(key) or {"title": key, "hasBackup": True}
         try:
             ok = _restore_item(plex, paths, key, entry, progress)
             if key in log:
@@ -1659,6 +1695,7 @@ def revert_kometa(config: dict, rating_key: str | None = None, progress: Progres
         "reverted": reverted,
         "failed": failed,
         "remaining": len(log),
+        "recoveredFromBackup": len(orphan_backups),
         "finishedAt": datetime.now().isoformat(),
     }
 
@@ -1666,9 +1703,11 @@ def revert_kometa(config: dict, rating_key: str | None = None, progress: Progres
 def list_kometa_tracked(paths: dict) -> list[dict]:
     log = _load_log(kometa_log_path(paths))
     rows = []
+    seen: set[str] = set()
     for key, entry in log.items():
         if not isinstance(entry, dict):
             continue
+        seen.add(str(key))
         rows.append({
             "ratingKey": key,
             "title": entry.get("title") or key,
@@ -1677,7 +1716,23 @@ def list_kometa_tracked(paths: dict) -> list[dict]:
             "timestamp": entry.get("timestamp"),
             "previewOnly": bool(entry.get("preview_only")),
             "families": entry.get("families") or {},
-            "hasBackup": bool(entry.get("hasBackup")),
+            "hasBackup": bool(entry.get("hasBackup")) or _backup_file(paths, key).exists(),
+            "orphanBackup": False,
+        })
+    # Surface mid-run timeout orphans so the UI can revert them.
+    for key in _discover_kometa_backup_keys(paths):
+        if key in seen:
+            continue
+        rows.append({
+            "ratingKey": key,
+            "title": key,
+            "library": "",
+            "itemType": "",
+            "timestamp": None,
+            "previewOnly": False,
+            "families": {},
+            "hasBackup": True,
+            "orphanBackup": True,
         })
     rows.sort(key=lambda r: str(r.get("timestamp") or ""), reverse=True)
     return rows
