@@ -882,8 +882,11 @@ export const fr: DeepPartial<EnCatalog> = {
                 hint: 'Tampon live pour ce job uniquement — sauvegarde + journal ; pas de prune bibliothèque.',
                 hintShows: 'Tampon live pour ce job uniquement — séries ; sauvegarde + journal ; pas de prune bibliothèque.',
                 hintMovies: 'Tampon live pour ce job uniquement — films et séries ; sauvegarde + journal ; pas de prune bibliothèque.',
+                hintCollections: 'Tampon live seulement si ce titre est dans une collection liée à une règle activée. Pas de prune bibliothèque.',
                 started: 'Tamponnage de « {title} »…',
                 needPick: 'Choisissez d’abord un titre',
+                noResults: 'Aucun résultat',
+                searching: 'Recherche…',
             },
         },
         kometa: {

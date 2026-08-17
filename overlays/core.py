@@ -3566,8 +3566,6 @@ def search_sample_candidates(config: dict, query: str = "", progress: ProgressFn
         key = str(getattr(item, "ratingKey", "") or "")
         if not key or key in seen:
             return False
-        if not getattr(item, "thumb", None):
-            return False
         seen.add(key)
         results.append({
             "ratingKey": key,

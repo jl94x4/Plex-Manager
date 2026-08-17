@@ -665,6 +665,212 @@ def _resolve_collection_member_keys(
     return members
 
 
+def _fetch_plex_item(plex, rating_key: str):
+    key = str(rating_key or "").strip()
+    if not key:
+        return None
+    try:
+        return plex.fetchItem(int(key))
+    except Exception:
+        try:
+            return plex.fetchItem(key)
+        except Exception:
+            try:
+                return plex.fetchItem(f"/library/metadata/{key}")
+            except Exception:
+                return None
+
+
+def _item_collection_candidates(item) -> list:
+    """Raw collection tag objects attached to a Plex title."""
+    if item is None:
+        return []
+    try:
+        if hasattr(item, "reload") and callable(item.reload):
+            item.reload()
+    except Exception:
+        pass
+    candidates = []
+    for attr in ("collections", "Collection"):
+        try:
+            raw = getattr(item, attr, None)
+            if callable(raw):
+                raw = raw()
+            if raw:
+                candidates.extend(list(raw))
+        except Exception:
+            continue
+    # plexapi XML fallback — Collection nodes sometimes carry ratingKey.
+    try:
+        data = getattr(item, "_data", None)
+        if data is not None and hasattr(data, "findall"):
+            for elem in list(data.findall("Collection") or []):
+                candidates.append(elem)
+    except Exception:
+        pass
+    return candidates
+
+
+def _item_collection_rating_keys(item) -> set[str]:
+    """Collection ratingKeys attached to a title (when Plex exposes them)."""
+    keys: set[str] = set()
+    for coll in _item_collection_candidates(item):
+        rk = ""
+        if hasattr(coll, "attrib") and isinstance(getattr(coll, "attrib", None), dict):
+            rk = str(coll.attrib.get("ratingKey") or coll.attrib.get("id") or "").strip()
+        else:
+            rk = str(
+                getattr(coll, "ratingKey", None)
+                or getattr(coll, "key", None)
+                or (coll.get("ratingKey") if isinstance(coll, dict) else None)
+                or "",
+            ).strip()
+            if rk.startswith("/library/metadata/"):
+                rk = rk.rsplit("/", 1)[-1]
+        if rk and rk.isdigit():
+            keys.add(rk)
+    return keys
+
+
+def _item_collection_titles(item) -> set[str]:
+    """Lowercased collection titles/tags on a title (reliable reverse membership)."""
+    titles: set[str] = set()
+    for coll in _item_collection_candidates(item):
+        tag = ""
+        if hasattr(coll, "attrib") and isinstance(getattr(coll, "attrib", None), dict):
+            tag = str(coll.attrib.get("tag") or coll.attrib.get("title") or "").strip()
+        else:
+            tag = str(
+                getattr(coll, "tag", None)
+                or getattr(coll, "title", None)
+                or (coll.get("tag") if isinstance(coll, dict) else None)
+                or (coll.get("title") if isinstance(coll, dict) else None)
+                or "",
+            ).strip()
+        if tag:
+            titles.add(tag.casefold())
+    return titles
+
+
+def _expand_membership_keys(plex, rating_keys: set[str]) -> set[str]:
+    """Include related show/season keys so collection child filters match the picked title."""
+    expanded = {str(k or "").strip() for k in (rating_keys or set()) if str(k or "").strip()}
+    for key in list(expanded):
+        item = _fetch_plex_item(plex, key)
+        if item is None:
+            continue
+        rk = str(getattr(item, "ratingKey", "") or "").strip()
+        if rk:
+            expanded.add(rk)
+        stamp = _collection_member_target_key(item)
+        if stamp:
+            expanded.add(stamp)
+        itype = str(getattr(item, "type", "") or "").lower()
+        if itype == "episode":
+            show_rk = str(
+                getattr(item, "grandparentRatingKey", None)
+                or getattr(item, "showRatingKey", None)
+                or "",
+            ).strip()
+            if show_rk:
+                expanded.add(show_rk)
+        elif itype == "season":
+            parent = str(getattr(item, "parentRatingKey", "") or "").strip()
+            if parent:
+                expanded.add(parent)
+        elif itype == "show":
+            try:
+                for season in list(item.seasons() or [])[:40]:
+                    sk = str(getattr(season, "ratingKey", "") or "").strip()
+                    if sk:
+                        expanded.add(sk)
+            except Exception:
+                pass
+    return expanded
+
+
+def _scoped_collection_member_keys(
+    plex,
+    collection_rating_key: str,
+    title_keys: set[str],
+    *,
+    libraries: list[str] | None = None,
+    library_section_ids: list[str] | None = None,
+    collection_title_hint: str = "",
+    progress: ProgressFn | None = None,
+) -> set[str]:
+    """Membership for a single-title stamp: reverse tags first, then intersect full resolve."""
+    title_keys = {str(k or "").strip() for k in (title_keys or set()) if str(k or "").strip()}
+    if not title_keys:
+        return set()
+    expanded = _expand_membership_keys(plex, title_keys)
+    coll = _fetch_plex_item(plex, collection_rating_key)
+    coll_rk = str(getattr(coll, "ratingKey", "") or collection_rating_key or "").strip()
+    coll_title = str(
+        collection_title_hint
+        or (getattr(coll, "title", None) if coll is not None else None)
+        or "",
+    ).strip()
+    coll_title_cf = coll_title.casefold() if coll_title else ""
+
+    allowed_libs = [str(lib or "").strip() for lib in (libraries or []) if str(lib or "").strip()]
+    allowed_sids = [
+        str(sid or "").strip()
+        for sid in (library_section_ids or [])
+        if str(sid or "").strip()
+    ]
+    if coll is not None and allowed_libs:
+        if not _library_in_allowed(coll, allowed_libs, library_section_ids=allowed_sids):
+            return set()
+
+    matched: set[str] = set()
+    for tk in sorted(title_keys):
+        item = _fetch_plex_item(plex, tk)
+        if item is None:
+            continue
+        stamp = _collection_member_target_key(item) or str(getattr(item, "ratingKey", "") or "").strip()
+        if not stamp:
+            continue
+        check_items = [item]
+        if stamp != str(getattr(item, "ratingKey", "") or "").strip():
+            show_item = _fetch_plex_item(plex, stamp)
+            if show_item is not None:
+                check_items.append(show_item)
+        for check in check_items:
+            tag_keys = _item_collection_rating_keys(check)
+            tag_titles = _item_collection_titles(check)
+            if (coll_rk and coll_rk in tag_keys) or (coll_title_cf and coll_title_cf in tag_titles):
+                matched.add(stamp)
+                break
+
+    if matched:
+        return matched
+
+    # Scan children until the scoped title is found (avoids empty intersect from
+    # season/episode key mismatch and short-circuits huge smart collections).
+    if coll is not None:
+        try:
+            for child in _iter_collection_children(coll):
+                child_rk = str(getattr(child, "ratingKey", "") or "").strip()
+                stamp = _collection_member_target_key(child)
+                if (child_rk and child_rk in expanded) or (stamp and stamp in expanded):
+                    hit = stamp or child_rk
+                    if hit:
+                        return {hit}
+        except Exception as exc:
+            _progress(progress, f"Collection {collection_rating_key}: scoped scan failed ({exc})")
+
+    # Fallback: full resolve + intersect expanded keys (show↔season↔episode).
+    part = _resolve_collection_member_keys(
+        plex,
+        collection_rating_key,
+        libraries=libraries,
+        library_section_ids=library_section_ids,
+        progress=progress,
+    )
+    return {k for k in part if k in expanded}
+
+
 def _resolve_custom_preset_path(paths: dict, image_id: str) -> Path | None:
     name = str(image_id or "").strip()
     if not name:
@@ -683,19 +889,6 @@ def _resolve_custom_preset_path(paths: dict, image_id: str) -> Path | None:
     if bundled.is_file():
         return bundled
     return None
-
-
-def _fetch_plex_item(plex, rating_key: str):
-    key = str(rating_key or "").strip()
-    if not key:
-        return None
-    try:
-        return plex.fetchItem(int(key))
-    except Exception:
-        try:
-            return plex.fetchItem(key)
-        except Exception:
-            return None
 
 
 def _apply_custom_collection_winners(
@@ -750,26 +943,35 @@ def _apply_custom_collection_winners(
         members: set[str] = set()
         member_source: dict[str, str] = {}
         lib_label = ", ".join(libraries)
+        titles_map = rule.get("collectionTitles") if isinstance(rule.get("collectionTitles"), dict) else {}
         for collection_key in collection_keys:
-            part = _resolve_collection_member_keys(
-                plex,
-                collection_key,
-                libraries=libraries,
-                library_section_ids=section_ids,
-                progress=progress,
-            )
-            if title_filter:
-                part = {k for k in part if k in title_filter}
-            members.update(part)
-            for rk in part:
-                if rk not in member_source:
-                    member_source[rk] = collection_key
             title_hint = ""
-            titles_map = rule.get("collectionTitles") if isinstance(rule.get("collectionTitles"), dict) else {}
             if titles_map:
                 title_hint = str(titles_map.get(collection_key) or "").strip()
             if not title_hint and collection_key == rule.get("collectionRatingKey"):
                 title_hint = str(rule.get("collectionTitle") or "").strip()
+            if title_filter:
+                part = _scoped_collection_member_keys(
+                    plex,
+                    collection_key,
+                    title_filter,
+                    libraries=libraries,
+                    library_section_ids=section_ids,
+                    collection_title_hint=title_hint,
+                    progress=progress,
+                )
+            else:
+                part = _resolve_collection_member_keys(
+                    plex,
+                    collection_key,
+                    libraries=libraries,
+                    library_section_ids=section_ids,
+                    progress=progress,
+                )
+            members.update(part)
+            for rk in part:
+                if rk not in member_source:
+                    member_source[rk] = collection_key
             label = title_hint or collection_key
             _progress(
                 progress,
@@ -796,14 +998,20 @@ def _apply_custom_collection_winners(
             member_rule[rk] = (rule, image_path, member_source.get(rk) or collection_keys[0])
 
     if title_filter:
+        stamped_keys = set(member_rule.keys())
         for key in sorted(title_filter):
-            if key not in member_rule:
-                item = _fetch_plex_item(plex, key)
-                label = getattr(item, "title", None) if item is not None else key
-                _progress(
-                    progress,
-                    f"{label}: not a member of any enabled collection overlay rule — nothing stamped",
-                )
+            # Match picked season/episode against show-level stamp keys.
+            related = _expand_membership_keys(plex, {key})
+            if stamped_keys & related:
+                continue
+            item = _fetch_plex_item(plex, key)
+            label = getattr(item, "title", None) if item is not None else key
+            on_title = sorted(_item_collection_titles(item)) if item is not None else []
+            on_hint = f" (on title: {', '.join(on_title[:8])})" if on_title else " (no Plex collections on title)"
+            _progress(
+                progress,
+                f"{label}: not a member of any enabled collection overlay rule — nothing stamped{on_hint}",
+            )
     queued_by_rule: dict[str, int] = {rule["id"]: 0 for rule in rules}
     dropped = 0
     for rk, (rule, image_path, source_collection_key) in member_rule.items():

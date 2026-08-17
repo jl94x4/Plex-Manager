@@ -82,7 +82,9 @@ def main() -> int:
 
     config = request.get("config") if isinstance(request.get("config"), dict) else {}
     try:
-        progress(f"Worker received `{args.command}`")
+        # sections / sample-candidates are UI helpers — don't spam Activity.
+        if args.command not in {"sections", "sample-candidates", "status"}:
+            progress(f"Worker received `{args.command}`")
         if args.command == "status":
             write_event("result", **list_status(config))
             return 0
@@ -107,7 +109,7 @@ def main() -> int:
 
         if args.command == "sample-candidates":
             query = str(request.get("query") or request.get("q") or "")
-            write_event("result", **search_sample_candidates(config, query=query, progress=progress))
+            write_event("result", **search_sample_candidates(config, query=query, progress=None))
             return 0
 
         if args.command == "scan":

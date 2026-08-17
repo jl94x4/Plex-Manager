@@ -369,6 +369,10 @@ export const OverlaysDashboard: React.FC = () => {
             reconnectedRunRef.current = false;
             return;
         }
+        const cmd = String(status.command || '').trim();
+        if (cmd === 'sections' || cmd === 'sample-candidates' || cmd === 'status') {
+            return;
+        }
         if (reconnectedRunRef.current) return;
         reconnectedRunRef.current = true;
         setTab('activity');
@@ -376,7 +380,6 @@ export const OverlaysDashboard: React.FC = () => {
             intentionalStartRef.current = false;
             return;
         }
-        const cmd = String(status.command || '').trim() || '…';
         const label = cmd === 'preview-kometa'
             ? 'preview-layer'
             : cmd === 'run-kometa'
@@ -551,11 +554,15 @@ export const OverlaysDashboard: React.FC = () => {
     const summary = status?.lastRunSummary || configDraft.lastRunSummary || null;
     const activity = status?.activity || [];
     const workerReady = !!status?.workerReady;
+    const runningCommand = String(status?.command || '').trim();
+    // Test-title search / library pickers must never freeze settings editing.
+    const quietHelperCommand = runningCommand === 'sections'
+        || runningCommand === 'sample-candidates'
+        || runningCommand === 'status';
+    const jobRunning = !!status?.running && !quietHelperCommand;
     const showCount = shows.length || status?.logCount || 0;
     const episodeCount = episodes.length || status?.episodeLogCount || 0;
     const trackedTotal = showCount + episodeCount;
-    const jobRunning = !!status?.running;
-    const runningCommand = String(status?.command || '');
     const runningCommandLabel = runningCommand === 'preview-kometa'
         ? 'preview-layer'
         : runningCommand === 'run-kometa'
@@ -2252,6 +2259,8 @@ export const OverlaysDashboard: React.FC = () => {
                                     stampLabel={t('overlays.jobs.testTitle.stamp')}
                                     hint={t('overlays.jobs.testTitle.hintShows')}
                                     emptyPick={t('overlays.jobs.testTitle.empty')}
+                                    noResultsLabel={t('overlays.jobs.testTitle.noResults')}
+                                    searchingLabel={t('overlays.jobs.testTitle.searching')}
                                     titleFilter="show"
                                     disabled={jobTitleTestDisabled}
                                     busy={busy === 'run' || (coreJobActive && runningCommand === 'run')}
@@ -2482,6 +2491,8 @@ export const OverlaysDashboard: React.FC = () => {
                                     stampLabel={t('overlays.jobs.testTitle.stamp')}
                                     hint={t('overlays.jobs.testTitle.hintShows')}
                                     emptyPick={t('overlays.jobs.testTitle.empty')}
+                                    noResultsLabel={t('overlays.jobs.testTitle.noResults')}
+                                    searchingLabel={t('overlays.jobs.testTitle.searching')}
                                     titleFilter="show"
                                     disabled={jobTitleTestDisabled}
                                     busy={busy === 'runRecently' || (recentlyJobActive && runningCommand === 'run-recently')}
@@ -2607,6 +2618,8 @@ export const OverlaysDashboard: React.FC = () => {
                                     stampLabel={t('overlays.jobs.testTitle.stamp')}
                                     hint={t('overlays.jobs.testTitle.hintMovies')}
                                     emptyPick={t('overlays.jobs.testTitle.empty')}
+                                    noResultsLabel={t('overlays.jobs.testTitle.noResults')}
+                                    searchingLabel={t('overlays.jobs.testTitle.searching')}
                                     titleFilter="all"
                                     disabled={jobTitleTestDisabled}
                                     busy={busy === 'runKometa' || (kometaJobActive && runningCommand === 'run-kometa')}
@@ -3217,8 +3230,10 @@ export const OverlaysDashboard: React.FC = () => {
                                     searchPlaceholder={t('overlays.jobs.testTitle.searchPlaceholder')}
                                     pickLabel={t('overlays.jobs.testTitle.pick')}
                                     stampLabel={t('overlays.jobs.testTitle.stamp')}
-                                    hint={t('overlays.jobs.testTitle.hint')}
+                                    hint={t('overlays.jobs.testTitle.hintCollections')}
                                     emptyPick={t('overlays.jobs.testTitle.empty')}
+                                    noResultsLabel={t('overlays.jobs.testTitle.noResults')}
+                                    searchingLabel={t('overlays.jobs.testTitle.searching')}
                                     titleFilter="all"
                                     disabled={jobTitleTestDisabled}
                                     busy={busy === 'runCollections' || (collectionsJobActive && runningCommand === 'run-collections')}

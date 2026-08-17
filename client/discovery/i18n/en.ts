@@ -880,8 +880,11 @@ export const en = {
                 hint: 'Live stamp for this job only — backup + tracked log; no library-wide prune.',
                 hintShows: 'Live stamp for this job only — TV shows; backup + tracked log; no library-wide prune.',
                 hintMovies: 'Live stamp for this job only — movies & shows; backup + tracked log; no library-wide prune.',
+                hintCollections: 'Live stamp only if this title is in a linked collection for an enabled rule. No library-wide prune.',
                 started: 'Stamping “{title}”…',
                 needPick: 'Pick a title first',
+                noResults: 'No matches',
+                searching: 'Searching…',
             },
         },
         kometa: {

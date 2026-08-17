@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronDown, Loader2, Play, Stamp } from 'lucide-react';
-import { CustomSelect } from '../shared/ui';
 import { overlaysApi } from './api';
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
@@ -18,11 +17,15 @@ export type OverlayJobTitleTestProps = {
     stampLabel: string;
     hint: string;
     emptyPick: string;
+    noResultsLabel?: string;
+    searchingLabel?: string;
     disabled?: boolean;
     busy?: boolean;
     titleFilter?: OverlayJobTitleFilter;
     onStamp: (ratingKey: string, title: string) => void;
 };
+
+type TitleCandidate = { ratingKey: string; title: string; type?: string; library?: string };
 
 export const OverlayJobTitleTest: React.FC<OverlayJobTitleTestProps> = ({
     searchLabel,
@@ -31,19 +34,25 @@ export const OverlayJobTitleTest: React.FC<OverlayJobTitleTestProps> = ({
     stampLabel,
     hint,
     emptyPick,
+    noResultsLabel = 'No matches',
+    searchingLabel = 'Searching…',
     disabled = false,
     busy = false,
     titleFilter = 'all',
     onStamp,
 }) => {
     const [query, setQuery] = useState('');
-    const [selectedKey, setSelectedKey] = useState('');
-    const [candidates, setCandidates] = useState<Array<{ ratingKey: string; title: string; type?: string; library?: string }>>([]);
+    const [selected, setSelected] = useState<TitleCandidate | null>(null);
+    const [candidates, setCandidates] = useState<TitleCandidate[]>([]);
+    const [searching, setSearching] = useState(false);
 
     useEffect(() => {
         const q = query.trim();
+        let cancelled = false;
         const timer = window.setTimeout(() => {
+            setSearching(true);
             void overlaysApi.sampleCandidates(q).then((res) => {
+                if (cancelled) return;
                 const items = Array.isArray(res.items) && res.items.length
                     ? res.items
                     : (res.shows || []).map((s) => ({ ...s, type: s.type || 'show' }));
@@ -51,18 +60,19 @@ export const OverlayJobTitleTest: React.FC<OverlayJobTitleTestProps> = ({
                     ? items
                     : items.filter((row) => String(row.type || '').toLowerCase() === titleFilter);
                 setCandidates(filtered);
-            }).catch(() => setCandidates([]));
+            }).catch(() => {
+                if (!cancelled) setCandidates([]);
+            }).finally(() => {
+                if (!cancelled) setSearching(false);
+            });
         }, 250);
-        return () => window.clearTimeout(timer);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, [query, titleFilter]);
 
-    useEffect(() => {
-        if (selectedKey && !candidates.some((c) => c.ratingKey === selectedKey)) {
-            setSelectedKey('');
-        }
-    }, [candidates, selectedKey]);
-
-    const selected = candidates.find((c) => c.ratingKey === selectedKey);
+    const showList = query.trim().length > 0 || candidates.length > 0;
 
     return (
         <div className="border-t border-white/10 bg-background/15 px-4 py-3 space-y-2">
@@ -70,50 +80,78 @@ export const OverlayJobTitleTest: React.FC<OverlayJobTitleTestProps> = ({
                 <p className={fieldLabelClass}>{searchLabel}</p>
                 <p className="text-[11px] text-muted">{hint}</p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_auto] sm:items-end">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <label className="block min-w-0">
                     <span className="sr-only">{searchLabel}</span>
                     <input
                         className={fieldInputClass}
                         value={query}
-                        onChange={(e) => setQuery(e.target.value)}
+                        onChange={(e) => {
+                            setQuery(e.target.value);
+                            setSelected(null);
+                        }}
                         placeholder={searchPlaceholder}
                         disabled={disabled || busy}
-                    />
-                </label>
-                <label className="block min-w-0">
-                    <span className="sr-only">{pickLabel}</span>
-                    <CustomSelect
-                        className="mt-1.5"
-                        value={selectedKey}
-                        onChange={(value) => {
-                            if (disabled || busy) return;
-                            setSelectedKey(value);
-                        }}
-                        options={[
-                            { value: '', label: emptyPick },
-                            ...candidates.map((s) => ({
-                                value: s.ratingKey,
-                                label: s.library
-                                    ? `${s.title} · ${s.library}${s.type ? ` (${s.type})` : ''}`
-                                    : s.title,
-                            })),
-                        ]}
+                        autoComplete="off"
                     />
                 </label>
                 <button
                     type="button"
                     className={primaryButtonClass}
-                    disabled={disabled || busy || !selectedKey}
+                    disabled={disabled || busy || !selected?.ratingKey}
                     onClick={() => {
-                        if (!selectedKey) return;
-                        onStamp(selectedKey, selected?.title || selectedKey);
+                        if (!selected?.ratingKey) return;
+                        onStamp(selected.ratingKey, selected.title || selected.ratingKey);
                     }}
                 >
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stamp className="h-4 w-4" />}
                     {stampLabel}
                 </button>
             </div>
+            {selected ? (
+                <p className="text-[12px] text-text">
+                    <span className="text-muted">{pickLabel}: </span>
+                    {selected.library
+                        ? `${selected.title} · ${selected.library}${selected.type ? ` (${selected.type})` : ''}`
+                        : selected.title}
+                </p>
+            ) : null}
+            {showList ? (
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-border/60 bg-background/40">
+                    {searching && candidates.length === 0 ? (
+                        <p className="px-3 py-2 text-[12px] text-muted">{searchingLabel}</p>
+                    ) : candidates.length === 0 ? (
+                        <p className="px-3 py-2 text-[12px] text-muted">
+                            {query.trim() ? noResultsLabel : emptyPick}
+                        </p>
+                    ) : (
+                        <ul className="divide-y divide-white/5">
+                            {candidates.map((row) => {
+                                const active = selected?.ratingKey === row.ratingKey;
+                                return (
+                                    <li key={row.ratingKey}>
+                                        <button
+                                            type="button"
+                                            className={`flex w-full items-start gap-2 px-3 py-2 text-left text-[13px] transition-colors ${
+                                                active
+                                                    ? 'bg-plex/20 text-text'
+                                                    : 'text-text/90 hover:bg-white/5'
+                                            }`}
+                                            disabled={disabled || busy}
+                                            onClick={() => setSelected(row)}
+                                        >
+                                            <span className="min-w-0 flex-1 truncate font-medium">{row.title}</span>
+                                            <span className="shrink-0 text-[11px] text-muted">
+                                                {[row.library, row.type].filter(Boolean).join(' · ')}
+                                            </span>
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </div>
+            ) : null}
         </div>
     );
 };
