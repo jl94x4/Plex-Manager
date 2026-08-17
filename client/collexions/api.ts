@@ -448,6 +448,28 @@ class CollexionsApiService {
         );
     }
 
+    async scanCollectionWebHealth(library?: string): Promise<{
+        success: boolean;
+        scanned?: number;
+        libraries?: string[];
+        suspects?: Array<{
+            title: string;
+            library: string;
+            ratingKey?: string;
+            smart?: boolean;
+            issues: string[];
+        }>;
+        errors?: string[];
+        error?: string;
+    }> {
+        const q = library ? `?library=${encodeURIComponent(library)}` : '';
+        return withTimeout(
+            cx(`/collections/web-health${q}`),
+            COLLEXIONS_LONG_MS,
+            'Scanning collections for Plex Web crashes',
+        );
+    }
+
     async getPlexLibraries(): Promise<any[]> {
         return apiFetch(base('/plex/libraries'));
     }

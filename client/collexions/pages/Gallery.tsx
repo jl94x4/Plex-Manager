@@ -18,6 +18,7 @@ import {
     CheckSquare,
     X,
     Trash2,
+    AlertTriangle,
 } from 'lucide-react';
 import { CustomSelect } from '../../shared/ui';
 import { NoPosterPlaceholder } from '../../shared/NoPosterPlaceholder';
@@ -112,6 +113,12 @@ const Gallery: React.FC = () => {
     const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
     const [bulkBusy, setBulkBusy] = useState(false);
     const [bulkProgress, setBulkProgress] = useState<{ total: number; label: string } | null>(null);
+    const [healthBusy, setHealthBusy] = useState(false);
+    const [healthResult, setHealthResult] = useState<{
+        scanned: number;
+        suspects: Array<{ title: string; library: string; ratingKey?: string; smart?: boolean; issues: string[] }>;
+        errors?: string[];
+    } | null>(null);
     const resolveGenRef = useRef(0);
 
     useEffect(() => {
@@ -287,6 +294,41 @@ const Gallery: React.FC = () => {
         }
     };
 
+    const handleWebHealthScan = async () => {
+        setHealthBusy(true);
+        try {
+            const lib = selectedLibrary !== 'All' ? selectedLibrary : undefined;
+            const res = await api.scanCollectionWebHealth(lib);
+            if (!res.success) {
+                void appAlert(res.error || 'Scan failed.');
+                return;
+            }
+            setHealthResult({
+                scanned: Number(res.scanned || 0),
+                suspects: Array.isArray(res.suspects) ? res.suspects : [],
+                errors: res.errors,
+            });
+            if (!(res.suspects || []).length) {
+                void appAlert(`Scanned ${res.scanned || 0} collection(s). None look like a Plex Web crash.`);
+            }
+        } catch (e: any) {
+            void appAlert(e?.message || 'Scan failed.');
+        } finally {
+            setHealthBusy(false);
+        }
+    };
+
+    const handleHealthDelete = async (row: { title: string; library: string; ratingKey?: string }) => {
+        await handleDelete({
+            title: row.title,
+            library: row.library,
+            ratingKey: row.ratingKey,
+        } as PlexCollection);
+        setHealthResult((prev) => prev
+            ? { ...prev, suspects: prev.suspects.filter((s) => !(s.library === row.library && s.title === row.title && (s.ratingKey || '') === (row.ratingKey || ''))) }
+            : prev);
+    };
+
     const toggleSelect = (coll: PlexCollection) => {
         const key = collKey(coll);
         setSelectedKeys(prev => {
@@ -456,6 +498,16 @@ const Gallery: React.FC = () => {
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
+                        onClick={() => void handleWebHealthScan()}
+                        disabled={healthBusy}
+                        className="px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-100 text-sm font-bold hover:bg-amber-500/20 disabled:opacity-50 inline-flex items-center gap-1.5"
+                        title="Probe each collection poster the same way Plex Web does when you scroll Collections"
+                    >
+                        {healthBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+                        Find Plex crash
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
                         className={`px-3 py-2 rounded-lg border text-sm font-bold transition-colors ${selectMode
                             ? 'bg-plex text-background border-plex'
@@ -473,6 +525,74 @@ const Gallery: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {healthResult ? (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                            <p className="text-sm font-bold text-amber-100">
+                                Plex Web crash scan — {healthResult.scanned} collection(s)
+                            </p>
+                            <p className="text-[12px] text-muted mt-1">
+                                Suspects are collections Plex Web cannot render (bad type, broken poster, or a corrupt page-2 list entry). The A–Z jumper in Plex still loads that broken page, so use this scan and delete/fix suspects here instead of Plex Web. Filter to your Movies library first for a faster scan.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            className="text-xs font-bold text-muted hover:text-text"
+                            onClick={() => setHealthResult(null)}
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                    {healthResult.suspects.length === 0 ? (
+                        <p className="text-sm text-emerald-200">No broken collections found. If Plex Web still crashes on every letter, run Clean Bundles + Optimize Database on the Plex server, then retry.</p>
+                    ) : (
+                        <ul className="space-y-2 max-h-80 overflow-y-auto">
+                            {healthResult.suspects.map((row) => (
+                                <li
+                                    key={`${row.library}-${row.ratingKey || row.title}`}
+                                    className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-white/10 bg-black/30 p-3"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-text">
+                                            {row.title}
+                                            {row.smart ? <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-200">smart</span> : null}
+                                        </p>
+                                        <p className="text-[11px] text-muted">{row.library}{row.ratingKey ? ` · ${row.ratingKey}` : ''}</p>
+                                        <ul className="mt-1 text-[12px] text-red-200 list-disc pl-4">
+                                            {row.issues.map((issue) => <li key={issue}>{issue}</li>)}
+                                        </ul>
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-plex/15 text-plex border border-plex/30"
+                                            onClick={() => void handleFixArt({
+                                                title: row.title,
+                                                library: row.library,
+                                                ratingKey: row.ratingKey,
+                                            } as PlexCollection)}
+                                        >
+                                            Fix poster
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-600/20 text-red-300 border border-red-600/40"
+                                            onClick={() => void handleHealthDelete(row)}
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    {(healthResult.errors || []).length ? (
+                        <p className="text-[11px] text-muted">{healthResult.errors?.join(' · ')}</p>
+                    ) : null}
+                </div>
+            ) : null}
 
             {selectMode && (
                 <div className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-card/60 border border-border">

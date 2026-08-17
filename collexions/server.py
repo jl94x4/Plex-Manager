@@ -3484,6 +3484,351 @@ def unpin_collection():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+def _normalize_plex_metadata_type(raw_type):
+    """Map Plex metadata type strings/ints to a numeric id when possible."""
+    if raw_type is None:
+        return None
+    text = str(raw_type).strip().lower()
+    if not text:
+        return None
+    if text.isdigit():
+        return int(text)
+    aliases = {
+        'collection': 18,
+        'movie': 1,
+        'show': 2,
+        'season': 3,
+        'episode': 4,
+        'folder': 99,
+    }
+    return aliases.get(text)
+
+
+def _parse_plex_metadata_list(body, content_type=''):
+    """Return (items, total_size) from a Plex list response (JSON or XML)."""
+    import xml.etree.ElementTree as ET
+
+    ctype = str(content_type or '').lower()
+    if 'json' in ctype or (body or b'').lstrip().startswith(b'{'):
+        try:
+            payload = json.loads(body.decode('utf-8', errors='replace'))
+        except Exception:
+            payload = {}
+        container = payload.get('MediaContainer') or {}
+        rows = container.get('Metadata') or container.get('Directory') or []
+        if isinstance(rows, dict):
+            rows = [rows]
+        total = container.get('totalSize') or container.get('totalSize'.lower()) or container.get('size')
+        items = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            items.append({
+                'ratingKey': str(row.get('ratingKey') or row.get('ratingkey') or '').strip(),
+                'title': str(row.get('title') or row.get('tag') or '').strip(),
+                'type': row.get('type'),
+            })
+        return items, int(total or len(items))
+
+    try:
+        root = ET.fromstring(body)
+    except Exception:
+        return [], 0
+    total_raw = root.attrib.get('totalSize') or root.attrib.get('size') or '0'
+    try:
+        total = int(total_raw)
+    except Exception:
+        total = 0
+    items = []
+    for node in root:
+        tag = str(node.tag or '').split('}')[-1]
+        if tag not in {'Directory', 'Video', 'Metadata'}:
+            continue
+        items.append({
+            'ratingKey': str(node.attrib.get('ratingKey') or '').strip(),
+            'title': str(node.attrib.get('title') or node.attrib.get('tag') or '').strip(),
+            'type': node.attrib.get('type'),
+        })
+    if not total:
+        total = len(items)
+    return items, total
+
+
+def _scan_plex_web_collection_pages(plex_base, token, section_key, library_name):
+    """Mimic Plex Web's paginated Collections tab load (where type-99 crashes happen)."""
+    suspects = []
+    page_size = 50
+    start = 0
+    headers_base = plex_request_headers(token, {
+        'User-Agent': 'Mozilla/5.0 Plex Web',
+        'Accept': 'application/json',
+    })
+    params = {
+        'includeCollections': 1,
+        'includeExternalMedia': 1,
+        'X-Plex-Token': token,
+    }
+    section_id = str(section_key or '').strip()
+    if not section_id:
+        return suspects
+
+    while True:
+        headers = dict(headers_base)
+        headers['X-Plex-Container-Start'] = str(start)
+        headers['X-Plex-Container-Size'] = str(page_size)
+        try:
+            resp = requests.get(
+                f"{plex_base}/library/sections/{section_id}/collections",
+                params=params,
+                headers=headers,
+                timeout=12,
+                verify=PLEX_SSL_VERIFY,
+            )
+        except Exception as exc:
+            suspects.append({
+                'title': f'(page {start}-{start + page_size - 1})',
+                'library': library_name,
+                'ratingKey': '',
+                'smart': False,
+                'issues': [f'collections page fetch error: {exc}'],
+            })
+            break
+        if resp.status_code >= 400:
+            suspects.append({
+                'title': f'(page {start}-{start + page_size - 1})',
+                'library': library_name,
+                'ratingKey': '',
+                'smart': False,
+                'issues': [f'collections page HTTP {resp.status_code}'],
+            })
+            break
+
+        items, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
+        if start >= 50 and len(items) >= 10 and len(resp.content or b'') < 12000:
+            suspects.append({
+                'title': f'(collections page {start}+)',
+                'library': library_name,
+                'ratingKey': '',
+                'smart': False,
+                'issues': [
+                    'Plex returned a tiny collections page (matches “Asked for unknown type: 99” in Plex logs)',
+                ],
+            })
+
+        for item in items:
+            type_id = _normalize_plex_metadata_type(item.get('type'))
+            issues = []
+            if type_id not in (None, 18):
+                issues.append(f'invalid Plex type {item.get("type")!r} (expected collection/18)')
+            if not item.get('title'):
+                issues.append('missing collection title')
+            if not item.get('ratingKey'):
+                issues.append('missing ratingKey')
+            if issues:
+                suspects.append({
+                    'title': item.get('title') or f'ratingKey {item.get("ratingKey") or "?"}',
+                    'library': library_name,
+                    'ratingKey': item.get('ratingKey') or '',
+                    'smart': False,
+                    'issues': issues,
+                })
+
+        if not items or start + len(items) >= total:
+            break
+        start += page_size
+
+    return suspects
+
+
+def _probe_collection_web_crash(plex_base, token, coll, library_name):
+    """Reproduce Plex Web Collections-tab loads: metadata + poster transcode."""
+    from urllib.parse import quote
+
+    title = str(getattr(coll, 'title', '') or '').strip() or '?'
+    rk = str(getattr(coll, 'ratingKey', '') or '').strip()
+    smart = bool(getattr(coll, 'smart', False))
+    issues = []
+    headers = plex_request_headers(token, {
+        'User-Agent': 'Server Manager Portal',
+        'Accept': 'application/json',
+    })
+    if not rk:
+        issues.append('missing ratingKey')
+        return {
+            'title': title,
+            'library': library_name,
+            'ratingKey': '',
+            'smart': smart,
+            'issues': issues,
+        }
+
+    try:
+        meta = requests.get(
+            f"{plex_base}/library/metadata/{quote(rk, safe='')}",
+            params={'X-Plex-Token': token},
+            headers=headers,
+            timeout=8,
+            verify=PLEX_SSL_VERIFY,
+        )
+        if meta.status_code >= 400:
+            issues.append(f'metadata HTTP {meta.status_code}')
+        else:
+            ctype = str(meta.headers.get('Content-Type') or '')
+            if 'html' in ctype.lower() and 'xml' not in ctype.lower() and 'json' not in ctype.lower():
+                issues.append('metadata returned HTML (Plex Web crash)')
+    except requests.Timeout:
+        issues.append('metadata timed out')
+    except Exception as exc:
+        issues.append(f'metadata error: {exc}')
+
+    thumb = (
+        getattr(coll, 'thumb', None)
+        or getattr(coll, 'composite', None)
+        or getattr(coll, 'art', None)
+        or f'/library/metadata/{rk}/thumb'
+    )
+    thumb_path = str(thumb or '')
+    if thumb_path.startswith('http'):
+        from urllib.parse import urlparse
+        thumb_path = urlparse(thumb_path).path
+    if not thumb_path.startswith('/'):
+        thumb_path = f'/{thumb_path}'
+    if '?' in thumb_path:
+        thumb_path = thumb_path.split('?', 1)[0]
+    if is_safe_plex_media_path(thumb_path):
+        try:
+            transcode = requests.get(
+                f"{plex_base}/photo/:/transcode",
+                params={
+                    'url': thumb_path,
+                    'width': 240,
+                    'height': 360,
+                    'minSize': 1,
+                    'upscale': 1,
+                    'X-Plex-Token': token,
+                },
+                headers=plex_request_headers(token, {
+                    'User-Agent': 'Server Manager Portal',
+                    'Accept': 'image/*,*/*',
+                }),
+                timeout=8,
+                verify=PLEX_SSL_VERIFY,
+            )
+            if transcode.status_code >= 400:
+                issues.append(f'poster transcode HTTP {transcode.status_code}')
+            else:
+                body = transcode.content or b''
+                ctype = str(transcode.headers.get('Content-Type') or '')
+                if 'html' in ctype.lower() or body[:15].lower().startswith(b'<!doctype') or body[:6].lower().startswith(b'<html'):
+                    issues.append('poster transcode returned HTML (classic Plex Web crash)')
+                elif len(body) < 64:
+                    issues.append('poster transcode empty')
+                elif not ctype.startswith('image/') and body[:3] not in (b'\xff\xd8\xff', b'\x89PN'):
+                    issues.append(f'poster not an image ({ctype or "unknown type"})')
+        except requests.Timeout:
+            issues.append('poster transcode timed out (PhotoTranscoder)')
+        except Exception as exc:
+            issues.append(f'poster error: {exc}')
+    else:
+        issues.append('unsafe or missing poster path')
+
+    return {
+        'title': title,
+        'library': library_name,
+        'ratingKey': rk,
+        'smart': smart,
+        'issues': issues,
+    }
+
+
+@app.route('/api/collections/web-health', methods=['GET', 'POST'])
+@require_auth
+def collections_web_health():
+    """Find collections whose metadata/poster would crash Plex Web's Collections tab."""
+    payload = request.get_json(silent=True) or {}
+    library_name = str(
+        request.args.get('library') or payload.get('library') or ''
+    ).strip()
+    plex = get_plex_instance()
+    if not plex:
+        return jsonify({"success": False, "error": "Plex connection failed"}), 500
+    config = load_config()
+    url = str(config.get('plex_url') or '').rstrip('/')
+    token = str(config.get('plex_token') or '')
+    if not url or not token:
+        return jsonify({"success": False, "error": "Plex is not configured"}), 400
+
+    lib_names = [library_name] if library_name else list(config.get('library_names') or [])
+    if not lib_names:
+        try:
+            lib_names = [s.title for s in plex.library.sections() if getattr(s, 'type', '') in {'movie', 'show'}]
+        except Exception:
+            lib_names = []
+    if not lib_names:
+        return jsonify({"success": False, "error": "No libraries to scan"}), 400
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    scanned = 0
+    suspects = []
+    suspect_keys = set()
+    errors = []
+
+    def _add_suspect(row):
+        key = (
+            str(row.get('library') or ''),
+            str(row.get('ratingKey') or ''),
+            str(row.get('title') or ''),
+        )
+        if key in suspect_keys:
+            return
+        suspect_keys.add(key)
+        suspects.append(row)
+
+    for name in lib_names:
+        try:
+            library = plex.library.section(name)
+            collections = list(library.collections() or [])
+        except Exception as exc:
+            errors.append(f"{name}: {exc}")
+            continue
+        scanned += len(collections)
+        try:
+            for row in _scan_plex_web_collection_pages(
+                url, token, getattr(library, 'key', ''), name
+            ):
+                _add_suspect(row)
+        except Exception as exc:
+            errors.append(f"{name} page scan: {exc}")
+        workers = min(8, max(1, len(collections)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [
+                pool.submit(_probe_collection_web_crash, url, token, coll, name)
+                for coll in collections
+            ]
+            for fut in as_completed(futures):
+                try:
+                    row = fut.result()
+                except Exception as exc:
+                    errors.append(str(exc))
+                    continue
+                if row.get('issues'):
+                    _add_suspect(row)
+
+    suspects.sort(key=lambda row: (row.get('library') or '', row.get('title') or ''))
+    log_action(
+        f"Collections web-health: scanned {scanned}, "
+        f"{len(suspects)} suspect(s) that can crash Plex Web."
+    )
+    return jsonify({
+        "success": True,
+        "scanned": scanned,
+        "libraries": lib_names,
+        "suspects": suspects,
+        "errors": errors,
+    })
+
+
 @app.route('/api/collections/delete', methods=['POST'])
 @require_auth
 def delete_collection():
