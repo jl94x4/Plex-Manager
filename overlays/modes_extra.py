@@ -194,7 +194,14 @@ def _restore_show_mode(
     if not backup.exists():
         return False
     try:
-        show.uploadPoster(filepath=str(backup))
+        from core import _upload_poster_resilient
+
+        _upload_poster_resilient(
+            show,
+            backup,
+            progress=progress,
+            title=getattr(show, "title", key),
+        )
         _progress(progress, f"Restored {mode} backup: {getattr(show, 'title', key)}")
         _clear_mode_backup(paths, mode, key)
         return True

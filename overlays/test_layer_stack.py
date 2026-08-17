@@ -112,6 +112,18 @@ class LayerStackTests(unittest.TestCase):
         data = json.loads(log_path.read_text(encoding="utf-8"))
         self.assertNotIn(self.key, data)
 
+    def test_compress_oversized_poster_for_plex(self):
+        from core import PLEX_POSTER_MAX_BYTES, _compress_poster_for_plex
+
+        with tempfile.TemporaryDirectory() as td:
+            src = Path(td) / "large.png"
+            img = Image.effect_noise((4000, 3000), 64).convert("RGB")
+            img.save(src, format="PNG", compress_level=0)
+            self.assertGreater(src.stat().st_size, PLEX_POSTER_MAX_BYTES)
+            dest = Path(td) / "large_plex.jpg"
+            _compress_poster_for_plex(src, dest)
+            self.assertLessEqual(dest.stat().st_size, PLEX_POSTER_MAX_BYTES)
+
 
 if __name__ == "__main__":
     unittest.main()

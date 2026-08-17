@@ -353,7 +353,9 @@ def upload_composed(
     temp = Path(paths["preview"]) / f"temp_{safe}.png"
     composed.save(temp)
     try:
-        show.uploadPoster(filepath=str(temp))
+        from core import _upload_poster_resilient
+
+        _upload_poster_resilient(show, temp, progress=progress, title=label)
         _progress(
             progress,
             f"Uploaded stack ({','.join(entry['activeLayers']) or 'clean'}): {label}",
@@ -604,11 +606,16 @@ def remove_banner_layer(
         )
         return True
 
-    from core import _sync_banner_overlay_label
+    from core import _sync_banner_overlay_label, _upload_poster_resilient
 
     if base.exists():
         try:
-            show.uploadPoster(filepath=str(base))
+            _upload_poster_resilient(
+                show,
+                base,
+                progress=progress,
+                title=getattr(show, "title", key),
+            )
             _progress(progress, f"Restored clean base: {getattr(show, 'title', key)}")
             _sync_banner_overlay_label(
                 show,
@@ -629,7 +636,12 @@ def remove_banner_layer(
         legacy_file = Path(paths["backups"]) / mode / key / "show.png"
     if legacy_file.exists():
         try:
-            show.uploadPoster(filepath=str(legacy_file))
+            _upload_poster_resilient(
+                show,
+                legacy_file,
+                progress=progress,
+                title=getattr(show, "title", key),
+            )
             _progress(progress, f"Restored legacy {mode} backup: {getattr(show, 'title', key)}")
             _sync_banner_overlay_label(
                 show,
@@ -655,7 +667,7 @@ def restore_clean_base(
     config: dict | None = None,
 ) -> bool:
     """Upload clean base and optionally wipe the layer registry (reset paths)."""
-    from core import _sync_banner_overlay_label
+    from core import _sync_banner_overlay_label, _upload_poster_resilient
 
     key = str(rating_key)
     if clear_layers:
@@ -668,7 +680,12 @@ def restore_clean_base(
             _copy_if_exists(legacy, base)
     if base.exists():
         try:
-            show.uploadPoster(filepath=str(base))
+            _upload_poster_resilient(
+                show,
+                base,
+                progress=progress,
+                title=getattr(show, "title", key),
+            )
             _progress(progress, f"Restored clean base: {getattr(show, 'title', key)}")
             _sync_banner_overlay_label(
                 show,

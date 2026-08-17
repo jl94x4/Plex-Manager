@@ -215,7 +215,7 @@ def _restore_from_backup(show, paths: dict, rating_key: str, progress: ProgressF
 
     if show_path.exists():
         try:
-            show.uploadPoster(filepath=str(show_path))
+            _upload_poster_resilient(show, show_path, progress=progress, title=getattr(show, "title", rating_key))
             restored_any = True
             _progress(progress, f"Restored show poster from backup: {show.title}")
         except Exception as exc:
@@ -242,7 +242,12 @@ def _restore_from_backup(show, paths: dict, rating_key: str, progress: ProgressF
 
     if season_path.exists() and season_item is not None:
         try:
-            season_item.uploadPoster(filepath=str(season_path))
+            _upload_poster_resilient(
+                season_item,
+                season_path,
+                progress=progress,
+                title=f"{getattr(show, 'title', rating_key)} S{getattr(season_item, 'index', '')}",
+            )
             restored_any = True
             _progress(progress, f"Restored season poster from backup: {show.title}")
         except Exception as exc:
@@ -920,8 +925,8 @@ def _upload_poster_resilient(
                     f"Plex poster upload failed for {label} "
                     f"(attempt {attempt + 1}/{retries}): {exc}",
                 )
-                # Oversized / rejected payload → compress instead of retrying the same file.
-                if compressed is None:
+                # Only compress when Plex rejected an oversized payload — not on every 500.
+                if compressed is None and (size > PLEX_POSTER_MAX_BYTES or _is_oversized_poster_error(exc)):
                     try:
                         compressed = path.with_name(f"{path.stem}_plex.jpg")
                         _compress_poster_for_plex(path, compressed)
@@ -1744,7 +1749,12 @@ def _restore_season_episode_from_backup(show, paths: dict, show_key: str, progre
     if season_item is None:
         return False
     try:
-        season_item.uploadPoster(filepath=str(season_path))
+        _upload_poster_resilient(
+            season_item,
+            season_path,
+            progress=progress,
+            title=f"{getattr(show, 'title', show_key)} S{getattr(season_item, 'index', '')}",
+        )
         _progress(progress, f"Restored season poster from New Episode backup: {getattr(show, 'title', show_key)}")
         _clear_season_episode_backup(paths, show_key)
         return True
@@ -1821,7 +1831,12 @@ def process_season_new_episode_overlay(
         temp = paths["preview"] / f"temp_{safe}_season_ns.png"
         result.save(temp)
         try:
-            latest.uploadPoster(filepath=str(temp))
+            _upload_poster_resilient(
+                latest,
+                temp,
+                progress=progress,
+                title=f"{show.title} S{latest.index}",
+            )
             _progress(progress, f"Uploaded season New Season: {show.title} S{latest.index}")
             _sync_banner_overlay_label(
                 latest,
@@ -1909,7 +1924,12 @@ def _restore_episode_from_backup(episode, paths: dict, rating_key: str, progress
     if not thumb_path.exists():
         return False
     try:
-        episode.uploadPoster(filepath=str(thumb_path))
+        _upload_poster_resilient(
+            episode,
+            thumb_path,
+            progress=progress,
+            title=getattr(episode, "title", rating_key),
+        )
         _progress(progress, f"Restored episode thumb from backup: {getattr(episode, 'title', rating_key)}")
         _clear_episode_backup(paths, rating_key)
         return True
@@ -2281,7 +2301,7 @@ def process_episode_overlay(
         temp = paths["previewEpisodes"] / f"temp_{safe}.png"
         result.save(temp)
         try:
-            episode.uploadPoster(filepath=str(temp))
+            _upload_poster_resilient(episode, temp, progress=progress, title=label)
             _progress(progress, f"Uploaded episode thumb: {label}")
             _sync_banner_overlay_label(
                 episode,
