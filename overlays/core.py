@@ -989,6 +989,84 @@ def _season_index(season) -> int | None:
         return None
 
 
+def _within_overlay_window(
+    cutoff: datetime,
+    *,
+    aired: datetime | None = None,
+    added: datetime | None = None,
+) -> bool:
+    """True when either air date or Plex addedAt falls inside the overlay window."""
+    for dt in (aired, added):
+        if dt is not None and dt >= cutoff:
+            return True
+    return False
+
+
+def _first_episode(season):
+    try:
+        episodes = season.episodes()
+    except Exception:
+        return None
+    return next(
+        (ep for ep in episodes or [] if getattr(ep, "index", None) in (1, "1")),
+        None,
+    )
+
+
+def premiere_show_eligible(
+    show,
+    cutoff: datetime,
+    *,
+    skip_kometa: bool = False,
+    resolver=None,
+) -> tuple[bool, dict]:
+    """Recently Added — first-season premiere only (S1 E01 aired or added within window)."""
+    meta = {
+        "seasonIndex": 1,
+        "airedAt": None,
+        "addedAt": None,
+        "reason": None,
+        "airDateSource": None,
+    }
+    try:
+        if skip_kometa and _has_kometa_overlay_label(show):
+            meta["reason"] = "kometa_overlay_label"
+            return False, meta
+        regular = _regular_seasons(show)
+        if len(regular) != 1:
+            meta["reason"] = "not_premiere"
+            return False, meta
+        season = regular[0]
+        if _season_index(season) != 1:
+            meta["reason"] = "not_premiere"
+            return False, meta
+        episode1 = _first_episode(season)
+        if not episode1:
+            meta["reason"] = "no_episodes"
+            return False, meta
+        aired = _as_datetime(getattr(episode1, "originallyAvailableAt", None))
+        added = _as_datetime(getattr(episode1, "addedAt", None)) or _as_datetime(
+            getattr(show, "addedAt", None)
+        )
+        source = "plex" if aired is not None else None
+        if aired is None and resolver is not None:
+            aired = resolver.resolve_episode_aired(episode1, show)
+            if aired is not None:
+                source = "tmdb"
+        if aired is not None:
+            meta["airedAt"] = aired.isoformat()
+        if added is not None:
+            meta["addedAt"] = added.isoformat()
+        meta["airDateSource"] = source
+        if not _within_overlay_window(cutoff, aired=aired, added=added):
+            meta["reason"] = "aged_out" if (aired or added) else "no_date"
+            return False, meta
+        return True, meta
+    except Exception as exc:
+        meta["reason"] = f"error:{exc}"
+        return False, meta
+
+
 def _is_returning_season(season, show=None) -> bool:
     """New Season badges are only for season 2+ — never the show's first season."""
     idx = _season_index(season)
@@ -1053,7 +1131,13 @@ def should_have_overlay(
     skip_kometa: bool,
     resolver=None,
 ) -> tuple[bool, dict]:
-    meta = {"seasonIndex": None, "airedAt": None, "reason": None, "airDateSource": None}
+    meta = {
+        "seasonIndex": None,
+        "airedAt": None,
+        "addedAt": None,
+        "reason": None,
+        "airDateSource": None,
+    }
     try:
         if skip_kometa and _has_kometa_overlay_label(show):
             meta["reason"] = "kometa_overlay_label"
@@ -1066,25 +1150,24 @@ def should_have_overlay(
         if not _is_returning_season(latest, show):
             meta["reason"] = "first_season"
             return False, meta
-        episodes = latest.episodes()
-        episode1 = next((ep for ep in episodes if ep.index == 1), None)
+        episode1 = _first_episode(latest)
         if not episode1:
-            meta["reason"] = "no_air_date"
+            meta["reason"] = "no_episodes"
             return False, meta
-        plex_aired = _as_datetime(getattr(episode1, "originallyAvailableAt", None))
-        aired = plex_aired
+        aired = _as_datetime(getattr(episode1, "originallyAvailableAt", None))
+        added = _as_datetime(getattr(episode1, "addedAt", None))
         source = "plex" if aired is not None else None
         if aired is None and resolver is not None:
             aired = resolver.resolve_episode_aired(episode1, show)
             if aired is not None:
                 source = "tmdb"
-        if aired is None:
-            meta["reason"] = "no_air_date"
-            return False, meta
-        meta["airedAt"] = aired.isoformat()
+        if aired is not None:
+            meta["airedAt"] = aired.isoformat()
+        if added is not None:
+            meta["addedAt"] = added.isoformat()
         meta["airDateSource"] = source
-        if aired < cutoff:
-            meta["reason"] = "aged_out"
+        if not _within_overlay_window(cutoff, aired=aired, added=added):
+            meta["reason"] = "aged_out" if (aired or added) else "no_date"
             return False, meta
         return True, meta
     except Exception as exc:
@@ -1408,66 +1491,73 @@ def discover_eligible_shows(
                 # Never badge season 1 (or specials) — "New Season" means a return.
                 if not _is_returning_season(latest, show):
                     continue
-                if aired is None or aired < cutoff:
+                added = _as_datetime(getattr(ep, "addedAt", None))
+                if not _within_overlay_window(cutoff, aired=aired, added=added):
                     continue
                 should_have.add(key)
                 show_by_key[key] = show
                 meta_by_key[key] = {
                     "seasonIndex": latest.index,
-                    "airedAt": aired.isoformat(),
+                    "airedAt": aired.isoformat() if aired else None,
+                    "addedAt": added.isoformat() if added else None,
                     "airDateSource": source,
                     "reason": None,
                     "library": section.title,
                 }
 
-            # TMDB fallback: recently-added E01s missing Plex air dates.
-            if resolver is not None and getattr(resolver, "active", False):
+            # Plex addedAt / TMDB fallback for latest-season E01 premieres.
+            try:
+                recent = _search_recently_added_episodes(section, cutoff, max_results=250)
+            except Exception as exc:
+                _progress(progress, f"{section.title}: addedAt/TMDB premiere fallback failed ({exc})")
+                recent = []
+            e01s = [
+                ep for ep in recent
+                if getattr(ep, "index", None) in (1, "1")
+            ]
+            if e01s:
+                _progress(
+                    progress,
+                    f"{section.title}: checking {len(e01s)} recently-added E01(s)…",
+                )
+            for ep in e01s:
                 try:
-                    recent = _search_recently_added_episodes(section, cutoff, max_results=200)
-                except Exception as exc:
-                    _progress(progress, f"{section.title}: TMDB premiere fallback scan failed ({exc})")
-                    recent = []
-                e01s = [
-                    ep for ep in recent
-                    if getattr(ep, "index", None) in (1, "1")
-                    and _as_datetime(getattr(ep, "originallyAvailableAt", None)) is None
-                ]
-                if e01s:
-                    _progress(
-                        progress,
-                        f"{section.title}: TMDB fallback checking {len(e01s)} undated E01(s)…",
-                    )
-                for ep in e01s:
-                    try:
-                        show = ep.show()
-                        season = ep.season()
-                    except Exception:
-                        continue
-                    key = str(getattr(show, "ratingKey", "") or "")
-                    if not key or key in should_have:
-                        continue
-                    if skip_kometa and _has_kometa_overlay_label(show):
-                        continue
-                    try:
-                        latest = _latest_season(show)
-                    except Exception:
-                        continue
-                    if latest is None or str(latest.ratingKey) != str(season.ratingKey):
-                        continue
-                    if not _is_returning_season(latest, show):
-                        continue
+                    show = ep.show()
+                    season = ep.season()
+                except Exception:
+                    continue
+                key = str(getattr(show, "ratingKey", "") or "")
+                if not key or key in should_have:
+                    continue
+                if skip_kometa and _has_kometa_overlay_label(show):
+                    continue
+                try:
+                    latest = _latest_season(show)
+                except Exception:
+                    continue
+                if latest is None or str(latest.ratingKey) != str(season.ratingKey):
+                    continue
+                if not _is_returning_season(latest, show):
+                    continue
+                aired = _as_datetime(getattr(ep, "originallyAvailableAt", None))
+                added = _as_datetime(getattr(ep, "addedAt", None))
+                source = "plex" if aired is not None else None
+                if aired is None and resolver is not None and getattr(resolver, "active", False):
                     aired = resolver.resolve_episode_aired(ep, show)
-                    if aired is None or aired < cutoff:
-                        continue
-                    should_have.add(key)
-                    show_by_key[key] = show
-                    meta_by_key[key] = {
-                        "seasonIndex": latest.index,
-                        "airedAt": aired.isoformat(),
-                        "airDateSource": "tmdb",
-                        "reason": None,
-                        "library": section.title,
-                    }
+                    if aired is not None:
+                        source = "tmdb"
+                if not _within_overlay_window(cutoff, aired=aired, added=added):
+                    continue
+                should_have.add(key)
+                show_by_key[key] = show
+                meta_by_key[key] = {
+                    "seasonIndex": latest.index,
+                    "airedAt": aired.isoformat() if aired else None,
+                    "addedAt": added.isoformat() if added else None,
+                    "airDateSource": source or ("addedAt" if added else None),
+                    "reason": None,
+                    "library": section.title,
+                }
             continue
 
         # Slow fallback (broken date filters / older plexapi).
@@ -1531,7 +1621,7 @@ def discover_eligible_shows_for_keys(
 
 def scan_library(config: dict, progress: ProgressFn | None = None) -> dict:
     plex = _connect(config)
-    days = int(config.get("newSeasonDays") or config.get("new_season_days") or 21)
+    days = int(config.get("newSeasonDays") or config.get("new_season_days") or 7)
     cutoff = datetime.now() - timedelta(days=max(1, days))
     skip_kometa = _as_bool(config.get("skipIfKometaOverlayLabel", config.get("skip_if_kometa_overlay_label")), True)
     paths = _resolve_paths(config)
@@ -2786,7 +2876,7 @@ def run_overlays(
     if run_bundle == "recently":
         return _run_recently_bundle(plex, config, paths, preview_mode, progress)
 
-    days = int(config.get("newSeasonDays") or config.get("new_season_days") or 21)
+    days = int(config.get("newSeasonDays") or config.get("new_season_days") or 7)
     cutoff = datetime.now() - timedelta(days=max(1, days))
     skip_kometa = _as_bool(config.get("skipIfKometaOverlayLabel", config.get("skip_if_kometa_overlay_label")), True)
     new_season_on = _as_bool(config.get("newSeasonEnabled", config.get("new_season_enabled")), True)

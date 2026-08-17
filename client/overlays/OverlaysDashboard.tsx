@@ -125,7 +125,7 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     enabled: true,
     previewMode: false,
     newSeasonEnabled: true,
-    newSeasonDays: 21,
+    newSeasonDays: 7,
     newSeasonWatchNowStyle: false,
     newEpisodeEnabled: true,
     newEpisodeDays: 6,
@@ -2402,10 +2402,10 @@ export const OverlaysDashboard: React.FC = () => {
                                         min={1}
                                         max={365}
                                         className={fieldInputClass}
-                                        value={configDraft.newSeasonDays ?? 21}
+                                        value={configDraft.newSeasonDays ?? 7}
                                         onChange={(e) => setConfigDraft((prev) => ({
                                             ...prev,
-                                            newSeasonDays: Math.max(1, Math.min(365, Number(e.target.value) || 21)),
+                                            newSeasonDays: Math.max(1, Math.min(365, Number(e.target.value) || 7)),
                                         }))}
                                     />
                                     <span className="mt-1 block text-[11px] text-muted">{t('overlays.settings.windowHint')}</span>

@@ -4584,6 +4584,27 @@ def _trakt_headers(trakt_id):
     }
 
 
+def _trakt_api_error_message(status_code, username=None, slug=None):
+    """Human-readable Trakt API failure (see trakt.tv API status codes)."""
+    if status_code == 403:
+        return (
+            'Trakt rejected the request (403). Check ColleXions → Config → Trakt Client ID: '
+            'paste the Client ID from trakt.tv/oauth/applications (not the secret) and ensure '
+            'the app is approved.'
+        )
+    if status_code == 401:
+        return (
+            'Trakt requires sign-in for this list or profile (401). Only public lists work '
+            'without OAuth; try Search Trakt lists or import via MDBList instead.'
+        )
+    if status_code == 404:
+        target = f'{username}/{slug}' if username and slug else 'that list'
+        return f'Trakt list not found ({target}). Try Search Trakt lists to pick the correct slug.'
+    if status_code == 429:
+        return 'Trakt rate limit exceeded (429). Wait a minute and try again.'
+    return f'Trakt API error: {status_code}'
+
+
 def _parse_trakt_list_url(url):
     """Parse https://trakt.tv/users/{user}/lists/{slug} → (username, slug)."""
     parts = [p for p in str(url or '').strip().split('/') if p]
@@ -4612,7 +4633,7 @@ def _fetch_trakt_list_items(trakt_id, username, slug, max_pages=20):
         )
         if resp.status_code != 200:
             if page == 1:
-                raise RuntimeError(f"Trakt API error: {resp.status_code}")
+                raise RuntimeError(_trakt_api_error_message(resp.status_code, username, slug))
             break
         data = resp.json() or []
         if not data:
@@ -4654,7 +4675,7 @@ def search_trakt_lists():
             timeout=15,
         )
         if resp.status_code != 200:
-            return jsonify({'error': f'Trakt API error: {resp.status_code}'}), 400
+            return jsonify({'error': _trakt_api_error_message(resp.status_code)}), 400
         results = []
         for row in resp.json() or []:
             lst = row.get('list') or {}

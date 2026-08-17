@@ -527,8 +527,20 @@ def run_live_overlays(
     }
 
 
-def discover_recently_added(plex, config: dict, sections, progress: ProgressFn | None = None):
-    from core import _as_datetime, _has_kometa_overlay_label, _only_rating_keys, _fetch_plex_item, _library_title
+def discover_recently_added(
+    plex,
+    config: dict,
+    sections,
+    progress: ProgressFn | None = None,
+    resolver=None,
+):
+    from core import (
+        _has_kometa_overlay_label,
+        _only_rating_keys,
+        _fetch_plex_item,
+        _library_title,
+        premiere_show_eligible,
+    )
 
     days = int(config.get("recentlyAddedDays") or config.get("recently_added_days") or 7)
     cutoff = datetime.now() - timedelta(days=max(1, days))
@@ -536,25 +548,29 @@ def discover_recently_added(plex, config: dict, sections, progress: ProgressFn |
     only_keys = _only_rating_keys(config)
     should: dict[str, dict] = {}
 
-    def _consider(show, library: str, added) -> None:
+    def _consider(show, library: str) -> None:
         key = str(getattr(show, "ratingKey", "") or "")
         if not key or key in should:
             return
-        if skip_kometa and _has_kometa_overlay_label(show):
+        ok, meta = premiere_show_eligible(
+            show,
+            cutoff,
+            skip_kometa=skip_kometa,
+            resolver=resolver,
+        )
+        if not ok:
             if only_keys:
-                _progress(progress, f"{getattr(show, 'title', key)}: skipped (Overlay label)")
-            return
-        if added is None or added < cutoff:
-            if only_keys:
+                reason = meta.get("reason") or "ineligible"
                 _progress(
                     progress,
-                    f"{getattr(show, 'title', key)}: not recently added — nothing stamped",
+                    f"{getattr(show, 'title', key)}: not premiere Recently Added ({reason})",
                 )
             return
         should[key] = {
             "show": show,
             "library": library,
-            "addedAt": added.isoformat(),
+            "addedAt": meta.get("addedAt"),
+            "airedAt": meta.get("airedAt"),
         }
 
     if only_keys:
@@ -571,28 +587,21 @@ def discover_recently_added(plex, config: dict, sections, progress: ProgressFn |
                     show = item.show()
             except Exception:
                 show = item
-            show_type = str(getattr(show, "type", "") or "").lower()
-            if show_type not in {"show", "movie"} and itype not in {"show", "movie"}:
-                # Prefer show-level; movies are allowed for Layer-style cards but Recently is TV-scoped.
-                pass
             if str(getattr(show, "type", "") or "").lower() != "show":
                 _progress(progress, f"{getattr(show, 'title', key)}: not a TV show — Recently Added skipped")
                 continue
-            added = _as_datetime(getattr(item, "addedAt", None)) or _as_datetime(getattr(show, "addedAt", None))
-            _consider(show, _library_title(show), added)
+            _consider(show, _library_title(show))
         _progress(progress, f"Recently Added eligible (scoped): {len(should)}")
         return should
 
     for section in sections:
         try:
-            # Prefer section recentlyAdded when available
             items = []
             try:
                 items = list(section.recentlyAdded(maxresults=200) or [])
             except Exception:
                 items = list(section.all() or [])
             for item in items:
-                # Want show-level keys
                 show = item
                 itype = str(getattr(item, "type", "") or getattr(item, "TYPE", "") or "").lower()
                 try:
@@ -600,11 +609,12 @@ def discover_recently_added(plex, config: dict, sections, progress: ProgressFn |
                         show = item.show()
                 except Exception:
                     show = item
-                added = _as_datetime(getattr(item, "addedAt", None)) or _as_datetime(getattr(show, "addedAt", None))
-                _consider(show, section.title, added)
+                if str(getattr(show, "type", "") or "").lower() != "show":
+                    continue
+                _consider(show, section.title)
         except Exception as exc:
             _progress(progress, f"Recently Added scan failed for {getattr(section, 'title', '?')}: {exc}")
-    _progress(progress, f"Recently Added eligible: {len(should)}")
+    _progress(progress, f"Recently Added eligible (premiere S1): {len(should)}")
     return should
 
 
@@ -646,10 +656,14 @@ def run_recently_added_overlays(
 
     from core import _iter_tv_sections
 
+    from tmdb_dates import create_resolver_from_config
+
+    resolver = create_resolver_from_config(config, paths=paths, progress=progress)
     reserved = reserved_keys or set()
     log = _load_log(log_path)
     asset = _recently_badge_path(paths, config)
     if not asset.exists():
+        resolver.save()
         return {"recentlyAddedEnabled": True, "recentlyAdded": 0, "recentlyRemoved": 0, "recentlyTotal": 0, "recentlyErrors": [f"missing overlay asset ({asset.name})"]}
 
     badge = Image.open(asset)
@@ -657,7 +671,7 @@ def run_recently_added_overlays(
     sections = list(_iter_tv_sections(plex, config, bundle="recently"))
     if not sections and not scoped_run:
         _progress(progress, "No TV libraries in Recently Added scope (check the library selector on this card).")
-    candidates = discover_recently_added(plex, config, sections, progress)
+    candidates = discover_recently_added(plex, config, sections, progress, resolver=resolver)
     should = {k: v for k, v in candidates.items() if k not in reserved}
 
     added = removed = 0
@@ -735,6 +749,7 @@ def run_recently_added_overlays(
         _progress(progress, "Scoped Recently Added pass — prune of other titles skipped")
 
     _save_log(log_path, log)
+    resolver.save()
     return {
         "recentlyAddedEnabled": True,
         "recentlyAdded": added,
