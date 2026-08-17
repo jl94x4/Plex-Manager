@@ -15579,9 +15579,17 @@ const aggregateAnalyticsWindow = (historyItems, { afterTs = 0, beforeTs = null }
         }
 
         let deviceName = 'Unknown Platform';
-        if (item.deviceID && devicesMap[item.deviceID]) deviceName = devicesMap[item.deviceID];
-        else if (item.Player && item.Player.product) deviceName = item.Player.product;
-        else if (item.client) deviceName = item.client;
+        const deviceKey = item.deviceID ?? item.deviceId ?? item.machine_id;
+        if (deviceKey != null && deviceKey !== '') {
+            const mapped = devicesMap[deviceKey] || devicesMap[String(deviceKey)];
+            if (mapped) deviceName = mapped;
+        }
+        if (deviceName === 'Unknown Platform') {
+            const product = item.Player?.product || item.player || item.client || null;
+            const platform = item.Player?.platform || item.platform || null;
+            if (product) deviceName = product;
+            else if (platform) deviceName = platform;
+        }
 
         if (!deviceCounts[deviceName]) deviceCounts[deviceName] = { name: deviceName, plays: 0 };
         deviceCounts[deviceName].plays++;
@@ -15875,7 +15883,7 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
         })).sort((a, b) => b.plays - a.plays).slice(0, 10);
 
         const topDevices = (Array.isArray(mostUsedClients) ? mostUsedClients : []).map((device, index) => ({
-            name: device.Client || device.Name || `Client ${index + 1}`,
+            name: device.Client || device.DeviceName || device.Name || device.AppName || `Client ${index + 1}`,
             plays: toNumber(device.Plays ?? device.Count, 0),
         })).sort((a, b) => b.plays - a.plays).slice(0, 10);
 
@@ -16091,6 +16099,8 @@ const slimPlexHistoryItem = (item) => {
         accountID: item.accountID,
         deviceID: item.deviceID,
         client: item.client,
+        platform: item.platform || (item.Player && item.Player.platform) || null,
+        player: item.player || (item.Player && (item.Player.product || item.Player.title)) || null,
         librarySectionID: item.librarySectionID,
         librarySectionTitle: item.librarySectionTitle,
         parentKey: item.parentKey,
@@ -16112,8 +16122,12 @@ const slimPlexHistoryItem = (item) => {
     if (Array.isArray(item.Genre) && item.Genre.length) {
         slim.Genre = item.Genre.map((g) => (g && g.tag ? { tag: g.tag } : null)).filter(Boolean);
     }
-    if (item.Player && item.Player.product) {
-        slim.Player = { product: item.Player.product };
+    if (item.Player && (item.Player.product || item.Player.platform || item.Player.title)) {
+        slim.Player = {
+            product: item.Player.product || item.Player.title || null,
+            platform: item.Player.platform || null,
+            title: item.Player.title || null,
+        };
     }
     return slim;
 };
@@ -20211,7 +20225,11 @@ async function calculateAnalyticsStats() {
 
         const devicesMap = {};
         if (devicesRes && devicesRes.MediaContainer && devicesRes.MediaContainer.Device) {
-            devicesRes.MediaContainer.Device.forEach(d => devicesMap[d.id] = d.name || d.platform || 'Unknown Device');
+            devicesRes.MediaContainer.Device.forEach((d) => {
+                const id = d?.id != null ? String(d.id) : '';
+                if (!id) return;
+                devicesMap[id] = d.name || d.platform || d.product || 'Unknown Device';
+            });
         }
 
         const fetchRichMetadata = async (c) => {
