@@ -100,6 +100,23 @@ type DiscoveryFactPayload = {
 
 const LOCAL_WATCHLIST_KEY = 'portal.companion.watchlist.v1';
 const LOCAL_ROOM_STATE_KEY = 'portal.companion.room.v1';
+const LOCAL_COMPANION_EXPANDED_KEY = 'portal.companion.expanded.v1';
+
+const readCompanionExpanded = (userKey: string): boolean => {
+    const key = String(userKey || '').trim();
+    if (!key) return false;
+    const stored = readJsonStorage<Record<string, boolean>>(LOCAL_COMPANION_EXPANDED_KEY, {});
+    if (!(key in stored)) return false;
+    return stored[key] === true;
+};
+
+const writeCompanionExpanded = (userKey: string, expanded: boolean): void => {
+    const key = String(userKey || '').trim();
+    if (!key) return;
+    const stored = readJsonStorage<Record<string, boolean>>(LOCAL_COMPANION_EXPANDED_KEY, {});
+    stored[key] = expanded;
+    writeJsonStorage(LOCAL_COMPANION_EXPANDED_KEY, stored);
+};
 
 const posterUrl = (path?: string | null, size = 'w342') => (
     path ? `https://image.tmdb.org/t/p/${size}${path}` : ''
@@ -254,7 +271,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     const storageKey = `${userKey}:${mediaType}:${tmdbId}`;
     const basePath = Number.isFinite(tmdbId) && tmdbId > 0 ? `/discovery/${mediaType}/${tmdbId}` : '';
 
-    const [open, setOpen] = useState(true);
+    const [open, setOpen] = useState(() => readCompanionExpanded(userKey));
     const [tab, setTab] = useState<'companion' | 'deep-dive' | 'watch-room'>('companion');
     const [payload, setPayload] = useState<CompanionPayload | null>(null);
     const [loading, setLoading] = useState(false);
@@ -274,9 +291,20 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     const year = formatYear(payload?.details?.release_date || payload?.details?.first_air_date);
 
     useEffect(() => {
-        setOpen(true);
+        setOpen(readCompanionExpanded(userKey));
+    }, [userKey]);
+
+    useEffect(() => {
         setTab('companion');
     }, [mediaType, tmdbId, seasonNumber, episodeNumber]);
+
+    const toggleOpen = useCallback(() => {
+        setOpen((prev) => {
+            const next = !prev;
+            writeCompanionExpanded(userKey, next);
+            return next;
+        });
+    }, [userKey]);
 
     useEffect(() => {
         const saved = readJsonStorage<Record<string, any>>(LOCAL_WATCHLIST_KEY, {});
@@ -909,7 +937,12 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     return (
         <div className="glass-card mt-4 p-3 sm:p-4 md:p-5 border border-emerald-500/25 bg-black/25">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <div>
+                <button
+                    type="button"
+                    onClick={toggleOpen}
+                    className="min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-white/5 transition-colors"
+                    aria-expanded={open}
+                >
                     <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-emerald-200 flex items-center gap-2">
                         <Sparkles className="w-4 h-4" />
                         {t('homeDashboard.nowPlayingCompanion.header.title')}
@@ -917,12 +950,13 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                     <p className="text-xs text-white/70 mt-1">
                         {year ? t('homeDashboard.nowPlayingCompanion.header.subtitleWithYear', { title, year }) : t('homeDashboard.nowPlayingCompanion.header.subtitle', { title })}
                     </p>
-                </div>
+                </button>
                 <div className="flex items-center justify-end">
                     <button
                         type="button"
-                        onClick={() => setOpen((prev) => !prev)}
+                        onClick={toggleOpen}
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-white/20 bg-white/5 text-xs font-bold text-white hover:bg-white/10 transition-colors"
+                        aria-expanded={open}
                     >
                         {open ? (
                             <>
