@@ -400,7 +400,7 @@ def apply_banner_layer(
 
     if not preview_mode:
         try:
-            hydrate_layers_from_logs(paths, key, config=config, progress=progress)
+            hydrate_layers_from_logs(paths, key, config=config, progress=progress, show=show)
         except Exception as exc:
             _progress(progress, f"Hydrate before apply skipped: {exc}")
 
@@ -451,6 +451,7 @@ def hydrate_layers_from_logs(
     *,
     config: dict | None = None,
     progress: ProgressFn | None = None,
+    show=None,
 ) -> None:
     """Seed registry layers from mode logs when upgrading from full-poster backups.
 
@@ -509,22 +510,40 @@ def hydrate_layers_from_logs(
     # New Season
     season_entry = _log("log").get(key)
     if isinstance(season_entry, dict) and not season_entry.get("preview_only") and "newseason" not in layers:
-        try:
-            from core import _load_show_overlay_image, _effective_placement
-            overlay = _load_show_overlay_image(
-                config, paths, season_index=season_entry.get("seasonIndex")
-            )
-            preset = str(season_entry.get("presetId") or config.get("overlayPresetId") or "new-season")
-            placement = _effective_placement(config, "show", preset)
-            set_layer(
-                paths, key, "newseason",
-                badge=overlay,
-                placement=placement,
-                meta={"seasonIndex": season_entry.get("seasonIndex"), "presetId": preset},
-            )
-            _progress(progress, f"Hydrate: seeded newseason layer for {key}")
-        except Exception as exc:
-            _progress(progress, f"Hydrate newseason failed for {key}: {exc}")
+        seed_newseason = True
+        if show is not None:
+            try:
+                from core import _is_returning_season, _latest_season
+
+                latest = _latest_season(show)
+                if latest is None or not _is_returning_season(latest, show):
+                    seed_newseason = False
+            except Exception:
+                seed_newseason = False
+        else:
+            logged_idx = season_entry.get("seasonIndex")
+            try:
+                if logged_idx is not None and int(logged_idx) < 2:
+                    seed_newseason = False
+            except (TypeError, ValueError):
+                pass
+        if seed_newseason:
+            try:
+                from core import _load_show_overlay_image, _effective_placement
+                overlay = _load_show_overlay_image(
+                    config, paths, season_index=season_entry.get("seasonIndex")
+                )
+                preset = str(season_entry.get("presetId") or config.get("overlayPresetId") or "new-season")
+                placement = _effective_placement(config, "show", preset)
+                set_layer(
+                    paths, key, "newseason",
+                    badge=overlay,
+                    placement=placement,
+                    meta={"seasonIndex": season_entry.get("seasonIndex"), "presetId": preset},
+                )
+                _progress(progress, f"Hydrate: seeded newseason layer for {key}")
+            except Exception as exc:
+                _progress(progress, f"Hydrate newseason failed for {key}: {exc}")
 
     # Recently
     recently_entry = _log("recentlyAddedLog").get(key)

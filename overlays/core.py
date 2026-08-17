@@ -958,12 +958,25 @@ def _upload_poster_resilient(
                 pass
 
 
+def _regular_seasons(show) -> list:
+    """Seasons 1+ — excludes Specials (index 0)."""
+    out = []
+    try:
+        seasons = show.seasons()
+    except Exception:
+        return out
+    for season in seasons or []:
+        idx = _season_index(season)
+        if idx is not None and idx >= 1:
+            out.append(season)
+    return out
+
+
 def _latest_season(show):
-    seasons = show.seasons()
-    valid = [s for s in seasons if s.index is not None]
-    if not valid:
+    regular = _regular_seasons(show)
+    if not regular:
         return None
-    return max(valid, key=lambda s: s.index)
+    return max(regular, key=lambda s: s.index)
 
 
 def _season_index(season) -> int | None:
@@ -976,10 +989,21 @@ def _season_index(season) -> int | None:
         return None
 
 
-def _is_returning_season(season) -> bool:
+def _is_returning_season(season, show=None) -> bool:
     """New Season badges are only for season 2+ — never the show's first season."""
     idx = _season_index(season)
-    return idx is not None and idx >= 2
+    if idx is None or idx < 1:
+        return False
+    if show is not None:
+        regular = _regular_seasons(show)
+        # One regular season = series premiere — never "New Season".
+        if len(regular) < 2:
+            return False
+        latest = max(regular, key=lambda s: s.index)
+        if _season_index(latest) != idx:
+            return False
+        return True
+    return idx >= 2
 
 
 def _library_title(item) -> str:
@@ -1039,7 +1063,7 @@ def should_have_overlay(
             meta["reason"] = "no_season"
             return False, meta
         meta["seasonIndex"] = latest.index
-        if not _is_returning_season(latest):
+        if not _is_returning_season(latest, show):
             meta["reason"] = "first_season"
             return False, meta
         episodes = latest.episodes()
@@ -1382,7 +1406,7 @@ def discover_eligible_shows(
                 if str(latest.ratingKey) != str(season.ratingKey):
                     continue
                 # Never badge season 1 (or specials) — "New Season" means a return.
-                if not _is_returning_season(latest):
+                if not _is_returning_season(latest, show):
                     continue
                 if aired is None or aired < cutoff:
                     continue
@@ -1430,7 +1454,7 @@ def discover_eligible_shows(
                         continue
                     if latest is None or str(latest.ratingKey) != str(season.ratingKey):
                         continue
-                    if not _is_returning_season(latest):
+                    if not _is_returning_season(latest, show):
                         continue
                     aired = resolver.resolve_episode_aired(ep, show)
                     if aired is None or aired < cutoff:
@@ -1571,7 +1595,7 @@ def process_show_overlay(
     latest = _latest_season(show)
     if not latest:
         raise ValueError(f"No seasons for {show.title}")
-    if not _is_returning_season(latest):
+    if not _is_returning_season(latest, show):
         raise ValueError(f"New Season skipped for first season: {show.title}")
 
     overlay_img = _load_show_overlay_image(config, paths, season_index=getattr(latest, "index", None))
@@ -2841,6 +2865,16 @@ def run_overlays(
 
                 needs = existing is None or bool(existing.get("preview_only"))
                 if not needs:
+                    ok, _meta = should_have_overlay(show, cutoff, skip_kometa, resolver=resolver)
+                    if not ok:
+                        if remove_show_overlay(show, False, progress, paths=paths, config=config):
+                            del log[key]
+                            removed += 1
+                            _progress(progress, f"Removed New Season (no longer eligible): {show.title}")
+                        else:
+                            del log[key]
+                            removed += 1
+                        continue
                     if library and isinstance(existing, dict) and not existing.get("library"):
                         log[key] = {**existing, "library": library}
                     skipped += 1

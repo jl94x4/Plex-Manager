@@ -124,6 +124,34 @@ class LayerStackTests(unittest.TestCase):
             _compress_poster_for_plex(src, dest)
             self.assertLessEqual(dest.stat().st_size, PLEX_POSTER_MAX_BYTES)
 
+    def test_new_season_requires_two_regular_seasons(self):
+        from core import _is_returning_season, _latest_season
+
+        class FakeSeason:
+            def __init__(self, index, rating_key):
+                self.index = index
+                self.ratingKey = rating_key
+
+        class FakeShow:
+            def __init__(self, seasons):
+                self._seasons = seasons
+
+            def seasons(self):
+                return self._seasons
+
+        only_s1 = FakeShow([FakeSeason(0, "sp"), FakeSeason(1, "s1")])
+        latest = _latest_season(only_s1)
+        self.assertEqual(latest.index, 1)
+        self.assertFalse(_is_returning_season(latest, only_s1))
+
+        mislabeled = FakeShow([FakeSeason(2, "s2")])
+        latest_bad = _latest_season(mislabeled)
+        self.assertFalse(_is_returning_season(latest_bad, mislabeled))
+
+        returning = FakeShow([FakeSeason(1, "s1"), FakeSeason(2, "s2")])
+        latest_ok = _latest_season(returning)
+        self.assertTrue(_is_returning_season(latest_ok, returning))
+
 
 if __name__ == "__main__":
     unittest.main()
