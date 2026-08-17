@@ -324,6 +324,9 @@ export const overlaysApi = {
     }) => apiFetch(`${ROOT}/preview`, json(options || {})),
     promote: () => apiFetch(`${ROOT}/promote`, json({})),
     stop: () => apiFetch(`${ROOT}/stop`, json({})),
+    stopAndClearQueue: () => apiFetch(`${ROOT}/stop`, json({ clearQueue: true })),
+    clearQueue: () => apiFetch(`${ROOT}/queue`, { method: 'DELETE' }),
+    cancelQueuedJob: (jobId: string) => apiFetch(`${ROOT}/queue/${encodeURIComponent(jobId)}`, { method: 'DELETE' }),
     importLog: (log: Record<string, unknown>, mode: 'merge' | 'replace' = 'merge') => (
         apiFetch(`${ROOT}/import-log`, json({ mode, log }))
     ),

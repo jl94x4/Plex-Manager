@@ -632,6 +632,7 @@ export const en = {
         actionStarted: '{action} started',
         actionComplete: '{action} complete',
         actionFailed: '{action} failed',
+        actionQueued: '{action} queued (#{position})',
         actionLabels: {
             refresh: 'Refresh',
             stop: 'Stop',
@@ -1164,10 +1165,17 @@ export const en = {
         },
         activity: {
             title: 'Activity',
-            subtitle: 'Recent worker output. Runs keep going if you refresh — reopen this tab to follow progress.',
+            subtitle: 'Server-side worker log. Jobs keep running if you refresh or close the browser — reopen this tab to follow progress.',
             running: 'Running {command}',
             stillRunning: '{command} still in progress — watching from Activity.',
-            empty: 'No activity yet this session.',
+            empty: 'No activity yet.',
+            queueTitle: 'Queued jobs ({count})',
+            queueHint: 'Jobs run one at a time on the server. Stop ends the current job; the next queued job starts automatically.',
+            queueEmpty: 'No jobs waiting.',
+            clearQueue: 'Clear queue',
+            removeQueued: 'Remove',
+            stopCurrent: 'Stop current',
+            stopAll: 'Stop & clear queue',
         },
         footer: {
             workerReadyBeforePath: 'Worker ready · data in',

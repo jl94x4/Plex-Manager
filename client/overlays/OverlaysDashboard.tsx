@@ -106,6 +106,7 @@ const overlayResetKindForShow = (row: any) => (
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover disabled:opacity-50';
+const ghostButtonClass = 'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-muted hover:bg-white/5 hover:text-text disabled:opacity-50';
 const fieldInputClass = 'mt-1.5 w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
@@ -356,12 +357,13 @@ export const OverlaysDashboard: React.FC = () => {
     }, [refresh, toast, t]);
 
     useEffect(() => {
-        if (!status?.running) return undefined;
+        const queueLen = Number(status?.queueLength || 0);
+        if (!status?.running && queueLen <= 0) return undefined;
         const timer = window.setInterval(() => {
             void refresh().catch(() => {});
         }, 1500);
         return () => window.clearInterval(timer);
-    }, [status?.running, refresh]);
+    }, [status?.running, status?.queueLength, refresh]);
 
     // After a page refresh, reconnect to a still-running server job.
     useEffect(() => {
@@ -1312,8 +1314,15 @@ export const OverlaysDashboard: React.FC = () => {
         const label = actionLabel(id);
         void (async () => {
             try {
-                await fn();
-                toast(t('overlays.actionStarted', { action: label }));
+                const result = await fn() as { queued?: boolean; position?: number } | undefined;
+                if (result?.queued) {
+                    toast(t('overlays.actionQueued', {
+                        action: label,
+                        position: result.position ?? '?',
+                    }));
+                } else {
+                    toast(t('overlays.actionStarted', { action: label }));
+                }
             } catch (error) {
                 intentionalStartRef.current = false;
                 toast(error instanceof Error ? error.message : t('overlays.actionFailed', { action: label }), 'error');
@@ -2099,15 +2108,27 @@ export const OverlaysDashboard: React.FC = () => {
                         >
                             <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> {t('overlays.actions.refresh')}
                         </button>
-                        {jobRunning ? (
-                            <button
-                                type="button"
-                                className={buttonClass}
-                                disabled={busy === 'stop'}
-                                onClick={() => void runAction('stop', () => overlaysApi.stop())}
-                            >
-                                <Square className="h-4 w-4" /> {t('overlays.actions.stop')}
-                            </button>
+                        {jobRunning || (Number(status?.queueLength || 0) > 0) ? (
+                            <>
+                                {jobRunning ? (
+                                    <button
+                                        type="button"
+                                        className={buttonClass}
+                                        disabled={busy === 'stop'}
+                                        onClick={() => void runAction('stop', () => overlaysApi.stop())}
+                                    >
+                                        <Square className="h-4 w-4" /> {t('overlays.activity.stopCurrent')}
+                                    </button>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy === 'stop'}
+                                    onClick={() => void runAction('stop', () => overlaysApi.stopAndClearQueue())}
+                                >
+                                    <Square className="h-4 w-4" /> {t('overlays.activity.stopAll')}
+                                </button>
+                            </>
                         ) : null}
                         {canPromote ? (
                             <button
@@ -2141,9 +2162,11 @@ export const OverlaysDashboard: React.FC = () => {
                             : t('overlays.status.missing')}
                     hint={jobRunning
                         ? t('overlays.activity.running', { command: runningCommandLabel })
-                        : workerReady
-                            ? t('overlays.status.workerHintReady')
-                            : t('overlays.status.workerHintMissing')}
+                        : Number(status?.queueLength || 0) > 0
+                            ? t('overlays.activity.queueTitle', { count: status.queueLength })
+                            : workerReady
+                                ? t('overlays.status.workerHintReady')
+                                : t('overlays.status.workerHintMissing')}
                     icon={workerReady
                         ? <CheckCircle2 className="h-4 w-4 text-emerald-300" />
                         : <XCircle className="h-4 w-4 text-rose-300" />}
@@ -4517,6 +4540,41 @@ export const OverlaysDashboard: React.FC = () => {
                             <Loader2 className="h-4 w-4 animate-spin" /> {t('overlays.activity.running', { command: runningCommandLabel })}
                         </p>
                     )}
+                    {Array.isArray(status?.queue) && status.queue.length > 0 ? (
+                        <div className="mb-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="font-semibold">
+                                    {t('overlays.activity.queueTitle', { count: status.queue.length })}
+                                </p>
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null}
+                                    onClick={() => void runAction('stop', () => overlaysApi.clearQueue(), { skipRefresh: false })}
+                                >
+                                    {t('overlays.activity.clearQueue')}
+                                </button>
+                            </div>
+                            <p className="mt-1 text-[11px] text-muted">{t('overlays.activity.queueHint')}</p>
+                            <ul className="mt-2 space-y-1">
+                                {status.queue.map((job: { id: string; command?: string; position?: number }) => (
+                                    <li key={job.id} className="flex items-center justify-between gap-2 text-xs">
+                                        <span className="font-mono text-text/85">
+                                            #{job.position ?? '?'} · {String(job.command || '—')}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className={ghostButtonClass}
+                                            disabled={busy !== null}
+                                            onClick={() => void runAction('stop', () => overlaysApi.cancelQueuedJob(job.id))}
+                                        >
+                                            {t('overlays.activity.removeQueued')}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ) : null}
                     {!status?.running && summary ? (
                         <div className="mb-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
                             <p className="font-semibold">{t('overlays.home.lastRunTitle')}</p>

@@ -634,6 +634,7 @@ export const fr: DeepPartial<EnCatalog> = {
         actionStarted: 'Action « {action} » démarrée.',
         actionComplete: 'Action « {action} » terminée.',
         actionFailed: 'Échec de l’action « {action} ».',
+        actionQueued: 'Action « {action} » mise en file (#{position})',
         actionLabels: {
             refresh: 'Actualiser',
             stop: 'Arrêter',
@@ -1166,10 +1167,17 @@ export const fr: DeepPartial<EnCatalog> = {
         },
         activity: {
             title: 'Activité',
-            subtitle: 'Sortie récente du worker. Les exécutions continuent si vous rafraîchissez — rouvrez cet onglet pour suivre.',
+            subtitle: 'Journal du worker côté serveur. Les tâches continuent si vous rafraîchissez ou fermez le navigateur — rouvrez cet onglet pour suivre.',
             running: 'Exécution de {command}',
             stillRunning: '{command} toujours en cours — suivi depuis Activité.',
-            empty: 'Aucune activité pour cette session.',
+            empty: 'Aucune activité pour le moment.',
+            queueTitle: 'File d’attente ({count})',
+            queueHint: 'Une tâche à la fois sur le serveur. Stop termine la tâche en cours ; la suivante démarre automatiquement.',
+            queueEmpty: 'Aucune tâche en attente.',
+            clearQueue: 'Vider la file',
+            removeQueued: 'Retirer',
+            stopCurrent: 'Arrêter la tâche en cours',
+            stopAll: 'Arrêter et vider la file',
         },
         footer: {
             workerReadyBeforePath: 'Worker prêt · données dans',
