@@ -1149,9 +1149,10 @@ def _managed_job_id(library_name, title):
     return f"{lib}::{name}".lower()
 
 
-def _register_managed_job(library_name, title, source_type, source_id, sort_order='custom', auto_sync=True):
+def _register_managed_job(library_name, title, source_type, source_id, sort_order='custom', auto_sync=True, rating_key=None):
     managed = load_managed_collections()
     job_id = _managed_job_id(library_name, title)
+    existing = managed.get(job_id) if isinstance(managed.get(job_id), dict) else {}
     # Drop legacy colliding ids that match this library+title under the old format.
     legacy_id = f"{library_name}_{title}".replace(' ', '_').lower()
     for jid, job in list(managed.items()):
@@ -1160,20 +1161,29 @@ def _register_managed_job(library_name, title, source_type, source_id, sort_orde
         if jid == job_id:
             continue
         if job.get('library') == library_name and job.get('name') == title:
+            if not existing:
+                existing = job
             del managed[jid]
         elif jid == legacy_id:
+            if not existing:
+                existing = job
             del managed[jid]
-    managed[job_id] = {
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    payload = {
         "name": title,
         "library": library_name,
         "source_type": source_type,
         "source_id": source_id or '',
         "sort_order": sort_order,
         "auto_sync": bool(auto_sync),
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "last_run": "Never",
-        "next_run": (datetime.now() + timedelta(hours=6)).strftime("%Y-%m-%d %H:%M:%S"),
+        "created_at": existing.get('created_at') or now,
+        "last_run": existing.get('last_run') or "Never",
+        "next_run": existing.get('next_run') or (datetime.now() + timedelta(hours=6)).strftime("%Y-%m-%d %H:%M:%S"),
     }
+    keep_key = str(rating_key or existing.get('rating_key') or existing.get('ratingKey') or '').strip()
+    if keep_key:
+        payload['rating_key'] = keep_key
+    managed[job_id] = payload
     save_managed_collections(managed)
     log_action(f"Registered Auto-Sync job for '{title}' (Source: {source_type})")
     return job_id
@@ -1267,23 +1277,44 @@ def _collection_item_count_light(coll):
     return _collection_item_count(coll, allow_fetch=False)
 
 
+def _item_rating_keys(items):
+    keys = set()
+    for item in items or []:
+        rk = str(getattr(item, 'ratingKey', '') or '').strip()
+        if rk:
+            keys.add(rk)
+    return keys
+
+
 def _pick_primary_collection(collections):
-    """Keep the collection with the most items; tie-break on highest ratingKey."""
+    """Keep the original/pinned collection — never prefer a newer duplicate ratingKey."""
     if not collections:
         return None
     return max(
         collections,
-        key=lambda coll: (_collection_item_count(coll, allow_fetch=True), int(getattr(coll, 'ratingKey', 0) or 0)),
+        key=lambda coll: (
+            1 if _collection_is_pinned(coll) else 0,
+            _collection_item_count(coll, allow_fetch=True),
+            # Older keys usually hold Library/Home/Friends pins and overlay rules.
+            -int(getattr(coll, 'ratingKey', 0) or 0),
+        ),
     )
 
 
 def _delete_duplicate_collections(library, title, keep_rating_key=None):
-    """Delete same-title duplicates, optionally keeping one ratingKey."""
+    """Delete unpinned same-title duplicates, never touching the kept or home-pinned copy."""
     keep = str(keep_rating_key) if keep_rating_key is not None else None
     removed = 0
     for coll in _find_collections_by_title(library, title):
         rk = str(getattr(coll, 'ratingKey', ''))
         if keep and rk == keep:
+            continue
+        if _collection_is_pinned(coll):
+            logging.warning(
+                "Leaving pinned duplicate '%s' (key %s) — deleting it would drop Home/Library/Friends.",
+                getattr(coll, 'title', title),
+                rk,
+            )
             continue
         try:
             coll.delete()
@@ -1296,9 +1327,8 @@ def _delete_duplicate_collections(library, title, keep_rating_key=None):
 
 def _update_collection_items_in_place(coll, matched_items, label):
     """Sync collection membership. Returns {changed, added, removed, memberKeys}."""
-    current_items = list(coll.items() or [])
     current_by_key = {}
-    for item in current_items:
+    for item in list(coll.items() or []):
         rk = str(getattr(item, 'ratingKey', '') or '').strip()
         if rk:
             current_by_key[rk] = item
@@ -1328,10 +1358,39 @@ def _update_collection_items_in_place(coll, matched_items, label):
     }
 
 
-def _upsert_plex_collection(library, title, matched_items, sort_order='custom', label='Collexions'):
+def _update_smart_collection_in_place(coll, matched_items, sort_order='custom', label='Collexions'):
+    """Update a smart collection's id filter without delete/recreate (keeps hub pins + ratingKey)."""
+    current = _item_rating_keys(list(coll.items() or []))
+    target = _item_rating_keys(matched_items)
+    if current != target:
+        sort = 'random' if str(sort_order or '') == 'random' else None
+        ids = []
+        for key in target:
+            try:
+                ids.append(int(key))
+            except (TypeError, ValueError):
+                ids.append(key)
+        coll.updateFilters(sort=sort, filters={'id': ids})
+    try:
+        coll.addLabel(label)
+    except Exception:
+        pass
+    added = len(target - current)
+    removed = len(current - target)
+    return {
+        'changed': bool(added or removed),
+        'added': added,
+        'removed': removed,
+        'memberKeys': sorted(target),
+    }
+
+
+def _upsert_plex_collection(library, title, matched_items, sort_order='custom', label='Collexions', keep_rating_key=None):
     """
     Create or update exactly one Plex collection for title.
-    Merges duplicates by keeping the fullest collection and deleting extras.
+    Never delete/recreate an existing collection — that drops Library/Home/Friends
+    pins and invalidates Overlays ratingKeys. Smart (random) collections are
+    updated via filters in place.
     Returns (collection, created_fresh, membership_delta).
     """
     title = _normalize_collection_title(title)
@@ -1340,37 +1399,23 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
     if not matched_items:
         raise ValueError("No matched items to add")
 
-    empty_delta = {'changed': False, 'added': 0, 'removed': 0, 'memberKeys': []}
+    coll = None
+    keep_key = str(keep_rating_key or '').strip()
+    if keep_key:
+        coll = _resolve_collection(library, rating_key=keep_key)
     existing_all = _find_collections_by_title(library, title)
-    if existing_all:
+    if coll is None and existing_all:
         coll = _pick_primary_collection(existing_all)
-        keep_key = getattr(coll, 'ratingKey', None)
+    if coll is not None:
+        keep_key = str(getattr(coll, 'ratingKey', '') or keep_key or '').strip()
         removed = _delete_duplicate_collections(library, title, keep_rating_key=keep_key)
         if removed:
             log_action(f"Removed {removed} duplicate collection(s) named '{title}'.")
 
-        # Prefer in-place membership updates so Plex ratingKeys stay stable
-        # (Overlays rules store those keys). Only smart collections need a
-        # recreate — random sort on a regular collection must not delete it.
-        is_smart = getattr(coll, 'smart', False)
+        is_smart = bool(getattr(coll, 'smart', False))
         if is_smart:
-            try:
-                coll.delete()
-            except Exception as e:
-                logging.error(f"Failed to delete collection '{title}' before recreate: {e}")
-                raise RuntimeError(f"Could not replace existing collection '{title}'") from e
-            coll = _create_plex_collection(library, title, matched_items, sort_order=sort_order, label=label)
-            keys = sorted({
-                str(getattr(i, 'ratingKey', '') or '').strip()
-                for i in matched_items
-                if str(getattr(i, 'ratingKey', '') or '').strip()
-            })
-            return coll, True, {
-                'changed': True,
-                'added': len(keys),
-                'removed': 0,
-                'memberKeys': keys,
-            }
+            delta = _update_smart_collection_in_place(coll, matched_items, sort_order=sort_order, label=label)
+            return coll, False, delta
 
         delta = _update_collection_items_in_place(coll, matched_items, label)
         if sort_order == 'release':
@@ -1378,14 +1423,17 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
                 coll.sortUpdate('release')
             except Exception as e:
                 logging.warning(f"Failed to set release sort: {e}")
+        elif sort_order == 'random':
+            logging.info(
+                "Keeping regular collection '%s' (key %s) — not converting to smart/random, "
+                "which would delete Home/Library/Friends pins.",
+                title,
+                keep_key,
+            )
         return coll, False, delta
 
     coll = _create_plex_collection(library, title, matched_items, sort_order=sort_order, label=label)
-    keys = sorted({
-        str(getattr(i, 'ratingKey', '') or '').strip()
-        for i in matched_items
-        if str(getattr(i, 'ratingKey', '') or '').strip()
-    })
+    keys = sorted(_item_rating_keys(matched_items))
     return coll, True, {
         'changed': True,
         'added': len(keys),
@@ -1857,7 +1905,15 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
 
             job_id = None
             if auto_sync and source_type:
-                job_id = _register_managed_job(library_name, title, source_type, source_id, sort_order, auto_sync=True)
+                job_id = _register_managed_job(
+                    library_name,
+                    title,
+                    source_type,
+                    source_id,
+                    sort_order,
+                    auto_sync=True,
+                    rating_key=getattr(coll, 'ratingKey', None),
+                )
 
             GALLERY_CACHE['data'] = None
             log_action(f"Created/updated collection '{title}' with {len(matched_items)}/{len(items)} items matched.")
@@ -1963,13 +2019,18 @@ def run_sync_job(job_id=None):
 
             try:
                 with _collection_create_lock(lib_name, coll_name):
-                    coll, recreated, membership_delta = _upsert_plex_collection(
+                    keep_key = str(job.get('rating_key') or job.get('ratingKey') or '').strip() or None
+                    coll, created_fresh, membership_delta = _upsert_plex_collection(
                         library,
                         coll_name,
                         plex_items,
                         sort_order=sort_order,
                         label=label,
+                        keep_rating_key=keep_key,
                     )
+                    coll_key = str(getattr(coll, 'ratingKey', '') or '').strip()
+                    if coll_key:
+                        job['rating_key'] = coll_key
                     _notify_portal_collection_updated(coll, lib_name, coll_name, membership_delta)
                     if membership_delta.get('changed'):
                         log_action(
@@ -1983,12 +2044,12 @@ def run_sync_job(job_id=None):
                         external_items=items,
                         matched_items=plex_items,
                         config=config,
-                        force=recreated,
+                        force=created_fresh,
                     )
-                    if recreated:
-                        log_action(f"Auto-Sync: Recreated '{coll_name}' with {len(plex_items)} items.")
+                    if created_fresh:
+                        log_action(f"Auto-Sync: Created '{coll_name}' with {len(plex_items)} items.")
                     else:
-                        log_action(f"Auto-Sync: Updated '{coll_name}'.")
+                        log_action(f"Auto-Sync: Updated '{coll_name}' in place (key {coll_key or keep_key or '?'}).")
             except RuntimeError as e:
                 log_action(f"Auto-Sync: Skipping '{coll_name}' — {e}")
             except Exception as e:
