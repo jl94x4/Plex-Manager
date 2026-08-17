@@ -448,10 +448,11 @@ class CollexionsApiService {
         );
     }
 
-    async scanCollectionWebHealth(library?: string): Promise<{
+    async scanCollectionWebHealth(library?: string, deep = true): Promise<{
         success: boolean;
         scanned?: number;
         libraries?: string[];
+        deep?: boolean;
         suspects?: Array<{
             title: string;
             library: string;
@@ -462,7 +463,10 @@ class CollexionsApiService {
         errors?: string[];
         error?: string;
     }> {
-        const q = library ? `?library=${encodeURIComponent(library)}` : '';
+        const params = new URLSearchParams();
+        if (library) params.set('library', library);
+        if (deep) params.set('deep', '1');
+        const q = params.toString() ? `?${params.toString()}` : '';
         return withTimeout(
             cx(`/collections/web-health${q}`),
             COLLEXIONS_LONG_MS,

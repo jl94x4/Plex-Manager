@@ -3491,8 +3491,6 @@ def _normalize_plex_metadata_type(raw_type):
     text = str(raw_type).strip().lower()
     if not text:
         return None
-    if text.isdigit():
-        return int(text)
     aliases = {
         'collection': 18,
         'movie': 1,
@@ -3501,7 +3499,46 @@ def _normalize_plex_metadata_type(raw_type):
         'episode': 4,
         'folder': 99,
     }
-    return aliases.get(text)
+    if text in aliases:
+        return aliases[text]
+    if text.isdigit():
+        return int(text)
+    # Unknown string labels must not be treated as “missing” — Plex Web may crash on them.
+    return text
+
+
+def _issues_for_collection_list_row(item):
+    """Flag rows Plex Web's Collections tab cannot render."""
+    raw = item.get('type')
+    issues = []
+    if raw is None or str(raw).strip() == '':
+        issues.append('missing type (Plex Web expects collection/18)')
+        return issues
+    norm = _normalize_plex_metadata_type(raw)
+    if norm == 18:
+        return issues
+    raw_text = str(raw).strip().lower()
+    if norm == 99 or raw_text in {'99', 'folder'}:
+        issues.append('type 99/folder in collections list (matches Plex “unknown type: 99” crash)')
+    else:
+        issues.append(f'invalid Plex type {raw!r} (expected collection/18)')
+    return issues
+
+
+def _issues_for_metadata_row(item, *, expect_collection=False):
+    """General metadata row checks (library browse + collection members)."""
+    raw = item.get('type')
+    issues = []
+    if raw is None or str(raw).strip() == '':
+        issues.append('missing metadata type')
+        return issues
+    norm = _normalize_plex_metadata_type(raw)
+    if expect_collection:
+        return _issues_for_collection_list_row(item)
+    raw_text = str(raw).strip().lower()
+    if norm == 99 or raw_text in {'99', 'folder'}:
+        issues.append('type 99/folder metadata (matches Plex “unknown type: 99” crash)')
+    return issues
 
 
 def _parse_plex_metadata_list(body, content_type=''):
@@ -3542,7 +3579,7 @@ def _parse_plex_metadata_list(body, content_type=''):
     items = []
     for node in root:
         tag = str(node.tag or '').split('}')[-1]
-        if tag not in {'Directory', 'Video', 'Metadata'}:
+        if tag not in {'Directory', 'Video', 'Metadata', 'Collection'}:
             continue
         items.append({
             'ratingKey': str(node.attrib.get('ratingKey') or '').strip(),
@@ -3554,7 +3591,7 @@ def _parse_plex_metadata_list(body, content_type=''):
     return items, total
 
 
-def _scan_plex_web_collection_pages(plex_base, token, section_key, library_name):
+def _scan_plex_web_collection_pages(plex_base, token, section_key, library_name, *, list_path='collections'):
     """Mimic Plex Web's paginated Collections tab load (where type-99 crashes happen)."""
     suspects = []
     page_size = 50
@@ -3568,9 +3605,14 @@ def _scan_plex_web_collection_pages(plex_base, token, section_key, library_name)
         'includeExternalMedia': 1,
         'X-Plex-Token': token,
     }
+    if list_path == 'all':
+        params['type'] = 18
     section_id = str(section_key or '').strip()
     if not section_id:
         return suspects
+
+    url_suffix = 'all' if list_path == 'all' else 'collections'
+    page_label = 'all?type=18' if list_path == 'all' else 'collections'
 
     while True:
         headers = dict(headers_base)
@@ -3578,7 +3620,7 @@ def _scan_plex_web_collection_pages(plex_base, token, section_key, library_name)
         headers['X-Plex-Container-Size'] = str(page_size)
         try:
             resp = requests.get(
-                f"{plex_base}/library/sections/{section_id}/collections",
+                f"{plex_base}/library/sections/{section_id}/{url_suffix}",
                 params=params,
                 headers=headers,
                 timeout=12,
@@ -3586,51 +3628,46 @@ def _scan_plex_web_collection_pages(plex_base, token, section_key, library_name)
             )
         except Exception as exc:
             suspects.append({
-                'title': f'(page {start}-{start + page_size - 1})',
+                'title': f'({page_label} page {start}-{start + page_size - 1})',
                 'library': library_name,
                 'ratingKey': '',
                 'smart': False,
-                'issues': [f'collections page fetch error: {exc}'],
+                'issues': [f'{page_label} page fetch error: {exc}'],
             })
             break
         if resp.status_code >= 400:
             suspects.append({
-                'title': f'(page {start}-{start + page_size - 1})',
+                'title': f'({page_label} page {start}-{start + page_size - 1})',
                 'library': library_name,
                 'ratingKey': '',
                 'smart': False,
-                'issues': [f'collections page HTTP {resp.status_code}'],
+                'issues': [f'{page_label} page HTTP {resp.status_code}'],
             })
             break
 
         items, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
-        if start >= 50 and len(items) >= 10 and len(resp.content or b'') < 12000:
+        body_len = len(resp.content or b'')
+        if start >= 50 and len(items) > 0 and body_len < 25000:
             suspects.append({
-                'title': f'(collections page {start}+)',
+                'title': f'({page_label} page {start}+)',
                 'library': library_name,
                 'ratingKey': '',
                 'smart': False,
                 'issues': [
-                    'Plex returned a tiny collections page (matches “Asked for unknown type: 99” in Plex logs)',
+                    f'suspiciously small {page_label} page ({body_len} bytes, {len(items)} rows) '
+                    f'— often matches Plex “Asked for unknown type: 99” in server logs',
                 ],
             })
 
         for item in items:
-            type_id = _normalize_plex_metadata_type(item.get('type'))
-            issues = []
-            if type_id not in (None, 18):
-                issues.append(f'invalid Plex type {item.get("type")!r} (expected collection/18)')
-            if not item.get('title'):
-                issues.append('missing collection title')
-            if not item.get('ratingKey'):
-                issues.append('missing ratingKey')
+            issues = _issues_for_collection_list_row(item)
             if issues:
                 suspects.append({
                     'title': item.get('title') or f'ratingKey {item.get("ratingKey") or "?"}',
                     'library': library_name,
                     'ratingKey': item.get('ratingKey') or '',
                     'smart': False,
-                    'issues': issues,
+                    'issues': [f'{page_label}: {msg}' for msg in issues],
                 })
 
         if not items or start + len(items) >= total:
@@ -3638,6 +3675,66 @@ def _scan_plex_web_collection_pages(plex_base, token, section_key, library_name)
         start += page_size
 
     return suspects
+
+
+def _probe_collection_children_types(plex_base, token, rating_key, title, library_name):
+    """Bad folder/type-99 members inside a collection can break Plex Web composites."""
+    from urllib.parse import quote
+
+    rk = str(rating_key or '').strip()
+    if not rk:
+        return None
+    headers = plex_request_headers(token, {
+        'User-Agent': 'Mozilla/5.0 Plex Web',
+        'Accept': 'application/json',
+    })
+    try:
+        resp = requests.get(
+            f"{plex_base}/library/metadata/{quote(rk, safe='')}/children",
+            params={
+                'X-Plex-Container-Start': 0,
+                'X-Plex-Container-Size': 100,
+                'X-Plex-Token': token,
+            },
+            headers=headers,
+            timeout=10,
+            verify=PLEX_SSL_VERIFY,
+        )
+    except Exception as exc:
+        return {
+            'title': title,
+            'library': library_name,
+            'ratingKey': rk,
+            'smart': False,
+            'issues': [f'collection children fetch error: {exc}'],
+        }
+    if resp.status_code >= 400:
+        return {
+            'title': title,
+            'library': library_name,
+            'ratingKey': rk,
+            'smart': False,
+            'issues': [f'collection children HTTP {resp.status_code}'],
+        }
+    items, _total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
+    issues = []
+    for item in items:
+        row_issues = _issues_for_metadata_row(item, expect_collection=False)
+        if row_issues:
+            label = item.get('title') or item.get('ratingKey') or '?'
+            issues.extend([f'member “{label}”: {msg}' for msg in row_issues])
+            if len(issues) >= 6:
+                issues.append('…more bad members omitted')
+                break
+    if not issues:
+        return None
+    return {
+        'title': title,
+        'library': library_name,
+        'ratingKey': rk,
+        'smart': False,
+        'issues': issues,
+    }
 
 
 def _probe_collection_web_crash(plex_base, token, coll, library_name):
@@ -3749,6 +3846,9 @@ def collections_web_health():
     library_name = str(
         request.args.get('library') or payload.get('library') or ''
     ).strip()
+    deep = str(
+        request.args.get('deep') or payload.get('deep') or ''
+    ).strip().lower() in {'1', 'true', 'yes', 'on'}
     plex = get_plex_instance()
     if not plex:
         return jsonify({"success": False, "error": "Plex connection failed"}), 500
@@ -3794,10 +3894,11 @@ def collections_web_health():
             continue
         scanned += len(collections)
         try:
-            for row in _scan_plex_web_collection_pages(
-                url, token, getattr(library, 'key', ''), name
-            ):
-                _add_suspect(row)
+            for list_path in ('collections', 'all'):
+                for row in _scan_plex_web_collection_pages(
+                    url, token, getattr(library, 'key', ''), name, list_path=list_path
+                ):
+                    _add_suspect(row)
         except Exception as exc:
             errors.append(f"{name} page scan: {exc}")
         workers = min(8, max(1, len(collections)))
@@ -3806,13 +3907,25 @@ def collections_web_health():
                 pool.submit(_probe_collection_web_crash, url, token, coll, name)
                 for coll in collections
             ]
+            if deep:
+                for coll in collections:
+                    futures.append(
+                        pool.submit(
+                            _probe_collection_children_types,
+                            url,
+                            token,
+                            getattr(coll, 'ratingKey', ''),
+                            getattr(coll, 'title', '') or '?',
+                            name,
+                        )
+                    )
             for fut in as_completed(futures):
                 try:
                     row = fut.result()
                 except Exception as exc:
                     errors.append(str(exc))
                     continue
-                if row.get('issues'):
+                if row and row.get('issues'):
                     _add_suspect(row)
 
     suspects.sort(key=lambda row: (row.get('library') or '', row.get('title') or ''))
@@ -3823,6 +3936,7 @@ def collections_web_health():
     return jsonify({
         "success": True,
         "scanned": scanned,
+        "deep": deep,
         "libraries": lib_names,
         "suspects": suspects,
         "errors": errors,

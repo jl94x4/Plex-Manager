@@ -116,6 +116,7 @@ const Gallery: React.FC = () => {
     const [healthBusy, setHealthBusy] = useState(false);
     const [healthResult, setHealthResult] = useState<{
         scanned: number;
+        deep?: boolean;
         suspects: Array<{ title: string; library: string; ratingKey?: string; smart?: boolean; issues: string[] }>;
         errors?: string[];
     } | null>(null);
@@ -305,11 +306,16 @@ const Gallery: React.FC = () => {
             }
             setHealthResult({
                 scanned: Number(res.scanned || 0),
+                deep: res.deep === true,
                 suspects: Array.isArray(res.suspects) ? res.suspects : [],
                 errors: res.errors,
             });
             if (!(res.suspects || []).length) {
-                void appAlert(`Scanned ${res.scanned || 0} collection(s). None look like a Plex Web crash.`);
+                void appAlert(
+                    `Scanned ${res.scanned || 0} collection(s) across Plex Web list endpoints — no bad types or posters found. `
+                    + 'If Plex desktop still crashes on Movies → Collections, check Plex Media Server.log for “unknown type: 99” '
+                    + 'and note which library letter/page fails, then delete suspects from this Gallery or run Clean Bundles on the server.',
+                );
             }
         } catch (e: any) {
             void appAlert(e?.message || 'Scan failed.');
@@ -546,7 +552,13 @@ const Gallery: React.FC = () => {
                         </button>
                     </div>
                     {healthResult.suspects.length === 0 ? (
-                        <p className="text-sm text-emerald-200">No broken collections found. If Plex Web still crashes on every letter, run Clean Bundles + Optimize Database on the Plex server, then retry.</p>
+                        <p className="text-sm text-emerald-200">
+                            No broken collection rows or posters found (including paginated Plex Web list scans
+                            {healthResult.deep ? ' and member checks' : ''}).
+                            If Plex Web still crashes, the fault may be outside collections — check{' '}
+                            <code className="text-emerald-100">Plex Media Server.log</code> for “unknown type: 99”,
+                            run Clean Bundles + Optimize Database on the server, or browse collections here instead of Plex Web.
+                        </p>
                     ) : (
                         <ul className="space-y-2 max-h-80 overflow-y-auto">
                             {healthResult.suspects.map((row) => (
