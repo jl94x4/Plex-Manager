@@ -64,6 +64,7 @@ def main() -> int:
             "reset-one",
             "reset-all",
             "revert-kometa",
+            "drop-kometa-family",
             "promote",
             "sections",
             "sample",
@@ -137,6 +138,28 @@ def main() -> int:
             write_event("result", **revert_kometa(config, rating_key=key, progress=progress))
             return 0
 
+        if args.command == "drop-kometa-family":
+            from kometa_engine import drop_kometa_family
+            family = str(request.get("family") or "").strip()
+            rule_id = str(request.get("ruleId") or request.get("rule_id") or "").strip() or None
+            raw_keys = request.get("ratingKeys") or request.get("rating_keys") or []
+            rating_keys = [
+                str(key or "").strip()
+                for key in (raw_keys if isinstance(raw_keys, list) else [raw_keys])
+                if str(key or "").strip()
+            ]
+            write_event(
+                "result",
+                **drop_kometa_family(
+                    config,
+                    family,
+                    rule_id=rule_id,
+                    rating_keys=rating_keys or None,
+                    progress=progress,
+                ),
+            )
+            return 0
+
         if args.command == "promote":
             write_event("result", **promote_preview_to_live(config, progress=progress))
             return 0
@@ -164,9 +187,9 @@ def main() -> int:
                 config["kometaScope"] = "collections"
             elif "kometa" in args.command:
                 bundle = "kometa"
-                # Keep scheduler full-pass unless caller set an explicit scope.
+                # Media / Layer runs stay scoped unless caller set an explicit scope.
                 if not str(config.get("kometaScope") or config.get("kometa_scope") or "").strip():
-                    config["kometaScope"] = "all"
+                    config["kometaScope"] = "media"
             elif args.command in {"run", "preview", "cleanup"}:
                 # Main Preview/Run stays on the fast core path unless caller sets runBundle.
                 bundle = str(config.get("runBundle") or config.get("run_bundle") or "core")

@@ -252,6 +252,10 @@ export type OverlaysConfig = {
     recentlyAddedLastRunAt?: string | null;
     kometaLastRunAt?: string | null;
     lastRunSummary?: Record<string, unknown> | null;
+    coreLastRunSummary?: Record<string, unknown> | null;
+    recentlyLastRunSummary?: Record<string, unknown> | null;
+    kometaLastRunSummary?: Record<string, unknown> | null;
+    collectionsLastRunSummary?: Record<string, unknown> | null;
 };
 
 export type OverlayPreset = {
@@ -286,6 +290,13 @@ export const overlaysApi = {
         total: number;
     }>,
     revertKometa: (ratingKey?: string) => apiFetch(`${ROOT}/revert-kometa`, json(ratingKey ? { ratingKey } : {})),
+    dropKometaFamily: (opts: { family: string; ruleId?: string; ratingKeys?: string[] }) => (
+        apiFetch(`${ROOT}/drop-kometa-family`, json({
+            family: opts.family,
+            ...(opts.ruleId ? { ruleId: opts.ruleId } : {}),
+            ...(opts.ratingKeys?.length ? { ratingKeys: opts.ratingKeys } : {}),
+        }))
+    ),
     presets: () => apiFetch(`${ROOT}/presets`) as Promise<{ presets: OverlayPreset[] }>,
     uploadPreset: async (kind: 'season' | 'episode' | 'collection', file: File) => {
         const buf = await file.arrayBuffer();

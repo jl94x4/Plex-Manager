@@ -459,6 +459,40 @@ def _render_rating_column(slots: list[dict], *, paths: dict | None) -> Image.Ima
     return column
 
 
+def _placement_for_family(family: str, winners: dict[str, Winner], config: dict | None) -> dict:
+    placement = slot_placement(config, family)
+    if family == "edition" and "resolution" not in winners:
+        # Without a resolution badge the edition takes the top-left slot.
+        placement = {**placement, "y": slot_placement(config, "resolution")["y"]}
+    return placement
+
+
+def _slot_collision_key(placement: dict) -> tuple:
+    return (
+        round(float(placement.get("x") or 0), 3),
+        round(float(placement.get("y") or 0), 3),
+        str(placement.get("anchorX") or "").strip().lower(),
+        str(placement.get("anchorY") or "").strip().lower(),
+    )
+
+
+def select_compose_winners(
+    winners: dict[str, Winner],
+    config: dict | None = None,
+) -> dict[str, Winner]:
+    """Keep independent families; if two share a slot, the higher weight wins."""
+    best: dict[tuple, tuple[str, Winner]] = {}
+    for family in FAMILY_RENDER_ORDER:
+        winner = winners.get(family)
+        if winner is None:
+            continue
+        key = _slot_collision_key(_placement_for_family(family, winners, config))
+        existing = best.get(key)
+        if existing is None or int(winner.weight or 0) > int(existing[1].weight or 0):
+            best[key] = (family, winner)
+    return {family: winner for family, winner in best.values()}
+
+
 def compose_poster(
     poster: Image.Image,
     winners: dict[str, Winner],
@@ -470,17 +504,15 @@ def compose_poster(
     from core import _apply_with_placement
 
     result = poster.convert("RGBA")
+    selected = select_compose_winners(winners, config)
     for family in FAMILY_RENDER_ORDER:
-        winner = winners.get(family)
+        winner = selected.get(family)
         if winner is None:
             continue
         badge = render_winner(winner, config=config, paths=paths)
         if badge is None:
             continue
-        placement = slot_placement(config, family)
-        if family == "edition" and "resolution" not in winners:
-            # Without a resolution badge the edition takes the top-left slot.
-            placement = {**placement, "y": slot_placement(config, "resolution")["y"]}
+        placement = _placement_for_family(family, winners, config)
         result = _apply_with_placement(result, badge, placement)
     return result
 

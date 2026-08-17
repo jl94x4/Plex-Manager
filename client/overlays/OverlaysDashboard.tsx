@@ -35,6 +35,7 @@ import { useDiscoverI18n } from '../discovery/i18n';
 import { overlaysApi, DEFAULT_OVERLAY_PLACEMENT, type OverlaysConfig, type OverlaysPlacement, type CustomCollectionOverlayRule } from './api';
 import { PlacementEditor } from './PlacementEditor';
 import { OverlayJobCard, OverlayJobTitleTest } from './OverlayJobCard';
+import { formatRunSummaryDetail, formatRunSummaryWhen, inferRunBundle, parseRunSummary } from './runSummary';
 import { api as collexionsApi } from '../collexions/api';
 
 /** Primary tabs after UX overhaul. Legacy hashes map via parseOverlaysTab. */
@@ -398,30 +399,31 @@ export const OverlaysDashboard: React.FC = () => {
             } else if (status?.lastError || status?.lastOutcome === 'error') {
                 toast(status.lastError || t('overlays.jobFailed'), 'error');
             } else if (status?.lastOutcome === 'ok') {
-                const s = status?.lastRunSummary;
-                if (s?.command === 'scan' || s?.command === 'reconcile') {
-                    toast(t('overlays.eligibleToast', { count: s.eligible ?? 0 }));
-                } else if (s?.previewMode || s?.command === 'preview') {
-                    toast(t('overlays.previewFinishedSummary', {
-                        eligible: s?.eligible ?? 0,
-                        added: s?.added ?? 0,
-                        refreshed: s?.refreshed ?? 0,
-                        episodesEligible: s?.episodesEligible ?? 0,
-                        episodesAdded: s?.episodesAdded ?? 0,
-                    }));
-                } else {
-                    toast(
-                        s
-                            ? t('overlays.jobFinishedSummary', {
-                                added: s.added ?? 0,
-                                removed: s.removed ?? 0,
-                                episodesAdded: s.episodesAdded ?? 0,
-                                episodesRemoved: s.episodesRemoved ?? 0,
-                                preview: s.previewMode ? t('overlays.overview.previewSuffix') : '',
-                            })
-                            : t('overlays.jobFinished'),
-                    );
-                }
+                void refresh().then((next) => {
+                    const s = next?.lastRunSummary;
+                    const parsed = parseRunSummary(s);
+                    if (!parsed) {
+                        toast(t('overlays.jobFinished'));
+                        return;
+                    }
+                    if (parsed.bundle === 'scan') {
+                        toast(t('overlays.eligibleToast', { count: parsed.eligible }));
+                        return;
+                    }
+                    if (parsed.previewMode || String(s?.command || '').startsWith('preview')) {
+                        toast(t('overlays.previewFinishedSummary', {
+                            eligible: Number(s?.eligible ?? 0),
+                            added: Number(s?.added ?? 0),
+                            refreshed: Number(s?.refreshed ?? 0),
+                            episodesEligible: Number(s?.episodesEligible ?? 0),
+                            episodesAdded: Number(s?.episodesAdded ?? 0),
+                        }));
+                        return;
+                    }
+                    toast(formatRunSummaryDetail(parsed, t));
+                }).catch(() => {
+                    toast(t('overlays.jobFinished'));
+                });
             }
             void Promise.all([
                 overlaysApi.shows().then((showsRes) => setShows(showsRes.shows || [])),
@@ -554,6 +556,35 @@ export const OverlaysDashboard: React.FC = () => {
     };
 
     const summary = status?.lastRunSummary || configDraft.lastRunSummary || null;
+    const parsedSummary = useMemo(() => parseRunSummary(summary), [summary]);
+    const summaryDetail = useMemo(
+        () => (parsedSummary ? formatRunSummaryDetail(parsedSummary, t) : ''),
+        [parsedSummary, t],
+    );
+    const summaryWhen = useMemo(
+        () => formatRunSummaryWhen(summary, status?.lastRunAt || configDraft.lastRunAt || null),
+        [summary, status?.lastRunAt, configDraft.lastRunAt],
+    );
+    const bundleRunHint = useCallback((
+        bundleSummary: Record<string, unknown> | null | undefined,
+    ) => {
+        const parsed = parseRunSummary(bundleSummary);
+        return parsed ? formatRunSummaryDetail(parsed, t) : '';
+    }, [t]);
+    const legacySummary = summary && inferRunBundle(summary) !== 'other' ? summary : null;
+    const coreRunHint = bundleRunHint(status?.coreLastRunSummary || configDraft.coreLastRunSummary
+        || (legacySummary && inferRunBundle(legacySummary) === 'core' ? legacySummary : null));
+    const recentlyRunHint = bundleRunHint(status?.recentlyLastRunSummary || configDraft.recentlyLastRunSummary
+        || (legacySummary && inferRunBundle(legacySummary) === 'recently' ? legacySummary : null));
+    const kometaRunHint = bundleRunHint(status?.kometaLastRunSummary || configDraft.kometaLastRunSummary
+        || (legacySummary && inferRunBundle(legacySummary) === 'kometa' ? legacySummary : null));
+    const collectionsRunHint = bundleRunHint(status?.collectionsLastRunSummary || configDraft.collectionsLastRunSummary
+        || (legacySummary && inferRunBundle(legacySummary) === 'collections' ? legacySummary : null));
+    const collectionsWhen = formatRunSummaryWhen(
+        status?.collectionsLastRunSummary || configDraft.collectionsLastRunSummary
+            || (legacySummary && inferRunBundle(legacySummary) === 'collections' ? legacySummary : null),
+        status?.kometaLastRunAt || configDraft.kometaLastRunAt || null,
+    );
     const activity = status?.activity || [];
     const workerReady = !!status?.workerReady;
     const runningCommand = String(status?.command || '').trim();
@@ -1217,19 +1248,14 @@ export const OverlaysDashboard: React.FC = () => {
                     customCollectionOverlaysEnabled: saved.config.customCollectionOverlaysEnabled === true,
                 }));
             }
-            if (stampCount > 0) {
-                setBusy('revertKometa');
-                try {
-                    const seen = new Set<string>();
-                    for (const row of stampRows) {
-                        const key = String(row?.ratingKey || '').trim();
-                        if (!key || seen.has(key)) continue;
-                        seen.add(key);
-                        await overlaysApi.revertKometa(key);
-                    }
-                } finally {
-                    setBusy(null);
-                }
+            setBusy('revertKometa');
+            try {
+                await overlaysApi.dropKometaFamily({
+                    family: 'custom_collection',
+                    ruleId: id,
+                });
+            } finally {
+                setBusy(null);
             }
             const imageId = String(doomed.image || '').trim();
             if (imageId) {
@@ -1656,16 +1682,24 @@ export const OverlaysDashboard: React.FC = () => {
     };
 
     const revertAllCollections = () => {
-        const rows = collectionSections.flatMap((section) => section.rows);
-        revertKometaRows(rows, {
-            confirmKey: 'overlays.kometa.revertCollectionsConfirm',
-            titleKey: 'overlays.kometa.revertCollectionsTitle',
-            confirmLabelKey: 'overlays.actions.revertAllCollections',
-            count: collectionTrackedCount,
-        });
+        void (async () => {
+            if (!collectionTrackedCount) return;
+            const ok = await askConfirm(
+                t('overlays.kometa.revertCollectionsConfirm', { count: collectionTrackedCount }),
+                {
+                    title: t('overlays.kometa.revertCollectionsTitle'),
+                    confirmLabel: t('overlays.actions.revertAllCollections'),
+                    cancelLabel: t('common.cancel', { defaultValue: 'Cancel' }),
+                    danger: true,
+                },
+            );
+            if (!ok) return;
+            await runAction('revertKometa', () => overlaysApi.dropKometaFamily({ family: 'custom_collection' }));
+            await refresh();
+        })();
     };
 
-    const revertKometaSection = (section: { id: string; title: string; rows: any[] }) => {
+    const revertKometaSection = (section: { id: string; title: string; rows: any[]; kind?: string; ruleId?: string }) => {
         void (async () => {
             const count = section.rows.length;
             if (!count) return;
@@ -1683,12 +1717,32 @@ export const OverlaysDashboard: React.FC = () => {
             );
             if (!ok) return;
             await runAction('revertKometa', async () => {
+                if (section.kind === 'collection') {
+                    await overlaysApi.dropKometaFamily({
+                        family: 'custom_collection',
+                        ...(section.ruleId ? { ruleId: section.ruleId } : {}),
+                    });
+                    return;
+                }
                 for (const row of section.rows) {
                     await overlaysApi.revertKometa(row.ratingKey);
                 }
             });
             await refresh();
         })();
+    };
+
+    const revertCollectionRow = (row: any, ruleId?: string) => {
+        void runAction('revertKometa', async () => {
+            const key = String(row?.ratingKey || '').trim();
+            if (!key) return;
+            await overlaysApi.dropKometaFamily({
+                family: 'custom_collection',
+                ...(ruleId ? { ruleId } : {}),
+                ratingKeys: [key],
+            });
+            await refresh();
+        });
     };
 
     const sectionHeading = (section: { id: string; title: string; library: string; rows: any[] }) => {
@@ -2188,16 +2242,11 @@ export const OverlaysDashboard: React.FC = () => {
                 />
                 <DashboardStatCard
                     label={t('overlays.status.lastRun')}
-                    value={status?.lastRunAt
-                        ? new Date(status.lastRunAt).toLocaleString()
+                    value={summaryWhen
+                        ? new Date(summaryWhen).toLocaleString()
                         : t('overlays.overview.never')}
-                    hint={summary
-                        ? t('overlays.overview.lastRunHint', {
-                            added: String(summary.added ?? 0),
-                            removed: String(summary.removed ?? 0),
-                            preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
-                        })
-                        : (configDraft.scheduleHours
+                    hint={summaryDetail
+                        || (configDraft.scheduleHours
                             ? t('overlays.status.everyHours', { hours: configDraft.scheduleHours })
                             : t('overlays.status.disabled'))}
                     icon={<Clock3 className="h-4 w-4 text-plex" />}
@@ -2253,16 +2302,18 @@ export const OverlaysDashboard: React.FC = () => {
                                 ? t('overlays.jobs.status.running')
                                 : !bannersEnabled
                                     ? t('overlays.jobs.status.off')
-                                    : status?.lastRunAt
-                                        ? t('overlays.jobs.status.lastRun', { when: new Date(status.lastRunAt).toLocaleString() })
+                                    : status?.lastRunAt || configDraft.lastRunAt
+                                        ? t('overlays.jobs.status.lastRun', {
+                                            when: new Date(String(status?.lastRunAt || configDraft.lastRunAt)).toLocaleString(),
+                                        })
                                         : t('overlays.jobs.status.idle')}
                             statusTone={coreJobActive ? 'running' : !bannersEnabled ? 'off' : 'idle'}
-                            enabledSummary={t('overlays.jobs.banners.enabledSummary', {
+                            enabledSummary={[t('overlays.jobs.banners.enabledSummary', {
                                 season: configDraft.newSeasonEnabled !== false ? t('overlays.jobs.on') : t('overlays.jobs.off'),
                                 episode: configDraft.newEpisodeEnabled !== false ? t('overlays.jobs.on') : t('overlays.jobs.off'),
                                 live: configDraft.liveScheduleEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
                                 top10: configDraft.top10Enabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
-                            })}
+                            }), coreRunHint].filter(Boolean).join(' · ')}
                             previewLabel={t('overlays.actions.preview')}
                             runLabel={t('overlays.actions.runNow')}
                             expandLabel={t('overlays.jobs.expand')}
@@ -2490,11 +2541,15 @@ export const OverlaysDashboard: React.FC = () => {
                                 ? t('overlays.jobs.status.running')
                                 : configDraft.recentlyAddedEnabled !== true
                                     ? t('overlays.jobs.status.off')
-                                    : t('overlays.jobs.status.idle')}
+                                    : status?.recentlyAddedLastRunAt || configDraft.recentlyAddedLastRunAt
+                                        ? t('overlays.jobs.status.lastRun', {
+                                            when: new Date(String(status?.recentlyAddedLastRunAt || configDraft.recentlyAddedLastRunAt)).toLocaleString(),
+                                        })
+                                        : t('overlays.jobs.status.idle')}
                             statusTone={recentlyJobActive ? 'running' : configDraft.recentlyAddedEnabled !== true ? 'off' : 'idle'}
-                            enabledSummary={configDraft.recentlyAddedEnabled === true
+                            enabledSummary={[configDraft.recentlyAddedEnabled === true
                                 ? t('overlays.jobs.recently.enabledOn', { days: configDraft.recentlyAddedDays ?? 7 })
-                                : t('overlays.jobs.recently.enabledOff')}
+                                : t('overlays.jobs.recently.enabledOff'), recentlyRunHint].filter(Boolean).join(' · ')}
                             previewLabel={t('overlays.actions.previewRecently')}
                             runLabel={t('overlays.actions.runRecently')}
                             expandLabel={t('overlays.jobs.expand')}
@@ -2606,9 +2661,13 @@ export const OverlaysDashboard: React.FC = () => {
                                 ? t('overlays.jobs.status.running')
                                 : !kometaEnabled
                                     ? t('overlays.jobs.status.off')
-                                    : t('overlays.jobs.status.idle')}
+                                    : status?.kometaLastRunAt || configDraft.kometaLastRunAt
+                                        ? t('overlays.jobs.status.lastRun', {
+                                            when: new Date(String(status?.kometaLastRunAt || configDraft.kometaLastRunAt)).toLocaleString(),
+                                        })
+                                        : t('overlays.jobs.status.idle')}
                             statusTone={kometaJobActive ? 'running' : !kometaEnabled ? 'off' : 'idle'}
-                            enabledSummary={t('overlays.jobs.kometa.enabledSummary', {
+                            enabledSummary={[t('overlays.jobs.kometa.enabledSummary', {
                                 media: configDraft.mediaInfoEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
                                 status: configDraft.statusOverlayEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
                                 ratings: configDraft.ratingsOverlayEnabled === true ? t('overlays.jobs.on') : t('overlays.jobs.off'),
@@ -2621,7 +2680,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 ].filter(Boolean).length
                                     ? t('overlays.jobs.on')
                                     : t('overlays.jobs.off'),
-                            })}
+                            }), kometaRunHint].filter(Boolean).join(' · ')}
                             previewLabel={t('overlays.actions.previewKometa')}
                             runLabel={t('overlays.actions.runKometa')}
                             expandLabel={t('overlays.jobs.expand')}
@@ -3231,11 +3290,15 @@ export const OverlaysDashboard: React.FC = () => {
                                 ? t('overlays.jobs.status.running')
                                 : !collectionsEnabled
                                     ? t('overlays.jobs.status.off')
-                                    : t('overlays.jobs.status.idle')}
+                                    : collectionsWhen
+                                        ? t('overlays.jobs.status.lastRun', {
+                                            when: new Date(collectionsWhen).toLocaleString(),
+                                        })
+                                        : t('overlays.jobs.status.idle')}
                             statusTone={collectionsJobActive ? 'running' : !collectionsEnabled ? 'off' : 'idle'}
-                            enabledSummary={collectionsEnabled
+                            enabledSummary={[collectionsEnabled
                                 ? t('overlays.jobs.collections.enabledOn', { count: collectionRules.length })
-                                : t('overlays.jobs.collections.enabledOff')}
+                                : t('overlays.jobs.collections.enabledOff'), collectionsRunHint].filter(Boolean).join(' · ')}
                             previewLabel={t('overlays.actions.previewCollections')}
                             runLabel={t('overlays.actions.runCollections')}
                             expandLabel={t('overlays.jobs.expand')}
@@ -3313,19 +3376,16 @@ export const OverlaysDashboard: React.FC = () => {
                         </OverlayJobCard>
                     </div>
 
-                    {summary ? (
+                    {parsedSummary && summaryDetail ? (
                         <DashboardPanel
                             title={t('overlays.home.lastRunTitle')}
                             subtitle={t('overlays.home.lastRunSubtitle')}
                         >
                             <p className="text-sm text-text">
-                                {t('overlays.home.lastRunBody', {
-                                    command: String(summary.command || runningCommandLabel || '—'),
-                                    added: String(summary.added ?? 0),
-                                    removed: String(summary.removed ?? 0),
-                                    episodesAdded: String(summary.episodesAdded ?? 0),
-                                    episodesRemoved: String(summary.episodesRemoved ?? 0),
-                                    preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
+                                {t('overlays.summary.lastRunBody', {
+                                    command: String(summary?.command || runningCommandLabel || '—'),
+                                    detail: summaryDetail,
+                                    preview: '',
                                 })}
                             </p>
                             <button
@@ -4346,10 +4406,7 @@ export const OverlaysDashboard: React.FC = () => {
                                                                             type="button"
                                                                             className="shrink-0 text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
                                                                             disabled={busy !== null || jobRunning}
-                                                                            onClick={() => void runAction('revertKometa', async () => {
-                                                                                await overlaysApi.revertKometa(row.ratingKey);
-                                                                                await refresh();
-                                                                            })}
+                                                                            onClick={() => revertCollectionRow(row, section.ruleId)}
                                                                         >
                                                                             {t('overlays.actions.revert')}
                                                                         </button>
@@ -4396,10 +4453,7 @@ export const OverlaysDashboard: React.FC = () => {
                                                                                     type="button"
                                                                                     className="text-xs font-semibold text-amber-200 hover:underline disabled:opacity-50"
                                                                                     disabled={busy !== null || jobRunning}
-                                                                                    onClick={() => void runAction('revertKometa', async () => {
-                                                                                        await overlaysApi.revertKometa(row.ratingKey);
-                                                                                        await refresh();
-                                                                                    })}
+                                                                                    onClick={() => revertCollectionRow(row, section.ruleId)}
                                                                                 >
                                                                                     {t('overlays.actions.revert')}
                                                                                 </button>
@@ -4575,17 +4629,14 @@ export const OverlaysDashboard: React.FC = () => {
                             </ul>
                         </div>
                     ) : null}
-                    {!status?.running && summary ? (
+                    {!status?.running && parsedSummary && summaryDetail ? (
                         <div className="mb-4 rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
                             <p className="font-semibold">{t('overlays.home.lastRunTitle')}</p>
                             <p className="mt-1 text-muted">
-                                {t('overlays.home.lastRunBody', {
-                                    command: String(summary.command || '—'),
-                                    added: String(summary.added ?? 0),
-                                    removed: String(summary.removed ?? 0),
-                                    episodesAdded: String(summary.episodesAdded ?? 0),
-                                    episodesRemoved: String(summary.episodesRemoved ?? 0),
-                                    preview: summary.previewMode ? t('overlays.overview.previewSuffix') : '',
+                                {t('overlays.summary.lastRunBody', {
+                                    command: String(summary?.command || '—'),
+                                    detail: summaryDetail,
+                                    preview: '',
                                 })}
                             </p>
                         </div>

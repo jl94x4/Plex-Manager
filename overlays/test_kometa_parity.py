@@ -139,6 +139,21 @@ assert "custom_collection" not in enabled_families({
 })
 assert enabled_families({}) == []
 
+_scope_cfg = {
+    "mediaInfoEnabled": True,
+    "customCollectionOverlaysEnabled": True,
+    "customCollectionOverlays": [{
+        "id": "t",
+        "collectionRatingKey": "1",
+        "image": "collection-fire",
+        "library": "Movies",
+    }],
+}
+assert "resolution" in enabled_families(_scope_cfg, scope="media")
+assert "custom_collection" not in enabled_families(_scope_cfg, scope="media")
+assert "custom_collection" in enabled_families(_scope_cfg, scope="collections")
+assert "resolution" not in enabled_families(_scope_cfg, scope="collections")
+
 # Content rating + episode info helpers (no Plex)
 class _Fake:
     def __init__(self, **kw):
@@ -206,7 +221,14 @@ winners2 = {
 out2 = compose_poster(poster, winners2, config={}, paths=None)
 assert out2.size == (1000, 1500)
 
-from kometa_engine import _entry_labels_to_clear, _labels_from_families
+from kometa_engine import (
+    _entry_labels_to_clear,
+    _labels_from_families,
+    _should_drop_winner,
+    _winner_label_names,
+    winner_from_log,
+)
+from kometa_render import select_compose_winners
 
 assert _labels_from_families({"resolution": {"name": "4K", "weight": 130}}) == ["4K"]
 assert sorted(_entry_labels_to_clear({
@@ -218,5 +240,33 @@ assert sorted(_entry_labels_to_clear({
     "overlayLabels": ["4K-HDR"],
     "families": {"resolution": {"name": "4K", "weight": 130}},
 })) == ["4K", "4K-HDR", "Overlay"]
+
+trending = Winner(
+    family="custom_collection",
+    name="cc-trending",
+    key="preset.png",
+    text="Trending",
+    weight=50,
+    extra={"ruleId": "cc-trending"},
+)
+fourk = Winner(family="resolution", name="4K", key="4K", weight=130)
+assert sorted(_winner_label_names({"resolution": fourk, "custom_collection": trending})) == [
+    "4K", "Trending", "cc-trending",
+]
+assert _should_drop_winner("custom_collection", trending, "custom_collection", "cc-trending")
+assert _should_drop_winner("custom_collection", trending, "custom_collection", "Trending")
+assert not _should_drop_winner("resolution", fourk, "custom_collection", "cc-trending")
+assert winner_from_log("custom_collection", trending.as_log()) is not None
+
+# Independent slots keep both; same slot keeps the higher weight (4K).
+both = select_compose_winners({"resolution": fourk, "custom_collection": trending}, {})
+assert "resolution" in both and "custom_collection" in both
+colliding_config = {
+    "placement": {
+        "custom_collection": {"x": 0.015, "y": 0.01, "anchorX": "left", "anchorY": "top"},
+    },
+}
+collided = select_compose_winners({"resolution": fourk, "custom_collection": trending}, colliding_config)
+assert "resolution" in collided and "custom_collection" not in collided
 
 print("kometa smoke OK")

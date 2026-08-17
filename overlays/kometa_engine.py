@@ -1090,6 +1090,7 @@ def _apply_custom_collection_winners(
             key=str(rule["image"]),
             text=str(rule.get("name") or rule["id"]),
             image_rel=str(image_path),
+            weight=int(rule.get("weight") or 50),
             extra={
                 "ruleId": rule["id"],
                 "collectionRatingKey": source_key or rule["collectionRatingKey"],
@@ -1384,18 +1385,26 @@ def _normalize_label_name(value: object) -> str:
 
 
 def _winner_label_names(winners: dict) -> list[str]:
-    """Plex Labels for stamped overlays — e.g. 4K-HDR, TrueHD-Atmos."""
+    """Plex Labels for stamped overlays — e.g. 4K-HDR, TrueHD-Atmos, Trending."""
     names: list[str] = []
     seen: set[str] = set()
-    for winner in winners.values():
-        label = _normalize_label_name(getattr(winner, "name", None) or getattr(winner, "text", None))
+
+    def _add(value: object) -> None:
+        label = _normalize_label_name(value)
         if not label:
-            continue
+            return
         key = label.casefold()
         if key in seen:
-            continue
+            return
         seen.add(key)
         names.append(label)
+
+    for winner in winners.values():
+        _add(getattr(winner, "name", None))
+        _add(getattr(winner, "text", None))
+        extra = getattr(winner, "extra", None)
+        if isinstance(extra, dict):
+            _add(extra.get("ruleId"))
     return names
 
 
@@ -1540,6 +1549,138 @@ def _sync_plex_labels(item, wanted: list[str], previous: list[str] | None = None
     return want
 
 
+def _winners_from_entry(entry: dict | None) -> dict[str, Winner]:
+    """Rehydrate every tracked family from a kometa log row."""
+    entry = entry if isinstance(entry, dict) else {}
+    prev = entry.get("families") if isinstance(entry.get("families"), dict) else {}
+    winners: dict[str, Winner] = {}
+    for family, meta in prev.items():
+        restored = winner_from_log(str(family), meta if isinstance(meta, dict) else None)
+        if restored is not None:
+            winners[str(family)] = restored
+    return winners
+
+
+def _previous_overlay_labels(entry: dict | None) -> list[str]:
+    """Union of stored labels + family names so a partial drop can untag leftovers."""
+    entry = entry if isinstance(entry, dict) else {}
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def _add(value: object) -> None:
+        label = _normalize_label_name(value)
+        if not label:
+            return
+        key = label.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        names.append(label)
+
+    stored = entry.get("overlayLabels")
+    if isinstance(stored, list):
+        for value in stored:
+            _add(value)
+    for value in _labels_from_families(entry.get("families")):
+        _add(value)
+    return names
+
+
+def _collection_rule_aliases(winner: Winner | None) -> set[str]:
+    if winner is None:
+        return set()
+    extra = winner.extra if isinstance(winner.extra, dict) else {}
+    aliases = {
+        _normalize_label_name(winner.name),
+        _normalize_label_name(winner.text),
+        _normalize_label_name(winner.key),
+        _normalize_label_name(extra.get("ruleId")),
+    }
+    return {name for name in aliases if name}
+
+
+def _should_drop_winner(
+    family: str,
+    winner: Winner,
+    target_family: str,
+    rule_id: str | None,
+) -> bool:
+    if str(family) != str(target_family):
+        return False
+    rid = _normalize_label_name(rule_id)
+    if not rid or str(target_family) != "custom_collection":
+        return True
+    aliases = {name.casefold() for name in _collection_rule_aliases(winner)}
+    return rid.casefold() in aliases
+
+
+def _restamp_item_winners(
+    plex,
+    paths: dict,
+    config: dict,
+    key: str,
+    entry: dict,
+    winners: dict[str, Winner],
+    progress: ProgressFn | None,
+) -> dict | None:
+    """Compose remaining families from the clean backup. None means full restore."""
+    if not winners:
+        return None
+    try:
+        item = plex.fetchItem(f"/library/metadata/{key}")
+    except Exception:
+        return None
+    backup = _backup_file(paths, key)
+    if backup.exists():
+        original = Image.open(backup).convert("RGBA")
+    else:
+        poster = _download_original(plex, item)
+        if poster is None:
+            raise RuntimeError("failed to download poster")
+        original = poster.convert("RGBA")
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        if not backup.exists():
+            original.save(backup)
+    result = compose_poster(original, winners, config=config, paths=paths)
+    safe = _sanitize(f"{(entry or {}).get('title') or key}_kometa")
+    temp = Path(paths["preview"]) / f"temp_{safe}.png"
+    save_with_marker(result, temp)
+    try:
+        from core import _upload_poster_resilient
+
+        _upload_poster_resilient(
+            item,
+            temp,
+            progress=progress,
+            title=str((entry or {}).get("title") or key),
+        )
+    finally:
+        if temp.exists():
+            temp.unlink()
+    wanted = _winner_label_names(winners)
+    synced = _sync_plex_labels(item, wanted, previous=_previous_overlay_labels(entry))
+    if wanted:
+        _add_overlay_label(item)
+    else:
+        _remove_overlay_label(item)
+    updated = {
+        **(entry if isinstance(entry, dict) else {}),
+        "families": {family: winner.as_log() for family, winner in winners.items()},
+        "signature": _signature(winners, config),
+        "timestamp": datetime.now().isoformat(),
+        "posterThumb": _reload_item_thumb(item) or (entry or {}).get("posterThumb"),
+        "overlayLabels": synced,
+        "labeled": bool(wanted),
+        "hasBackup": backup.exists(),
+    }
+    updated.pop("needsRestamp", None)
+    _progress(
+        progress,
+        f"Kept {', '.join(w.name for w in winners.values())} on {(entry or {}).get('title') or key}",
+    )
+    return updated
+
+
 def _restore_item(plex, paths: dict, key: str, entry: dict, progress: ProgressFn | None) -> bool:
     """Kometa restore priority: disk backup, else fresh provider poster."""
     import shutil
@@ -1597,11 +1738,11 @@ def _restore_item(plex, paths: dict, key: str, entry: dict, progress: ProgressFn
     return ok
 
 
-def _collect_section_plans(plex, config: dict) -> dict[str, dict]:
-    """section_id -> {section, families: set} across all enabled family scopes."""
+def _collect_section_plans(plex, config: dict, scope: str | None = None) -> dict[str, dict]:
+    """section_id -> {section, families: set} for enabled families in the given scope."""
     from modes_kometa import _sections_for_kometa_mode
 
-    families = enabled_families(config)
+    families = enabled_families(config, scope=scope)
     plans: dict[str, dict] = {}
     seen_modes: dict[str, list] = {}
     for family in families:
@@ -1790,8 +1931,11 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             "kometaSkipped": 0,
         }
 
+    media_families = [f for f in families if f != "custom_collection"]
+    media_family_set = set(media_families)
+
     _progress(progress, f"Layer pass ({scope_name}) — families: {', '.join(families)}")
-    detector = KometaDetector(plex, progress=progress)
+    detector: KometaDetector | None = None
     res_allowed = _resolution_variant_allowed(config)
     allow_deny = {
         mode: _mode_allow_deny(config, mode)
@@ -1801,40 +1945,45 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
     streaming_region = str(_cfg(config, "streamingRegion", "streaming_region", "US") or "US").strip().upper() or "US"
 
     tmdb = None
-    need_tmdb = {"status", "streaming", "ratings", "ribbon", "mediastinger"} & set(families)
+    need_tmdb = {"status", "streaming", "ratings", "ribbon", "mediastinger"} & media_family_set
     if need_tmdb:
         from kometa_external import create_kometa_tmdb
 
         tmdb = create_kometa_tmdb(config, paths, progress)
         if not tmdb.enabled:
-            if "streaming" in families:
+            if "streaming" in media_family_set:
                 _progress(progress, "Streaming overlays need a TMDB API key — skipping that family")
+                media_families = [f for f in media_families if f != "streaming"]
+                media_family_set.discard("streaming")
                 families = [f for f in families if f != "streaming"]
-            if "mediastinger" in families:
+            if "mediastinger" in media_family_set:
                 _progress(progress, "MediaStinger overlays need a TMDB API key — skipping that family")
+                media_families = [f for f in media_families if f != "mediastinger"]
+                media_family_set.discard("mediastinger")
                 families = [f for f in families if f != "mediastinger"]
-            if "status" in families:
+            if "status" in media_family_set:
                 _progress(progress, "No TMDB API key — status falls back to Plex series status")
 
     lists = None
-    if "ribbon" in families:
+    if "ribbon" in media_family_set:
         from kometa_lists import KometaLists
 
         lists = KometaLists(Path(paths["root"]) / "cache", progress=progress)
 
-    plans = _collect_section_plans(plex, config)
+    plans: dict[str, dict] = {}
     should: dict[str, dict] = {}
     scanned = 0
     only_title_keys = _only_rating_keys(config)
     scoped_titles = bool(only_title_keys)
 
-    if scoped_titles:
+    if scoped_titles and media_family_set:
+        if detector is None:
+            detector = KometaDetector(plex, progress=progress)
         _progress(
             progress,
             f"Scoped Layer pass — {len(only_title_keys)} rating key(s); full-library scan and prune skipped",
         )
         # Detect media/status/etc on the requested titles only (collections inject later).
-        media_families = {f for f in families if f != "custom_collection"}
         for key in sorted(only_title_keys):
             item = _fetch_plex_item(plex, key)
             if item is None:
@@ -1855,7 +2004,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 "itemType": item_type,
                 "winners": {},
             }
-            for family in media_families:
+            for family in media_family_set:
                 if item_type == "episode" and family != "episode_info":
                     continue
                 if item_type != "episode" and family == "episode_info":
@@ -1898,15 +2047,18 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                     errors.append(f"{family} {getattr(item, 'title', key)}: {exc}")
             if row["winners"]:
                 should[key] = row
-            elif media_families:
+            elif media_family_set:
                 _progress(
                     progress,
                     f"{getattr(item, 'title', key)}: no Layer family matched — waiting for collection rules if enabled",
                 )
-    else:
+    elif media_family_set:
+        if detector is None:
+            detector = KometaDetector(plex, progress=progress)
+        plans = _collect_section_plans(plex, config, scope=scope_name)
         for sid, plan in plans.items():
             section = plan["section"]
-            section_families = plan["families"]
+            section_families = plan["families"] & media_family_set
             if not section_families:
                 continue
             _progress(progress, f"Layer scan: {getattr(section, 'title', sid)} ({', '.join(sorted(section_families))})…")
@@ -1956,6 +2108,8 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                         errors.append(f"{family} {getattr(item, 'title', key)}: {exc}")
                 if row["winners"]:
                     should[key] = row
+    elif scope_name == "collections":
+        _progress(progress, "Collection-only pass — resolving membership (no library-wide Layer scan)")
 
     cc_rule_members: dict[str, set[str]] = {}
     active_cc_rule_ids: set[str] = set()
@@ -2300,45 +2454,15 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                         del log[key]
                         removed += 1
                         continue
-                    try:
-                        item = plex.fetchItem(f"/library/metadata/{key}")
-                    except Exception:
+                    restamped = _restamp_item_winners(
+                        plex, paths, config, key, entry, preserved, progress,
+                    )
+                    if restamped is None:
                         _restore_item(plex, paths, key, entry, progress)
                         del log[key]
                         removed += 1
                         continue
-                    backup = _backup_file(paths, key)
-                    if backup.exists():
-                        original = Image.open(backup).convert("RGBA")
-                    else:
-                        poster = _download_original(plex, item)
-                        if poster is None:
-                            raise RuntimeError("failed to download poster for scoped prune")
-                        original = poster.convert("RGBA")
-                    result = compose_poster(original, preserved, config=config, paths=paths)
-                    safe = _sanitize(f"{entry.get('title') or key}_kometa")
-                    temp = Path(paths["preview"]) / f"temp_{safe}.png"
-                    save_with_marker(result, temp)
-                    try:
-                        from core import _upload_poster_resilient
-                        _upload_poster_resilient(
-                            item,
-                            temp,
-                            progress=progress,
-                            title=str(entry.get("title") or key),
-                        )
-                    finally:
-                        if temp.exists():
-                            temp.unlink()
-                    entry = {
-                        **entry,
-                        "families": {fam: w.as_log() for fam, w in preserved.items()},
-                        "signature": _signature(preserved, config),
-                        "timestamp": datetime.now().isoformat(),
-                        "posterThumb": _reload_item_thumb(item) or entry.get("posterThumb"),
-                    }
-                    entry.pop("needsRestamp", None)
-                    log[key] = entry
+                    log[key] = restamped
                     if not preview_mode:
                         _save_log(log_path, log)
                     removed += 1
@@ -2463,6 +2587,121 @@ def revert_kometa(config: dict, rating_key: str | None = None, progress: Progres
         "failed": failed,
         "remaining": len(log),
         "recoveredFromBackup": len(orphan_backups),
+        "clearedKeys": cleared_keys,
+        "finishedAt": datetime.now().isoformat(),
+    }
+
+
+def drop_kometa_family(
+    config: dict,
+    family: str,
+    *,
+    rule_id: str | None = None,
+    rating_keys: list[str] | None = None,
+    progress: ProgressFn | None = None,
+) -> dict:
+    """Remove one overlay family and restamp whatever is left from the backup.
+
+    Collection overlay delete/revert uses this so 4K/HDR/etc. stay when Trending
+    (or another custom collection badge) is taken off.
+    """
+    from core import _connect, _resolve_paths
+
+    target = str(family or "").strip()
+    if not target:
+        return {
+            "ok": False,
+            "requested": 0,
+            "dropped": 0,
+            "restamped": 0,
+            "reverted": 0,
+            "failed": ["family is required"],
+            "clearedKeys": [],
+            "finishedAt": datetime.now().isoformat(),
+        }
+
+    rid = _normalize_label_name(rule_id)
+    wanted_keys = [
+        str(key or "").strip()
+        for key in (rating_keys or [])
+        if str(key or "").strip()
+    ]
+
+    paths = _resolve_paths(config)
+    migrate_legacy_logs(paths, progress)
+    plex = _connect(config)
+    log_path = kometa_log_path(paths)
+    log = _load_log(log_path)
+
+    if wanted_keys:
+        keys = [key for key in wanted_keys if key in log]
+    else:
+        keys = []
+        for key, entry in log.items():
+            winners = _winners_from_entry(entry if isinstance(entry, dict) else {})
+            if any(_should_drop_winner(fam, winner, target, rid) for fam, winner in winners.items()):
+                keys.append(key)
+
+    label = rid or target
+    _progress(progress, f"Dropping '{label}' from {len(keys)} title(s) — keeping other Layer overlays")
+
+    dropped = 0
+    restamped = 0
+    reverted = 0
+    failed: list[str] = []
+    cleared_keys: list[str] = []
+
+    for key in keys:
+        entry = log.get(key) if isinstance(log.get(key), dict) else {"title": key}
+        winners = _winners_from_entry(entry)
+        remaining: dict[str, Winner] = {}
+        matched = False
+        for fam, winner in winners.items():
+            if _should_drop_winner(fam, winner, target, rid):
+                matched = True
+                continue
+            remaining[str(fam)] = winner
+        if not matched:
+            continue
+        dropped += 1
+        try:
+            if remaining:
+                updated = _restamp_item_winners(
+                    plex, paths, config, key, entry, remaining, progress,
+                )
+                if updated is None:
+                    _restore_item(plex, paths, key, entry, progress)
+                    del log[key]
+                    cleared_keys.append(key)
+                    reverted += 1
+                else:
+                    log[key] = updated
+                    restamped += 1
+            else:
+                _restore_item(plex, paths, key, entry, progress)
+                del log[key]
+                cleared_keys.append(key)
+                reverted += 1
+            _save_log(log_path, log)
+        except Exception as exc:
+            failed.append(f"{(entry or {}).get('title') or key}: {exc}")
+            _progress(progress, f"Drop '{label}' failed for {key}: {exc}")
+
+    _save_log(log_path, log)
+    _progress(
+        progress,
+        f"Dropped '{label}' from {dropped} title(s) — restamped {restamped}, fully restored {reverted}",
+    )
+    return {
+        "ok": True,
+        "family": target,
+        "ruleId": rid or None,
+        "requested": len(keys),
+        "dropped": dropped,
+        "restamped": restamped,
+        "reverted": reverted,
+        "failed": failed,
+        "remaining": len(log),
         "clearedKeys": cleared_keys,
         "finishedAt": datetime.now().isoformat(),
     }

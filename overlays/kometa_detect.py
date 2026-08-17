@@ -356,6 +356,10 @@ class Winner:
 
     def as_log(self) -> dict:
         out = {"name": self.name, "weight": self.weight}
+        if self.key:
+            out["key"] = self.key
+        if self.alt:
+            out["alt"] = self.alt
         if self.text:
             out["text"] = self.text
         if self.image_rel:

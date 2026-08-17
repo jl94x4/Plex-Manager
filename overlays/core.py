@@ -2654,11 +2654,11 @@ def _run_kometa_bundle(plex, config: dict, paths: dict, preview_mode: bool, prog
         ensure_placement_preview_badges(paths["assets"], paths=paths)
     except Exception:
         pass
-    # UI can pass kometaScope=media|collections; scheduler omits it → full pass.
+    # UI can pass kometaScope=media|collections; scheduler omits it → media-only pass.
     scope = str(config.get("kometaScope") or config.get("kometa_scope") or "").strip().lower()
     if not scope:
         bundle = _normalize_run_bundle(config.get("runBundle") or config.get("run_bundle") or "kometa")
-        scope = "collections" if bundle == "collections" else "all"
+        scope = "collections" if bundle == "collections" else "media"
     cfg = {**config, "kometaScope": scope}
     summary = run_kometa_parity(plex, cfg, paths, preview_mode, progress)
     out = {
