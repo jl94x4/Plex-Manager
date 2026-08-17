@@ -39,7 +39,7 @@ export type MediaAvailabilityState = {
 
 const resolveMediaType = (item: any): 'movie' | 'tv' | 'music' | null => {
     const normalized = normalizeRawDiscoveryItem(item);
-    const raw = normalized?.mediaType ?? item?.mediaType ?? item?.type;
+    const raw = normalized?.mediaType ?? item?.mediaType ?? item?.media_type ?? item?.type;
     if (raw === 'music') return 'music';
     if (raw === 'movie' || raw === 1 || raw === '1') return 'movie';
     if (raw === 'tv' || raw === 2 || raw === '2') return 'tv';

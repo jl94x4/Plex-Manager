@@ -175,9 +175,10 @@ export const MediaDetailsPage: React.FC<{
                 ? `/api/discovery/proxy/movie/${mediaId}/recommendations`
                 : `/api/discovery/proxy/tv/${mediaId}/recommendations`;
             apiFetch(recEndpoint)
-                .then((recRes) => {
+                .then(async (recRes) => {
                     if (cancelled || !recRes || recRes.error || !recRes.results) return;
-                    setRecommendations(recRes.results);
+                    const enriched = await enrichDiscoverItemsWithAvailability(recRes.results);
+                    if (!cancelled) setRecommendations(enriched);
                 })
                 .catch(() => undefined);
         };

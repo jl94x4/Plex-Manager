@@ -1,6 +1,6 @@
 import { apiFetch } from '../shared/api';
 
-/** Normalize Seerr media, request, or watchlist shapes into a TMDB-friendly item. */
+/** Normalize Seerr media, request, watchlist, or TMDB cast/credit shapes into a TMDB-friendly item. */
 export const normalizeRawDiscoveryItem = (item: any) => {
     if (!item || typeof item !== 'object') return item;
 
@@ -27,6 +27,20 @@ export const normalizeRawDiscoveryItem = (item: any) => {
             mediaType: item.title.mediaType || item.mediaType,
             tmdbId: item.title.tmdbId ?? item.tmdbId,
             posterPath: item.title.posterPath ?? item.posterPath,
+        };
+    }
+
+    const mediaTypeRaw = item.mediaType ?? item.media_type;
+    if (mediaTypeRaw === 'movie' || mediaTypeRaw === 'tv') {
+        return {
+            ...item,
+            mediaType: mediaTypeRaw,
+            tmdbId: item.tmdbId ?? item.id,
+            posterPath: item.posterPath ?? item.poster_path ?? null,
+            profilePath: item.profilePath ?? item.profile_path ?? null,
+            releaseDate: item.releaseDate ?? item.release_date ?? null,
+            firstAirDate: item.firstAirDate ?? item.first_air_date ?? null,
+            originalName: item.originalName ?? item.original_name ?? null,
         };
     }
 

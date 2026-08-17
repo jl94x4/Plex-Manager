@@ -3,6 +3,7 @@ import { ArrowLeft, Loader2, Star, Calendar, Film, ChevronDown } from 'lucide-re
 import { apiFetch } from '../shared/api';
 import { DiscoverPosterCard } from '../screens';
 import { filterHiddenAvailableItems, useDiscoveryPreferences } from './useDiscoveryPreferences';
+import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
 import { upgraderPosterGridClass, upgraderPosterGridStyle } from '../shared/portalLayout';
 import { useDiscoverI18n } from './i18n';
 
@@ -48,10 +49,11 @@ export const PersonDetailsPage: React.FC<{
                 if (creditsData && creditsData.cast) {
                     // Sort by popularity or release date
                     const sorted = creditsData.cast
-                        .filter((c: any) => c.posterPath)
+                        .filter((c: any) => c.posterPath || c.poster_path)
                         .sort((a: any, b: any) => b.popularity - a.popularity)
                         .slice(0, 50);
-                    setCredits(sorted);
+                    const enriched = await enrichDiscoverItemsWithAvailability(sorted);
+                    setCredits(enriched);
                 }
             } catch (err) {
                 console.error(err);
