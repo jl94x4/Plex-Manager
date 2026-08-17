@@ -1076,6 +1076,222 @@ def _plex_item_tmdb_ids(item):
     return ids
 
 
+def _plex_item_media_kind(item):
+    """Return 'movie' | 'show' for a Plex item, or None when not collection-safe."""
+    return normalize_media_kind(getattr(item, 'type', None) or getattr(item, 'TYPE', None))
+
+
+def _acceptable_collection_member(item, library_or_type=None):
+    """Only top-level movie/show rows belong in Plex collections."""
+    kind = _plex_item_media_kind(item)
+    if kind not in {'movie', 'show'}:
+        return False
+    lib_type = None
+    if library_or_type is not None:
+        if isinstance(library_or_type, str):
+            lib_type = normalize_media_kind(library_or_type)
+        else:
+            lib_type = normalize_media_kind(getattr(library_or_type, 'type', None))
+    if lib_type and kind != lib_type:
+        return False
+    norm = _normalize_plex_metadata_type(getattr(item, 'type', None) or getattr(item, 'TYPE', None))
+    if norm == 99:
+        return False
+    return True
+
+
+def _sanitize_collection_members(library, items):
+    """Drop seasons/episodes/folders/wrong-library rows before Plex collection writes."""
+    lib_type = normalize_media_kind(getattr(library, 'type', None))
+    clean = []
+    seen = set()
+    dropped = 0
+    for item in items or []:
+        rk = str(getattr(item, 'ratingKey', '') or '').strip()
+        if not rk or rk in seen:
+            continue
+        if not _acceptable_collection_member(item, lib_type):
+            dropped += 1
+            logging.warning(
+                "Skipping unsafe collection member %s (type=%s, library expects %s)",
+                getattr(item, 'title', rk),
+                getattr(item, 'type', None),
+                lib_type or 'any',
+            )
+            continue
+        seen.add(rk)
+        clean.append(item)
+    if dropped:
+        log_action(f"Filtered {dropped} unsafe item(s) before writing collection members.")
+    return clean
+
+
+def _clear_collection_custom_poster(coll):
+    """Remove uploaded posters that often break Plex Web poster transcode."""
+    cleared = False
+    try:
+        coll.unlockPoster()
+        cleared = True
+    except Exception:
+        pass
+    try:
+        for poster in coll.posters() or []:
+            rk = str(getattr(poster, 'ratingKey', '') or '')
+            if rk.startswith('upload://'):
+                poster.delete()
+                cleared = True
+    except Exception as exc:
+        logging.warning(f"Could not delete uploaded collection posters: {exc}")
+    try:
+        coll.reload()
+    except Exception:
+        pass
+    return cleared
+
+
+def _collection_poster_probe_issues(coll, config):
+    """Return poster-related Plex Web probe issues for this collection."""
+    url = str((config or {}).get('plex_url') or '').rstrip('/')
+    token = str((config or {}).get('plex_token') or '')
+    if not url or not token or coll is None:
+        return []
+    row = _probe_collection_web_crash(url, token, coll, '')
+    issues = [str(i) for i in (row.get('issues') or [])]
+    return [i for i in issues if 'poster' in i.lower()]
+
+
+def _remove_invalid_collection_members(coll):
+    """Remove collection members Plex Web cannot render (type 99 / non movie-show)."""
+    bad = []
+    for item in list(coll.items() or []):
+        row = {
+            'ratingKey': str(getattr(item, 'ratingKey', '') or ''),
+            'title': str(getattr(item, 'title', '') or ''),
+            'type': getattr(item, 'type', None) or getattr(item, 'TYPE', None),
+        }
+        if _issues_for_metadata_row(row, expect_collection=False):
+            bad.append(item)
+            continue
+        if not _acceptable_collection_member(item):
+            bad.append(item)
+    if not bad:
+        return 0
+    try:
+        coll.removeItems(bad)
+    except Exception as exc:
+        logging.warning(f"Failed to prune invalid collection members: {exc}")
+        return 0
+    return len(bad)
+
+
+def _purge_phantom_collection_list_rows(plex_base, token, section_key, title, keep_rating_key):
+    """
+    Delete type-99 / folder rows in Plex's collections list for this title.
+    These phantom rows crash Plex Web's Collections tab (unknown type: 99).
+    """
+    plex = get_plex_instance()
+    if not plex or not section_key:
+        return 0
+    keep = str(keep_rating_key or '').strip()
+    want = _normalize_collection_title(title).casefold()
+    if not want:
+        return 0
+    purged = 0
+    page_size = 50
+    start = 0
+    headers_base = plex_request_headers(token, {
+        'User-Agent': 'ColleXionsManager/1.0',
+        'Accept': 'application/json',
+    })
+    params = {
+        'includeCollections': 1,
+        'includeExternalMedia': 1,
+        'X-Plex-Token': token,
+    }
+    while True:
+        headers = dict(headers_base)
+        headers['X-Plex-Container-Start'] = str(start)
+        headers['X-Plex-Container-Size'] = str(page_size)
+        try:
+            resp = requests.get(
+                f"{plex_base}/library/sections/{section_key}/collections",
+                params=params,
+                headers=headers,
+                timeout=12,
+                verify=PLEX_SSL_VERIFY,
+            )
+        except Exception as exc:
+            logging.warning(f"Phantom collection scan failed: {exc}")
+            break
+        if resp.status_code >= 400:
+            break
+        items, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
+        for item in items:
+            issues = _issues_for_collection_list_row(item)
+            if not issues:
+                continue
+            rk = str(item.get('ratingKey') or '').strip()
+            if not rk or rk == keep:
+                continue
+            row_title = str(item.get('title') or '').strip().casefold()
+            if row_title != want:
+                continue
+            try:
+                node = plex.fetchItem(int(rk) if rk.isdigit() else rk)
+                node.delete()
+                purged += 1
+                log_action(f"Purged phantom collection list row '{item.get('title')}' (key {rk}).")
+            except Exception as exc:
+                logging.warning(f"Failed to purge phantom collection row {rk}: {exc}")
+        if not items or start + len(items) >= total:
+            break
+        start += page_size
+    return purged
+
+
+def _finalize_collection_for_plex_web(coll, library, config=None):
+    """
+    Post-create hardening: prune bad members, fix crashy posters, purge type-99 phantoms.
+    """
+    if coll is None:
+        return []
+    config = config or load_config()
+    fixes = []
+    lib_name = str(getattr(library, 'title', '') or '')
+    section_key = str(getattr(library, 'key', '') or '').rstrip('/').split('/')[-1]
+    title = str(getattr(coll, 'title', '') or '')
+    rk = str(getattr(coll, 'ratingKey', '') or '')
+
+    removed = _remove_invalid_collection_members(coll)
+    if removed:
+        fixes.append(f'removed {removed} invalid member(s)')
+
+    if _collection_poster_probe_issues(coll, config):
+        if _clear_collection_custom_poster(coll):
+            fixes.append('cleared crashy custom poster')
+
+    url = str(config.get('plex_url') or '').rstrip('/')
+    token = str(config.get('plex_token') or '')
+    if url and token and section_key:
+        purged = _purge_phantom_collection_list_rows(url, token, section_key, title, rk)
+        if purged:
+            fixes.append(f'purged {purged} phantom list row(s)')
+
+        child_row = _probe_collection_children_types(url, token, rk, title, lib_name)
+        if child_row and child_row.get('issues'):
+            extra = _remove_invalid_collection_members(coll)
+            if extra:
+                fixes.append(f'pruned {extra} bad member(s) after probe')
+
+        if _collection_poster_probe_issues(coll, config):
+            _clear_collection_custom_poster(coll)
+            fixes.append('cleared poster after re-probe')
+
+    if fixes:
+        log_action(f"Plex Web hardening for '{title}': {', '.join(fixes)}")
+    return fixes
+
+
 def _match_external_to_plex(library, external_items, tmdb_cache=None):
     """Match external {tmdb_id/id, title} items to local Plex items.
 
@@ -1088,6 +1304,8 @@ def _match_external_to_plex(library, external_items, tmdb_cache=None):
 
     matched = []
     seen_keys = set()
+
+    lib_type = normalize_media_kind(getattr(library, 'type', None))
 
     # Fast path: title search (+ TMDB guid verify) for modest lists.
     if tmdb_cache is None and len(items) <= 80:
@@ -1106,22 +1324,29 @@ def _match_external_to_plex(library, external_items, tmdb_cache=None):
                 results = []
             if tmdb_id and results:
                 for r in results[:20]:
+                    if not _acceptable_collection_member(r, lib_type):
+                        continue
                     if tmdb_id in _plex_item_tmdb_ids(r):
                         pick = r
                         break
             if pick is None and title and results:
                 for r in results[:10]:
+                    if not _acceptable_collection_member(r, lib_type):
+                        continue
                     if (getattr(r, 'title', '') or '').casefold() == title.casefold():
                         pick = r
                         break
             if pick is None and results:
-                pick = results[0]
+                for r in results[:10]:
+                    if _acceptable_collection_member(r, lib_type):
+                        pick = r
+                        break
             if pick is not None:
                 key = getattr(pick, 'ratingKey', None)
                 if key not in seen_keys:
                     seen_keys.add(key)
                     matched.append(pick)
-        return matched
+        return _sanitize_collection_members(library, matched)
 
     if tmdb_cache is None:
         logging.info(f"Building full TMDB cache for {len(items)} items (slow path)")
@@ -1139,7 +1364,7 @@ def _match_external_to_plex(library, external_items, tmdb_cache=None):
             continue
         seen_keys.add(key)
         matched.append(local_item)
-    return matched
+    return _sanitize_collection_members(library, matched)
 
 
 def _managed_job_id(library_name, title):
@@ -1396,8 +1621,9 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
     title = _normalize_collection_title(title)
     if not title:
         raise ValueError("Collection title is required")
+    matched_items = _sanitize_collection_members(library, matched_items)
     if not matched_items:
-        raise ValueError("No matched items to add")
+        raise ValueError("No valid matched items to add")
 
     coll = None
     keep_key = str(keep_rating_key or '').strip()
@@ -1749,8 +1975,12 @@ def _build_poster_mosaic(poster_urls, cell_w=500, cell_h=750):
             logging.debug(f"Mosaic cell compose failed: {e}")
 
     buf = io.BytesIO()
-    canvas.save(buf, format='JPEG', quality=90, optimize=True)
+    canvas.save(buf, format='JPEG', quality=88, optimize=True)
     buf.seek(0)
+    if buf.getbuffer().nbytes > 9_000_000:
+        buf = io.BytesIO()
+        canvas.save(buf, format='JPEG', quality=75, optimize=True)
+        buf.seek(0)
     return buf
 
 
@@ -1807,7 +2037,11 @@ def _ensure_collection_art(coll, source_type='', source_id='', external_items=No
             except Exception:
                 pass
             log_action(f"Set franchise poster for collection '{title}'.")
-            return True
+            if _collection_poster_probe_issues(coll, config):
+                logging.warning(f"Franchise poster failed Plex Web probe for '{title}' — clearing.")
+                _clear_collection_custom_poster(coll)
+            else:
+                return True
         except Exception as e:
             logging.warning(f"Failed to upload franchise poster for '{title}': {e}")
 
@@ -1828,7 +2062,11 @@ def _ensure_collection_art(coll, source_type='', source_id='', external_items=No
             except Exception:
                 pass
             log_action(f"Set 2x2 mosaic poster for collection '{title}' ({len(mosaic_urls)} titles).")
-            return True
+            if _collection_poster_probe_issues(coll, config):
+                logging.warning(f"Mosaic poster failed Plex Web probe for '{title}' — clearing.")
+                _clear_collection_custom_poster(coll)
+            else:
+                return True
         except Exception as e:
             logging.warning(f"Failed to upload mosaic poster for '{title}': {e}")
 
@@ -1902,6 +2140,7 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
                 config=config,
                 force=created_fresh,
             )
+            web_fixes = _finalize_collection_for_plex_web(coll, library, config)
 
             job_id = None
             if auto_sync and source_type:
@@ -1924,6 +2163,7 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
                 "job_id": job_id,
                 "title": title,
                 "art_set": bool(art_set),
+                "web_fixes": web_fixes,
             }
     except RuntimeError as e:
         return {"success": False, "error": str(e)}
@@ -2009,10 +2249,17 @@ def run_sync_job(job_id=None):
                 for itm in items:
                     search_type = 'movie' if itm.get('type') == 'movie' else 'show'
                     results = library.search(title=itm.get('title'), libtype=search_type)
-                    if results and results[0].ratingKey not in matched_keys:
-                        plex_items.append(results[0])
-                        matched_keys.add(results[0].ratingKey)
+                    if not results:
+                        continue
+                    for candidate in results[:5]:
+                        if not _acceptable_collection_member(candidate, getattr(library, 'type', None)):
+                            continue
+                        if candidate.ratingKey not in matched_keys:
+                            plex_items.append(candidate)
+                            matched_keys.add(candidate.ratingKey)
+                            break
 
+            plex_items = _sanitize_collection_members(library, plex_items)
             if not plex_items:
                 log_action(f"Auto-Sync: No matching Plex items found for '{coll_name}'.")
                 continue
@@ -2046,6 +2293,7 @@ def run_sync_job(job_id=None):
                         config=config,
                         force=created_fresh,
                     )
+                    _finalize_collection_for_plex_web(coll, library, config)
                     if created_fresh:
                         log_action(f"Auto-Sync: Created '{coll_name}' with {len(plex_items)} items.")
                     else:
@@ -4023,9 +4271,15 @@ def fix_collection_art():
                 config=config,
                 force=force or bool(title),
             )
+            web_fixes = _finalize_collection_for_plex_web(coll, library, config)
             if changed:
                 ok_count += 1
-            results.append({"title": coll.title, "library": library_name, "ok": bool(changed)})
+            results.append({
+                "title": coll.title,
+                "library": library_name,
+                "ok": bool(changed),
+                "web_fixes": web_fixes,
+            })
 
         GALLERY_CACHE['data'] = None
         GALLERY_CACHE['timestamp'] = 0
@@ -4097,13 +4351,14 @@ def create_custom_collection():
                 config=config,
                 force=created_fresh,
             )
+            web_fixes = _finalize_collection_for_plex_web(collection, library, config)
             
             log_action(f"Created/updated collection '{title}' with {len(items)} items in {library_name} (Sort: {sort_order}).")
             
             # Clear cache since library changed
             GALLERY_CACHE['data'] = None
             
-            return jsonify({"success": True, "art_set": bool(art_set)})
+            return jsonify({"success": True, "art_set": bool(art_set), "web_fixes": web_fixes})
     except RuntimeError as e:
         return jsonify({"success": False, "error": str(e)}), 409
     except Exception as e:
