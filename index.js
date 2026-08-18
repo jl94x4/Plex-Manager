@@ -16471,7 +16471,9 @@ app.post('/api/plex/analytics/rebuild', requireAdmin, async (req, res) => {
     if (isBuildingAnalyticsStats) {
         return res.json({ status: 'already_running', message: 'Analytics cache rebuild is already in progress.' });
     }
-    calculateAnalyticsStats().catch((error) => {
+    // force=true: always write a building stub (so the UI shows progress) and always
+    // retry Tautulli even if a previous attempt was recorded in the cache.
+    calculateAnalyticsStats({ force: true }).catch((error) => {
         log(`Manual analytics rebuild failed: ${error.message}`);
     });
     return res.json({ status: 'started', message: 'Analytics cache rebuild started in the background.' });
@@ -20311,7 +20313,7 @@ app.get('/api/downloads/status', requireAuth, requireMember, async (req, res) =>
 let isBuildingAnalyticsStats = false;
 let isBuildingTrendingStats = false;
 
-async function calculateAnalyticsStats() {
+async function calculateAnalyticsStats({ force = false } = {}) {
     if (isBuildingAnalyticsStats) {
         log('[AnalyticsStats] Build already in progress, skipping.');
         return;
@@ -20346,20 +20348,26 @@ async function calculateAnalyticsStats() {
             sourceMeta = { source: 'tautulli', fallback: null, degraded: false };
         }
 
-        // Only stamp a "building" stub when there is no usable cache yet (fresh install /
-        // null file). Overwriting a good cache here would blank analytics during every
-        // scheduled rebuild and lose the previous data if this run fails.
+        // Stamp a "building" stub so the UI can show progress.
+        // On scheduled rebuilds we skip this when there's already a good cache, to avoid
+        // blanking analytics if the run fails. On manual/forced rebuilds we always write it
+        // so the UI immediately reflects that a rebuild is underway.
         let existingCacheUsable = false;
         try {
             existingCacheUsable = isValidAnalyticsCache(await readAnalyticsCacheFile());
         } catch { /* treat unreadable as missing */ }
-        if (!existingCacheUsable) {
+        if (!existingCacheUsable || force) {
             await saveFile(
                 ANALYTICS_CACHE_PATH,
                 buildAnalyticsCachePayload(sourceMeta, { building: true }),
             );
+            // After a forced write, treat the stub as non-usable so error recovery
+            // will always update the cache if this run fails.
+            existingCacheUsable = false;
         }
 
+        // On a forced/manual rebuild always retry Tautulli, even if a previous
+        // attempt is recorded in the cache (the user explicitly asked us to try again).
         if (preferTautulli) {
             try {
                 historyItems = await fetchTautulliServerHistoryItems(config, { maxItems: maxHistoryItems });
@@ -20530,9 +20538,12 @@ async function calculateAnalyticsStats() {
     } catch (e) {
         log(`Error calculating analytics stats: ${e.message}`);
         // Never leave a "building" stub behind — the UI would show rebuild-pending forever.
+        // Also update the cache metadata even when no building stub was written (e.g. scheduled
+        // rebuild with an existing valid cache) so the failure is visible in the UI.
         try {
             const current = await readAnalyticsCacheFile();
             if (current?.building) {
+                // Wrote a building stub at the start — replace it with a failure marker.
                 await saveFile(ANALYTICS_CACHE_PATH, {
                     ...current,
                     building: false,
@@ -20540,6 +20551,16 @@ async function calculateAnalyticsStats() {
                     degraded: true,
                     fallback: 'rebuild_failed',
                     sourceLabel: analyticsSourceLabelFor('plex', { degraded: true, fallback: 'rebuild_failed' }),
+                    lastUpdated: Date.now(),
+                });
+            } else if (current && typeof current === 'object') {
+                // No building stub (scheduled rebuild over a live cache) — patch only the
+                // metadata fields so the error is surfaced without wiping stats data.
+                await saveFile(ANALYTICS_CACHE_PATH, {
+                    ...current,
+                    degraded: true,
+                    fallback: 'rebuild_failed',
+                    sourceLabel: analyticsSourceLabelFor(current.source || 'plex', { degraded: true, fallback: 'rebuild_failed' }),
                     lastUpdated: Date.now(),
                 });
             }
