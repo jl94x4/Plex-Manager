@@ -156,9 +156,13 @@ export const DiscoverHeroHeader: React.FC<SearchResultProps> = (props) => {
 
         window.addEventListener('resize', updateRect);
         window.addEventListener('scroll', updateRect, true);
+        window.visualViewport?.addEventListener('resize', updateRect);
+        window.visualViewport?.addEventListener('scroll', updateRect);
         return () => {
             window.removeEventListener('resize', updateRect);
             window.removeEventListener('scroll', updateRect, true);
+            window.visualViewport?.removeEventListener('resize', updateRect);
+            window.visualViewport?.removeEventListener('scroll', updateRect);
         };
     }, [props.searchOpen, query]);
 

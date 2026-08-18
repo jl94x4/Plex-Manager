@@ -3,6 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <script>
+      (function () {
+        var ios = /iP(ad|hone|od)/.test(navigator.userAgent)
+          || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (!ios) return;
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (!meta) return;
+        // Must be set before first paint. Toggling maximum-scale on focus/blur is
+        // too late (Safari already zoomed) and unlocking leaves the page zoomed.
+        meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover');
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -18,39 +30,6 @@
 </head>
   <body>
     <div id="root"></div>
-    <script>
-      (function () {
-        var meta = document.querySelector('meta[name="viewport"]');
-        if (!meta) return;
-        var base = meta.getAttribute('content') || 'width=device-width, initial-scale=1, viewport-fit=cover';
-        var ios = /iP(ad|hone|od)/.test(navigator.userAgent)
-          || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        if (!ios) return;
-        // iOS 17+ can still zoom focused fields even at 16px. Lock scale only while
-        // an input is focused so Android pinch-zoom is not permanently disabled.
-        var locked = base.indexOf('maximum-scale') >= 0 ? base : base + ', maximum-scale=1';
-        var unlockTimer;
-        var isField = function (t) {
-          if (!t) return false;
-          var tag = String(t.tagName || '').toLowerCase();
-          return tag === 'input' || tag === 'textarea' || tag === 'select' || t.isContentEditable;
-        };
-        var lock = function () {
-          clearTimeout(unlockTimer);
-          meta.setAttribute('content', locked);
-        };
-        document.addEventListener('touchstart', function (e) {
-          if (isField(e.target)) lock();
-        }, true);
-        document.addEventListener('focusin', function (e) {
-          if (isField(e.target)) lock();
-        }, true);
-        document.addEventListener('focusout', function () {
-          clearTimeout(unlockTimer);
-          unlockTimer = setTimeout(function () { meta.setAttribute('content', base); }, 300);
-        }, true);
-      })();
-    </script>
     <script type="module" src="static/index.js?v=23453ad-mseme1a3"></script>
   </body>
 </html>
