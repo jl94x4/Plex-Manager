@@ -176,7 +176,7 @@ const Dashboard: React.FC = () => {
     };
 
     const calculateNextRun = (s: AppStatus) => {
-        if (s.next_run_timestamp && s.next_run_timestamp > 0) {
+        if (s.process_alive && s.next_run_timestamp && s.next_run_timestamp > 0) {
             const targetDate = new Date(s.next_run_timestamp * 1000);
             const timeStr = targetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             const diff = targetDate.getTime() - Date.now();
@@ -391,9 +391,11 @@ const Dashboard: React.FC = () => {
     // --- Actions ---
     const currentStatus = status?.status || 'Connecting...';
     const statusLower = currentStatus.toLowerCase();
-    const isLoopActive = !!status?.process_alive
-        || /running|sleeping|processing|waiting|run complete/.test(statusLower);
-    const isWorking = statusLower.includes('processing') || statusLower.includes('pinning');
+    // process_alive is the source of truth. Stale status.json text ("Sleeping",
+    // "Run complete") used to keep the dashboard looking Active after Stop,
+    // which also hid the Start button.
+    const isLoopActive = !!status?.process_alive;
+    const isWorking = isLoopActive && (statusLower.includes('processing') || statusLower.includes('pinning'));
     const isOffline = statusLower === 'offline' || status === null;
     const lastUpdateDate = safeParseDate(status?.last_run_at || status?.last_update || '');
     const isDryRun = config?.dry_run === true;
@@ -402,7 +404,12 @@ const Dashboard: React.FC = () => {
         if (loading) return;
         if (isLoopActive) return alert("Service is already active.");
         setLoading(true);
-        try { await api.runNow(); setTimeout(fetchStatusOnly, 1000); } catch (error) { alert("Failed to start."); }
+        try {
+            await api.runNow();
+            await Promise.all([fetchStatusOnly(), fetchHealth()]);
+        } catch (error: any) {
+            alert(error?.message || "Failed to start.");
+        }
         setLoading(false);
     };
 
@@ -410,7 +417,12 @@ const Dashboard: React.FC = () => {
         if (loading) return;
         if (!confirm("Stop the Automation Service?")) return;
         setLoading(true);
-        try { await api.stopScript(); setTimeout(fetchStatusOnly, 1000); } catch (error) { console.error(error); }
+        try {
+            await api.stopScript();
+            await Promise.all([fetchStatusOnly(), fetchHealth()]);
+        } catch (error: any) {
+            alert(error?.message || "Failed to stop.");
+        }
         setLoading(false);
     };
 
@@ -420,7 +432,8 @@ const Dashboard: React.FC = () => {
         setTimeout(() => setIsRefreshing(false), 500);
     };
 
-    const healthIssues = health?.issues?.length ? health.issues : (healthError ? [healthError] : []);
+    const healthIssues = (health?.issues?.length ? health.issues : (healthError ? [healthError] : []))
+        .filter((issue) => !/pinning service is stopped/i.test(issue));
     const showHealthWarn = !!(health && (!health.ok || healthIssues.length > 0)) || !!healthError;
 
     return (

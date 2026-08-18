@@ -2834,19 +2834,80 @@ def log_action(message):
 
 def is_script_already_running():
     """Check via psutil if ColleXions.py is running in a process the server didn't start."""
+    return bool(_collexions_script_pids())
+
+
+def _collexions_script_pids():
+    """PIDs whose command line is the pinning script (not this Flask worker)."""
     if not PSUTIL_AVAILABLE:
-        return False
+        return []
+    pids = []
+    my_pid = os.getpid()
     try:
         for proc in psutil.process_iter(['pid', 'cmdline']):
             try:
+                pid = proc.info.get('pid')
+                if not pid or pid == my_pid:
+                    continue
                 cmdline = proc.info.get('cmdline') or []
-                if any(SCRIPT_NAME in (arg or '') for arg in cmdline):
-                    return True
+                if any(
+                    os.path.basename(str(arg or '').replace('\\', '/')) == SCRIPT_NAME
+                    for arg in cmdline
+                ):
+                    pids.append(pid)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
     except Exception:
         pass
-    return False
+    return pids
+
+
+def _mark_script_stopped():
+    """Persist Stopped so leftover Sleeping/Run-complete text cannot look live."""
+    data = _read_status_file()
+    data['status'] = 'Stopped'
+    data['next_run_timestamp'] = 0
+    data['last_update'] = datetime.now().isoformat()
+    try:
+        ensure_dir_exists(STATUS_FILE)
+        with open(STATUS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logging.warning(f"Could not write stopped status: {e}")
+
+
+def _stop_background_process():
+    """Stop the managed pin loop and any leftover ColleXions.py process."""
+    global process
+    stopped = False
+    if process is not None and process.poll() is None:
+        try:
+            process.terminate()
+            try:
+                process.wait(timeout=8)
+            except Exception:
+                process.kill()
+                process.wait(timeout=3)
+            stopped = True
+        except Exception as exc:
+            logging.warning(f"Failed to terminate managed ColleXions process: {exc}")
+    process = None
+    if PSUTIL_AVAILABLE:
+        for pid in _collexions_script_pids():
+            try:
+                proc = psutil.Process(pid)
+                proc.terminate()
+                stopped = True
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
+                logging.warning(f"Could not stop ColleXions pid {pid}: {exc}")
+            except Exception as exc:
+                logging.warning(f"Could not stop ColleXions pid {pid}: {exc}")
+    _mark_script_stopped()
+    return stopped
 
 def _check_plex_quick(config, timeout=3):
     """Lightweight Plex reachability check (identity endpoint)."""
@@ -2892,8 +2953,6 @@ def health():
         issues.append(f'Cannot reach Plex: {plex_error}')
     if not libraries:
         issues.append('No libraries selected — pinning has nothing to process.')
-    if script_status == 'stopped':
-        issues.append('Pinning service is stopped (Start Service or enable Auto-start).')
 
     return jsonify({
         'ok': plex_ok and bool(libraries),
@@ -2970,17 +3029,18 @@ def get_status():
     elif process is not None and process.poll() is not None and process.returncode not in (0, None):
         status = file_msg or "Error (Check Logs)"
     else:
-        status = file_msg if file_msg and file_msg.lower() not in ('running', 'initializing') else "Idle"
+        status = "Stopped"
 
     next_run_timestamp = 0
-    raw_next = file_status.get('next_run_timestamp')
-    try:
-        if raw_next is not None:
-            next_run_timestamp = float(raw_next)
-    except (TypeError, ValueError):
-        next_run_timestamp = 0
-    if next_run_timestamp <= 0:
-        next_run_timestamp = _next_run_from_logs() or 0
+    if process_alive:
+        raw_next = file_status.get('next_run_timestamp')
+        try:
+            if raw_next is not None:
+                next_run_timestamp = float(raw_next)
+        except (TypeError, ValueError):
+            next_run_timestamp = 0
+        if next_run_timestamp <= 0:
+            next_run_timestamp = _next_run_from_logs() or 0
 
     last_run_at = str(file_status.get('last_run_at') or '').strip()
     last_update = last_run_at or str(file_status.get('last_update') or '').strip()
@@ -4983,11 +5043,9 @@ def fix_collection_art():
 @app.route('/api/stop', methods=['POST'])
 @require_auth
 def stop_script():
-    global process
-    if process and process.poll() is None:
-        process.terminate()
-        return jsonify({"success": True})
-    return jsonify({"error": "Script is not running"}), 400
+    stopped = _stop_background_process()
+    log_action("Pinning service stopped." if stopped else "Pinning service already stopped.")
+    return jsonify({"success": True, "stopped": stopped})
 
 @app.route('/api/collections/create', methods=['POST'])
 @require_auth
