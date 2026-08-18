@@ -5759,6 +5759,21 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     }
     systemJobs.autoBackup.nextRun = collexionsConfig.autoBackupEnabled ? computeNextBackupRun(collexionsConfig) : null;
     log('Configuration saved successfully.');
+    const previousWatchHistorySource = String(existingConfig.watchHistorySource || '').toLowerCase() === 'tautulli' ? 'tautulli' : 'plex';
+    const nextWatchHistorySource = String(collexionsConfig.watchHistorySource || '').toLowerCase() === 'tautulli' ? 'tautulli' : 'plex';
+    const tautulliUrlChanged = String(collexionsConfig.tautulliUrl || '') !== String(existingConfig.tautulliUrl || '');
+    const tautulliKeyChanged = tautulliApiKey !== undefined
+        && tautulliApiKey !== SECRET_MASK
+        && String(tautulliApiKey || '') !== String(existingConfig.tautulliApiKey || '');
+    if (
+        previousWatchHistorySource !== nextWatchHistorySource
+        || (nextWatchHistorySource === 'tautulli' && (tautulliUrlChanged || tautulliKeyChanged))
+    ) {
+        log('[AnalyticsStats] Watch history source or Tautulli credentials changed — rebuilding analytics cache.');
+        scheduleAnalyticsRebuild(0);
+    } else {
+        void maybeRebuildAnalyticsForPreferredSource('settings-save');
+    }
     if (collexionsDefaultsChanged) {
         log('[collexions] Applied bundled worker defaults (internal URL / service key).');
     }
@@ -15254,12 +15269,44 @@ const analyticsSourceLabelFor = (source, { degraded = false, fallback = null } =
     if (normalized === 'jellyglance') return 'JellyGlance';
     if (normalized === 'emby') return 'Emby Analytics';
     if (normalized === 'plex') {
+        if (fallback === 'tautulli_rebuild_pending') return 'Plex (Tautulli rebuild pending)';
+        if (degraded && fallback === 'tautulli_not_configured') return 'Plex (Tautulli not configured)';
         if (degraded && fallback === 'tautulli_unavailable') return 'Plex (Tautulli unavailable)';
         if (degraded && fallback === 'tautulli_history_failed') return 'Plex (Tautulli history failed)';
         if (degraded && fallback === 'tautulli_history_empty') return 'Plex (Tautulli history empty)';
         return 'Plex';
     }
     return source ? String(source) : 'Unknown';
+};
+
+const wantsTautulliWatchHistory = (config = {}) => String(config.watchHistorySource || '').toLowerCase() === 'tautulli';
+
+const analyticsCacheMatchesPreferredSource = (cache, config) => {
+    if (!wantsTautulliWatchHistory(config)) {
+        return String(cache?.source || '').toLowerCase() !== 'tautulli';
+    }
+    if (!isTautulliWatchHistorySource(config)) return true;
+    return String(cache?.source || '').toLowerCase() === 'tautulli';
+};
+
+let lastAnalyticsSourceMismatchRebuildAt = 0;
+const maybeRebuildAnalyticsForPreferredSource = async (reason = 'source-mismatch') => {
+    try {
+        if (typeof isBuildingAnalyticsStats !== 'undefined' && isBuildingAnalyticsStats) return false;
+        const config = await loadFile(CONFIG_PATH, {});
+        if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex') return false;
+        const cache = await loadFile(ANALYTICS_CACHE_PATH, null);
+        if (analyticsCacheMatchesPreferredSource(cache, config)) return false;
+        const now = Date.now();
+        if (now - lastAnalyticsSourceMismatchRebuildAt < 15000) return true;
+        lastAnalyticsSourceMismatchRebuildAt = now;
+        log(`[AnalyticsStats] Preferred source mismatch (${reason}); rebuilding cache.`);
+        scheduleAnalyticsRebuild(0);
+        return true;
+    } catch (error) {
+        log(`[AnalyticsStats] Source mismatch check failed: ${error.message}`);
+        return false;
+    }
 };
 
 const tautulliHourStatsMatchPlexPlays = (tautulliCount, plexCount) => {
@@ -16297,7 +16344,20 @@ app.get('/api/plex/analytics', requireAuth, requireMember, async (req, res) => {
                     fallback: statsData.fallback ?? cachedData.fallback ?? null,
                 }),
             lastUpdated: statsData.lastUpdated || null,
+            preferredSource: wantsTautulliWatchHistory(config) ? 'tautulli' : 'plex',
+            rebuildPending: false,
         };
+        const cachedSource = String(data.source || '').toLowerCase();
+        const canUseTautulli = isTautulliWatchHistorySource(config);
+        if (wantsTautulliWatchHistory(config) && canUseTautulli && cachedSource !== 'tautulli') {
+            data.rebuildPending = true;
+            data.sourceLabel = analyticsSourceLabelFor('plex', { fallback: 'tautulli_rebuild_pending' });
+            void maybeRebuildAnalyticsForPreferredSource('analytics-get');
+        } else if (wantsTautulliWatchHistory(config) && !canUseTautulli) {
+            data.degraded = true;
+            data.fallback = data.fallback || 'tautulli_not_configured';
+            data.sourceLabel = analyticsSourceLabelFor('plex', { degraded: true, fallback: 'tautulli_not_configured' });
+        }
         
         // attach max stats dynamically
         const stats = await loadFile(PLEX_STATS_CACHE_PATH, {});
@@ -20204,7 +20264,11 @@ async function calculateAnalyticsStats() {
         let historyItems = [];
         let sourceMeta = { source: 'plex', fallback: null, degraded: false };
 
+        const wantsTautulli = wantsTautulliWatchHistory(config);
         const preferTautulli = isTautulliWatchHistorySource(config);
+        if (wantsTautulli && !preferTautulli) {
+            sourceMeta = { source: 'plex', fallback: 'tautulli_not_configured', degraded: true };
+        }
         if (preferTautulli) {
             try {
                 historyItems = await fetchTautulliServerHistoryItems(config, { maxItems: maxHistoryItems });
@@ -20694,6 +20758,14 @@ const startAnalyticsStatsBackgroundTask = async () => {
     } catch { /* no cache yet */ }
 
     if (existing) {
+        try {
+            const config = await loadFile(CONFIG_PATH, {});
+            if (!analyticsCacheMatchesPreferredSource(existing, config)) {
+                log('[AnalyticsStats] Cache source does not match preferred watch history source — triggering rebuild.');
+                scheduleAnalyticsRebuild(0);
+                return;
+            }
+        } catch { /* fall through to age-based schedule */ }
         const ageMs = await getCacheAgeMs(ANALYTICS_CACHE_PATH, existing);
         if (ageMs == null) {
             log('[AnalyticsStats] Loaded existing cache.');

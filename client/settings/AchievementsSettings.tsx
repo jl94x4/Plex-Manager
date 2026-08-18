@@ -31,9 +31,6 @@ type Props = {
     setAchievementsHomeWidgetEnabled: (v: boolean) => void;
     achievementsShowOnProfile: boolean;
     setAchievementsShowOnProfile: (v: boolean) => void;
-    watchHistorySource: 'plex' | 'tautulli';
-    setWatchHistorySource: (v: 'plex' | 'tautulli') => void;
-    tautulliConfigured?: boolean;
     achievementsXpWeights: AchievementsXpWeights;
     setAchievementsXpWeights: (v: AchievementsXpWeights) => void;
     achievementsDisabledBadgeIds: string[];
@@ -62,9 +59,6 @@ export const AchievementsSettings: React.FC<Props> = ({
     setAchievementsHomeWidgetEnabled,
     achievementsShowOnProfile,
     setAchievementsShowOnProfile,
-    watchHistorySource,
-    setWatchHistorySource,
-    tautulliConfigured = false,
     achievementsXpWeights,
     setAchievementsXpWeights,
     achievementsDisabledBadgeIds,
@@ -249,32 +243,10 @@ export const AchievementsSettings: React.FC<Props> = ({
                 checked={achievementsEnabled}
                 onChange={setAchievementsEnabled}
             />
+            <p className="text-xs text-muted pb-3 border-b border-border/60">
+                {t('settings.achievements.watchHistoryMovedHint')}
+            </p>
             <div className={achievementsEnabled ? '' : 'opacity-50 pointer-events-none'}>
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 py-4 border-b border-border/60">
-                    <div className="min-w-0 sm:pr-6">
-                        <p className="text-sm font-semibold text-text">{t('settings.achievements.watchHistorySource')}</p>
-                        <SettingHint>
-                            {t('settings.achievements.watchHistorySourceHint')}
-                        </SettingHint>
-                    </div>
-                    <div className="w-full sm:w-56 shrink-0">
-                        <CustomSelect
-                            value={watchHistorySource}
-                            onChange={(v) => setWatchHistorySource(v === 'tautulli' ? 'tautulli' : 'plex')}
-                            options={[
-                                { label: t('settings.achievements.plexSessionHistory'), value: 'plex' },
-                                { label: 'Tautulli', value: 'tautulli' },
-                            ]}
-                            compact
-                            className="w-full"
-                        />
-                        {watchHistorySource === 'tautulli' && !tautulliConfigured && (
-                            <p className="text-[11px] text-amber-300/90 mt-1.5">
-                                {t('settings.achievements.tautulliNotConfigured')}
-                            </p>
-                        )}
-                    </div>
-                </div>
                 <SettingsToggleRow
                     title={t('settings.achievements.showLeaderboard')}
                     description={t('settings.achievements.showLeaderboardDescription')}

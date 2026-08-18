@@ -29,6 +29,7 @@ import {
     Film,
     Bookmark,
     ExternalLink,
+    BarChart3,
 } from 'lucide-react';
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -49,6 +50,7 @@ import { NotificationsSettingsTab } from './NotificationsSettingsTab';
 import { IntegrationTestButton } from '../shared/IntegrationTestButton';
 import { HomeLayoutSettings } from './HomeLayoutSettings';
 import { AchievementsSettings } from './AchievementsSettings';
+import { AnalyticsSettings } from './AnalyticsSettings';
 import { NavigationOrderSettings } from './NavigationOrderSettings';
 import { ArrInstancesPanel } from './ArrInstancesPanel';
 import { DISCOVER_LANGUAGE_OPTIONS, DISCOVER_REGION_OPTIONS } from './discoverySettingsOptions';
@@ -198,6 +200,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
     overlays: Layers,
     editions: Film,
     achievements: Trophy,
+    analytics: BarChart3,
     system: Settings,
     contact: Phone,
     broadcast: Radio,
@@ -265,6 +268,7 @@ const SETTINGS_TAB_TRANSLATION_KEYS: Record<string, string> = {
     contact: 'settings.navigation.tabs.contact',
     layout: 'settings.navigation.tabs.layout',
     achievements: 'settings.navigation.tabs.achievements',
+    analytics: 'settings.navigation.tabs.analytics',
     plex: 'settings.navigation.tabs.plex',
     mediastack: 'settings.navigation.tabs.mediastack',
     request: 'settings.navigation.tabs.request',
@@ -2434,15 +2438,6 @@ export const SettingsDashboard: React.FC = () => {
                                         </div>
                                     </div>
 
-                                <div id={getSettingsSectionElementId('analytics-usernames')} className="scroll-mt-24">
-                                <SettingsToggleRow
-                                    title="Show Usernames in Analytics"
-                                    description="Allow non-admin users to see real usernames on the Analytics dashboard. If disabled, usernames are shown as Viewer 1, Viewer 2, etc."
-                                    checked={showUsernamesInAnalytics}
-                                    onChange={setShowUsernamesInAnalytics}
-                                />
-                                </div>
-
                                 <div className="mb-4" style={{ marginTop: '1rem' }}>
                                     <SettingFieldLabel
                                         htmlFor="requestUrl"
@@ -3679,9 +3674,6 @@ export const SettingsDashboard: React.FC = () => {
                                 setAchievementsHomeWidgetEnabled={setAchievementsHomeWidgetEnabled}
                                 achievementsShowOnProfile={achievementsShowOnProfile}
                                 setAchievementsShowOnProfile={setAchievementsShowOnProfile}
-                                watchHistorySource={watchHistorySource}
-                                setWatchHistorySource={setWatchHistorySource}
-                                tautulliConfigured={tautulliConfigured || !!(tautulliUrl && tautulliApiKey)}
                                 achievementsXpWeights={achievementsXpWeights}
                                 setAchievementsXpWeights={setAchievementsXpWeights}
                                 achievementsDisabledBadgeIds={achievementsDisabledBadgeIds}
@@ -3690,6 +3682,23 @@ export const SettingsDashboard: React.FC = () => {
                                 setAchievementsMinPercentComplete={setAchievementsMinPercentComplete}
                                 achievementsSeasons={achievementsSeasons}
                                 setAchievementsSeasons={setAchievementsSeasons}
+                            />
+                        </div>
+                    )}
+
+                    {activeTab === 'analytics' && (
+                        <div className="mb-8 animate-fade-in glass-card-sm p-5">
+                            <AnalyticsSettings
+                                mediaServerType={mediaServerType}
+                                watchHistorySource={watchHistorySource}
+                                setWatchHistorySource={setWatchHistorySource}
+                                tautulliConfigured={tautulliConfigured || !!(tautulliUrl && tautulliApiKey)}
+                                showUsernamesInAnalytics={showUsernamesInAnalytics}
+                                setShowUsernamesInAnalytics={setShowUsernamesInAnalytics}
+                                onOpenTautulliSettings={() => {
+                                    const entry = resolveSettingsEntry('mediastack/tautulli');
+                                    if (entry) navigateToSetting(entry);
+                                }}
                             />
                         </div>
                     )}

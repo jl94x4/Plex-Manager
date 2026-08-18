@@ -3791,6 +3791,8 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         source?: string | null,
         fallback?: string | null,
         degraded?: boolean,
+        rebuildPending?: boolean,
+        preferredSource?: string | null,
         sourceLabel?: string | null,
         lastUpdated?: number | null,
     } | null>(null);
@@ -3824,6 +3826,8 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         const source = String(analyticsData?.source || '').toLowerCase();
         if (source === 'tautulli') return t('analytics.source.tautulli');
         if (source === 'plex') {
+            if (analyticsData?.rebuildPending) return t('analytics.source.rebuildPending');
+            if (analyticsData?.fallback === 'tautulli_not_configured') return t('analytics.source.tautulliNotConfigured');
             return analyticsData?.degraded
                 ? t('analytics.source.plexDegraded')
                 : t('analytics.source.plex');
@@ -3835,6 +3839,7 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         return t('analytics.source.plex');
     })();
     const analyticsSourceDegraded = !!analyticsData?.degraded;
+    const analyticsRebuildPending = !!analyticsData?.rebuildPending;
     const analyticsLastUpdatedLabel = (() => {
         const ts = Number(analyticsData?.lastUpdated);
         if (!Number.isFinite(ts) || ts <= 0) return t('analytics.source.updatedUnknown');
@@ -4021,6 +4026,16 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         return () => { cancelled = true; };
     }, [days, isJellyfinPortal]);
 
+    useEffect(() => {
+        if (!analyticsData?.rebuildPending || isJellyfinPortal) return undefined;
+        const timer = window.setTimeout(() => {
+            void apiFetch(`/api/plex/analytics?days=${days}`)
+                .then((data) => setAnalyticsData(data))
+                .catch(() => { /* keep current */ });
+        }, 8000);
+        return () => window.clearTimeout(timer);
+    }, [analyticsData?.rebuildPending, days, isJellyfinPortal]);
+
     const handleRebuildAnalyticsCache = useCallback(async () => {
         if (!isAdmin || isJellyfinPortal || isRebuildingAnalytics) return;
         setIsRebuildingAnalytics(true);
@@ -4188,7 +4203,7 @@ return (
                     <>
                         {totalPlaybacks.toLocaleString()} playbacks · {uniqueActiveViewers} active viewers · {analyticsPeriodLabel.toLowerCase()}
                         <span className={`ml-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide align-middle ${
-                            analyticsSourceDegraded
+                            analyticsSourceDegraded || analyticsRebuildPending
                                 ? 'border-amber-400/40 bg-amber-500/10 text-amber-200'
                                 : 'border-white/15 bg-white/5 text-muted'
                         }`}>
@@ -4281,7 +4296,12 @@ return (
                             Analytics cache for this period is still building. Showing cached data from the last {analyticsData.cachePeriodDays} day period instead.
                         </div>
                     )}
-                    {analyticsSourceDegraded && (
+                    {analyticsRebuildPending && (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                            {t('analytics.source.mismatchHint')}
+                        </div>
+                    )}
+                    {analyticsSourceDegraded && !analyticsRebuildPending && (
                         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
                             {t('analytics.source.degradedHint')}
                         </div>

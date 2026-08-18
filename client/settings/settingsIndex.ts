@@ -1,6 +1,6 @@
 export const SETTINGS_TABS = [
     'plex', 'notifications', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'layout',
-    'achievements', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'overlays', 'editions', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
+    'achievements', 'analytics', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'overlays', 'editions', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
 ] as const;
 
 export type SettingsTabId = typeof SETTINGS_TABS[number];
@@ -32,11 +32,14 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'layout/navigation', tabId: 'layout', sectionId: 'navigation', label: 'Navigation', group: 'Portal', keywords: ['menu', 'order', 'sidebar', 'nav', 'downloads', 'members'] },
     { id: 'layout/home-layout', tabId: 'layout', sectionId: 'home-layout', label: 'Home Layout', group: 'Portal', keywords: ['dashboard', 'widgets', 'sections', 'home', 'layout', 'reorder', 'hide'] },
     { id: 'achievements', tabId: 'achievements', label: 'Achievements', group: 'Portal', keywords: ['xp', 'badges', 'leaderboard', 'gamification', 'achievements', 'level'] },
+    { id: 'analytics', tabId: 'analytics', label: 'Analytics', group: 'Portal', keywords: ['analytics', 'tautulli', 'watch history', 'usernames', 'rebuild', 'cache', 'source'] },
+    { id: 'analytics/history-source', tabId: 'analytics', sectionId: 'history-source', label: 'Watch History Source', group: 'Portal', keywords: ['tautulli', 'plex', 'watch history', 'source', 'analytics', 'achievements'] },
+    { id: 'analytics/usernames', tabId: 'analytics', sectionId: 'usernames', label: 'Show Usernames in Analytics', group: 'Portal', keywords: ['analytics', 'usernames', 'viewer', 'privacy'] },
+    { id: 'analytics/cache', tabId: 'analytics', sectionId: 'cache', label: 'Analytics Cache', group: 'Portal', keywords: ['rebuild', 'cache', 'source', 'tautulli'] },
 
     { id: 'plex', tabId: 'plex', label: 'Media Player', group: 'Media Stack', keywords: ['plex', 'jellyfin', 'media', 'player', 'server'] },
     { id: 'plex/connection', tabId: 'plex', sectionId: 'connection', label: 'Media Server Connection', group: 'Media Stack', keywords: ['token', 'server', 'docker', 'url', 'jellyfin', 'plex'] },
     { id: 'plex/privacy', tabId: 'plex', sectionId: 'privacy', label: 'Stream User Privacy', group: 'Media Stack', keywords: ['privacy', 'anonymous', 'hide', 'stream', 'users'] },
-    { id: 'plex/analytics-usernames', tabId: 'plex', sectionId: 'analytics-usernames', label: 'Show Usernames in Analytics', group: 'Media Stack', keywords: ['analytics', 'usernames', 'viewer', 'privacy'] },
     { id: 'plex/libraries', tabId: 'plex', sectionId: 'libraries', label: 'Default Libraries', group: 'Media Stack', keywords: ['libraries', 'share', 'temporary', 'access'] },
 
     { id: 'mediastack', tabId: 'mediastack', label: 'Integrations', group: 'Media Stack', keywords: ['integrations', 'arr', 'sonarr', 'radarr', 'lidarr', 'bazarr', 'downloads', 'qbittorrent', 'rdt-client', 'real-debrid', 'transmission', 'deluge', 'sabnzbd', 'nzbget', 'nzb'] },
@@ -136,6 +139,9 @@ export const parseSettingsHash = (hash: string): { tabId: SettingsTabId | null; 
     const normalizedTabPart = tabPart === 'media-player' ? 'plex' : tabPart;
     if (!sectionParts.length && legacyTabRedirects[normalizedTabPart]) {
         return legacyTabRedirects[normalizedTabPart];
+    }
+    if (normalizedTabPart === 'plex' && sectionParts.join('/') === 'analytics-usernames') {
+        return { tabId: 'analytics', sectionId: 'usernames' };
     }
     const tabId = SETTINGS_TABS.includes(normalizedTabPart as SettingsTabId) ? normalizedTabPart as SettingsTabId : null;
     const sectionId = sectionParts.length > 0 ? sectionParts.join('/') : null;
