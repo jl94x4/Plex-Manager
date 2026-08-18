@@ -336,21 +336,44 @@ const Gallery: React.FC = () => {
         setRepairBusy(true);
         try {
             const lib = selectedLibrary !== 'All' ? selectedLibrary : undefined;
-            const res = await api.repairCollectionsWeb(lib);
+            let res = await api.repairCollectionsWeb(lib);
             if (!res.success) {
                 void appAlert(res.error || 'Repair failed.');
                 return;
             }
+            const deadline = Date.now() + 10 * 60 * 1000;
+            while (res.running && Date.now() < deadline) {
+                await new Promise((resolve) => window.setTimeout(resolve, 2000));
+                res = await api.repairCollectionsWebStatus();
+            }
+            if (res.running) {
+                void appAlert(
+                    'Repair is still running in the background. Reload Plex Web’s Collections tab in a minute — you do not need to click Repair again.',
+                );
+                return;
+            }
+            if (res.error && !res.purged && !res.converted) {
+                void appAlert(res.error);
+                return;
+            }
             const extra = (res.errors || []).length ? `\n\nWarnings: ${res.errors?.join(' · ')}` : '';
             void appAlert(
-                `Removed ${res.purged || 0} crashy folder row(s), ${res.pruned || 0} bad member(s), `
-                + `and converted ${res.converted || 0} smart collection(s) across ${res.scanned || 0} collection(s). `
+                `Removed ${res.purged || 0} crashy folder row(s) `
+                + `and converted ${res.converted || 0} smart collection(s) across ${res.scanned || 0} managed collection(s). `
                 + 'Reload Plex Web’s Collections tab.'
                 + extra,
             );
             await fetchCollections(true);
         } catch (e: any) {
-            void appAlert(e?.message || 'Repair failed.');
+            const msg = String(e?.message || '');
+            if (/\b524\b/.test(msg) || /origin took too long/i.test(msg) || /timed out/i.test(msg)) {
+                void appAlert(
+                    'The repair is still running on the server (Cloudflare timed out waiting). '
+                    + 'Wait a minute, reload Plex Web’s Collections tab, then refresh this gallery — do not click Repair again yet.',
+                );
+                return;
+            }
+            void appAlert(msg || 'Repair failed.');
         } finally {
             setRepairBusy(false);
         }

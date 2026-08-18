@@ -476,6 +476,9 @@ class CollexionsApiService {
 
     async repairCollectionsWeb(library?: string): Promise<{
         success: boolean;
+        started?: boolean;
+        running?: boolean;
+        phase?: string;
         scanned?: number;
         purged?: number;
         pruned?: number;
@@ -490,8 +493,29 @@ class CollexionsApiService {
                 method: 'POST',
                 body: JSON.stringify(library ? { library } : {}),
             }),
-            COLLEXIONS_LONG_MS,
-            'Repairing Plex Collections tab',
+            30_000,
+            'Starting Plex Collections tab repair',
+        );
+    }
+
+    async repairCollectionsWebStatus(): Promise<{
+        success: boolean;
+        started?: boolean;
+        running?: boolean;
+        phase?: string;
+        scanned?: number;
+        purged?: number;
+        pruned?: number;
+        converted?: number;
+        libraries?: string[];
+        results?: Array<{ library: string; scanned: number; purged: number; pruned: number; converted?: number }>;
+        errors?: string[];
+        error?: string;
+    }> {
+        return withTimeout(
+            cx('/collections/repair-web'),
+            20_000,
+            'Checking Collections tab repair',
         );
     }
 

@@ -190,6 +190,19 @@ IMAGE_CACHE = {} # Cache for proxied posters: { thumb_path: { 'data': binary, 'm
 # materialises the leftover path as a type-99 folder. One of those rows crashes
 # Plex Web's entire Collections tab ("Something went wrong" / "unknown type: 99").
 _COLLECTION_ITEM_BATCH = 20
+_REPAIR_LOCK = threading.Lock()
+_REPAIR_STATE = {
+    'running': False,
+    'started': False,
+    'phase': '',
+    'error': None,
+    'libraries': [],
+    'scanned': 0,
+    'purged': 0,
+    'pruned': 0,
+    'converted': 0,
+    'errors': [],
+}
 SUMMARY_CACHE = {
     'data': None,
     'timestamp': 0,
@@ -1431,7 +1444,7 @@ def _remove_invalid_collection_members(coll, config=None):
     return _remove_collection_item_keys(coll, bad_keys)
 
 
-def _purge_phantom_collection_list_rows(plex_base, token, section_key, title=None, keep_rating_key=None):
+def _purge_phantom_collection_list_rows(plex_base, token, section_key, title=None, keep_rating_key=None, plex=None):
     """
     Delete type-99 / folder rows from Plex's collections list.
 
@@ -1442,7 +1455,7 @@ def _purge_phantom_collection_list_rows(plex_base, token, section_key, title=Non
     """
     if not section_key or not plex_base or not token:
         return 0
-    server = get_plex_instance()
+    server = plex if plex is not None else get_plex_instance()
     keep = str(keep_rating_key or '').strip()
     want = _normalize_collection_title(title).casefold() if title else ''
     purged = 0
@@ -4482,51 +4495,62 @@ def _probe_collection_web_crash(plex_base, token, coll, library_name):
     }
 
 
+def _repair_state_snapshot():
+    with _REPAIR_LOCK:
+        return dict(_REPAIR_STATE)
+
+
+def _repair_state_update(**kwargs):
+    with _REPAIR_LOCK:
+        _REPAIR_STATE.update(kwargs)
+        return dict(_REPAIR_STATE)
+
+
 def _repair_library_collections_tab(library, config=None):
-    """Purge type-99 rows, prune folder members, and convert ColleXions smart collections."""
+    """Purge type-99 rows and convert managed smart collections. Avoids a full library walk."""
     config = config or load_config()
     url = str(config.get('plex_url') or '').rstrip('/')
     token = str(config.get('plex_token') or '')
     section_key = str(getattr(library, 'key', '') or '').rstrip('/').split('/')[-1]
     lib_name = str(getattr(library, 'title', '') or '')
     label = config.get('collexions_label', 'Collexions')
+    plex_server = getattr(library, '_server', None)
     purged = 0
     pruned = 0
     converted = 0
     scanned = 0
     if url and token and section_key:
-        purged = _purge_phantom_collection_list_rows(url, token, section_key)
-    try:
-        collections = list(library.collections() or [])
-    except Exception as exc:
-        logging.warning(f"Repair could not list collections in '{lib_name}': {exc}")
-        collections = []
+        purged = _purge_phantom_collection_list_rows(
+            url, token, section_key, plex=plex_server
+        )
     managed = load_managed_collections()
     jobs_changed = False
-    for coll in collections:
+    for job in list(managed.values()):
+        if not isinstance(job, dict) or job.get('library') != lib_name:
+            continue
         scanned += 1
-        title = _normalize_collection_title(getattr(coll, 'title', ''))
+        title = _normalize_collection_title(job.get('name'))
+        keep_key = str(job.get('rating_key') or job.get('ratingKey') or '').strip() or None
         try:
-            if getattr(coll, 'smart', False) and _collection_has_label(coll, label):
-                new_coll, did = _convert_smart_collection_to_regular(library, coll, label=label)
+            coll = _resolve_collection(library, title=title, rating_key=keep_key)
+            if coll is None:
+                continue
+            if getattr(coll, 'smart', False):
+                new_coll, did = _convert_smart_collection_to_regular(
+                    library, coll, label=label
+                )
                 if did:
                     converted += 1
                     new_key = str(getattr(new_coll, 'ratingKey', '') or '').strip()
-                    for job in managed.values():
-                        if not isinstance(job, dict):
-                            continue
-                        if job.get('library') == lib_name and job.get('name') == title:
-                            if new_key:
-                                job['rating_key'] = new_key
-                            if str(job.get('sort_order') or '') == 'random':
-                                job['sort_order'] = 'custom'
-                            jobs_changed = True
-                    continue
-            pruned += _remove_invalid_collection_members(coll, config)
+                    if new_key:
+                        job['rating_key'] = new_key
+                    if str(job.get('sort_order') or '') == 'random':
+                        job['sort_order'] = 'custom'
+                    jobs_changed = True
         except Exception as exc:
             logging.warning(
                 "Repair failed on '%s': %s",
-                title or getattr(coll, 'title', '?'),
+                title or job.get('name') or '?',
                 exc,
             )
     if jobs_changed:
@@ -4534,8 +4558,8 @@ def _repair_library_collections_tab(library, config=None):
     if purged or pruned or converted:
         log_action(
             f"Repaired Plex Collections tab for '{lib_name}': "
-            f"purged {purged} type-99 row(s), pruned {pruned} bad member(s), "
-            f"converted {converted} smart collection(s) across {scanned} collection(s)."
+            f"purged {purged} type-99 row(s), converted {converted} smart collection(s) "
+            f"across {scanned} managed collection(s)."
         )
     return {
         'library': lib_name,
@@ -4546,54 +4570,103 @@ def _repair_library_collections_tab(library, config=None):
     }
 
 
-@app.route('/api/collections/repair-web', methods=['POST'])
+def _run_repair_job(lib_names, config):
+    """Background Cloudflare-safe repair (POST returns immediately)."""
+    errors = []
+    results = []
+    try:
+        configure_plex_identity()
+        from plexapi.server import PlexServer
+        url = str(config.get('plex_url') or '').rstrip('/')
+        token = str(config.get('plex_token') or '')
+        if not url or not token:
+            raise RuntimeError('Plex URL or token is not configured')
+        plex = PlexServer(url, token)
+        totals = {'scanned': 0, 'purged': 0, 'pruned': 0, 'converted': 0}
+        for name in lib_names:
+            _repair_state_update(phase=f'Repairing {name}')
+            try:
+                library = plex.library.section(name)
+                row = _repair_library_collections_tab(library, config)
+                results.append(row)
+                for key in totals:
+                    totals[key] += int(row.get(key) or 0)
+                _repair_state_update(**totals)
+            except Exception as exc:
+                errors.append(f"{name}: {exc}")
+                _repair_state_update(errors=list(errors))
+        GALLERY_CACHE['data'] = None
+        GALLERY_CACHE['timestamp'] = 0
+        log_action(
+            f"Collections tab repair finished: scanned {totals['scanned']}, "
+            f"purged {totals['purged']} type-99 row(s), "
+            f"converted {totals['converted']} smart collection(s)."
+        )
+        _repair_state_update(running=False, phase='done', errors=errors, results=results, **totals)
+    except Exception as exc:
+        logging.error(f"Collections tab repair failed: {exc}", exc_info=True)
+        _repair_state_update(running=False, phase='error', error=str(exc), errors=errors)
+
+
+@app.route('/api/collections/repair-web', methods=['GET', 'POST'])
 @require_auth
 def repair_collections_web():
-    """Remove type-99 folder rows that crash Plex Web's Collections tab."""
+    """Start or poll a background repair so Cloudflare cannot 524 the request."""
+    if request.method == 'GET':
+        state = _repair_state_snapshot()
+        return jsonify({
+            'success': True,
+            **state,
+        })
+
     payload = request.get_json(silent=True) or {}
     library_name = str(
         request.args.get('library') or payload.get('library') or ''
     ).strip()
-    plex = get_plex_instance()
-    if not plex:
-        return jsonify({"success": False, "error": "Plex connection failed"}), 500
     config = load_config()
     lib_names = [library_name] if library_name else list(config.get('library_names') or [])
     if not lib_names:
-        try:
-            lib_names = [s.title for s in plex.library.sections() if getattr(s, 'type', '') in {'movie', 'show'}]
-        except Exception:
-            lib_names = []
-    if not lib_names:
         return jsonify({"success": False, "error": "No libraries to repair"}), 400
 
-    results = []
-    errors = []
-    for name in lib_names:
-        try:
-            library = plex.library.section(name)
-            results.append(_repair_library_collections_tab(library, config))
-        except Exception as exc:
-            errors.append(f"{name}: {exc}")
-    GALLERY_CACHE['data'] = None
-    GALLERY_CACHE['timestamp'] = 0
-    purged = sum(int(row.get('purged') or 0) for row in results)
-    pruned = sum(int(row.get('pruned') or 0) for row in results)
-    converted = sum(int(row.get('converted') or 0) for row in results)
-    scanned = sum(int(row.get('scanned') or 0) for row in results)
-    log_action(
-        f"Collections tab repair: scanned {scanned}, purged {purged} type-99 row(s), "
-        f"pruned {pruned} bad member(s), converted {converted} smart collection(s)."
-    )
+    with _REPAIR_LOCK:
+        if _REPAIR_STATE.get('running'):
+            return jsonify({
+                'success': True,
+                'started': True,
+                **dict(_REPAIR_STATE),
+            })
+        _REPAIR_STATE.update({
+            'running': True,
+            'started': True,
+            'phase': 'starting',
+            'error': None,
+            'libraries': lib_names,
+            'scanned': 0,
+            'purged': 0,
+            'pruned': 0,
+            'converted': 0,
+            'errors': [],
+            'results': [],
+        })
+
+    threading.Thread(
+        target=_run_repair_job,
+        args=(lib_names, config),
+        daemon=True,
+        name='collexions-repair-web',
+    ).start()
+    log_action(f"Collections tab repair started for: {', '.join(lib_names)}")
     return jsonify({
-        "success": True,
-        "scanned": scanned,
-        "purged": purged,
-        "pruned": pruned,
-        "converted": converted,
-        "libraries": lib_names,
-        "results": results,
-        "errors": errors,
+        'success': True,
+        'started': True,
+        'running': True,
+        'phase': 'starting',
+        'libraries': lib_names,
+        'scanned': 0,
+        'purged': 0,
+        'pruned': 0,
+        'converted': 0,
+        'errors': [],
     })
 
 
