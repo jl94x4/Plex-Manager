@@ -2285,6 +2285,7 @@ const DOWNLOADS_CLIENT_FILTER_KEY = 'portal-downloads-client-filter';
 const DOWNLOADS_UPLOAD_COLLAPSED_KEY = 'portal-downloads-upload-collapsed';
 const DOWNLOADS_CLIENTS_COLLAPSED_KEY = 'portal-downloads-clients-collapsed';
 const OPS_SNAPSHOT_COLLAPSED_KEY = 'portal-home-ops-snapshot-collapsed';
+const ANALYTICS_OVERVIEW_SNAPSHOT_COLLAPSED_KEY = 'portal-analytics-overview-snapshot-collapsed';
 
 const downloadClientTypeLabel = (type: string, fallback = 'Download Client') => ({
     qbittorrent: 'qBittorrent',
@@ -3844,6 +3845,10 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
     const [viewTab, setViewTab] = useState<'overview' | 'graphs'>('overview');
     const [analyticsToasts, setAnalyticsToasts] = useState<ToastMessage[]>([]);
     const [isRebuildingAnalytics, setIsRebuildingAnalytics] = useState(false);
+    const [overviewSnapshotCollapsed, setOverviewSnapshotCollapsed] = usePersistedCollapsed(
+        ANALYTICS_OVERVIEW_SNAPSHOT_COLLAPSED_KEY,
+        preferCollapsedOnNarrow(),
+    );
     const mediaServerType = String(sessionInfo?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
     const addAnalyticsToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
@@ -4355,6 +4360,32 @@ return (
                             {t('analytics.source.degradedHint')}
                         </div>
                     )}
+                    <section>
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <button
+                                type="button"
+                                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                onClick={() => setOverviewSnapshotCollapsed(!overviewSnapshotCollapsed)}
+                                aria-expanded={!overviewSnapshotCollapsed}
+                                aria-label={overviewSnapshotCollapsed ? t('analytics.overviewSnapshot.expand') : t('analytics.overviewSnapshot.collapse')}
+                            >
+                                <span className="w-3 shrink-0 text-muted" aria-hidden>{overviewSnapshotCollapsed ? '▸' : '▾'}</span>
+                                <h2 className="w-full border-b border-white/10 pb-2 text-sm font-bold uppercase tracking-[2px] text-plex">
+                                    {t('analytics.overviewSnapshot.title')}
+                                </h2>
+                            </button>
+                            {overviewSnapshotCollapsed ? (
+                                <span className="shrink-0 text-xs font-semibold text-muted">
+                                    {[
+                                        t('analytics.overviewSnapshot.playbacks', { count: totalPlaybacks }),
+                                        t('analytics.overviewSnapshot.viewers', { count: uniqueActiveViewers }),
+                                        libraryHealth?.healthLabel,
+                                    ].filter(Boolean).join(' · ')}
+                                </span>
+                            ) : null}
+                        </div>
+                    {overviewSnapshotCollapsed ? null : (
+                    <div className="flex flex-col gap-6">
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
                         <DashboardStatCard
                             label="Total Playbacks"
@@ -4621,6 +4652,9 @@ return (
                             })()}
                         </>
                     )}
+                    </div>
+                    )}
+                    </section>
 
                     {isAdmin ? (
                         <DashboardPanel
@@ -10294,6 +10328,19 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
     const directStreams = totalStreams - transcodingStreams;
     const totalBandwidthKbps = dashboardData?.activeSessions?.reduce((acc, s) => acc + (s.bandwidth || 0), 0) || 0;
     const totalBandwidthMbps = (totalBandwidthKbps / 1000).toFixed(2);
+    const showStreamCards = Boolean(dashboardData && totalStreams > 0);
+    const showOpsSnapshot = Boolean(isAdmin);
+    const snapshotHealthHint = opsSnapshot
+        ? (opsSnapshot.unhealthyCount > 0
+            ? t('homeDashboard.opsSnapshot.metrics.unhealthy', { count: opsSnapshot.unhealthyCount })
+            : t('homeDashboard.opsSnapshot.metrics.allHealthy'))
+        : '';
+    const snapshotStreamHint = showStreamCards
+        ? t('homeDashboard.opsSnapshot.metrics.streams', { count: totalStreams })
+        : '';
+    const snapshotCollapsedHint = [snapshotStreamHint, showOpsSnapshot ? snapshotHealthHint : '']
+        .filter(Boolean)
+        .join(' · ');
 
     return (
         <div className="w-full flex flex-col min-h-screen">
@@ -10415,29 +10462,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                     </div>
                 )}
 
-                {/* SUMMARY CARDS */}
-                {dashboardData && totalStreams > 0 && (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                        <div className="bg-white/5 border border-white/10 rounded-xl py-2 px-3 flex flex-col items-center justify-center gap-0.5 shadow-lg backdrop-blur-sm">
-                            <span className="text-plex font-bold text-2xl">{totalStreams}</span>
-                            <span className="text-muted text-[10px] uppercase tracking-wider font-bold">Total Streams</span>
-                        </div>
-                        <div className="bg-white/5 border border-white/10 rounded-xl py-2 px-3 flex flex-col items-center justify-center gap-0.5 shadow-lg backdrop-blur-sm">
-                            <span className="text-status-active font-bold text-2xl">{directStreams}</span>
-                            <span className="text-muted text-[10px] uppercase tracking-wider font-bold">Direct Play</span>
-                        </div>
-                        <div className="bg-white/5 border border-white/10 rounded-xl py-2 px-3 flex flex-col items-center justify-center gap-0.5 shadow-lg backdrop-blur-sm">
-                            <span className="text-status-expiring font-bold text-2xl">{transcodingStreams}</span>
-                            <span className="text-muted text-[10px] uppercase tracking-wider font-bold">Transcoding</span>
-                        </div>
-                        <div className="bg-white/5 border border-white/10 rounded-xl py-2 px-3 flex flex-col items-center justify-center gap-0.5 shadow-lg backdrop-blur-sm">
-                            <span className="text-plex font-bold text-2xl">{totalBandwidthMbps} <span className="text-sm">Mbps</span></span>
-                            <span className="text-muted text-[10px] uppercase tracking-wider font-bold">Total Bandwidth</span>
-                        </div>
-                    </div>
-                )}
-
-                {isAdmin && (
+                {(showStreamCards || showOpsSnapshot) && (
                     <section className="mb-8 w-full">
                         <div className="flex items-center justify-between gap-3 mb-3">
                             <button
@@ -10448,24 +10473,57 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                 aria-label={opsCollapsed ? t('homeDashboard.opsSnapshot.expand') : t('homeDashboard.opsSnapshot.collapse')}
                             >
                                 <span className="w-3 shrink-0 text-muted" aria-hidden>{opsCollapsed ? '▸' : '▾'}</span>
-                                <h2 className="text-plex text-sm uppercase tracking-[2px] font-bold border-b border-white/10 pb-2 w-full">{t('homeDashboard.opsSnapshot.title')}</h2>
+                                <h2 className="text-plex text-sm uppercase tracking-[2px] font-bold border-b border-white/10 pb-2 w-full">
+                                    {showOpsSnapshot
+                                        ? t('homeDashboard.opsSnapshot.title')
+                                        : t('homeDashboard.opsSnapshot.streamsTitle')}
+                                </h2>
                             </button>
-                            {opsCollapsed && opsSnapshot ? (
-                                <span className={`shrink-0 text-xs font-semibold ${opsSnapshot.unhealthyCount > 0 ? 'text-rose-200' : 'text-emerald-200'}`}>
-                                    {opsSnapshot.unhealthyCount > 0
-                                        ? t('homeDashboard.opsSnapshot.metrics.unhealthy', { count: opsSnapshot.unhealthyCount })
-                                        : t('homeDashboard.opsSnapshot.metrics.allHealthy')}
+                            {opsCollapsed && snapshotCollapsedHint ? (
+                                <span className={`shrink-0 text-xs font-semibold ${
+                                    showOpsSnapshot && opsSnapshot && opsSnapshot.unhealthyCount > 0
+                                        ? 'text-rose-200'
+                                        : showOpsSnapshot
+                                            ? 'text-emerald-200'
+                                            : 'text-muted'
+                                }`}>
+                                    {snapshotCollapsedHint}
                                 </span>
                             ) : null}
-                            <button
-                                type="button"
-                                onClick={() => { void fetchOpsSnapshot(false); }}
-                                className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border border-border bg-white/5 hover:bg-white/10 transition-colors"
-                            >
-                                {t('homeDashboard.admin.refresh')}
-                            </button>
+                            {showOpsSnapshot ? (
+                                <button
+                                    type="button"
+                                    onClick={() => { void fetchOpsSnapshot(false); }}
+                                    className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border border-border bg-white/5 hover:bg-white/10 transition-colors"
+                                >
+                                    {t('homeDashboard.admin.refresh')}
+                                </button>
+                            ) : null}
                         </div>
-                        {opsCollapsed ? null : opsLoading && !opsSnapshot ? (
+                        {opsCollapsed ? null : (
+                            <>
+                                {showStreamCards ? (
+                                    <div className={`grid grid-cols-2 lg:grid-cols-4 gap-4 ${showOpsSnapshot ? 'mb-4' : ''}`}>
+                                        <div className="bg-white/5 border border-white/10 rounded-xl py-2 px-3 flex flex-col items-center justify-center gap-0.5 shadow-lg backdrop-blur-sm">
+                                            <span className="text-plex font-bold text-2xl">{totalStreams}</span>
+                                            <span className="text-muted text-[10px] uppercase tracking-wider font-bold">{t('homeDashboard.opsSnapshot.metrics.totalStreams')}</span>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/10 rounded-xl py-2 px-3 flex flex-col items-center justify-center gap-0.5 shadow-lg backdrop-blur-sm">
+                                            <span className="text-status-active font-bold text-2xl">{directStreams}</span>
+                                            <span className="text-muted text-[10px] uppercase tracking-wider font-bold">{t('homeDashboard.opsSnapshot.metrics.directPlay')}</span>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/10 rounded-xl py-2 px-3 flex flex-col items-center justify-center gap-0.5 shadow-lg backdrop-blur-sm">
+                                            <span className="text-status-expiring font-bold text-2xl">{transcodingStreams}</span>
+                                            <span className="text-muted text-[10px] uppercase tracking-wider font-bold">{t('homeDashboard.opsSnapshot.metrics.transcoding')}</span>
+                                        </div>
+                                        <div className="bg-white/5 border border-white/10 rounded-xl py-2 px-3 flex flex-col items-center justify-center gap-0.5 shadow-lg backdrop-blur-sm">
+                                            <span className="text-plex font-bold text-2xl">{totalBandwidthMbps} <span className="text-sm">Mbps</span></span>
+                                            <span className="text-muted text-[10px] uppercase tracking-wider font-bold">{t('homeDashboard.opsSnapshot.metrics.totalBandwidth')}</span>
+                                        </div>
+                                    </div>
+                                ) : null}
+                                {showOpsSnapshot ? (
+                                    opsLoading && !opsSnapshot ? (
                             <div className="text-center text-muted p-6 border border-dashed border-border rounded-xl">{t('homeDashboard.opsSnapshot.loading')}</div>
                         ) : opsError && !opsSnapshot ? (
                             <div className="text-center text-red-300 p-6 border border-red-500/30 rounded-xl bg-red-500/10">{opsError}</div>
@@ -10520,6 +10578,9 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                             </div>
                         ) : (
                             <div className="text-center text-muted p-6 border border-dashed border-border rounded-xl">{t('homeDashboard.opsSnapshot.empty.unavailable')}</div>
+                        )
+                                ) : null}
+                            </>
                         )}
                     </section>
                 )}

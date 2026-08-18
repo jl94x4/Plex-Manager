@@ -223,6 +223,15 @@ export const en = {
         },
     },
     analytics: {
+        overviewSnapshot: {
+            title: 'Library snapshot',
+            collapse: 'Collapse',
+            expand: 'Expand',
+            playbacks: '{count} playback',
+            playbacks_plural: '{count} playbacks',
+            viewers: '{count} viewer',
+            viewers_plural: '{count} viewers',
+        },
         source: {
             badge: 'Source: {source}',
             plex: 'Plex',
@@ -2340,6 +2349,7 @@ export type EnCatalog = typeof en;
 
 Object.assign(en, { homeDashboard: { ...en.homeDashboard, opsSnapshot: {
     title: 'Ops Snapshot',
+    streamsTitle: 'Active Streams',
     collapse: 'Collapse',
     expand: 'Expand',
     loading: 'Loading ops snapshot…',
@@ -2350,6 +2360,8 @@ Object.assign(en, { homeDashboard: { ...en.homeDashboard, opsSnapshot: {
         unreadNotifications: 'Unread Notifications', stored: '{count} stored', stored_plural: '{count} stored',
         jobAlerts: 'Job Alerts', running: '{count} running', running_plural: '{count} running',
         lastCheck: 'Last Check', seconds: '{count}s',
+        streams: '{count} stream', streams_plural: '{count} streams',
+        totalStreams: 'Total Streams', directPlay: 'Direct Play', transcoding: 'Transcoding', totalBandwidth: 'Total Bandwidth',
     },
     empty: { noIncidents: 'No incidents', unavailable: 'Ops snapshot unavailable.' },
 } } });
