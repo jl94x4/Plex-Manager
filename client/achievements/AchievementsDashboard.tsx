@@ -983,31 +983,31 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
             )}
 
             {Array.isArray(data?.nextUnlocks) && data.nextUnlocks.length > 0 && (
-                <div className="glass-card p-5 space-y-3 lg:space-y-5">
+                <div className="glass-card p-5 space-y-3">
                     <h2 className="text-sm font-bold text-text uppercase tracking-widest flex items-center gap-2">
                         <Target className="w-4 h-4 text-plex" />
                         {tAchievements('page.nextUnlocks')}
                     </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 lg:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         {data.nextUnlocks.map((badge: any) => (
                             <button
                                 type="button"
                                 key={badge.id}
                                 onClick={() => setSelectedBadgeId(String(badge.id))}
-                                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 min-w-0 text-left hover:border-plex/40 lg:px-6 lg:py-5"
+                                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 min-w-0 text-left hover:border-plex/40"
                             >
-                                <div className="flex items-start gap-2 lg:gap-4">
-                                    <span className="text-xl leading-none lg:text-4xl">{badge.icon || '🏅'}</span>
+                                <div className="flex items-start gap-2">
+                                    <span className="text-xl leading-none">{badge.icon || '🏅'}</span>
                                     <div className="min-w-0 flex-1">
                                         <p className="text-sm font-bold truncate flex items-center gap-1.5">
                                             {badge.name}
-                                            {pinnedIds.includes(String(badge.id)) && <Pin className="w-3 h-3 text-plex shrink-0 lg:h-4 lg:w-4" />}
+                                            {pinnedIds.includes(String(badge.id)) && <Pin className="w-3 h-3 text-plex shrink-0" />}
                                         </p>
-                                        <p className="mt-0.5 line-clamp-2 text-[11px] text-muted lg:mt-1.5 lg:text-sm lg:leading-relaxed">{badge.description}</p>
-                                        <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden lg:mt-4 lg:h-2.5">
+                                        <p className="text-[11px] text-muted line-clamp-2 mt-0.5">{badge.description}</p>
+                                        <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
                                             <div className="h-full rounded-full bg-plex" style={{ width: `${Math.min(100, Number(badge.progressPct) || 0)}%` }} />
                                         </div>
-                                        <p className="mt-1 text-[10px] text-muted font-mono lg:mt-2 lg:text-sm">
+                                        <p className="mt-1 text-[10px] text-muted font-mono">
                                             {badge.progress ?? 0} / {badge.threshold ?? 0}
                                         </p>
                                     </div>

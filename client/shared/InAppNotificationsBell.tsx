@@ -301,20 +301,20 @@ const NotificationItemRow: React.FC<{
                     <NotificationArtwork item={item} />
                     <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                            <p className={`text-xs leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
+                            <p className={`text-sm leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
                                 {item.title}
                             </p>
                             {repeatCount > 1 && (
-                                <span className="shrink-0 rounded-md border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold text-plex">
+                                <span className="shrink-0 rounded-md border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-xs font-bold text-plex">
                                     {t('notifications.repeats', { count: repeatCount })}
                                 </span>
                             )}
                             <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
                         </div>
                         {item.body ? (
-                            <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">{item.body}</p>
+                            <p className="text-sm text-muted mt-0.5 line-clamp-2 leading-relaxed">{item.body}</p>
                         ) : null}
-                        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]">
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
                             <span className="text-muted/80">{formatRelative(item.createdAt, t)}</span>
                             <span className="text-border">·</span>
                             <span className="font-semibold text-plex/90 transition-colors duration-200 group-hover:text-plex">
@@ -419,13 +419,12 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         const margin = 12;
 
         if (placement === 'up') {
-            // Half the previous “almost full viewport” panel — tall enough to scan, not dominate.
-            const available = Math.max(260, rect.top - margin * 2);
-            const maxHeight = Math.max(240, Math.min(Math.floor(available * 0.5), Math.floor(window.innerHeight * 0.48)));
+            const available = Math.max(320, rect.top - margin * 2);
+            const maxHeight = Math.max(360, Math.min(Math.floor(available * 0.72), Math.floor(window.innerHeight * 0.7)));
             const width = Math.min(
-                Math.max(300, Math.floor(window.innerWidth * 0.36)),
+                Math.max(420, Math.floor(window.innerWidth * 0.42)),
                 window.innerWidth - margin * 2,
-                480,
+                720,
             );
             let left = Math.max(margin, rect.left - 8);
             left = Math.min(left, window.innerWidth - margin - width);
@@ -630,14 +629,14 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             >
                 <div className="relative shrink-0 border-b border-border/70">
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-plex/20 via-plex/5 to-transparent" />
-                    <div className="relative flex flex-col gap-2 px-3 py-3 sm:px-5">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <span className="notif-header-icon inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-plex/35 bg-plex/15 text-plex">
-                                <Bell className="h-3.5 w-3.5" />
+                    <div className="relative flex flex-col gap-2 px-4 py-4 sm:px-5">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <span className="notif-header-icon inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-plex/35 bg-plex/15 text-plex">
+                                <Bell className="h-4 w-4" />
                             </span>
                             <div className="min-w-0">
-                                <p className="text-xs font-bold tracking-wide text-text truncate">{t('notifications.title')}</p>
-                                <p className="text-[10px] text-muted mt-0.5 truncate">
+                                <p className="text-sm font-bold tracking-wide text-text truncate">{t('notifications.title')}</p>
+                                <p className="text-sm text-muted mt-0.5 truncate">
                                     {unread > 0
                                         ? t('notifications.unreadCount', { count: unread })
                                         : t('notifications.allCaughtUp')}
@@ -650,7 +649,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                     <button
                                         type="button"
                                         onClick={() => setFilterMode('all')}
-                                        className={`px-2 py-1 text-[10px] font-semibold rounded-md transition-colors ${
+                                        className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                                             filterMode === 'all'
                                                 ? 'bg-plex/20 text-plex'
                                                 : 'text-muted hover:text-text'
@@ -661,7 +660,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                     <button
                                         type="button"
                                         onClick={() => setFilterMode('unread')}
-                                        className={`px-2 py-1 text-[10px] font-semibold rounded-md transition-colors ${
+                                        className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                                             filterMode === 'unread'
                                                 ? 'bg-plex/20 text-plex'
                                                 : 'text-muted hover:text-text'
@@ -675,7 +674,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                         type="button"
                                         onClick={markAllRead}
                                         disabled={unread <= 0}
-                                        className="notif-mark-read inline-flex min-h-8 items-center gap-1 rounded-lg border border-plex/30 bg-plex/10 px-2.5 py-1 text-[10px] font-semibold text-plex transition-all duration-200 hover:bg-plex/20 hover:border-plex/50 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
+                                        className="notif-mark-read inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-plex/30 bg-plex/10 px-3 py-1.5 text-xs font-semibold text-plex transition-all duration-200 hover:bg-plex/20 hover:border-plex/50 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
                                     >
                                         <CheckCheck className="h-3 w-3 shrink-0" />
                                         <span className="whitespace-nowrap">{t('notifications.markAllRead')}</span>
@@ -684,7 +683,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                         type="button"
                                         onClick={clearAll}
                                         disabled={clearing}
-                                        className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-border/80 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-muted transition-all duration-200 hover:text-text hover:border-border hover:bg-white/10 active:scale-[0.97] disabled:opacity-50"
+                                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border/80 bg-white/5 px-3 py-1.5 text-xs font-semibold text-muted transition-all duration-200 hover:text-text hover:border-border hover:bg-white/10 active:scale-[0.97] disabled:opacity-50"
                                     >
                                         <Trash2 className="h-3 w-3 shrink-0" />
                                         <span className="whitespace-nowrap">{t('notifications.clearAll')}</span>
@@ -699,16 +698,16 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                     {loading && !items.length ? (
                         <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center">
                             <span className="h-10 w-10 rounded-2xl border border-border bg-white/5 animate-pulse" />
-                            <p className="text-xs text-muted">{t('common.loadingMore')}</p>
+                            <p className="text-sm text-muted">{t('common.loadingMore')}</p>
                         </div>
                     ) : !items.length ? (
-                        <div className="h-full flex flex-col items-center justify-center gap-3 px-8 text-center">
-                            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-plex/25 bg-plex/10 text-plex">
-                                <Inbox className="h-5 w-5" />
+                        <div className="h-full flex flex-col items-center justify-center gap-4 px-8 text-center">
+                            <span className="inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-plex/25 bg-plex/10 text-plex">
+                                <Inbox className="h-7 w-7" />
                             </span>
                             <div>
                                 <p className="text-sm font-semibold text-text">{t('notifications.empty')}</p>
-                                <p className="text-xs text-muted mt-1 max-w-sm">{t('notifications.emptyHint')}</p>
+                                <p className="text-sm text-muted mt-1 max-w-sm">{t('notifications.emptyHint')}</p>
                             </div>
                         </div>
                     ) : (
@@ -762,16 +761,16 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                                     </span>
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex items-start justify-between gap-2">
-                                                            <p className={`text-xs leading-snug ${unreadCount > 0 ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
+                                                            <p className={`text-sm leading-snug ${unreadCount > 0 ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
                                                                 {stackTitle(stack.type, stack.items.length, t)}
                                                             </p>
-                                                            <ChevronDown className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-muted transition-transform duration-200 ${expanded ? 'rotate-180 text-plex' : 'group-hover:text-plex'}`} />
+                                                            <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-muted transition-transform duration-200 ${expanded ? 'rotate-180 text-plex' : 'group-hover:text-plex'}`} />
                                                         </div>
-                                                        <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">
+                                                        <p className="text-sm text-muted mt-0.5 line-clamp-2 leading-relaxed">
                                                             {newest.title}
                                                             {extra > 0 ? ` · ${t('notifications.stack.more', { count: extra })}` : ''}
                                                         </p>
-                                                        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]">
+                                                        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
                                                             <span className="text-muted/80">{formatRelative(newest.createdAt, t)}</span>
                                                             {unreadCount > 0 && (
                                                                 <>
