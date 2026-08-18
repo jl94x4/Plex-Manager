@@ -9324,22 +9324,22 @@ export const StatusDashboard: React.FC<{ onBack: () => void, isAdmin: boolean, i
                                                         : t('statusPage.relative.daysAgo', { count: 90 });
                                             return (
                                                 <div key={service.id} className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-4 md:p-5 flex flex-col gap-4 animate-fade-in transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/25 hover:shadow-lg hover:shadow-emerald-500/5" style={{ animationFillMode: 'both', animationDelay: `${index * 75}ms` }}>
-                                                    <div className="flex justify-between items-start mb-2 gap-4">
-                                                        <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="flex justify-between items-start mb-2 gap-3">
+                                                        <div className="flex items-start gap-3 min-w-0 flex-1">
                                                             <StatusServiceIcon service={service} />
-                                                            <div className="min-w-0">
-                                                                <div className="flex items-center gap-2 min-w-0">
-                                                                    <h4 className="font-bold text-text text-lg truncate">{service.name}</h4>
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                                    <h4 className="font-bold text-text text-lg leading-tight break-words" title={service.name}>{service.name}</h4>
                                                                     {isAdmin && service.visibleToUsers === false ? (
-                                                                        <span className="shrink-0 rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted" title={t('statusPage.labels.adminOnlyHint')}>
+                                                                        <span className="rounded-full border border-white/10 bg-black/30 px-1.5 py-0.5 text-[10px] font-semibold text-muted" title={t('statusPage.labels.adminOnlyHint')}>
                                                                             {t('statusPage.labels.adminOnly')}
                                                                         </span>
                                                                     ) : null}
                                                                 </div>
-                                                                {service.description && <p className="text-xs text-muted truncate">{service.description}</p>}
+                                                                {service.description && <p className="text-xs text-muted mt-0.5 line-clamp-2">{service.description}</p>}
                                                             </div>
                                                         </div>
-                                                        <span className={`px-3 py-1 rounded-full text-[0.65rem] uppercase tracking-wider font-bold border flex items-center gap-1.5 shadow-lg transition-all duration-300 ${health.currentStatus === 'online' ? 'bg-status-active/10 text-status-active border-status-active/30 shadow-[0_0_10px_rgba(35,134,54,0.3)]' : health.currentStatus === 'offline' ? 'bg-status-expired/10 text-[#D32F2F] border-[#D32F2F]/30 shadow-[0_0_10px_rgba(211,47,47,0.3)] animate-pulse' : 'bg-status-expiring/10 text-status-expiring border-status-expiring/30 shadow-[0_0_10px_rgba(210,153,34,0.3)]'}`}>
+                                                        <span className={`shrink-0 px-3 py-1 rounded-full text-[0.65rem] uppercase tracking-wider font-bold border flex items-center gap-1.5 shadow-lg transition-all duration-300 ${health.currentStatus === 'online' ? 'bg-status-active/10 text-status-active border-status-active/30 shadow-[0_0_10px_rgba(35,134,54,0.3)]' : health.currentStatus === 'offline' ? 'bg-status-expired/10 text-[#D32F2F] border-[#D32F2F]/30 shadow-[0_0_10px_rgba(211,47,47,0.3)] animate-pulse' : 'bg-status-expiring/10 text-status-expiring border-status-expiring/30 shadow-[0_0_10px_rgba(210,153,34,0.3)]'}`}>
                                                             {health.currentStatus === 'online' && <span className="w-1.5 h-1.5 rounded-full bg-status-active animate-pulse shadow-[0_0_5px_rgba(35,134,54,0.8)]" />}
                                                             {health.currentStatus === 'offline' && <span className="w-1.5 h-1.5 rounded-full bg-[#D32F2F] animate-ping" />}
                                                             {health.currentStatus === 'degraded' && <span className="w-1.5 h-1.5 rounded-full bg-status-expiring animate-pulse shadow-[0_0_5px_rgba(210,153,34,0.8)]" />}
