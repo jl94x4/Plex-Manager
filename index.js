@@ -5765,7 +5765,13 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         // Encode claiming is gated by persisted workerPaused (Start/Pause), not settings save.
         if (collexionsConfig.mediaAutomationEnabled) {
             void mediaAutomationService.start()
-                .then(() => mediaAutomationService.reloadLibraries())
+                .then(() => {
+                    // Re-evaluate quiet hours immediately so shortening the window
+                    // (e.g. 00:00–09:00 → 00:00–07:00 at 07:30) unpauses encodes now,
+                    // instead of waiting for the next 2s worker poll. No-ops if paused.
+                    void mediaAutomationService.scheduler.processNow();
+                    return mediaAutomationService.reloadLibraries();
+                })
                 .catch((error) => log(`[media-automation] Failed to reload after settings save: ${error.message}`));
         } else {
             void mediaAutomationService.stop().catch((error) => {
