@@ -2037,7 +2037,9 @@ const loadFile = async (path, defaultContent) => {
         return data === null ? defaultContent : data;
     } catch (error) {
         if (error.code === 'ENOENT') {
-            await fs.writeFile(path, JSON.stringify(defaultContent, null, 2));
+            if (defaultContent !== null && defaultContent !== undefined) {
+                await fs.writeFile(path, JSON.stringify(defaultContent, null, 2));
+            }
             return defaultContent;
         }
         throw error;
@@ -15292,6 +15294,51 @@ const analyticsCacheAlreadyAttemptedTautulli = (cache) => (
     && TAUTULLI_ATTEMPTED_ANALYTICS_FALLBACKS.has(String(cache?.fallback || ''))
 );
 
+const emptyAnalyticsPeriodEntry = () => ({
+    topUsers: [],
+    topLibraries: [],
+    topMovies: [],
+    topShows: [],
+    topMusic: [],
+    topDevices: [],
+    peakHours: new Array(24).fill(0),
+    totalPlaybacks: 0,
+});
+
+const buildAnalyticsCachePayload = (sourceMeta, { building = false, historyItems = null } = {}) => {
+    const payload = {
+        building: !!building,
+        lastUpdated: Date.now(),
+        source: sourceMeta.source,
+        fallback: sourceMeta.fallback,
+        degraded: !!sourceMeta.degraded,
+        sourceLabel: analyticsSourceLabelFor(sourceMeta.source, sourceMeta),
+    };
+    if (historyItems != null) {
+        payload.historyItemCount = historyItems.length;
+    }
+    for (const days of [1, 7, 30, 60, 90, 180, 365, 1825, 'all']) {
+        payload[days] = emptyAnalyticsPeriodEntry();
+    }
+    return payload;
+};
+
+const readAnalyticsCacheFile = async () => {
+    try {
+        const unlock = await lockFile(ANALYTICS_CACHE_PATH);
+        try {
+            const content = await fs.readFile(ANALYTICS_CACHE_PATH, 'utf-8');
+            const data = JSON.parse(content);
+            return data && typeof data === 'object' ? data : null;
+        } finally {
+            unlock();
+        }
+    } catch (error) {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+    }
+};
+
 const analyticsCacheMatchesPreferredSource = (cache, config) => {
     if (!wantsTautulliWatchHistory(config)) {
         return String(cache?.source || '').toLowerCase() !== 'tautulli';
@@ -15309,7 +15356,7 @@ const maybeRebuildAnalyticsForPreferredSource = async (reason = 'source-mismatch
         if (typeof isBuildingAnalyticsStats !== 'undefined' && isBuildingAnalyticsStats) return false;
         const config = await loadFile(CONFIG_PATH, {});
         if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex') return false;
-        const cache = await loadFile(ANALYTICS_CACHE_PATH, null);
+        const cache = await readAnalyticsCacheFile();
         if (analyticsCacheMatchesPreferredSource(cache, config)) return false;
         const now = Date.now();
         if (now - lastAnalyticsSourceMismatchRebuildAt < 15000) return true;
@@ -16359,12 +16406,17 @@ app.get('/api/plex/analytics', requireAuth, requireMember, async (req, res) => {
                 }),
             lastUpdated: statsData.lastUpdated || null,
             preferredSource: wantsTautulliWatchHistory(config) ? 'tautulli' : 'plex',
-            rebuildPending: false,
+            rebuildPending: !!statsData.building,
+            building: !!statsData.building,
+            historyItemCount: Number(statsData.historyItemCount) || 0,
         };
         const cachedSource = String(data.source || '').toLowerCase();
         const canUseTautulli = isTautulliWatchHistorySource(config);
         const tautulliAttempted = analyticsCacheAlreadyAttemptedTautulli(statsData);
-        if (wantsTautulliWatchHistory(config) && canUseTautulli && cachedSource !== 'tautulli' && !tautulliAttempted) {
+        if (statsData.building) {
+            data.rebuildPending = true;
+            data.sourceLabel = analyticsSourceLabelFor('plex', { fallback: 'tautulli_rebuild_pending' });
+        } else if (wantsTautulliWatchHistory(config) && canUseTautulli && cachedSource !== 'tautulli' && !tautulliAttempted) {
             data.rebuildPending = true;
             data.sourceLabel = analyticsSourceLabelFor('plex', { fallback: 'tautulli_rebuild_pending' });
             void maybeRebuildAnalyticsForPreferredSource('analytics-get');
@@ -20283,7 +20335,15 @@ async function calculateAnalyticsStats() {
         const preferTautulli = isTautulliWatchHistorySource(config);
         if (wantsTautulli && !preferTautulli) {
             sourceMeta = { source: 'plex', fallback: 'tautulli_not_configured', degraded: true };
+        } else if (preferTautulli) {
+            sourceMeta = { source: 'tautulli', fallback: null, degraded: false };
         }
+
+        await saveFile(
+            ANALYTICS_CACHE_PATH,
+            buildAnalyticsCachePayload(sourceMeta, { building: true }),
+        );
+
         if (preferTautulli) {
             try {
                 historyItems = await fetchTautulliServerHistoryItems(config, { maxItems: maxHistoryItems });
@@ -20336,6 +20396,11 @@ async function calculateAnalyticsStats() {
         const users = await loadFile(USERS_PATH, []);
 
         if (!Array.isArray(historyItems) || historyItems.length === 0) {
+            log('[AnalyticsStats] No watch history available for analytics cache; saving empty snapshot.');
+            await saveFile(
+                ANALYTICS_CACHE_PATH,
+                buildAnalyticsCachePayload(sourceMeta, { building: false, historyItems: [] }),
+            );
             markTaskEnd(systemJobs.analyticsCache, null);
             return;
         }
@@ -20435,6 +20500,8 @@ async function calculateAnalyticsStats() {
         statsData.fallback = sourceMeta.fallback;
         statsData.degraded = !!sourceMeta.degraded;
         statsData.sourceLabel = analyticsSourceLabelFor(sourceMeta.source, sourceMeta);
+        statsData.building = false;
+        statsData.historyItemCount = historyItems.length;
         await saveFile(ANALYTICS_CACHE_PATH, statsData);
         log(`Successfully calculated and cached Plex Analytics Stats (source=${statsData.source}, degraded=${statsData.degraded}).`);
         markTaskEnd(systemJobs.analyticsCache, null);
@@ -20713,6 +20780,7 @@ const isValidTrendingCache = (data) => (
 
 const isValidAnalyticsCache = (data) => {
     if (!data || typeof data !== 'object') return false;
+    if (data.building) return false;
     return data.all !== undefined || data['7'] !== undefined || data['30'] !== undefined || data[7] !== undefined || data[30] !== undefined;
 };
 
@@ -20768,7 +20836,7 @@ const startTrendingStatsBackgroundTask = async () => {
 const startAnalyticsStatsBackgroundTask = async () => {
     let existing = null;
     try {
-        const loaded = await loadFile(ANALYTICS_CACHE_PATH, null);
+        const loaded = await readAnalyticsCacheFile();
         if (isValidAnalyticsCache(loaded)) existing = loaded;
     } catch { /* no cache yet */ }
 
