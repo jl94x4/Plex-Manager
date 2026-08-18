@@ -1,100 +1,117 @@
 /**
  * iOS Safari "reveal" scroll suppressor.
  *
- * When the on-screen keyboard opens, iOS scrolls the page to bring the focused
- * field into view — even when the field is already fully visible above the
- * keyboard (worst on the first keyboard open after load). That shoves the whole
- * layout up. This watches scrolls for a short window after a text field gains
- * focus and undoes them, but only when the field would have remained visible at
- * the original position; fields that really would sit under the keyboard keep
- * the native reveal scroll so the user is never typing blind.
+ * iOS scrolls the page to reveal a focused field even when it is already
+ * visible. Restoring after that scroll paints a one-frame flicker. Freeze
+ * document overflow and focus with preventScroll on the opening tap so the
+ * jump never happens. Fields that would sit under the keyboard are left
+ * alone so the native reveal still works.
  */
 
 const isIos = () => /iP(ad|hone|od)/.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-type ScrollTarget = { node: Element | Window; x: number; y: number };
-type Saved = { el: HTMLElement; targets: ScrollTarget[]; until: number };
+const NON_TEXT_INPUT_TYPES = new Set([
+    'button', 'submit', 'reset', 'checkbox', 'radio', 'range',
+    'file', 'color', 'hidden', 'image',
+]);
 
 const isTextField = (target: EventTarget | null): target is HTMLElement => {
     if (!(target instanceof HTMLElement)) return false;
     const tag = target.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+    if (tag === 'TEXTAREA' || target.isContentEditable) return true;
+    if (tag !== 'INPUT') return false;
+    return !NON_TEXT_INPUT_TYPES.has((target as HTMLInputElement).type || 'text');
 };
 
-const scrollableAncestors = (el: HTMLElement): Element[] => {
-    const out: Element[] = [];
-    let node: HTMLElement | null = el.parentElement;
-    while (node) {
-        // html/body are covered by the window entry — including them here would
-        // double-count the same scroll delta.
-        if (node !== document.documentElement && node !== document.body
-            && node.scrollHeight > node.clientHeight + 1) {
-            out.push(node);
-        }
-        node = node.parentElement;
-    }
-    return out;
+const fieldStaysAboveKeyboard = (el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    // iPhone keyboards cover roughly the bottom 40–45%. Leave a little headroom.
+    return rect.top >= 0 && rect.bottom <= window.innerHeight * 0.55;
+};
+
+type Pin = {
+    htmlOverflow: string;
+    bodyOverflow: string;
+    htmlOverscroll: string;
+    raf: number;
+    until: number;
+    x: number;
+    y: number;
 };
 
 export const installIosKeyboardScrollLock = () => {
     if (typeof window === 'undefined' || !isIos()) return;
 
-    let saved: Saved | null = null;
+    let pin: Pin | null = null;
+    const html = document.documentElement;
+    const body = document.body;
+
+    const holdScroll = () => {
+        if (!pin) return;
+        window.scrollTo(pin.x, pin.y);
+        html.scrollTop = pin.y;
+        body.scrollTop = pin.y;
+    };
+
+    const stopPin = () => {
+        if (!pin) return;
+        cancelAnimationFrame(pin.raf);
+        html.style.overflow = pin.htmlOverflow;
+        body.style.overflow = pin.bodyOverflow;
+        html.style.overscrollBehavior = pin.htmlOverscroll;
+        pin = null;
+    };
+
+    const startPin = () => {
+        if (pin) {
+            pin.until = Date.now() + 450;
+            return;
+        }
+        pin = {
+            htmlOverflow: html.style.overflow,
+            bodyOverflow: body.style.overflow,
+            htmlOverscroll: html.style.overscrollBehavior,
+            raf: 0,
+            until: Date.now() + 450,
+            x: window.scrollX,
+            y: window.scrollY,
+        };
+        // overflow:hidden stops iOS from scrolling the layout viewport at all,
+        // so the reveal jump never paints. 450ms covers the keyboard animation.
+        html.style.overflow = 'hidden';
+        body.style.overflow = 'hidden';
+        html.style.overscrollBehavior = 'none';
+        holdScroll();
+        const tick = () => {
+            if (!pin) return;
+            if (Date.now() > pin.until) {
+                stopPin();
+                return;
+            }
+            holdScroll();
+            pin.raf = requestAnimationFrame(tick);
+        };
+        pin.raf = requestAnimationFrame(tick);
+    };
+
+    // Capture the tap *before* iOS focuses+scrolls. preventDefault +
+    // focus({ preventScroll: true }) is what actually removes the flicker;
+    // overflow freeze is the belt-and-braces for the keyboard slide-in.
+    document.addEventListener('touchend', (event) => {
+        const el = event.target;
+        if (!isTextField(el)) return;
+        if (el.tagName === 'SELECT') return;
+        if (!fieldStaysAboveKeyboard(el)) return;
+        if (document.activeElement === el) return;
+        event.preventDefault();
+        el.focus({ preventScroll: true });
+        startPin();
+    }, { capture: true, passive: false });
 
     document.addEventListener('focusin', (event) => {
         if (!isTextField(event.target)) return;
-        saved = {
-            el: event.target,
-            // Covers the keyboard slide-in animation; short enough not to fight
-            // deliberate user scrolling while typing.
-            until: Date.now() + 900,
-            targets: [
-                ...scrollableAncestors(event.target).map((node) => ({
-                    node,
-                    x: node.scrollLeft,
-                    y: node.scrollTop,
-                })),
-                { node: window, x: window.scrollX, y: window.scrollY },
-            ],
-        };
+        if (!fieldStaysAboveKeyboard(event.target)) return;
+        startPin();
     }, true);
-
-    document.addEventListener('focusout', () => { saved = null; }, true);
-
-    const maybeRestore = () => {
-        if (!saved) return;
-        if (Date.now() > saved.until) {
-            saved = null;
-            return;
-        }
-        if (document.activeElement !== saved.el) return;
-
-        let deltaY = 0;
-        for (const target of saved.targets) {
-            const currentY = target.node === window ? window.scrollY : (target.node as Element).scrollTop;
-            deltaY += currentY - target.y;
-        }
-        if (deltaY <= 0) return;
-
-        // Predict where the field would sit if the scroll were undone; only
-        // restore when it stays clear of both the top edge and the keyboard.
-        const rect = saved.el.getBoundingClientRect();
-        const vv = window.visualViewport;
-        const keyboardTop = vv ? vv.offsetTop + vv.height : window.innerHeight;
-        if (rect.top + deltaY < 8 || rect.bottom + deltaY > keyboardTop - 8) return;
-
-        for (const target of saved.targets) {
-            if (target.node === window) {
-                window.scrollTo(target.x, target.y);
-            } else {
-                (target.node as Element).scrollTop = target.y;
-                (target.node as Element).scrollLeft = target.x;
-            }
-        }
-    };
-
-    window.addEventListener('scroll', maybeRestore, true);
-    window.visualViewport?.addEventListener('resize', maybeRestore);
-    window.visualViewport?.addEventListener('scroll', maybeRestore);
 };
