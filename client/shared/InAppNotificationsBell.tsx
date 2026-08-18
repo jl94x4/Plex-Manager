@@ -556,7 +556,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                             }`}
                                         >
                                             {unreadItem && (
-                                                <span className="notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full bg-plex" />
+                                                <span className={`notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${item.type === 'media_job_completed' ? 'bg-emerald-500' : 'bg-plex'}`} />
                                             )}
                                             <div className="flex items-start gap-2.5">
                                                 <NotificationArtwork item={item} />

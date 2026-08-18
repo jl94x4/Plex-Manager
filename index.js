@@ -24743,12 +24743,12 @@ mediaAutomationService = createMediaAutomation({
                     await sendGotifyAlert(
                         config,
                         'Media Automation job failed',
-                        `${entry.message || 'Job failed'}${entry.jobId ? ` (Job #${entry.jobId})` : ''}`,
+                        entry.message || 'Job failed',
                         8,
                     );
                 }
                 await notifyOps('media_job_failed', {
-                    title: `${entry.message || 'Job failed'}${entry.jobId ? ` (Job #${entry.jobId})` : ''}`,
+                    title: entry.message || 'Job failed',
                     dedupeKey: `media-job-failed:${entry.jobId || entry.message || Date.now()}`,
                 });
                 if (config.mediaAutomation?.notifyOnFailBurst) {
@@ -24795,7 +24795,7 @@ mediaAutomationService = createMediaAutomation({
         if (entry.type === 'job.completed') {
             try {
                 await notifyOps('media_job_completed', {
-                    title: `${entry.message || 'Job completed'}${entry.jobId ? ` (Job #${entry.jobId})` : ''}`,
+                    title: entry.message || 'Job completed',
                     dedupeKey: `media-job-completed:${entry.jobId || Date.now()}`,
                 });
             } catch (error) {
