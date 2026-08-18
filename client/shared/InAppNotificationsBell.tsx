@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
     Bell,
     Calendar,
     CheckCheck,
+    ChevronDown,
     ChevronRight,
     CircleCheck,
     CircleX,
@@ -22,6 +23,7 @@ import {
 import { apiFetch } from './api';
 import { IN_APP_NOTIFICATIONS_CHANGED_EVENT, notifyInAppNotificationsChanged } from './inAppNotificationsRefresh';
 import { resolveNotificationDestination } from './notificationDestination';
+import { stackInAppNotifications } from './notificationStacks';
 import { resolveTmdbImageUrl } from '../discovery/tmdbImageUrl';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
@@ -158,6 +160,28 @@ const typeVisual = (type?: string) => {
     }
 };
 
+const STACK_TITLE_TYPES = new Set([
+    'request_available',
+    'request_approved',
+    'request_declined',
+    'request_season_available',
+    'request_new_episode',
+    'admin_pending',
+    'request_not_released',
+    'support_ticket',
+    'collexions_failed',
+    'scanner_failed',
+    'status_down',
+    'status_up',
+    'media_job_failed',
+    'media_job_completed',
+]);
+
+const stackTitle = (type: string, count: number, t: DiscoverTranslate) => {
+    const key = STACK_TITLE_TYPES.has(type) ? `notifications.stack.${type}` : 'notifications.stack.generic';
+    return t(key, { count });
+};
+
 const posterSrcFor = (item: InAppNotification) => {
     const url = String(item.meta?.posterUrl || '').trim();
     if (url) return url;
@@ -195,6 +219,76 @@ const NotificationArtwork: React.FC<{ item: InAppNotification }> = ({ item }) =>
     );
 };
 
+const StackedArtwork: React.FC<{ items: InAppNotification[] }> = ({ items }) => {
+    const shown = items.slice(0, 3);
+    return (
+        <span className="relative mt-0.5 h-14 w-12 shrink-0">
+            {shown.map((item, index) => (
+                <span
+                    key={item.id}
+                    className="absolute left-0 top-0"
+                    style={{
+                        transform: `translate(${index * 5}px, ${index * 3}px)`,
+                        zIndex: shown.length - index,
+                    }}
+                >
+                    <NotificationArtwork item={item} />
+                </span>
+            ))}
+        </span>
+    );
+};
+
+const NotificationItemRow: React.FC<{
+    item: InAppNotification;
+    t: DiscoverTranslate;
+    onOpen: (item: InAppNotification) => void;
+    compact?: boolean;
+}> = ({ item, t, onOpen, compact = false }) => {
+    const unreadItem = !item.readAt;
+    const dest = resolveNotificationDestination(item);
+    const repeatCount = Math.max(1, Number(item?.meta?.repeatCount || 1));
+    return (
+        <button
+            type="button"
+            onClick={() => onOpen(item)}
+            className={`notif-row-btn group relative w-full text-left transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10 ${
+                compact ? 'px-3.5 sm:px-4 py-2.5' : 'px-3.5 sm:px-4 py-3'
+            } ${unreadItem ? 'bg-plex/[0.045]' : ''}`}
+        >
+            {unreadItem && (
+                <span className={`notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${item.type === 'media_job_completed' ? 'bg-emerald-500' : 'bg-plex'}`} />
+            )}
+            <div className="flex items-start gap-2.5">
+                <NotificationArtwork item={item} />
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                        <p className={`text-xs leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
+                            {item.title}
+                        </p>
+                        {repeatCount > 1 && (
+                            <span className="shrink-0 rounded-md border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold text-plex">
+                                {t('notifications.repeats', { count: repeatCount })}
+                            </span>
+                        )}
+                        <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
+                    </div>
+                    {item.body ? (
+                        <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">{item.body}</p>
+                    ) : null}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]">
+                        <span className="text-muted/80">{formatRelative(item.createdAt, t)}</span>
+                        <span className="text-border">·</span>
+                        <span className="font-semibold text-plex/90 transition-colors duration-200 group-hover:text-plex">
+                            {t(dest.labelKey)}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </button>
+    );
+};
+
 type Props = {
     onNavigate?: (route: string, options?: { path?: string; reviewId?: number }) => void;
     className?: string;
@@ -226,6 +320,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
     const [loading, setLoading] = useState(false);
     const [clearing, setClearing] = useState(false);
     const [panelBox, setPanelBox] = useState<PanelBox | null>(null);
+    const [expandedStacks, setExpandedStacks] = useState<Set<string>>(() => new Set());
     const buttonRef = useRef<HTMLButtonElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
 
@@ -345,6 +440,21 @@ export const InAppNotificationsBell: React.FC<Props> = ({
             document.removeEventListener('keydown', onKey);
         };
     }, [open]);
+
+    useEffect(() => {
+        if (!open) setExpandedStacks(new Set());
+    }, [open]);
+
+    const stacks = useMemo(() => stackInAppNotifications(items), [items]);
+
+    const toggleStack = (key: string) => {
+        setExpandedStacks((current) => {
+            const next = new Set(current);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
 
     const markAllRead = async () => {
         try {
@@ -538,53 +648,84 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                         </div>
                     ) : (
                         <ul className="py-1">
-                            {items.map((item, index) => {
-                                const unreadItem = !item.readAt;
-                                const dest = resolveNotificationDestination(item);
-                                const repeatCount = Math.max(1, Number(item?.meta?.repeatCount || 1));
+                            {stacks.map((stack, index) => {
+                                if (stack.items.length === 1) {
+                                    const item = stack.items[0];
+                                    return (
+                                        <li
+                                            key={item.id}
+                                            className="notif-row-enter border-b border-border/40 last:border-b-0"
+                                            style={{ animationDelay: `${Math.min(index, 12) * 28}ms` }}
+                                        >
+                                            <NotificationItemRow item={item} t={t} onOpen={openItem} />
+                                        </li>
+                                    );
+                                }
+                                const newest = stack.items[0];
+                                const unreadCount = stack.items.filter((item) => !item.readAt).length;
+                                const expanded = expandedStacks.has(stack.key);
+                                const extra = Math.max(0, stack.items.length - 1);
                                 return (
                                     <li
-                                        key={item.id}
-                                        className="notif-row-enter"
+                                        key={stack.key}
+                                        className="notif-row-enter border-b border-border/40 last:border-b-0"
                                         style={{ animationDelay: `${Math.min(index, 12) * 28}ms` }}
                                     >
                                         <button
                                             type="button"
-                                            onClick={() => openItem(item)}
-                                            className={`notif-row-btn group relative w-full text-left px-3.5 sm:px-4 py-3 transition-all duration-200 border-b border-border/40 last:border-b-0 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10 ${
-                                                unreadItem ? 'bg-plex/[0.045]' : ''
+                                            onClick={() => toggleStack(stack.key)}
+                                            aria-expanded={expanded}
+                                            aria-label={expanded
+                                                ? t('notifications.stack.collapse')
+                                                : t('notifications.stack.expand', { count: stack.items.length })}
+                                            className={`group relative w-full text-left px-3.5 sm:px-4 py-3 transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10 ${
+                                                unreadCount > 0 ? 'bg-plex/[0.045]' : ''
                                             }`}
                                         >
-                                            {unreadItem && (
-                                                <span className={`notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${item.type === 'media_job_completed' ? 'bg-emerald-500' : 'bg-plex'}`} />
+                                            {unreadCount > 0 && (
+                                                <span className={`notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${stack.type === 'media_job_completed' ? 'bg-emerald-500' : 'bg-plex'}`} />
                                             )}
                                             <div className="flex items-start gap-2.5">
-                                                <NotificationArtwork item={item} />
+                                                <span className="relative">
+                                                    <StackedArtwork items={stack.items} />
+                                                    <span className="absolute -right-1 -top-1 z-20 inline-flex min-w-[1.15rem] items-center justify-center rounded-full border border-plex/40 bg-plex px-1 py-0.5 text-[9px] font-black leading-none text-background tabular-nums shadow-sm">
+                                                        {stack.items.length > 99 ? '99+' : stack.items.length}
+                                                    </span>
+                                                </span>
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-start justify-between gap-2">
-                                                        <p className={`text-xs leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
-                                                            {item.title}
+                                                        <p className={`text-xs leading-snug ${unreadCount > 0 ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
+                                                            {stackTitle(stack.type, stack.items.length, t)}
                                                         </p>
-                                                        {repeatCount > 1 && (
-                                                            <span className="shrink-0 rounded-md border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold text-plex">
-                                                                {t('notifications.repeats', { count: repeatCount })}
-                                                            </span>
-                                                        )}
-                                                        <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
+                                                        <ChevronDown className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-muted transition-transform duration-200 ${expanded ? 'rotate-180 text-plex' : 'group-hover:text-plex'}`} />
                                                     </div>
-                                                    {item.body ? (
-                                                        <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">{item.body}</p>
-                                                    ) : null}
+                                                    <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">
+                                                        {newest.title}
+                                                        {extra > 0 ? ` · ${t('notifications.stack.more', { count: extra })}` : ''}
+                                                    </p>
                                                     <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]">
-                                                        <span className="text-muted/80">{formatRelative(item.createdAt, t)}</span>
-                                                        <span className="text-border">·</span>
-                                                        <span className="font-semibold text-plex/90 transition-colors duration-200 group-hover:text-plex">
-                                                            {t(dest.labelKey)}
-                                                        </span>
+                                                        <span className="text-muted/80">{formatRelative(newest.createdAt, t)}</span>
+                                                        {unreadCount > 0 && (
+                                                            <>
+                                                                <span className="text-border">·</span>
+                                                                <span className="font-semibold text-plex/90">
+                                                                    {t('notifications.unreadCount', { count: unreadCount })}
+                                                                </span>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
                                         </button>
+                                        {expanded ? (
+                                            <ul className="border-t border-border/40 bg-black/20">
+                                                {stack.items.map((item) => (
+                                                    <li key={item.id} className="border-b border-border/30 last:border-b-0">
+                                                        <NotificationItemRow item={item} t={t} onOpen={openItem} compact />
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : null}
                                     </li>
                                 );
                             })}
