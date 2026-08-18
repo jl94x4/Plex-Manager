@@ -1100,6 +1100,7 @@ export const MediaAutomationDashboard: React.FC = () => {
     const [historySearch, setHistorySearch] = useState('');
     const profilesFileRef = React.useRef<HTMLInputElement | null>(null);
     const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
+    const [selectedLibraryIds, setSelectedLibraryIds] = useState<Set<string>>(new Set());
     const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
     const [postSavePipeline, setPostSavePipeline] = useState<MediaAutomationPipeline | null>(null);
     const [editorAdvancedOpen, setEditorAdvancedOpen] = useState(false);
@@ -1349,6 +1350,68 @@ export const MediaAutomationDashboard: React.FC = () => {
         } finally {
             setSavingEditor(false);
         }
+    };
+
+    const setLibraryEnabled = async (library: MediaAutomationLibrary, enabled: boolean) => {
+        if (library.id === undefined) return;
+        const id = library.id;
+        const previous = library.enabled;
+        setLibraries((current) => current.map((item) => (
+            String(item.id) === String(id) ? { ...item, enabled } : item
+        )));
+        try {
+            await mediaAutomationApi.updateLibrary(id, { ...library, enabled });
+            toast(enabled ? `Enabled ${library.name}.` : `Disabled ${library.name}.`);
+        } catch (error) {
+            setLibraries((current) => current.map((item) => (
+                String(item.id) === String(id) ? { ...item, enabled: previous } : item
+            )));
+            toast(error instanceof Error ? error.message : 'Failed to update library', 'error');
+        }
+    };
+
+    const toggleLibrarySelected = (id: string) => {
+        setSelectedLibraryIds((current) => {
+            const next = new Set(current);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const selectableLibraryIds = libraries
+        .filter((library) => library.id !== undefined)
+        .map((library) => String(library.id));
+    const allLibrariesSelected = selectableLibraryIds.length > 0
+        && selectableLibraryIds.every((id) => selectedLibraryIds.has(id));
+    const selectedLibraries = libraries.filter((library) => (
+        library.id !== undefined && selectedLibraryIds.has(String(library.id))
+    ));
+    const selectedEnabledLibraries = selectedLibraries.filter((library) => library.enabled !== false);
+
+    const disableSelectedLibraries = async () => {
+        if (!selectedEnabledLibraries.length) return;
+        const count = selectedEnabledLibraries.length;
+        const ok = await askConfirm(
+            `Disable ${count} selected ${count === 1 ? 'library' : 'libraries'}? Disabled libraries are skipped by scan and watch.`,
+            {
+                title: count === 1 ? 'Disable library?' : 'Disable selected libraries?',
+                confirmLabel: count === 1 ? 'Disable' : `Disable ${count}`,
+                cancelLabel: 'Keep enabled',
+                danger: true,
+            },
+        );
+        if (!ok) return;
+        await runAction(
+            'disable-libraries',
+            async () => {
+                for (const library of selectedEnabledLibraries) {
+                    await mediaAutomationApi.updateLibrary(library.id!, { ...library, enabled: false });
+                }
+            },
+            count === 1 ? `Disabled ${selectedEnabledLibraries[0].name}.` : `Disabled ${count} libraries.`,
+        );
+        setSelectedLibraryIds(new Set());
     };
 
     const savePipeline = async () => {
@@ -3166,6 +3229,31 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 </p>
                             </div>
                             <div className="flex flex-wrap gap-2">
+                                {libraries.length > 0 && (
+                                    <>
+                                        <label className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-background/40 px-3 py-2 text-sm font-semibold text-text">
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-border bg-background text-plex focus:ring-plex"
+                                                checked={allLibrariesSelected}
+                                                onChange={() => setSelectedLibraryIds(allLibrariesSelected ? new Set() : new Set(selectableLibraryIds))}
+                                            />
+                                            Select all
+                                            {selectedLibraryIds.size > 0 && (
+                                                <span className="font-normal text-muted">· {selectedLibraryIds.size}</span>
+                                            )}
+                                        </label>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={busy !== null || selectedEnabledLibraries.length === 0}
+                                            onClick={() => void disableSelectedLibraries()}
+                                        >
+                                            {busy === 'disable-libraries' ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                            Disable selected{selectedEnabledLibraries.length > 0 ? ` (${selectedEnabledLibraries.length})` : ''}
+                                        </button>
+                                    </>
+                                )}
                                 <button
                                     type="button"
                                     className={buttonClass}
@@ -3287,21 +3375,41 @@ export const MediaAutomationDashboard: React.FC = () => {
                                 const queueCount = countJobsForLibrary(jobs, library);
                                 const pipelineName = libraryPipelineLabel(library, pipelines);
                                 return (
-                                    <article key={libraryKey} className={`${listCardClass} p-5`}>
+                                    <article key={libraryKey} className={`${listCardClass} p-5 ${library.enabled === false ? 'opacity-70' : ''}`}>
                                         <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <h3 className="font-bold text-text">{library.name}</h3>
-                                                    <StatusPill value={library.enabled === false ? 'disabled' : 'enabled'} />
-                                                    {queueCount > 0 && (
-                                                        <span className="rounded-full border border-plex/30 bg-plex/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-plex">
-                                                            {queueCount} in queue
-                                                        </span>
-                                                    )}
+                                            <div className="flex min-w-0 items-start gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    className="mt-1 h-4 w-4 shrink-0 rounded border-border bg-background text-plex focus:ring-plex"
+                                                    checked={library.id !== undefined && selectedLibraryIds.has(String(library.id))}
+                                                    disabled={library.id === undefined}
+                                                    aria-label={`Select ${library.name}`}
+                                                    onChange={() => {
+                                                        if (library.id !== undefined) toggleLibrarySelected(String(library.id));
+                                                    }}
+                                                />
+                                                <div className="min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <h3 className="font-bold text-text">{library.name}</h3>
+                                                        {queueCount > 0 && (
+                                                            <span className="rounded-full border border-plex/30 bg-plex/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-plex">
+                                                                {queueCount} in queue
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="mt-2 text-sm text-text">{summarizeLibraryOutcome(library, pipelines)}</p>
                                                 </div>
-                                                <p className="mt-2 text-sm text-text">{summarizeLibraryOutcome(library, pipelines)}</p>
                                             </div>
-                                            <div className="flex gap-1">
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-2 shrink-0" title={library.enabled === false ? 'Disabled — skipped by scan and watch' : 'Enabled'}>
+                                                    <span className="hidden text-[10px] font-bold uppercase tracking-wide text-muted sm:inline">Enabled</span>
+                                                    <SettingsSwitch
+                                                        className="ml-0"
+                                                        checked={library.enabled !== false}
+                                                        disabled={library.id === undefined}
+                                                        onChange={(enabled) => void setLibraryEnabled(library, enabled)}
+                                                    />
+                                                </div>
                                                 <button type="button" className={buttonClass} onClick={() => setLibraryDraft({ ...emptyLibrary(), ...library })}>
                                                     <Pencil className="h-4 w-4" />
                                                 </button>

@@ -1873,7 +1873,7 @@ export const en = {
     },
     downloads: {
         page: { eyebrow: 'Downloads', title: 'Download Status', description: 'All configured download clients, grouped by Sonarr, Radarr, and Lidarr.' },
-        actions: { refresh: 'Refresh', clearClientFilter: 'Clear client filter', pause: 'Pause', resume: 'Resume', remove: 'Remove' },
+        actions: { refresh: 'Refresh', clearClientFilter: 'Clear client filter', pause: 'Pause', resume: 'Resume', remove: 'Remove', collapse: 'Collapse', expand: 'Expand' },
         filters: { client: 'Client', show: 'Show', activeOnly: 'Active only', all: 'All', allClients: 'All clients', other: 'Other', shown: '{count} shown', hidingCompleted: 'hiding completed/seeding' },
         labels: { clients: 'Clients', downloadClient: 'Download Client', downloadCount: '{count} download', downloadCount_plural: '{count} downloads', downSpeed: 'Down {value}/s', upSpeed: 'Up {value}/s', matchedFromArrQueue: 'Matched from Arr queue' },
         status: { activeDownloads: 'Active Downloads', downloads: 'Downloads', unknown: 'Unknown' },
@@ -2303,6 +2303,8 @@ export type EnCatalog = typeof en;
 
 Object.assign(en, { homeDashboard: { ...en.homeDashboard, opsSnapshot: {
     title: 'Ops Snapshot',
+    collapse: 'Collapse',
+    expand: 'Expand',
     loading: 'Loading ops snapshot…',
     errors: { loadFailed: 'Failed to load ops snapshot' },
     metrics: {

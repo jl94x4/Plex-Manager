@@ -221,7 +221,7 @@ export const DashboardPanel: React.FC<{
     return (
         <section className={`${dashboardPanelClass} p-4 md:p-5 ${className}`.trim()}>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div className={`${collapsible && collapsed ? 'mb-0' : 'mb-4'} flex flex-wrap items-start justify-between gap-3`}>
                 <div className="min-w-0 flex-1">
                     {collapsible ? (
                         <button
@@ -236,7 +236,7 @@ export const DashboardPanel: React.FC<{
                             </span>
                             <span className="min-w-0">
                                 <h2 className="text-lg font-bold tracking-tight text-text group-hover:text-plex">{title}</h2>
-                                {subtitle ? <p className="mt-0.5 text-xs text-muted">{subtitle}</p> : null}
+                                {subtitle && !collapsed ? <p className="mt-0.5 text-xs text-muted">{subtitle}</p> : null}
                             </span>
                         </button>
                     ) : (
@@ -256,6 +256,38 @@ export const DashboardPanel: React.FC<{
             {collapsible && collapsed ? null : children}
         </section>
     );
+};
+
+export const readPersistedCollapsed = (storageKey: string, defaultCollapsed = false) => {
+    try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw === '1') return true;
+        if (raw === '0') return false;
+    } catch {
+        // ignore
+    }
+    return defaultCollapsed;
+};
+
+export const preferCollapsedOnNarrow = (maxWidthPx = 1023) => {
+    try {
+        return window.matchMedia(`(max-width: ${maxWidthPx}px)`).matches;
+    } catch {
+        return false;
+    }
+};
+
+export const usePersistedCollapsed = (storageKey: string, defaultCollapsed = false) => {
+    const [collapsed, setCollapsed] = React.useState(() => readPersistedCollapsed(storageKey, defaultCollapsed));
+    const onCollapsedChange = React.useCallback((next: boolean) => {
+        setCollapsed(next);
+        try {
+            localStorage.setItem(storageKey, next ? '1' : '0');
+        } catch {
+            // ignore
+        }
+    }, [storageKey]);
+    return [collapsed, onCollapsedChange] as const;
 };
 
 export const DashboardSubnav: React.FC<{ children: React.ReactNode; className?: string }> = ({

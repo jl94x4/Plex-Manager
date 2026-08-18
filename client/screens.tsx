@@ -66,6 +66,8 @@ import {
     dashboardGlowClass,
     dashboardPanelClass,
     dashboardSubnavLinkClass,
+    preferCollapsedOnNarrow,
+    usePersistedCollapsed,
 } from './shared/dashboard/DashboardChrome';
 import { ANALYTICS_PERIOD_OPTIONS, persistAnalyticsDays, readPersistedAnalyticsDays } from './shared/analyticsPeriodOptions';
 import { UserDashboardLayout } from './home/UserDashboardLayout';
@@ -2280,6 +2282,9 @@ export const MediaStackDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin })
 
 const DOWNLOADS_STATUS_FILTER_KEY = 'portal-downloads-status-filter';
 const DOWNLOADS_CLIENT_FILTER_KEY = 'portal-downloads-client-filter';
+const DOWNLOADS_UPLOAD_COLLAPSED_KEY = 'portal-downloads-upload-collapsed';
+const DOWNLOADS_CLIENTS_COLLAPSED_KEY = 'portal-downloads-clients-collapsed';
+const OPS_SNAPSHOT_COLLAPSED_KEY = 'portal-home-ops-snapshot-collapsed';
 
 const downloadClientTypeLabel = (type: string, fallback = 'Download Client') => ({
     qbittorrent: 'qBittorrent',
@@ -2348,6 +2353,14 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
     const [torrentFiles, setTorrentFiles] = useState<File[]>([]);
     const [fileDropActive, setFileDropActive] = useState(false);
     const [uploadBusy, setUploadBusy] = useState(false);
+    const [uploadCollapsed, setUploadCollapsed] = usePersistedCollapsed(
+        DOWNLOADS_UPLOAD_COLLAPSED_KEY,
+        preferCollapsedOnNarrow(),
+    );
+    const [clientsCollapsed, setClientsCollapsed] = usePersistedCollapsed(
+        DOWNLOADS_CLIENTS_COLLAPSED_KEY,
+        preferCollapsedOnNarrow(),
+    );
     const loadGenRef = useRef(0);
     const torrentDropDepthRef = useRef(0);
 
@@ -2621,7 +2634,15 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
             {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 text-red-200 px-4 py-3 text-sm">{error}</div>}
 
             {isAdmin && (
-                <DashboardPanel title={t('downloads.upload.title')} subtitle={t('downloads.upload.subtitle')}>
+                <DashboardPanel
+                    title={t('downloads.upload.title')}
+                    subtitle={t('downloads.upload.subtitle')}
+                    collapsible
+                    collapsed={uploadCollapsed}
+                    onCollapsedChange={setUploadCollapsed}
+                    collapseLabel={t('downloads.actions.collapse')}
+                    expandLabel={t('downloads.actions.expand')}
+                >
                     <div className="space-y-3">
                         <div className="flex flex-col lg:flex-row lg:items-end gap-3">
                             <div className="lg:w-56">
@@ -2813,7 +2834,15 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <DashboardPanel title={t('downloads.labels.clients')} className="order-1 lg:order-2">
+                <DashboardPanel
+                    title={t('downloads.labels.clients')}
+                    className="order-2 lg:order-2"
+                    collapsible
+                    collapsed={clientsCollapsed}
+                    onCollapsedChange={setClientsCollapsed}
+                    collapseLabel={t('downloads.actions.collapse')}
+                    expandLabel={t('downloads.actions.expand')}
+                >
                     <div className="space-y-3">
                         {(data?.clients || []).length === 0 ? (
                             <p className="text-sm text-muted">{t('downloads.empty.noClients')}</p>
@@ -2854,7 +2883,7 @@ export const DownloadStatusPage: React.FC<{ isAdmin?: boolean }> = ({ isAdmin = 
                 </DashboardPanel>
                 <DashboardPanel
                     title={statusFilter === 'active' ? t('downloads.status.activeDownloads') : t('downloads.status.downloads')}
-                    className="lg:col-span-2 order-2 lg:order-1"
+                    className="lg:col-span-2 order-1 lg:order-1"
                 >
                     <div className="space-y-3">
                         {downloads.length === 0 ? (
@@ -10014,6 +10043,10 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
     const [opsSnapshot, setOpsSnapshot] = useState<AdminOpsSnapshot | null>(null);
     const [opsLoading, setOpsLoading] = useState(false);
     const [opsError, setOpsError] = useState<string | null>(null);
+    const [opsCollapsed, setOpsCollapsed] = usePersistedCollapsed(
+        OPS_SNAPSHOT_COLLAPSED_KEY,
+        preferCollapsedOnNarrow(),
+    );
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const libraryMediaServerType = String(publicConfig?.mediaServerType || mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = libraryMediaServerType === 'jellyfin' || libraryMediaServerType === 'emby';
@@ -10407,7 +10440,23 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                 {isAdmin && (
                     <section className="mb-8 w-full">
                         <div className="flex items-center justify-between gap-3 mb-3">
-                            <h2 className="text-plex text-sm uppercase tracking-[2px] font-bold border-b border-white/10 pb-2 w-full">{t('homeDashboard.opsSnapshot.title')}</h2>
+                            <button
+                                type="button"
+                                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                onClick={() => setOpsCollapsed(!opsCollapsed)}
+                                aria-expanded={!opsCollapsed}
+                                aria-label={opsCollapsed ? t('homeDashboard.opsSnapshot.expand') : t('homeDashboard.opsSnapshot.collapse')}
+                            >
+                                <span className="w-3 shrink-0 text-muted" aria-hidden>{opsCollapsed ? '▸' : '▾'}</span>
+                                <h2 className="text-plex text-sm uppercase tracking-[2px] font-bold border-b border-white/10 pb-2 w-full">{t('homeDashboard.opsSnapshot.title')}</h2>
+                            </button>
+                            {opsCollapsed && opsSnapshot ? (
+                                <span className={`shrink-0 text-xs font-semibold ${opsSnapshot.unhealthyCount > 0 ? 'text-rose-200' : 'text-emerald-200'}`}>
+                                    {opsSnapshot.unhealthyCount > 0
+                                        ? t('homeDashboard.opsSnapshot.metrics.unhealthy', { count: opsSnapshot.unhealthyCount })
+                                        : t('homeDashboard.opsSnapshot.metrics.allHealthy')}
+                                </span>
+                            ) : null}
                             <button
                                 type="button"
                                 onClick={() => { void fetchOpsSnapshot(false); }}
@@ -10416,7 +10465,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                 {t('homeDashboard.admin.refresh')}
                             </button>
                         </div>
-                        {opsLoading && !opsSnapshot ? (
+                        {opsCollapsed ? null : opsLoading && !opsSnapshot ? (
                             <div className="text-center text-muted p-6 border border-dashed border-border rounded-xl">{t('homeDashboard.opsSnapshot.loading')}</div>
                         ) : opsError && !opsSnapshot ? (
                             <div className="text-center text-red-300 p-6 border border-red-500/30 rounded-xl bg-red-500/10">{opsError}</div>
