@@ -4028,12 +4028,32 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
 
     useEffect(() => {
         if (!analyticsData?.rebuildPending || isJellyfinPortal) return undefined;
-        const timer = window.setTimeout(() => {
+        let cancelled = false;
+        let attempts = 0;
+        const maxAttempts = 24;
+        let timer: ReturnType<typeof window.setTimeout> | undefined;
+        const poll = () => {
+            if (cancelled || attempts >= maxAttempts) return;
+            attempts += 1;
             void apiFetch(`/api/plex/analytics?days=${days}`)
-                .then((data) => setAnalyticsData(data))
-                .catch(() => { /* keep current */ });
-        }, 8000);
-        return () => window.clearTimeout(timer);
+                .then((data) => {
+                    if (cancelled) return;
+                    setAnalyticsData(data);
+                    if (data?.rebuildPending && attempts < maxAttempts) {
+                        timer = window.setTimeout(poll, 8000);
+                    }
+                })
+                .catch(() => {
+                    if (!cancelled && attempts < maxAttempts) {
+                        timer = window.setTimeout(poll, 8000);
+                    }
+                });
+        };
+        timer = window.setTimeout(poll, 8000);
+        return () => {
+            cancelled = true;
+            if (timer) window.clearTimeout(timer);
+        };
     }, [analyticsData?.rebuildPending, days, isJellyfinPortal]);
 
     const handleRebuildAnalyticsCache = useCallback(async () => {

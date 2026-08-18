@@ -15281,12 +15281,26 @@ const analyticsSourceLabelFor = (source, { degraded = false, fallback = null } =
 
 const wantsTautulliWatchHistory = (config = {}) => String(config.watchHistorySource || '').toLowerCase() === 'tautulli';
 
+const TAUTULLI_ATTEMPTED_ANALYTICS_FALLBACKS = new Set([
+    'tautulli_history_failed',
+    'tautulli_history_empty',
+    'tautulli_unavailable',
+]);
+
+const analyticsCacheAlreadyAttemptedTautulli = (cache) => (
+    !!cache?.degraded
+    && TAUTULLI_ATTEMPTED_ANALYTICS_FALLBACKS.has(String(cache?.fallback || ''))
+);
+
 const analyticsCacheMatchesPreferredSource = (cache, config) => {
     if (!wantsTautulliWatchHistory(config)) {
         return String(cache?.source || '').toLowerCase() !== 'tautulli';
     }
     if (!isTautulliWatchHistorySource(config)) return true;
-    return String(cache?.source || '').toLowerCase() === 'tautulli';
+    const source = String(cache?.source || '').toLowerCase();
+    if (source === 'tautulli') return true;
+    if (analyticsCacheAlreadyAttemptedTautulli(cache)) return true;
+    return false;
 };
 
 let lastAnalyticsSourceMismatchRebuildAt = 0;
@@ -16349,7 +16363,8 @@ app.get('/api/plex/analytics', requireAuth, requireMember, async (req, res) => {
         };
         const cachedSource = String(data.source || '').toLowerCase();
         const canUseTautulli = isTautulliWatchHistorySource(config);
-        if (wantsTautulliWatchHistory(config) && canUseTautulli && cachedSource !== 'tautulli') {
+        const tautulliAttempted = analyticsCacheAlreadyAttemptedTautulli(statsData);
+        if (wantsTautulliWatchHistory(config) && canUseTautulli && cachedSource !== 'tautulli' && !tautulliAttempted) {
             data.rebuildPending = true;
             data.sourceLabel = analyticsSourceLabelFor('plex', { fallback: 'tautulli_rebuild_pending' });
             void maybeRebuildAnalyticsForPreferredSource('analytics-get');
