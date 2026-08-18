@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { MainApp } from './client/App';
+import { installIosKeyboardScrollLock } from './client/shared/iosKeyboardScrollLock';
 
 // iOS Safari auto-zooms focused inputs unless maximum-scale=1 (pinch zoom keeps
 // working on iOS regardless, so accessibility is unaffected). This must live in
@@ -13,6 +14,8 @@ if (isIos) {
         'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover',
     );
 }
+// Stop iOS shoving the page up when the keyboard opens on an already-visible field.
+installIosKeyboardScrollLock();
 
 const container = document.getElementById('root');
 const root = createRoot(container!);
