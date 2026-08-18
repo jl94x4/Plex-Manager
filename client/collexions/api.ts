@@ -474,6 +474,27 @@ class CollexionsApiService {
         );
     }
 
+    async repairCollectionsWeb(library?: string): Promise<{
+        success: boolean;
+        scanned?: number;
+        purged?: number;
+        pruned?: number;
+        converted?: number;
+        libraries?: string[];
+        results?: Array<{ library: string; scanned: number; purged: number; pruned: number; converted?: number }>;
+        errors?: string[];
+        error?: string;
+    }> {
+        return withTimeout(
+            cx('/collections/repair-web', {
+                method: 'POST',
+                body: JSON.stringify(library ? { library } : {}),
+            }),
+            COLLEXIONS_LONG_MS,
+            'Repairing Plex Collections tab',
+        );
+    }
+
     async getPlexLibraries(): Promise<any[]> {
         return apiFetch(base('/plex/libraries'));
     }

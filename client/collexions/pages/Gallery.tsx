@@ -19,6 +19,7 @@ import {
     X,
     Trash2,
     AlertTriangle,
+    Wrench,
 } from 'lucide-react';
 import { CustomSelect } from '../../shared/ui';
 import { NoPosterPlaceholder } from '../../shared/NoPosterPlaceholder';
@@ -114,6 +115,7 @@ const Gallery: React.FC = () => {
     const [bulkBusy, setBulkBusy] = useState(false);
     const [bulkProgress, setBulkProgress] = useState<{ total: number; label: string } | null>(null);
     const [healthBusy, setHealthBusy] = useState(false);
+    const [repairBusy, setRepairBusy] = useState(false);
     const [healthResult, setHealthResult] = useState<{
         scanned: number;
         deep?: boolean;
@@ -313,14 +315,44 @@ const Gallery: React.FC = () => {
             if (!(res.suspects || []).length) {
                 void appAlert(
                     `Scanned ${res.scanned || 0} collection(s) across Plex Web list endpoints — no bad types or posters found. `
-                    + 'If Plex desktop still crashes on Movies → Collections, check Plex Media Server.log for “unknown type: 99” '
-                    + 'and note which library letter/page fails, then delete suspects from this Gallery or run Clean Bundles on the server.',
+                    + 'If Plex desktop still crashes on Movies → Collections, click Repair Plex tab here, '
+                    + 'then check Plex Media Server.log for “unknown type: 99” if it still fails.',
                 );
             }
         } catch (e: any) {
             void appAlert(e?.message || 'Scan failed.');
         } finally {
             setHealthBusy(false);
+        }
+    };
+
+    const handleRepairCollectionsTab = async () => {
+        const scope = selectedLibrary !== 'All' ? selectedLibrary : 'every managed library';
+        const ok = await askConfirm(
+            `Repair the Plex Collections tab for ${scope}?\n\nThis deletes folder (type 99) rows that make Plex show “Something went wrong”, and converts ColleXions smart/random collections to regular ones (same title, items, art, and pins). Real library titles are not deleted.`,
+            { title: 'Repair Plex Collections tab?', confirmLabel: 'Repair', cancelLabel: 'Cancel' },
+        );
+        if (!ok) return;
+        setRepairBusy(true);
+        try {
+            const lib = selectedLibrary !== 'All' ? selectedLibrary : undefined;
+            const res = await api.repairCollectionsWeb(lib);
+            if (!res.success) {
+                void appAlert(res.error || 'Repair failed.');
+                return;
+            }
+            const extra = (res.errors || []).length ? `\n\nWarnings: ${res.errors?.join(' · ')}` : '';
+            void appAlert(
+                `Removed ${res.purged || 0} crashy folder row(s), ${res.pruned || 0} bad member(s), `
+                + `and converted ${res.converted || 0} smart collection(s) across ${res.scanned || 0} collection(s). `
+                + 'Reload Plex Web’s Collections tab.'
+                + extra,
+            );
+            await fetchCollections(true);
+        } catch (e: any) {
+            void appAlert(e?.message || 'Repair failed.');
+        } finally {
+            setRepairBusy(false);
         }
     };
 
@@ -505,12 +537,22 @@ const Gallery: React.FC = () => {
                     <button
                         type="button"
                         onClick={() => void handleWebHealthScan()}
-                        disabled={healthBusy}
+                        disabled={healthBusy || repairBusy}
                         className="px-3 py-2 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-100 text-sm font-bold hover:bg-amber-500/20 disabled:opacity-50 inline-flex items-center gap-1.5"
                         title="Probe each collection poster the same way Plex Web does when you scroll Collections"
                     >
                         {healthBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
                         Find Plex crash
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => void handleRepairCollectionsTab()}
+                        disabled={healthBusy || repairBusy}
+                        className="px-3 py-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-100 text-sm font-bold hover:bg-emerald-500/20 disabled:opacity-50 inline-flex items-center gap-1.5"
+                        title="Delete type-99 folder rows that crash Plex Web’s Collections tab"
+                    >
+                        {repairBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wrench className="w-4 h-4" />}
+                        Repair Plex tab
                     </button>
                     <button
                         type="button"

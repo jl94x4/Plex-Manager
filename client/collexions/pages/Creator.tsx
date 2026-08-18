@@ -1210,7 +1210,7 @@ const Creator: React.FC = () => {
                         </div>
                         <div>
                             <h3 className="text-lg font-bold text-text whitespace-nowrap">Sort Order</h3>
-                            <p className="text-sm text-muted">Plex collection sorting</p>
+                            <p className="text-sm text-muted">Plex collection sorting. Random no longer uses a smart collection — that crashed Plex Web.</p>
                         </div>
                     </div>
                     <CustomSelect
