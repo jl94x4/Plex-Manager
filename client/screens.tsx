@@ -2286,6 +2286,7 @@ const DOWNLOADS_UPLOAD_COLLAPSED_KEY = 'portal-downloads-upload-collapsed';
 const DOWNLOADS_CLIENTS_COLLAPSED_KEY = 'portal-downloads-clients-collapsed';
 const OPS_SNAPSHOT_COLLAPSED_KEY = 'portal-home-ops-snapshot-collapsed';
 const ANALYTICS_OVERVIEW_SNAPSHOT_COLLAPSED_KEY = 'portal-analytics-overview-snapshot-collapsed';
+const USERS_STATS_COLLAPSED_KEY = 'portal-users-stats-collapsed';
 
 const downloadClientTypeLabel = (type: string, fallback = 'Download Client') => ({
     qbittorrent: 'qBittorrent',
@@ -5726,6 +5727,11 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
         return { total: users.length, active, expiring, expired, trial, revoked };
     }, [users]);
 
+    const [statsCollapsed, setStatsCollapsed] = usePersistedCollapsed(
+        USERS_STATS_COLLAPSED_KEY,
+        preferCollapsedOnNarrow(),
+    );
+
     return (
         <DashboardPageShell>
             <Loader isLoading={isLoading} />
@@ -5771,47 +5777,70 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
 
             <main>
                 {isConfigured && (
-                    <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 xl:gap-4">
-                        <DashboardStatCard
-                            label={t('usersAdmin.stats.total')}
-                            value={userStats.total}
-                            icon={<Users className="h-4 w-4 text-plex" />}
-                            glow={dashboardGlowClass('plex')}
-                        />
-                        <DashboardStatCard
-                            label={t('usersAdmin.stats.active')}
-                            value={userStats.active}
-                            icon={<CheckCircle className="h-4 w-4 text-emerald-300" />}
-                            glow={dashboardGlowClass('emerald')}
-                            valueClassName="text-status-active"
-                        />
-                        <DashboardStatCard
-                            label={t('usersAdmin.stats.expiring')}
-                            value={userStats.expiring}
-                            icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
-                            glow={dashboardGlowClass('amber')}
-                            valueClassName="text-status-expiring"
-                        />
-                        <DashboardStatCard
-                            label={t('usersAdmin.stats.expired')}
-                            value={userStats.expired}
-                            icon={<AlertCircle className="h-4 w-4 text-rose-300" />}
-                            glow={dashboardGlowClass('rose')}
-                            valueClassName="text-status-expired"
-                        />
-                        <DashboardStatCard
-                            label={t('usersAdmin.stats.trial')}
-                            value={userStats.trial}
-                            icon={<Sparkles className="h-4 w-4 text-violet-300" />}
-                            glow={dashboardGlowClass('violet')}
-                        />
-                        <DashboardStatCard
-                            label={t('usersAdmin.stats.revoked')}
-                            value={userStats.revoked}
-                            icon={<Shield className="h-4 w-4 text-muted" />}
-                            glow={dashboardGlowClass('muted')}
-                        />
-                    </div>
+                    <section className="mb-6">
+                        <div className={`${statsCollapsed ? '' : 'mb-3'} flex items-center justify-between gap-3`}>
+                            <button
+                                type="button"
+                                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                onClick={() => setStatsCollapsed(!statsCollapsed)}
+                                aria-expanded={!statsCollapsed}
+                                aria-label={statsCollapsed ? t('usersAdmin.stats.expand') : t('usersAdmin.stats.collapse')}
+                            >
+                                <span className="w-3 shrink-0 text-muted" aria-hidden>{statsCollapsed ? '▸' : '▾'}</span>
+                                <h2 className="w-full border-b border-white/10 pb-2 text-sm font-bold uppercase tracking-[2px] text-plex">
+                                    {t('usersAdmin.stats.title')}
+                                </h2>
+                            </button>
+                            {statsCollapsed ? (
+                                <span className="shrink-0 text-xs font-semibold text-muted">
+                                    {t('usersAdmin.stats.summary', { total: userStats.total, active: userStats.active })}
+                                </span>
+                            ) : null}
+                        </div>
+                        {statsCollapsed ? null : (
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6 xl:gap-4">
+                                <DashboardStatCard
+                                    label={t('usersAdmin.stats.total')}
+                                    value={userStats.total}
+                                    icon={<Users className="h-4 w-4 text-plex" />}
+                                    glow={dashboardGlowClass('plex')}
+                                />
+                                <DashboardStatCard
+                                    label={t('usersAdmin.stats.active')}
+                                    value={userStats.active}
+                                    icon={<CheckCircle className="h-4 w-4 text-emerald-300" />}
+                                    glow={dashboardGlowClass('emerald')}
+                                    valueClassName="text-status-active"
+                                />
+                                <DashboardStatCard
+                                    label={t('usersAdmin.stats.expiring')}
+                                    value={userStats.expiring}
+                                    icon={<AlertTriangle className="h-4 w-4 text-amber-300" />}
+                                    glow={dashboardGlowClass('amber')}
+                                    valueClassName="text-status-expiring"
+                                />
+                                <DashboardStatCard
+                                    label={t('usersAdmin.stats.expired')}
+                                    value={userStats.expired}
+                                    icon={<AlertCircle className="h-4 w-4 text-rose-300" />}
+                                    glow={dashboardGlowClass('rose')}
+                                    valueClassName="text-status-expired"
+                                />
+                                <DashboardStatCard
+                                    label={t('usersAdmin.stats.trial')}
+                                    value={userStats.trial}
+                                    icon={<Sparkles className="h-4 w-4 text-violet-300" />}
+                                    glow={dashboardGlowClass('violet')}
+                                />
+                                <DashboardStatCard
+                                    label={t('usersAdmin.stats.revoked')}
+                                    value={userStats.revoked}
+                                    icon={<Shield className="h-4 w-4 text-muted" />}
+                                    glow={dashboardGlowClass('muted')}
+                                />
+                            </div>
+                        )}
+                    </section>
                 )}
 
                 {isConfigured && (
