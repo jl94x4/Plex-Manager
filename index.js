@@ -71,7 +71,7 @@ import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { registerSupportTicketRoutes } from './lib/support-tickets/http.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
-import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext } from './lib/achievements/index.js';
+import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill } from './lib/achievements/index.js';
 import { loadAchievementsState } from './lib/achievements/store.js';
 import {
     backfillJoiningDatesFromHistory,
@@ -17103,20 +17103,24 @@ const runAchievementsBackfillJob = async (reason = 'scheduled') => {
     const job = systemJobs.achievementsBackfill;
     if (job.running) return null;
     markTaskStart(job);
+    // So Last Run / Next Run don't look identical while the job is in flight.
+    job.nextRun = new Date(Date.now() + ACHIEVEMENTS_BACKFILL_INTERVAL_MS).toISOString();
     try {
         const config = await loadFile(CONFIG_PATH, {});
         if (!config.achievementsEnabled) {
-            job.nextRun = new Date(Date.now() + ACHIEVEMENTS_BACKFILL_INTERVAL_MS).toISOString();
+            job.lastDetail = 'Skipped — achievements are disabled.';
             markTaskEnd(job, null);
             return { skipped: true, reason: 'disabled' };
         }
-        const result = await achievementsHttp?.runLeaderboardBackfill?.();
-        job.nextRun = new Date(Date.now() + ACHIEVEMENTS_BACKFILL_INTERVAL_MS).toISOString();
+        const result = await achievementsHttp?.runLeaderboardBackfill?.({
+            force: reason === 'manual',
+        });
+        job.lastDetail = summarizeAchievementsBackfill(result);
         markTaskEnd(job, null);
-        log(`[AchievementsBackfill] ${reason}: ${result?.reason || 'ok'}`);
+        log(`[AchievementsBackfill] ${reason}: ${job.lastDetail || result?.reason || 'ok'}`);
         return result;
     } catch (error) {
-        job.nextRun = new Date(Date.now() + ACHIEVEMENTS_BACKFILL_INTERVAL_MS).toISOString();
+        job.lastDetail = null;
         markTaskEnd(job, error);
         log(`[AchievementsBackfill] ${reason} failed: ${error.message}`);
         return null;
@@ -18333,6 +18337,7 @@ const systemJobs = {
         running: false,
         lastDurationMs: null,
         lastError: null,
+        lastDetail: null,
     },
     personalAnalyticsWarm: {
         id: 'personalAnalyticsWarm',
