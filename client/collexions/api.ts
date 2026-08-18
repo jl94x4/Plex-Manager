@@ -483,8 +483,9 @@ class CollexionsApiService {
         purged?: number;
         pruned?: number;
         converted?: number;
+        posters?: number;
         libraries?: string[];
-        results?: Array<{ library: string; scanned: number; purged: number; pruned: number; converted?: number }>;
+        results?: Array<{ library: string; scanned: number; purged: number; pruned: number; converted?: number; posters?: number }>;
         errors?: string[];
         error?: string;
     }> {
@@ -507,8 +508,9 @@ class CollexionsApiService {
         purged?: number;
         pruned?: number;
         converted?: number;
+        posters?: number;
         libraries?: string[];
-        results?: Array<{ library: string; scanned: number; purged: number; pruned: number; converted?: number }>;
+        results?: Array<{ library: string; scanned: number; purged: number; pruned: number; converted?: number; posters?: number }>;
         errors?: string[];
         error?: string;
     }> {

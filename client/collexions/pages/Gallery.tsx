@@ -341,26 +341,28 @@ const Gallery: React.FC = () => {
                 void appAlert(res.error || 'Repair failed.');
                 return;
             }
-            const deadline = Date.now() + 10 * 60 * 1000;
+            const deadline = Date.now() + 20 * 60 * 1000;
             while (res.running && Date.now() < deadline) {
                 await new Promise((resolve) => window.setTimeout(resolve, 2000));
                 res = await api.repairCollectionsWebStatus();
             }
             if (res.running) {
                 void appAlert(
-                    'Repair is still running in the background. Reload Plex Web’s Collections tab in a minute — you do not need to click Repair again.',
+                    `Repair is still running (${res.phase || 'working'}). Reload Plex Web’s Collections tab in a minute — you do not need to click Repair again.`,
                 );
                 return;
             }
-            if (res.error && !res.purged && !res.converted) {
+            if (res.error && !res.purged && !res.converted && !res.pruned) {
                 void appAlert(res.error);
                 return;
             }
             const extra = (res.errors || []).length ? `\n\nWarnings: ${res.errors?.join(' · ')}` : '';
             void appAlert(
-                `Removed ${res.purged || 0} crashy folder row(s) `
-                + `and converted ${res.converted || 0} smart collection(s) across ${res.scanned || 0} managed collection(s). `
-                + 'Reload Plex Web’s Collections tab.'
+                `Removed ${res.purged || 0} crashy folder row(s), `
+                + `pruned ${res.pruned || 0} bad member(s), `
+                + `and converted ${res.converted || 0} smart collection(s) `
+                + `across ${res.scanned || 0} collection(s). `
+                + 'Hard-reload Plex Web’s Collections tab (Ctrl+F5).'
                 + extra,
             );
             await fetchCollections(true);

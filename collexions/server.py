@@ -201,6 +201,7 @@ _REPAIR_STATE = {
     'purged': 0,
     'pruned': 0,
     'converted': 0,
+    'posters': 0,
     'errors': [],
 }
 SUMMARY_CACHE = {
@@ -1351,46 +1352,72 @@ def _iter_collection_children_raw(plex_base, token, rating_key, page_size=100):
     rk = str(rating_key or '').strip()
     if not plex_base or not token or not rk:
         return []
-    headers_base = plex_request_headers(token, {
-        'User-Agent': 'ColleXionsManager/1.0',
-        'Accept': 'application/json',
-    })
-    items = []
-    start = 0
-    while True:
-        headers = dict(headers_base)
-        headers['X-Plex-Container-Start'] = str(start)
-        headers['X-Plex-Container-Size'] = str(page_size)
-        try:
-            resp = requests.get(
-                f"{plex_base}/library/metadata/{quote(rk, safe='')}/children",
-                params={'X-Plex-Token': token},
-                headers=headers,
-                timeout=12,
-                verify=PLEX_SSL_VERIFY,
-            )
-        except Exception as exc:
-            logging.warning(f"Collection children fetch failed for {rk}: {exc}")
-            break
-        if resp.status_code >= 400:
-            break
-        page, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
-        items.extend(page)
-        if not page or start + len(page) >= (total or start + len(page)):
-            break
-        start += page_size
-        if start > 20000:
-            break
-    return items
+    # JSON often omits type-99 folders; Plex Web uses XML and still crashes on them.
+    merged = {}
+    for accept in ('application/xml', 'application/json'):
+        start = 0
+        headers_base = plex_request_headers(token, {
+            'User-Agent': 'Mozilla/5.0 (Plex Web)',
+            'Accept': accept,
+        })
+        while True:
+            headers = dict(headers_base)
+            headers['X-Plex-Container-Start'] = str(start)
+            headers['X-Plex-Container-Size'] = str(page_size)
+            try:
+                resp = requests.get(
+                    f"{plex_base}/library/metadata/{quote(rk, safe='')}/children",
+                    params={
+                        'X-Plex-Token': token,
+                        'X-Plex-Container-Start': start,
+                        'X-Plex-Container-Size': page_size,
+                    },
+                    headers=headers,
+                    timeout=12,
+                    verify=PLEX_SSL_VERIFY,
+                )
+            except Exception as exc:
+                logging.warning(f"Collection children fetch failed for {rk} ({accept}): {exc}")
+                break
+            if resp.status_code >= 400:
+                break
+            page, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
+            for item in page:
+                child_rk = str(item.get('ratingKey') or '').strip()
+                dedupe = child_rk or f"{item.get('title')}|{item.get('type')}|{len(merged)}"
+                prev = merged.get(dedupe)
+                if prev is None:
+                    merged[dedupe] = item
+                elif (prev.get('type') is None or str(prev.get('type') or '').strip() == '') and item.get('type'):
+                    merged[dedupe] = item
+            if not page or start + len(page) >= (total or start + len(page)):
+                break
+            start += page_size
+            if start > 20000:
+                break
+    return list(merged.values())
 
 
-def _collection_list_row_is_type99(item):
-    """True for folder rows that crash Plex Web's Collections tab. Never movies/shows."""
-    raw = (item or {}).get('type')
-    if raw is None or str(raw).strip() == '':
+def _collection_list_row_should_purge(item):
+    """Rows on the collections list that crash Plex Web and are safe to DELETE.
+
+    Never delete movies/shows/seasons/episodes — those ratingKeys are library titles.
+    """
+    subtype = str((item or {}).get('subtype') or '').strip().lower()
+    if subtype in {'movie', 'show'}:
         return False
+    raw = (item or {}).get('type')
+    tag = str((item or {}).get('tag') or '').strip().lower()
+    if raw is None or str(raw).strip() == '':
+        # Plex Web XML often emits folder rows as <Directory> with no type.
+        return tag == 'directory'
     norm = _normalize_plex_metadata_type(raw)
-    return norm == 99 or str(raw).strip().lower() in {'99', 'folder'}
+    if norm in (1, 2, 3, 4, 18):
+        return False
+    raw_text = str(raw).strip().lower()
+    if raw_text in {'movie', 'show', 'season', 'episode', 'collection'}:
+        return False
+    return True
 
 
 def _raw_member_is_unsafe(item):
@@ -1402,14 +1429,12 @@ def _raw_member_is_unsafe(item):
     raw = (item or {}).get('type')
     if raw is None or str(raw).strip() == '':
         return False
-    if _collection_list_row_is_type99(item):
-        return True
     norm = _normalize_plex_metadata_type(raw)
     if norm in (1, 2):
         return False
     if norm in (3, 4, 18, 99):
         return True
-    return str(raw).strip().lower() in {'season', 'episode', 'collection', 'folder'}
+    return str(raw).strip().lower() in {'season', 'episode', 'collection', 'folder', '99'}
 
 
 def _remove_invalid_collection_members(coll, config=None):
@@ -1444,14 +1469,43 @@ def _remove_invalid_collection_members(coll, config=None):
     return _remove_collection_item_keys(coll, bad_keys)
 
 
+def _fetch_section_collection_page(plex_base, token, section_key, *, list_path='collections', accept='application/xml', start=0, page_size=50):
+    """One page of the collections list, matching how Plex Web pages the tab."""
+    url_suffix = 'all' if list_path == 'all' else 'collections'
+    headers = plex_request_headers(token, {
+        'User-Agent': 'Mozilla/5.0 (Plex Web)',
+        'Accept': accept,
+    })
+    headers['X-Plex-Container-Start'] = str(start)
+    headers['X-Plex-Container-Size'] = str(page_size)
+    params = {
+        'includeCollections': 1,
+        'includeExternalMedia': 1,
+        'includeAdvanced': 1,
+        'includeMeta': 1,
+        'X-Plex-Token': token,
+        'X-Plex-Container-Start': start,
+        'X-Plex-Container-Size': page_size,
+    }
+    if list_path == 'all':
+        params['type'] = 18
+    resp = requests.get(
+        f"{plex_base}/library/sections/{section_key}/{url_suffix}",
+        params=params,
+        headers=headers,
+        timeout=15,
+        verify=PLEX_SSL_VERIFY,
+    )
+    return resp
+
+
 def _purge_phantom_collection_list_rows(plex_base, token, section_key, title=None, keep_rating_key=None, plex=None):
     """
-    Delete type-99 / folder rows from Plex's collections list.
+    Delete folder / unknown-type rows from Plex's collections list.
 
-    These phantom rows crash Plex Web's Collections tab (unknown type: 99).
-    plexapi cannot fetch them (UnknownType), so we DELETE /library/metadata/{rk}
-    directly. Title is optional — any type-99 row in this library's collections
-    list will crash the whole tab, so we purge all of them.
+    Plex Web still loads XML; JSON often omits type-99 rows, so a JSON-only
+    scan can report "clean" while the Collections tab stays crashed.
+    Deleting shifts later pages, so each pass restarts at offset 0.
     """
     if not section_key or not plex_base or not token:
         return 0
@@ -1459,53 +1513,73 @@ def _purge_phantom_collection_list_rows(plex_base, token, section_key, title=Non
     keep = str(keep_rating_key or '').strip()
     want = _normalize_collection_title(title).casefold() if title else ''
     purged = 0
-    page_size = 50
-    start = 0
-    headers_base = plex_request_headers(token, {
-        'User-Agent': 'ColleXionsManager/1.0',
-        'Accept': 'application/json',
-    })
-    params = {
-        'includeCollections': 1,
-        'includeExternalMedia': 1,
-        'X-Plex-Token': token,
-    }
-    while True:
-        headers = dict(headers_base)
-        headers['X-Plex-Container-Start'] = str(start)
-        headers['X-Plex-Container-Size'] = str(page_size)
-        try:
-            resp = requests.get(
-                f"{plex_base}/library/sections/{section_key}/collections",
-                params=params,
-                headers=headers,
-                timeout=12,
-                verify=PLEX_SSL_VERIFY,
-            )
-        except Exception as exc:
-            logging.warning(f"Phantom collection scan failed: {exc}")
-            break
-        if resp.status_code >= 400:
-            break
-        items, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
-        for item in items:
-            if not _collection_list_row_is_type99(item):
-                continue
-            rk = str(item.get('ratingKey') or '').strip()
-            if not rk or rk == keep:
-                continue
-            if want:
-                row_title = str(item.get('title') or '').strip().casefold()
-                if row_title and row_title != want:
-                    continue
-            if _plex_delete_metadata(rk, server=server, plex_base=plex_base, token=token):
-                purged += 1
-                log_action(f"Purged phantom collection list row '{item.get('title')}' (key {rk}).")
-            else:
-                logging.warning(f"Failed to purge phantom collection row {rk}.")
-        if not items or start + len(items) >= total:
-            break
-        start += page_size
+    failed = set()
+    logged_sample = False
+    variants = (
+        ('collections', 'application/xml'),
+        ('collections', 'application/json'),
+        ('all', 'application/xml'),
+        ('all', 'application/json'),
+    )
+    for list_path, accept in variants:
+        for _pass in range(12):
+            deleted_this_pass = 0
+            start = 0
+            page_size = 50
+            while True:
+                try:
+                    resp = _fetch_section_collection_page(
+                        plex_base, token, section_key,
+                        list_path=list_path, accept=accept,
+                        start=start, page_size=page_size,
+                    )
+                except Exception as exc:
+                    logging.warning(f"Phantom collection scan failed ({list_path}/{accept}): {exc}")
+                    break
+                if resp.status_code >= 400:
+                    logging.warning(
+                        "Phantom collection scan HTTP %s (%s/%s)",
+                        resp.status_code, list_path, accept,
+                    )
+                    break
+                items, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
+                if not logged_sample and items:
+                    sample = [
+                        f"{it.get('title') or '?'} type={it.get('type')!r} tag={it.get('tag')!r}"
+                        for it in items[:8]
+                    ]
+                    log_action(
+                        f"Collections list sample ({list_path}, {accept}): {'; '.join(sample)}"
+                    )
+                    logged_sample = True
+                for item in items:
+                    if not _collection_list_row_should_purge(item):
+                        continue
+                    rk = str(item.get('ratingKey') or '').strip()
+                    if not rk or rk == keep or rk in failed:
+                        continue
+                    if want:
+                        row_title = str(item.get('title') or '').strip().casefold()
+                        if row_title and row_title != want:
+                            continue
+                    if _plex_delete_metadata(rk, server=server, plex_base=plex_base, token=token):
+                        purged += 1
+                        deleted_this_pass += 1
+                        log_action(
+                            f"Purged crashy collections-list row '{item.get('title')}' "
+                            f"(key {rk}, type={item.get('type')!r}, tag={item.get('tag')!r})."
+                        )
+                    else:
+                        failed.add(rk)
+                        logging.warning(f"Failed to purge phantom collection row {rk}.")
+                # Deleting shifts later offsets; restart this pass from 0.
+                if deleted_this_pass:
+                    break
+                if not items or start + len(items) >= total:
+                    break
+                start += page_size
+            if not deleted_this_pass:
+                break
     return purged
 
 
@@ -4184,9 +4258,16 @@ def _normalize_plex_metadata_type(raw_type):
 def _issues_for_collection_list_row(item):
     """Flag rows Plex Web's Collections tab cannot render."""
     raw = item.get('type')
+    tag = str(item.get('tag') or '').strip().lower()
+    subtype = str(item.get('subtype') or '').strip().lower()
     issues = []
+    if subtype in {'movie', 'show'} and (raw is None or str(raw).strip() == ''):
+        return issues
     if raw is None or str(raw).strip() == '':
-        issues.append('missing type (Plex Web expects collection/18)')
+        if tag == 'directory':
+            issues.append('untyped Directory in collections list (Plex Web crash)')
+        else:
+            issues.append('missing type (Plex Web expects collection/18)')
         return issues
     norm = _normalize_plex_metadata_type(raw)
     if norm == 18:
@@ -4237,11 +4318,11 @@ def _parse_plex_metadata_list(body, content_type=''):
             if isinstance(part, dict):
                 part = [part]
             if isinstance(part, list):
-                rows.extend(row for row in part if isinstance(row, dict))
+                rows.extend((key, row) for row in part if isinstance(row, dict))
         total = container.get('totalSize') or container.get('size')
         items = []
         seen = set()
-        for row in rows:
+        for key, row in rows:
             rk = str(row.get('ratingKey') or row.get('ratingkey') or '').strip()
             dedupe = rk or f"{row.get('title')}|{row.get('type')}|{len(items)}"
             if dedupe in seen:
@@ -4251,6 +4332,9 @@ def _parse_plex_metadata_list(body, content_type=''):
                 'ratingKey': rk,
                 'title': str(row.get('title') or row.get('tag') or '').strip(),
                 'type': row.get('type'),
+                'tag': key,
+                'smart': row.get('smart'),
+                'subtype': row.get('subtype') or row.get('collectionType'),
             })
         try:
             total_n = int(total)
@@ -4276,6 +4360,9 @@ def _parse_plex_metadata_list(body, content_type=''):
             'ratingKey': str(node.attrib.get('ratingKey') or '').strip(),
             'title': str(node.attrib.get('title') or node.attrib.get('tag') or '').strip(),
             'type': node.attrib.get('type'),
+            'tag': tag,
+            'smart': node.attrib.get('smart'),
+            'subtype': node.attrib.get('subtype') or node.attrib.get('collectionType'),
         })
     if not total:
         total = len(items)
@@ -4286,84 +4373,75 @@ def _scan_plex_web_collection_pages(plex_base, token, section_key, library_name,
     """Mimic Plex Web's paginated Collections tab load (where type-99 crashes happen)."""
     suspects = []
     page_size = 50
-    start = 0
-    headers_base = plex_request_headers(token, {
-        'User-Agent': 'Mozilla/5.0 Plex Web',
-        'Accept': 'application/json',
-    })
-    params = {
-        'includeCollections': 1,
-        'includeExternalMedia': 1,
-        'X-Plex-Token': token,
-    }
-    if list_path == 'all':
-        params['type'] = 18
-    section_id = str(section_key or '').strip()
+    section_id = str(section_key or '').rstrip('/').split('/')[-1]
     if not section_id:
         return suspects
 
-    url_suffix = 'all' if list_path == 'all' else 'collections'
     page_label = 'all?type=18' if list_path == 'all' else 'collections'
+    seen = set()
 
-    while True:
-        headers = dict(headers_base)
-        headers['X-Plex-Container-Start'] = str(start)
-        headers['X-Plex-Container-Size'] = str(page_size)
-        try:
-            resp = requests.get(
-                f"{plex_base}/library/sections/{section_id}/{url_suffix}",
-                params=params,
-                headers=headers,
-                timeout=12,
-                verify=PLEX_SSL_VERIFY,
-            )
-        except Exception as exc:
-            suspects.append({
-                'title': f'({page_label} page {start}-{start + page_size - 1})',
-                'library': library_name,
-                'ratingKey': '',
-                'smart': False,
-                'issues': [f'{page_label} page fetch error: {exc}'],
-            })
-            break
-        if resp.status_code >= 400:
-            suspects.append({
-                'title': f'({page_label} page {start}-{start + page_size - 1})',
-                'library': library_name,
-                'ratingKey': '',
-                'smart': False,
-                'issues': [f'{page_label} page HTTP {resp.status_code}'],
-            })
-            break
-
-        items, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
-        body_len = len(resp.content or b'')
-        if start >= 50 and len(items) > 0 and body_len < 25000:
-            suspects.append({
-                'title': f'({page_label} page {start}+)',
-                'library': library_name,
-                'ratingKey': '',
-                'smart': False,
-                'issues': [
-                    f'suspiciously small {page_label} page ({body_len} bytes, {len(items)} rows) '
-                    f'— often matches Plex “Asked for unknown type: 99” in server logs',
-                ],
-            })
-
-        for item in items:
-            issues = _issues_for_collection_list_row(item)
-            if issues:
+    for accept in ('application/xml', 'application/json'):
+        start = 0
+        while True:
+            try:
+                resp = _fetch_section_collection_page(
+                    plex_base, token, section_id,
+                    list_path=list_path, accept=accept,
+                    start=start, page_size=page_size,
+                )
+            except Exception as exc:
                 suspects.append({
-                    'title': item.get('title') or f'ratingKey {item.get("ratingKey") or "?"}',
+                    'title': f'({page_label} {accept} page {start}-{start + page_size - 1})',
                     'library': library_name,
-                    'ratingKey': item.get('ratingKey') or '',
+                    'ratingKey': '',
+                    'smart': False,
+                    'issues': [f'{page_label} page fetch error: {exc}'],
+                })
+                break
+            if resp.status_code >= 400:
+                suspects.append({
+                    'title': f'({page_label} {accept} page {start}-{start + page_size - 1})',
+                    'library': library_name,
+                    'ratingKey': '',
+                    'smart': False,
+                    'issues': [f'{page_label} page HTTP {resp.status_code}'],
+                })
+                break
+
+            items, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
+            body_len = len(resp.content or b'')
+            if start >= 50 and len(items) > 0 and body_len < 25000:
+                suspects.append({
+                    'title': f'({page_label} {accept} page {start}+)',
+                    'library': library_name,
+                    'ratingKey': '',
+                    'smart': False,
+                    'issues': [
+                        f'suspiciously small {page_label} page ({body_len} bytes, {len(items)} rows) '
+                        f'— often matches Plex “Asked for unknown type: 99” in server logs',
+                    ],
+                })
+
+            for item in items:
+                issues = _issues_for_collection_list_row(item)
+                if not issues:
+                    continue
+                rk = str(item.get('ratingKey') or '')
+                dedupe = (rk, str(item.get('title') or ''), tuple(issues))
+                if dedupe in seen:
+                    continue
+                seen.add(dedupe)
+                suspects.append({
+                    'title': item.get('title') or f'ratingKey {rk or "?"}',
+                    'library': library_name,
+                    'ratingKey': rk,
                     'smart': False,
                     'issues': [f'{page_label}: {msg}' for msg in issues],
                 })
 
-        if not items or start + len(items) >= total:
-            break
-        start += page_size
+            if not items or start + len(items) >= total:
+                break
+            start += page_size
 
     return suspects
 
@@ -4507,7 +4585,7 @@ def _repair_state_update(**kwargs):
 
 
 def _repair_library_collections_tab(library, config=None):
-    """Purge type-99 rows and convert managed smart collections. Avoids a full library walk."""
+    """Purge crash rows, prune folder members, convert smart ColleXions collections."""
     config = config or load_config()
     url = str(config.get('plex_url') or '').rstrip('/')
     token = str(config.get('plex_token') or '')
@@ -4518,55 +4596,77 @@ def _repair_library_collections_tab(library, config=None):
     purged = 0
     pruned = 0
     converted = 0
+    posters = 0
     scanned = 0
+    _repair_state_update(phase=f'{lib_name}: scanning collections list')
     if url and token and section_key:
         purged = _purge_phantom_collection_list_rows(
             url, token, section_key, plex=plex_server
         )
     managed = load_managed_collections()
     jobs_changed = False
-    for job in list(managed.values()):
-        if not isinstance(job, dict) or job.get('library') != lib_name:
-            continue
+    try:
+        collections = list(library.collections() or [])
+    except Exception as exc:
+        logging.warning(f"Repair could not list collections in '{lib_name}': {exc}")
+        collections = []
+    total_colls = len(collections)
+    for idx, coll in enumerate(collections, start=1):
         scanned += 1
-        title = _normalize_collection_title(job.get('name'))
-        keep_key = str(job.get('rating_key') or job.get('ratingKey') or '').strip() or None
+        title = _normalize_collection_title(getattr(coll, 'title', ''))
+        _repair_state_update(
+            phase=f'{lib_name}: {idx}/{total_colls} {title or "?"}',
+            scanned=scanned, purged=purged, pruned=pruned, converted=converted, posters=posters,
+        )
         try:
-            coll = _resolve_collection(library, title=title, rating_key=keep_key)
-            if coll is None:
-                continue
-            if getattr(coll, 'smart', False):
+            ours = _collection_has_label(coll, label)
+            job = None
+            for candidate in managed.values():
+                if not isinstance(candidate, dict):
+                    continue
+                if candidate.get('library') == lib_name and candidate.get('name') == title:
+                    job = candidate
+                    break
+            if getattr(coll, 'smart', False) and (ours or job):
                 new_coll, did = _convert_smart_collection_to_regular(
                     library, coll, label=label
                 )
                 if did:
                     converted += 1
                     new_key = str(getattr(new_coll, 'ratingKey', '') or '').strip()
-                    if new_key:
-                        job['rating_key'] = new_key
-                    if str(job.get('sort_order') or '') == 'random':
-                        job['sort_order'] = 'custom'
-                    jobs_changed = True
+                    if job is not None:
+                        if new_key:
+                            job['rating_key'] = new_key
+                        if str(job.get('sort_order') or '') == 'random':
+                            job['sort_order'] = 'custom'
+                        jobs_changed = True
+                    coll = new_coll
+            pruned += _remove_invalid_collection_members(coll, config)
+            if ours or job:
+                if _collection_poster_probe_issues(coll, config):
+                    if _clear_collection_custom_poster(coll):
+                        posters += 1
         except Exception as exc:
             logging.warning(
                 "Repair failed on '%s': %s",
-                title or job.get('name') or '?',
+                title or getattr(coll, 'title', '?'),
                 exc,
             )
     if jobs_changed:
         save_managed_collections(managed)
-    if purged or pruned or converted:
-        log_action(
-            f"Repaired Plex Collections tab for '{lib_name}': "
-            f"purged {purged} type-99 row(s), converted {converted} smart collection(s) "
-            f"across {scanned} managed collection(s)."
-        )
+    log_action(
+        f"Repaired Plex Collections tab for '{lib_name}': "
+        f"purged {purged} crash row(s), pruned {pruned} bad member(s), "
+        f"converted {converted} smart collection(s), cleared {posters} poster(s) "
+        f"across {scanned} collection(s)."
+    )
     return {
         'library': lib_name,
         'scanned': scanned,
         'purged': purged,
         'pruned': pruned,
         'converted': converted,
+        'posters': posters,
     }
 
 
@@ -4582,7 +4682,7 @@ def _run_repair_job(lib_names, config):
         if not url or not token:
             raise RuntimeError('Plex URL or token is not configured')
         plex = PlexServer(url, token)
-        totals = {'scanned': 0, 'purged': 0, 'pruned': 0, 'converted': 0}
+        totals = {'scanned': 0, 'purged': 0, 'pruned': 0, 'converted': 0, 'posters': 0}
         for name in lib_names:
             _repair_state_update(phase=f'Repairing {name}')
             try:
@@ -4599,8 +4699,9 @@ def _run_repair_job(lib_names, config):
         GALLERY_CACHE['timestamp'] = 0
         log_action(
             f"Collections tab repair finished: scanned {totals['scanned']}, "
-            f"purged {totals['purged']} type-99 row(s), "
-            f"converted {totals['converted']} smart collection(s)."
+            f"purged {totals['purged']} crash row(s), pruned {totals['pruned']} member(s), "
+            f"converted {totals['converted']} smart collection(s), "
+            f"cleared {totals['posters']} poster(s)."
         )
         _repair_state_update(running=False, phase='done', errors=errors, results=results, **totals)
     except Exception as exc:
@@ -4645,6 +4746,7 @@ def repair_collections_web():
             'purged': 0,
             'pruned': 0,
             'converted': 0,
+            'posters': 0,
             'errors': [],
             'results': [],
         })
@@ -4666,6 +4768,7 @@ def repair_collections_web():
         'purged': 0,
         'pruned': 0,
         'converted': 0,
+        'posters': 0,
         'errors': [],
     })
 
