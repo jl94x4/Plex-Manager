@@ -188,7 +188,20 @@ const posterSrcFor = (item: InAppNotification) => {
     return resolveTmdbImageUrl(String(item.meta?.posterPath || ''), 'w185');
 };
 
-const NotificationArtwork: React.FC<{ item: InAppNotification }> = ({ item }) => {
+const STACK_TILE_W = 40;
+const STACK_TILE_H = 56;
+const STACK_FAN_X = 12;
+const STACK_FAN_Y = 10;
+
+const NotificationArtwork: React.FC<{
+    item: InAppNotification;
+    hoverLift?: boolean;
+    peek?: boolean;
+}> = ({
+    item,
+    hoverLift = true,
+    peek = false,
+}) => {
     const [broken, setBroken] = useState(false);
     const posterSrc = posterSrcFor(item);
     const showPoster = Boolean(posterSrc) && !broken;
@@ -196,21 +209,25 @@ const NotificationArtwork: React.FC<{ item: InAppNotification }> = ({ item }) =>
 
     return (
         <span
-            className={`relative mt-0.5 inline-flex h-14 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border shadow-[0_8px_18px_rgba(0,0,0,0.28)] transition-transform duration-300 ease-out group-hover:scale-[1.06] group-hover:-translate-y-0.5 ${
-                showPoster ? 'border-white/15 bg-black/40' : `border ${tone} bg-gradient-to-br ${tile}`
-            }`}
+            className={`relative inline-flex h-14 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border ${
+                peek
+                    ? 'shadow-none opacity-70'
+                    : 'shadow-[0_6px_14px_rgba(0,0,0,0.28)]'
+            } ${
+                hoverLift && !peek ? 'mt-0.5 transition-transform duration-300 ease-out group-hover:scale-[1.06] group-hover:-translate-y-0.5' : ''
+            } ${showPoster ? 'border-white/15 bg-black/40' : `border ${tone} bg-gradient-to-br ${tile}`}`}
         >
             {showPoster ? (
                 <img
                     src={posterSrc}
                     alt=""
-                    className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                    className={`h-full w-full object-cover ${hoverLift && !peek ? 'transition-transform duration-500 ease-out group-hover:scale-110' : ''}`}
                     onError={() => setBroken(true)}
                 />
             ) : (
                 <Icon className="h-4 w-4 drop-shadow-[0_1px_4px_rgba(0,0,0,0.45)]" />
             )}
-            {showPoster && (
+            {showPoster && !peek && (
                 <span className={`absolute bottom-0.5 right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-md border shadow-sm ${tone}`}>
                     <Icon className="h-2.5 w-2.5" />
                 </span>
@@ -219,22 +236,36 @@ const NotificationArtwork: React.FC<{ item: InAppNotification }> = ({ item }) =>
     );
 };
 
-const StackedArtwork: React.FC<{ items: InAppNotification[] }> = ({ items }) => {
-    const shown = items.slice(0, 3);
+const StackedArtwork: React.FC<{ items: InAppNotification[]; count: number }> = ({ items, count }) => {
+    const posters = items.filter((item) => Boolean(posterSrcFor(item))).slice(0, 2);
+    const fan = posters.length >= 2;
+    const front = fan ? posters[0] : items[0];
+    const back = fan ? posters[1] : null;
+    if (!front) return null;
     return (
-        <span className="relative mt-0.5 h-14 w-12 shrink-0">
-            {shown.map((item, index) => (
+        <span
+            className="relative block shrink-0"
+            style={{
+                width: STACK_TILE_W + (back ? STACK_FAN_X : 0),
+                height: STACK_TILE_H + (back ? STACK_FAN_Y : 0),
+            }}
+        >
+            {back && (
                 <span
-                    key={item.id}
-                    className="absolute left-0 top-0"
-                    style={{
-                        transform: `translate(${index * 5}px, ${index * 3}px)`,
-                        zIndex: shown.length - index,
-                    }}
+                    className="absolute overflow-hidden rounded-xl"
+                    style={{ left: STACK_FAN_X, top: STACK_FAN_Y, zIndex: 1 }}
                 >
-                    <NotificationArtwork item={item} />
+                    <NotificationArtwork item={back} hoverLift={false} peek />
                 </span>
-            ))}
+            )}
+            <span className="absolute left-0 top-0 z-[2]">
+                <NotificationArtwork item={front} hoverLift={false} />
+                {count > 1 && (
+                    <span className="absolute -right-1 -top-1 z-20 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-plex/40 bg-plex px-1 text-[9px] font-black leading-none text-background tabular-nums shadow-sm">
+                        {count > 99 ? '99+' : count}
+                    </span>
+                )}
+            </span>
         </span>
     );
 };
@@ -685,12 +716,9 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                             {unreadCount > 0 && (
                                                 <span className={`notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${stack.type === 'media_job_completed' ? 'bg-emerald-500' : 'bg-plex'}`} />
                                             )}
-                                            <div className="flex items-start gap-2.5">
-                                                <span className="relative">
-                                                    <StackedArtwork items={stack.items} />
-                                                    <span className="absolute -right-1 -top-1 z-20 inline-flex min-w-[1.15rem] items-center justify-center rounded-full border border-plex/40 bg-plex px-1 py-0.5 text-[9px] font-black leading-none text-background tabular-nums shadow-sm">
-                                                        {stack.items.length > 99 ? '99+' : stack.items.length}
-                                                    </span>
+                                            <div className="flex items-start gap-3">
+                                                <span className="relative shrink-0 pt-1 pr-1">
+                                                    <StackedArtwork items={stack.items} count={stack.items.length} />
                                                 </span>
                                                 <div className="min-w-0 flex-1">
                                                     <div className="flex items-start justify-between gap-2">
