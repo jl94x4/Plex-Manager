@@ -7,6 +7,7 @@ import {
     ChevronDown,
     CirclePause,
     CirclePlay,
+    Copy,
     Cpu,
     FileBarChart2,
     FolderCog,
@@ -1434,6 +1435,33 @@ export const MediaAutomationDashboard: React.FC = () => {
         } finally {
             setSavingEditor(false);
         }
+    };
+
+    const uniqueCopiedPipelineName = (baseName: string) => {
+        const names = new Set(pipelines.map((pipeline) => String(pipeline.name || '').trim().toLowerCase()));
+        const stem = String(baseName || 'Pipeline').trim() || 'Pipeline';
+        const first = `${stem} (copy)`;
+        if (!names.has(first.toLowerCase())) return first;
+        let n = 2;
+        while (names.has(`${stem} (copy ${n})`.toLowerCase())) n += 1;
+        return `${stem} (copy ${n})`;
+    };
+
+    const copyPipeline = (pipeline: MediaAutomationPipeline) => {
+        const { id: _copiedId, ...rest } = pipeline;
+        setPreviewResult(null);
+        setEditorAdvancedOpen(false);
+        setEditorMatchAdvancedOpen(false);
+        setForceSampleSection(!String(pipeline.samplePath || '').trim());
+        setPipelineDraft({
+            ...emptyPipeline(),
+            ...rest,
+            id: undefined,
+            name: uniqueCopiedPipelineName(pipeline.name),
+            samplePath: String(pipeline.samplePath || ''),
+            rules: normalizeRules(pipeline.rules),
+            steps: Array.isArray(pipeline.steps) ? pipeline.steps.map((step) => ({ ...step })) : [],
+        });
     };
 
     const openPipelineFromPreset = (presetPipeline: MediaAutomationPipeline) => {
@@ -3143,6 +3171,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             <p className="mt-2 text-xs text-muted">{summarizeMatchRules(pipeline.rules)}</p>
                                         </div>
                                         <div className="flex gap-1">
+                                            <button
+                                                type="button"
+                                                className={buttonClass}
+                                                title="Copy pipeline"
+                                                aria-label={`Copy ${pipeline.name}`}
+                                                onClick={() => copyPipeline(pipeline)}
+                                            >
+                                                <Copy className="h-4 w-4" />
+                                            </button>
                                             <button type="button" className={buttonClass} onClick={() => openPipelineEditor(pipeline)}><Pencil className="h-4 w-4" /></button>
                                             <button type="button" className={buttonClass} disabled={pipeline.id === undefined || busy !== null} onClick={() => {
                                                 if (pipeline.id === undefined) return;
