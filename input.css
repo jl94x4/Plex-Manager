@@ -219,14 +219,6 @@
   [data-theme="light"] input[type="month"] {
     color-scheme: light;
   }
-
-  /* iOS Safari zooms the whole page when a focused input is under 16px.
-     -webkit-touch-callout only exists on iOS, so this targets iPhones/iPads only. */
-  @supports (-webkit-touch-callout: none) {
-    input, select, textarea {
-      font-size: max(1rem, 1em);
-    }
-  }
 }
 
 /*
@@ -1421,3 +1413,18 @@ html.branded-skeleton .skeleton-base::after {
     animation: none !important;
   }
 }
+
+/*
+ * iOS Safari zooms the whole page when a focused text field is under 16px.
+ * This must stay *outside* @layer — Tailwind text-sm/text-xs utilities beat
+ * @layer base, which is why Discover/Analytics search still zoomed on iPhone.
+ * Use 16px (not 1rem) so a smaller html font-size cannot sneak under the threshold.
+ */
+@supports (-webkit-touch-callout: none) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+

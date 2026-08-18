@@ -4622,7 +4622,7 @@ return (
                                             }
                                         }}
                                         placeholder="e.g. username or email…"
-                                        className="w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-3 text-sm text-text outline-none transition focus:border-plex"
+                                        className="w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-3 text-base text-text outline-none transition focus:border-plex"
                                         autoComplete="off"
                                     />
                                     {userSearchOpen && userSearchQuery.trim() && userSearchMenuBox && typeof document !== 'undefined'
