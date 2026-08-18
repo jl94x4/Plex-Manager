@@ -19,6 +19,7 @@ import {
     Sparkles,
     Trash2,
     Tv,
+    X,
 } from 'lucide-react';
 import { apiFetch } from './api';
 import { IN_APP_NOTIFICATIONS_CHANGED_EVENT, notifyInAppNotificationsChanged } from './inAppNotificationsRefresh';
@@ -274,49 +275,65 @@ const NotificationItemRow: React.FC<{
     item: InAppNotification;
     t: DiscoverTranslate;
     onOpen: (item: InAppNotification) => void;
+    onRemove: (item: InAppNotification) => void;
     compact?: boolean;
-}> = ({ item, t, onOpen, compact = false }) => {
+}> = ({ item, t, onOpen, onRemove, compact = false }) => {
     const unreadItem = !item.readAt;
     const dest = resolveNotificationDestination(item);
     const repeatCount = Math.max(1, Number(item?.meta?.repeatCount || 1));
     return (
-        <button
-            type="button"
-            onClick={() => onOpen(item)}
-            className={`notif-row-btn group relative w-full text-left transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10 ${
-                compact ? 'px-3.5 sm:px-4 py-2.5' : 'px-3.5 sm:px-4 py-3'
+        <div
+            className={`group relative flex items-start ${
+                compact ? 'px-2 sm:px-3 py-1.5' : 'px-2 sm:px-3 py-2'
             } ${unreadItem ? 'bg-plex/[0.045]' : ''}`}
         >
             {unreadItem && (
                 <span className={`notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${item.type === 'media_job_completed' ? 'bg-emerald-500' : 'bg-plex'}`} />
             )}
-            <div className="flex items-start gap-2.5">
-                <NotificationArtwork item={item} />
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                        <p className={`text-xs leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
-                            {item.title}
-                        </p>
-                        {repeatCount > 1 && (
-                            <span className="shrink-0 rounded-md border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold text-plex">
-                                {t('notifications.repeats', { count: repeatCount })}
+            <button
+                type="button"
+                onClick={() => onOpen(item)}
+                className={`notif-row-btn min-w-0 flex-1 text-left rounded-xl px-1.5 py-1 transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10 ${
+                    compact ? 'py-1' : 'py-1.5'
+                }`}
+            >
+                <div className="flex items-start gap-2.5">
+                    <NotificationArtwork item={item} />
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                            <p className={`text-xs leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
+                                {item.title}
+                            </p>
+                            {repeatCount > 1 && (
+                                <span className="shrink-0 rounded-md border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-[10px] font-bold text-plex">
+                                    {t('notifications.repeats', { count: repeatCount })}
+                                </span>
+                            )}
+                            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
+                        </div>
+                        {item.body ? (
+                            <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">{item.body}</p>
+                        ) : null}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]">
+                            <span className="text-muted/80">{formatRelative(item.createdAt, t)}</span>
+                            <span className="text-border">·</span>
+                            <span className="font-semibold text-plex/90 transition-colors duration-200 group-hover:text-plex">
+                                {t(dest.labelKey)}
                             </span>
-                        )}
-                        <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
-                    </div>
-                    {item.body ? (
-                        <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">{item.body}</p>
-                    ) : null}
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]">
-                        <span className="text-muted/80">{formatRelative(item.createdAt, t)}</span>
-                        <span className="text-border">·</span>
-                        <span className="font-semibold text-plex/90 transition-colors duration-200 group-hover:text-plex">
-                            {t(dest.labelKey)}
-                        </span>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </button>
+            </button>
+            <button
+                type="button"
+                onClick={() => onRemove(item)}
+                aria-label={t('notifications.removeAria')}
+                title={t('notifications.remove')}
+                className="mt-1.5 mr-0.5 shrink-0 rounded-lg p-1.5 text-muted hover:bg-white/10 hover:text-text focus-visible:outline-none focus-visible:bg-white/10"
+            >
+                <X className="h-3.5 w-3.5" />
+            </button>
+        </div>
     );
 };
 
@@ -523,6 +540,24 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         }
     };
 
+    const removeItems = async (ids: string[]) => {
+        const unique = [...new Set(ids.map(String).filter(Boolean))];
+        if (!unique.length) return;
+        const idSet = new Set(unique);
+        const unreadRemoved = items.filter((item) => idSet.has(item.id) && !item.readAt).length;
+        try {
+            await apiFetch('/api/notifications/clear', {
+                method: 'POST',
+                body: JSON.stringify({ ids: unique }),
+            });
+            setItems((prev) => prev.filter((item) => !idSet.has(item.id)));
+            if (unreadRemoved) setUnread((n) => Math.max(0, n - unreadRemoved));
+            notifyInAppNotificationsChanged();
+        } catch {
+            // ignore
+        }
+    };
+
     const openItem = async (item: InAppNotification) => {
         if (!item.readAt) {
             try {
@@ -635,17 +670,16 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                         {t('notifications.filterUnread')}
                                     </button>
                                 </div>
-                                {unread > 0 && (
+                                <div className="ml-auto flex items-center gap-1.5">
                                     <button
                                         type="button"
                                         onClick={markAllRead}
-                                        className="notif-mark-read inline-flex min-h-8 items-center gap-1 rounded-lg border border-plex/30 bg-plex/10 px-2.5 py-1 text-[10px] font-semibold text-plex transition-all duration-200 hover:bg-plex/20 hover:border-plex/50 active:scale-[0.97]"
+                                        disabled={unread <= 0}
+                                        className="notif-mark-read inline-flex min-h-8 items-center gap-1 rounded-lg border border-plex/30 bg-plex/10 px-2.5 py-1 text-[10px] font-semibold text-plex transition-all duration-200 hover:bg-plex/20 hover:border-plex/50 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
                                     >
                                         <CheckCheck className="h-3 w-3 shrink-0" />
                                         <span className="whitespace-nowrap">{t('notifications.markAllRead')}</span>
                                     </button>
-                                )}
-                                {items.length > 0 && (
                                     <button
                                         type="button"
                                         onClick={clearAll}
@@ -655,7 +689,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                         <Trash2 className="h-3 w-3 shrink-0" />
                                         <span className="whitespace-nowrap">{t('notifications.clearAll')}</span>
                                     </button>
-                                )}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -688,7 +722,12 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                             className="notif-row-enter border-b border-border/40 last:border-b-0"
                                             style={{ animationDelay: `${Math.min(index, 12) * 28}ms` }}
                                         >
-                                            <NotificationItemRow item={item} t={t} onOpen={openItem} />
+                                            <NotificationItemRow
+                                                item={item}
+                                                t={t}
+                                                onOpen={openItem}
+                                                onRemove={(row) => { void removeItems([row.id]); }}
+                                            />
                                         </li>
                                     );
                                 }
@@ -702,54 +741,71 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                         className="notif-row-enter border-b border-border/40 last:border-b-0"
                                         style={{ animationDelay: `${Math.min(index, 12) * 28}ms` }}
                                     >
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleStack(stack.key)}
-                                            aria-expanded={expanded}
-                                            aria-label={expanded
-                                                ? t('notifications.stack.collapse')
-                                                : t('notifications.stack.expand', { count: stack.items.length })}
-                                            className={`group relative w-full text-left px-3.5 sm:px-4 py-3 transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10 ${
-                                                unreadCount > 0 ? 'bg-plex/[0.045]' : ''
-                                            }`}
-                                        >
+                                        <div className={`group relative flex items-start ${
+                                            unreadCount > 0 ? 'bg-plex/[0.045]' : ''
+                                        }`}>
                                             {unreadCount > 0 && (
                                                 <span className={`notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${stack.type === 'media_job_completed' ? 'bg-emerald-500' : 'bg-plex'}`} />
                                             )}
-                                            <div className="flex items-start gap-3">
-                                                <span className="relative shrink-0 pt-1 pr-1">
-                                                    <StackedArtwork items={stack.items} count={stack.items.length} />
-                                                </span>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <p className={`text-xs leading-snug ${unreadCount > 0 ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
-                                                            {stackTitle(stack.type, stack.items.length, t)}
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleStack(stack.key)}
+                                                aria-expanded={expanded}
+                                                aria-label={expanded
+                                                    ? t('notifications.stack.collapse')
+                                                    : t('notifications.stack.expand', { count: stack.items.length })}
+                                                className="min-w-0 flex-1 text-left px-3.5 sm:px-4 py-3 transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10"
+                                            >
+                                                <div className="flex items-start gap-3">
+                                                    <span className="relative shrink-0 pt-1 pr-1">
+                                                        <StackedArtwork items={stack.items} count={stack.items.length} />
+                                                    </span>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-start justify-between gap-2">
+                                                            <p className={`text-xs leading-snug ${unreadCount > 0 ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
+                                                                {stackTitle(stack.type, stack.items.length, t)}
+                                                            </p>
+                                                            <ChevronDown className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-muted transition-transform duration-200 ${expanded ? 'rotate-180 text-plex' : 'group-hover:text-plex'}`} />
+                                                        </div>
+                                                        <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">
+                                                            {newest.title}
+                                                            {extra > 0 ? ` · ${t('notifications.stack.more', { count: extra })}` : ''}
                                                         </p>
-                                                        <ChevronDown className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-muted transition-transform duration-200 ${expanded ? 'rotate-180 text-plex' : 'group-hover:text-plex'}`} />
-                                                    </div>
-                                                    <p className="text-[11px] text-muted mt-0.5 line-clamp-2 leading-relaxed">
-                                                        {newest.title}
-                                                        {extra > 0 ? ` · ${t('notifications.stack.more', { count: extra })}` : ''}
-                                                    </p>
-                                                    <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]">
-                                                        <span className="text-muted/80">{formatRelative(newest.createdAt, t)}</span>
-                                                        {unreadCount > 0 && (
-                                                            <>
-                                                                <span className="text-border">·</span>
-                                                                <span className="font-semibold text-plex/90">
-                                                                    {t('notifications.unreadCount', { count: unreadCount })}
-                                                                </span>
-                                                            </>
-                                                        )}
+                                                        <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px]">
+                                                            <span className="text-muted/80">{formatRelative(newest.createdAt, t)}</span>
+                                                            {unreadCount > 0 && (
+                                                                <>
+                                                                    <span className="text-border">·</span>
+                                                                    <span className="font-semibold text-plex/90">
+                                                                        {t('notifications.unreadCount', { count: unreadCount })}
+                                                                    </span>
+                                                                </>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        </button>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => { void removeItems(stack.items.map((row) => row.id)); }}
+                                                aria-label={t('notifications.removeStackAria', { count: stack.items.length })}
+                                                title={t('notifications.remove')}
+                                                className="mt-3 mr-2 shrink-0 rounded-lg p-1.5 text-muted hover:bg-white/10 hover:text-text focus-visible:outline-none focus-visible:bg-white/10"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
                                         {expanded ? (
                                             <ul className="border-t border-border/40 bg-black/20">
                                                 {stack.items.map((item) => (
                                                     <li key={item.id} className="border-b border-border/30 last:border-b-0">
-                                                        <NotificationItemRow item={item} t={t} onOpen={openItem} compact />
+                                                        <NotificationItemRow
+                                                            item={item}
+                                                            t={t}
+                                                            onOpen={openItem}
+                                                            onRemove={(row) => { void removeItems([row.id]); }}
+                                                            compact
+                                                        />
                                                     </li>
                                                 ))}
                                             </ul>
