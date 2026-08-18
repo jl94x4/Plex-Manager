@@ -1078,7 +1078,16 @@ def _plex_item_tmdb_ids(item):
 
 def _plex_item_media_kind(item):
     """Return 'movie' | 'show' for a Plex item, or None when not collection-safe."""
-    return normalize_media_kind(getattr(item, 'type', None) or getattr(item, 'TYPE', None))
+    raw = getattr(item, 'type', None) or getattr(item, 'TYPE', None)
+    named = normalize_media_kind(raw)
+    if named:
+        return named
+    norm = _normalize_plex_metadata_type(raw)
+    if norm == 1:
+        return 'movie'
+    if norm == 2:
+        return 'show'
+    return None
 
 
 def _acceptable_collection_member(item, library_or_type=None):
@@ -1155,9 +1164,13 @@ def _collection_poster_probe_issues(coll, config):
     token = str((config or {}).get('plex_token') or '')
     if not url or not token or coll is None:
         return []
-    row = _probe_collection_web_crash(url, token, coll, '')
-    issues = [str(i) for i in (row.get('issues') or [])]
-    return [i for i in issues if 'poster' in i.lower()]
+    try:
+        row = _probe_collection_web_crash(url, token, coll, '')
+        issues = [str(i) for i in (row.get('issues') or [])]
+        return [i for i in issues if 'poster' in i.lower()]
+    except Exception as exc:
+        logging.warning(f"Collection poster probe failed: {exc}")
+        return []
 
 
 def _remove_invalid_collection_members(coll):
@@ -1252,44 +1265,49 @@ def _purge_phantom_collection_list_rows(plex_base, token, section_key, title, ke
 def _finalize_collection_for_plex_web(coll, library, config=None):
     """
     Post-create hardening: prune bad members, fix crashy posters, purge type-99 phantoms.
+    Must never raise — a failure here used to kill the embedded gunicorn worker (code=1).
     """
     if coll is None:
         return []
-    config = config or load_config()
-    fixes = []
-    lib_name = str(getattr(library, 'title', '') or '')
-    section_key = str(getattr(library, 'key', '') or '').rstrip('/').split('/')[-1]
-    title = str(getattr(coll, 'title', '') or '')
-    rk = str(getattr(coll, 'ratingKey', '') or '')
+    try:
+        config = config or load_config()
+        fixes = []
+        lib_name = str(getattr(library, 'title', '') or '')
+        section_key = str(getattr(library, 'key', '') or '').rstrip('/').split('/')[-1]
+        title = str(getattr(coll, 'title', '') or '')
+        rk = str(getattr(coll, 'ratingKey', '') or '')
 
-    removed = _remove_invalid_collection_members(coll)
-    if removed:
-        fixes.append(f'removed {removed} invalid member(s)')
-
-    if _collection_poster_probe_issues(coll, config):
-        if _clear_collection_custom_poster(coll):
-            fixes.append('cleared crashy custom poster')
-
-    url = str(config.get('plex_url') or '').rstrip('/')
-    token = str(config.get('plex_token') or '')
-    if url and token and section_key:
-        purged = _purge_phantom_collection_list_rows(url, token, section_key, title, rk)
-        if purged:
-            fixes.append(f'purged {purged} phantom list row(s)')
-
-        child_row = _probe_collection_children_types(url, token, rk, title, lib_name)
-        if child_row and child_row.get('issues'):
-            extra = _remove_invalid_collection_members(coll)
-            if extra:
-                fixes.append(f'pruned {extra} bad member(s) after probe')
+        removed = _remove_invalid_collection_members(coll)
+        if removed:
+            fixes.append(f'removed {removed} invalid member(s)')
 
         if _collection_poster_probe_issues(coll, config):
-            _clear_collection_custom_poster(coll)
-            fixes.append('cleared poster after re-probe')
+            if _clear_collection_custom_poster(coll):
+                fixes.append('cleared crashy custom poster')
 
-    if fixes:
-        log_action(f"Plex Web hardening for '{title}': {', '.join(fixes)}")
-    return fixes
+        url = str(config.get('plex_url') or '').rstrip('/')
+        token = str(config.get('plex_token') or '')
+        if url and token and section_key:
+            purged = _purge_phantom_collection_list_rows(url, token, section_key, title, rk)
+            if purged:
+                fixes.append(f'purged {purged} phantom list row(s)')
+
+            child_row = _probe_collection_children_types(url, token, rk, title, lib_name)
+            if child_row and child_row.get('issues'):
+                extra = _remove_invalid_collection_members(coll)
+                if extra:
+                    fixes.append(f'pruned {extra} bad member(s) after probe')
+
+            if _collection_poster_probe_issues(coll, config):
+                _clear_collection_custom_poster(coll)
+                fixes.append('cleared poster after re-probe')
+
+        if fixes:
+            log_action(f"Plex Web hardening for '{title}': {', '.join(fixes)}")
+        return fixes
+    except Exception as exc:
+        logging.error(f"Plex Web collection hardening failed: {exc}", exc_info=True)
+        return []
 
 
 def _match_external_to_plex(library, external_items, tmdb_cache=None):

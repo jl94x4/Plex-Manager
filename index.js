@@ -14809,11 +14809,56 @@ app.post('/api/announcements/push', requireAdmin, async (req, res) => {
     }
 });
 
-const TAUTULLI_HISTORY_PAGE_SIZE = 500;
+const TAUTULLI_HISTORY_PAGE_SIZE = 100;
 let cachedTautulliUsers = null;
 let cachedTautulliUsersAt = 0;
 let cachedTautulliTimezone = null;
 let cachedTautulliTimezoneAt = 0;
+
+const tautulliHistoryRowsFromPayload = (payload) => {
+    const data = payload?.response?.data;
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(payload?.data?.data)) return payload.data.data;
+    if (Array.isArray(payload?.data)) return payload.data;
+    return null;
+};
+
+const fetchTautulliApi = async (tUrl, params, { timeoutMs = 20000 } = {}) => {
+    const search = new URLSearchParams(params);
+    const res = await fetchWithTimeout(`${tUrl}/api/v2?${search.toString()}`, {
+        headers: { Accept: 'application/json' },
+    }, timeoutMs);
+    if (!res.ok) {
+        throw new Error(`Tautulli HTTP ${res.status}`);
+    }
+    const payload = await res.json();
+    const result = String(payload?.response?.result || '').toLowerCase();
+    if (result && result !== 'success') {
+        throw new Error(payload?.response?.message || `Tautulli ${params.cmd || 'API'} failed`);
+    }
+    return payload;
+};
+
+const fetchTautulliHistoryPage = async (tUrl, config, extraParams = {}, { timeoutMs = 25000 } = {}) => {
+    const payload = await fetchTautulliApi(tUrl, {
+        apikey: config.tautulliApiKey,
+        cmd: 'get_history',
+        order_column: extraParams.order_column || 'date',
+        order_dir: extraParams.order_dir || 'desc',
+        start: String(extraParams.start || 0),
+        length: String(extraParams.length || TAUTULLI_HISTORY_PAGE_SIZE),
+        grouping: extraParams.grouping != null ? String(extraParams.grouping) : '0',
+        ...(extraParams.user_id ? { user_id: String(extraParams.user_id) } : {}),
+        ...(extraParams.start_date ? { start_date: String(extraParams.start_date) } : {}),
+        ...(extraParams.search ? { search: String(extraParams.search) } : {}),
+    }, { timeoutMs });
+    const rows = tautulliHistoryRowsFromPayload(payload);
+    if (rows == null) {
+        throw new Error('Tautulli get_history returned an unexpected payload');
+    }
+    return rows;
+};
 
 const getHourInTimezone = (unixSec, timeZone) => {
     try {
@@ -15094,30 +15139,42 @@ const fetchTautulliServerHistoryItems = async (config, { maxItems = 75000 } = {}
 
     const items = [];
     let offset = 0;
+    let pageSize = TAUTULLI_HISTORY_PAGE_SIZE;
     let done = false;
+    let usedStartedColumn = false;
+
+    const pullPage = async (start, length, orderColumn) => fetchTautulliHistoryPage(
+        tUrl,
+        config,
+        { start, length, order_column: orderColumn, order_dir: 'desc', grouping: '0' },
+        { timeoutMs: 25000 },
+    );
 
     while (!done && items.length < maxItems) {
-        const length = Math.min(TAUTULLI_HISTORY_PAGE_SIZE, maxItems - items.length);
-        const params = new URLSearchParams({
-            apikey: config.tautulliApiKey,
-            cmd: 'get_history',
-            order_column: 'started',
-            order_dir: 'desc',
-            start: String(offset),
-            length: String(length),
-            grouping: '0',
-        });
+        const length = Math.min(pageSize, maxItems - items.length);
+        let rows;
+        try {
+            rows = await pullPage(offset, length, usedStartedColumn ? 'started' : 'date');
+        } catch (firstErr) {
+            if (!usedStartedColumn && offset === 0) {
+                usedStartedColumn = true;
+                log(`Tautulli history date column failed (${firstErr.message}); retrying with started.`);
+                rows = await pullPage(0, Math.min(25, length), 'started');
+                pageSize = Math.min(pageSize, 25);
+                offset = 0;
+            } else if (pageSize > 25 && offset === 0) {
+                pageSize = 25;
+                log(`Tautulli history page failed (${firstErr.message}); retrying with length=25.`);
+                rows = await pullPage(0, 25, usedStartedColumn ? 'started' : 'date');
+                offset = 0;
+            } else {
+                throw firstErr;
+            }
+        }
 
-        const response = await fetch(`${tUrl}/api/v2?${params.toString()}`, { headers: { Accept: 'application/json' } })
-            .then((r) => r.json())
-            .catch(() => null);
-
-        const rows = response?.response?.data?.data;
         if (!Array.isArray(rows) || rows.length === 0) break;
 
         for (const row of rows) {
-            const started = Number(row.started || row.date || 0);
-            if (!started) continue;
             items.push(mapTautulliHistoryRowToPlexItem(row));
             if (items.length >= maxItems) {
                 done = true;
@@ -15198,6 +15255,8 @@ const analyticsSourceLabelFor = (source, { degraded = false, fallback = null } =
     if (normalized === 'emby') return 'Emby Analytics';
     if (normalized === 'plex') {
         if (degraded && fallback === 'tautulli_unavailable') return 'Plex (Tautulli unavailable)';
+        if (degraded && fallback === 'tautulli_history_failed') return 'Plex (Tautulli history failed)';
+        if (degraded && fallback === 'tautulli_history_empty') return 'Plex (Tautulli history empty)';
         return 'Plex';
     }
     return source ? String(source) : 'Unknown';
@@ -20154,12 +20213,12 @@ async function calculateAnalyticsStats() {
                     log(`Analytics cache using Tautulli history (${historyItems.length} items).`);
                 } else {
                     log('Tautulli history empty for analytics cache; falling back to Plex.');
-                    sourceMeta = { source: 'plex', fallback: 'tautulli_unavailable', degraded: true };
+                    sourceMeta = { source: 'plex', fallback: 'tautulli_history_empty', degraded: true };
                 }
             } catch (tautulliError) {
                 log(`Tautulli analytics history failed (${tautulliError.message}); falling back to Plex.`);
                 historyItems = [];
-                sourceMeta = { source: 'plex', fallback: 'tautulli_unavailable', degraded: true };
+                sourceMeta = { source: 'plex', fallback: 'tautulli_history_failed', degraded: true };
             }
         }
 
@@ -20184,7 +20243,7 @@ async function calculateAnalyticsStats() {
             if (!preferTautulli) {
                 sourceMeta = { source: 'plex', fallback: null, degraded: false };
             } else if (!sourceMeta.degraded) {
-                sourceMeta = { source: 'plex', fallback: 'tautulli_unavailable', degraded: true };
+                sourceMeta = { source: 'plex', fallback: 'tautulli_history_empty', degraded: true };
             }
         }
 
