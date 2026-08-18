@@ -439,7 +439,7 @@ export const PlacementEditor: React.FC<Props> = ({
                 </div>
             )}
         >
-            <div className="grid gap-4 lg:grid-cols-[160px_minmax(200px,280px)_minmax(0,1fr)]">
+            <div className="grid gap-4 lg:grid-cols-[240px_minmax(200px,280px)_minmax(0,1fr)]">
                 <aside className="min-w-0">
                     <div className="lg:hidden">
                         <span className={fieldLabelClass}>{t('overlays.placement.target')}</span>
