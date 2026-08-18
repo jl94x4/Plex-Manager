@@ -17986,6 +17986,22 @@ const buildSocialMetaTags = async (req) => {
     return { title, tags, iconHref: resolvePortalBrandingIconHref(config, profile) };
 };
 
+/**
+ * iOS Safari only respects maximum-scale=1 (which suppresses focus auto-zoom) when
+ * it is present at HTML parse time — setting it from bundled JS is too late for the
+ * first focus, and Safari only re-evaluates after a user gesture. Inject it
+ * server-side for Apple UAs. Matching Macintosh also covers iPadOS 13+ "desktop"
+ * UAs; real desktop browsers ignore the viewport meta, and iOS keeps pinch zoom
+ * regardless, so this never disables zoom for anyone.
+ */
+const lockViewportForAppleClients = (html, userAgent = '') => {
+    if (!/iPhone|iPad|iPod|Macintosh/i.test(String(userAgent || ''))) return html;
+    return html.replace(
+        /<meta\s+name="viewport"\s+content="[^"]*"\s*\/?>/i,
+        '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />',
+    );
+};
+
 // Serve the main index.html for SPA routes (after base-path strip, paths are root-relative)
 app.get(/^\/(?!api\/|static\/|manifest\.(?:webmanifest|json)|site\.webmanifest|service-worker\.js).*$/, async (req, res) => {
     if (!arePortalFrontendAssetsReady()) {
@@ -17996,7 +18012,7 @@ app.get(/^\/(?!api\/|static\/|manifest\.(?:webmanifest|json)|site\.webmanifest|s
     }
     try {
         const indexPath = path.join(process.cwd(), 'index.html');
-        const html = await fs.readFile(indexPath, 'utf8');
+        const html = lockViewportForAppleClients(await fs.readFile(indexPath, 'utf8'), req.headers['user-agent']);
         const socialMeta = await buildSocialMetaTags(req);
         const updatedHtml = injectBasePathHtml(injectAppIconLinks(html
             .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtmlAttr(socialMeta.title)}</title>`)
@@ -18008,7 +18024,7 @@ app.get(/^\/(?!api\/|static\/|manifest\.(?:webmanifest|json)|site\.webmanifest|s
     } catch (e) {
         try {
             const indexPath = path.join(process.cwd(), 'index.html');
-            const html = await fs.readFile(indexPath, 'utf8');
+            const html = lockViewportForAppleClients(await fs.readFile(indexPath, 'utf8'), req.headers['user-agent']);
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             res.send(injectBasePathHtml(html));
         } catch {
