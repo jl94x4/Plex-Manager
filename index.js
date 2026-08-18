@@ -1379,6 +1379,7 @@ import {
     normalizeStatusNotifyDownAfterMinutes,
 } from './lib/notifications/opsNotify.js';
 import { enrichInAppNotificationItems } from './lib/notifications/mediaMeta.js';
+import { lookupJobNotificationPoster, resolveJobNotifySourcePath } from './lib/notifications/jobPoster.js';
 import { watcherTitleKey, setWatchingTitle } from './lib/notifications/requestWatchers.js';
 import { normalizeReleaseDatePreference, isFutureReleaseDate } from './lib/notifications/releaseDates.js';
 import {
@@ -2048,7 +2049,7 @@ const loadFile = async (path, defaultContent) => {
     }
 };
 
-const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs } = {}) => {
+const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta } = {}) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
         return await notifyOpsAdmins({
@@ -2059,12 +2060,27 @@ const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs } = {
             href,
             dedupeKey,
             cooldownMs,
+            meta,
             loadUsers: () => loadFile(USERS_PATH, []),
             log,
         });
     } catch (error) {
         log(`[ops-notify] ${event} failed: ${error?.message || error}`);
         return { notified: false };
+    }
+};
+
+const mediaJobNotifyMeta = async (entry, config = {}) => {
+    try {
+        const sourcePath = await resolveJobNotifySourcePath(
+            entry,
+            (id) => mediaAutomationService?.getJob?.(id),
+        );
+        if (!sourcePath) return {};
+        const poster = await lookupJobNotificationPoster({ sourcePath, config });
+        return poster && typeof poster === 'object' ? poster : {};
+    } catch {
+        return {};
     }
 };
 
@@ -17797,12 +17813,14 @@ self.addEventListener('push', (event) => {
   const href = toAbsoluteHref(data.href);
   let icon = '';
   try { icon = new URL('static/pwa-icon-192.png', self.registration.scope).href; } catch (_) {}
+  const image = typeof data.image === 'string' && /^https?:\/\//i.test(data.image) ? data.image : '';
   event.waitUntil(self.registration.showNotification(String(data.title || 'Notification'), {
     body: String(data.body || ''),
     tag: String(data.tag || 'portal'),
     data: { href },
-    icon: icon || undefined,
+    icon: image || icon || undefined,
     badge: icon || undefined,
+    image: image || undefined,
     renotify: true,
   }));
 });
@@ -24762,6 +24780,7 @@ mediaAutomationService = createMediaAutomation({
                 await notifyOps('media_job_failed', {
                     title: entry.message || 'Job failed',
                     dedupeKey: `media-job-failed:${entry.jobId || entry.message || Date.now()}`,
+                    meta: await mediaJobNotifyMeta(entry, config),
                 });
                 if (config.mediaAutomation?.notifyOnFailBurst) {
                     const now = Date.now();
@@ -24806,9 +24825,11 @@ mediaAutomationService = createMediaAutomation({
         }
         if (entry.type === 'job.completed') {
             try {
+                const config = await loadFile(CONFIG_PATH, {});
                 await notifyOps('media_job_completed', {
                     title: entry.message || 'Job completed',
                     dedupeKey: `media-job-completed:${entry.jobId || Date.now()}`,
+                    meta: await mediaJobNotifyMeta(entry, config),
                 });
             } catch (error) {
                 log(`[media-automation] job complete notify failed: ${error.message}`);
