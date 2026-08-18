@@ -6,6 +6,7 @@ import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { DashboardHero, DashboardPageShell } from '../shared/dashboard/DashboardChrome';
 import { formatDateTime } from '../shared/format';
+import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { CustomSelect } from '../shared/ui';
 import { formatIssueRelativeTime, issueStatusBadgeClass } from '../discovery/issueUtils';
@@ -779,12 +780,12 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                 </div>
             </div>
 
-            {composeOpen && (
-                <div className="fixed inset-0 z-[220] flex items-end sm:items-center justify-center p-0 sm:p-5">
+            <ModalPortal open={composeOpen}>
+                <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-5 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
                     <button type="button" className="absolute inset-0 bg-black/70" aria-label={t('common.close')} onClick={() => setComposeOpen(false)} />
                     <form
                         onSubmit={submitTicket}
-                        className="relative w-full sm:max-w-lg rounded-t-3xl sm:rounded-3xl border border-white/10 bg-[#12141a] p-5 space-y-3"
+                        className="relative w-full sm:max-w-lg max-h-full overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-white/10 bg-[#12141a] p-5 space-y-3"
                     >
                         <h2 className="text-lg font-black text-text">{t('support.compose.title')}</h2>
                         <div>
@@ -827,7 +828,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                         </div>
                     </form>
                 </div>
-            )}
+            </ModalPortal>
         </DashboardPageShell>
     );
 };
