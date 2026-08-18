@@ -15156,36 +15156,45 @@ const fetchTautulliServerHistoryItems = async (config, { maxItems = 75000 } = {}
 
     const items = [];
     let offset = 0;
-    let pageSize = TAUTULLI_HISTORY_PAGE_SIZE;
-    let done = false;
-    let usedStartedColumn = false;
+    // Tautulli honors large length values; big pages keep total request count low
+    // so one slow query deep into pagination can't kill a 75k-row export.
+    let pageSize = 1000;
+    let orderColumn = 'date';
 
-    const pullPage = async (start, length, orderColumn) => fetchTautulliHistoryPage(
+    const pullPage = async (start, length, column) => fetchTautulliHistoryPage(
         tUrl,
         config,
-        { start, length, order_column: orderColumn, order_dir: 'desc', grouping: '0' },
-        { timeoutMs: 25000 },
+        { start, length, order_column: column, order_dir: 'desc', grouping: '0' },
+        { timeoutMs: 60000 },
     );
 
-    while (!done && items.length < maxItems) {
+    while (items.length < maxItems) {
         const length = Math.min(pageSize, maxItems - items.length);
-        let rows;
+        let rows = null;
         try {
-            rows = await pullPage(offset, length, usedStartedColumn ? 'started' : 'date');
+            rows = await pullPage(offset, length, orderColumn);
         } catch (firstErr) {
-            if (!usedStartedColumn && offset === 0) {
-                usedStartedColumn = true;
-                log(`Tautulli history date column failed (${firstErr.message}); retrying with started.`);
-                rows = await pullPage(0, Math.min(25, length), 'started');
-                pageSize = Math.min(pageSize, 25);
-                offset = 0;
-            } else if (pageSize > 25 && offset === 0) {
-                pageSize = 25;
-                log(`Tautulli history page failed (${firstErr.message}); retrying with length=25.`);
-                rows = await pullPage(0, 25, usedStartedColumn ? 'started' : 'date');
-                offset = 0;
-            } else {
-                throw firstErr;
+            // Retry the same offset with a smaller page, then with the fallback sort column.
+            try {
+                if (length > 100) {
+                    pageSize = 100;
+                    log(`Tautulli history page failed at offset ${offset} (${firstErr.message}); retrying with length=100.`);
+                    rows = await pullPage(offset, 100, orderColumn);
+                } else if (orderColumn === 'date') {
+                    orderColumn = 'started';
+                    pageSize = Math.min(pageSize, 100);
+                    log(`Tautulli history date column failed at offset ${offset} (${firstErr.message}); retrying with started.`);
+                    rows = await pullPage(offset, Math.min(100, length), orderColumn);
+                } else {
+                    throw firstErr;
+                }
+            } catch (secondErr) {
+                // Partial history is far more useful than throwing everything away.
+                if (items.length > 0) {
+                    log(`Tautulli history paging gave up at offset ${offset} (${secondErr.message}); using ${items.length} rows fetched so far.`);
+                    break;
+                }
+                throw secondErr;
             }
         }
 
@@ -15193,13 +15202,9 @@ const fetchTautulliServerHistoryItems = async (config, { maxItems = 75000 } = {}
 
         for (const row of rows) {
             items.push(mapTautulliHistoryRowToPlexItem(row));
-            if (items.length >= maxItems) {
-                done = true;
-                break;
-            }
+            if (items.length >= maxItems) return items;
         }
 
-        if (rows.length < length) break;
         offset += rows.length;
     }
 
@@ -15276,6 +15281,7 @@ const analyticsSourceLabelFor = (source, { degraded = false, fallback = null } =
         if (degraded && fallback === 'tautulli_unavailable') return 'Plex (Tautulli unavailable)';
         if (degraded && fallback === 'tautulli_history_failed') return 'Plex (Tautulli history failed)';
         if (degraded && fallback === 'tautulli_history_empty') return 'Plex (Tautulli history empty)';
+        if (degraded && fallback === 'rebuild_failed') return 'Plex (analytics rebuild failed)';
         return 'Plex';
     }
     return source ? String(source) : 'Unknown';
@@ -15287,6 +15293,7 @@ const TAUTULLI_ATTEMPTED_ANALYTICS_FALLBACKS = new Set([
     'tautulli_history_failed',
     'tautulli_history_empty',
     'tautulli_unavailable',
+    'rebuild_failed',
 ]);
 
 const analyticsCacheAlreadyAttemptedTautulli = (cache) => (
@@ -20339,10 +20346,19 @@ async function calculateAnalyticsStats() {
             sourceMeta = { source: 'tautulli', fallback: null, degraded: false };
         }
 
-        await saveFile(
-            ANALYTICS_CACHE_PATH,
-            buildAnalyticsCachePayload(sourceMeta, { building: true }),
-        );
+        // Only stamp a "building" stub when there is no usable cache yet (fresh install /
+        // null file). Overwriting a good cache here would blank analytics during every
+        // scheduled rebuild and lose the previous data if this run fails.
+        let existingCacheUsable = false;
+        try {
+            existingCacheUsable = isValidAnalyticsCache(await readAnalyticsCacheFile());
+        } catch { /* treat unreadable as missing */ }
+        if (!existingCacheUsable) {
+            await saveFile(
+                ANALYTICS_CACHE_PATH,
+                buildAnalyticsCachePayload(sourceMeta, { building: true }),
+            );
+        }
 
         if (preferTautulli) {
             try {
@@ -20396,11 +20412,16 @@ async function calculateAnalyticsStats() {
         const users = await loadFile(USERS_PATH, []);
 
         if (!Array.isArray(historyItems) || historyItems.length === 0) {
-            log('[AnalyticsStats] No watch history available for analytics cache; saving empty snapshot.');
-            await saveFile(
-                ANALYTICS_CACHE_PATH,
-                buildAnalyticsCachePayload(sourceMeta, { building: false, historyItems: [] }),
-            );
+            if (existingCacheUsable) {
+                // Keep serving the previous cache instead of blanking it with zeros.
+                log('[AnalyticsStats] No watch history available this run; keeping previous cache.');
+            } else {
+                log('[AnalyticsStats] No watch history available for analytics cache; saving empty snapshot.');
+                await saveFile(
+                    ANALYTICS_CACHE_PATH,
+                    buildAnalyticsCachePayload(sourceMeta, { building: false, historyItems: [] }),
+                );
+            }
             markTaskEnd(systemJobs.analyticsCache, null);
             return;
         }
@@ -20508,6 +20529,21 @@ async function calculateAnalyticsStats() {
 
     } catch (e) {
         log(`Error calculating analytics stats: ${e.message}`);
+        // Never leave a "building" stub behind — the UI would show rebuild-pending forever.
+        try {
+            const current = await readAnalyticsCacheFile();
+            if (current?.building) {
+                await saveFile(ANALYTICS_CACHE_PATH, {
+                    ...current,
+                    building: false,
+                    source: 'plex',
+                    degraded: true,
+                    fallback: 'rebuild_failed',
+                    sourceLabel: analyticsSourceLabelFor('plex', { degraded: true, fallback: 'rebuild_failed' }),
+                    lastUpdated: Date.now(),
+                });
+            }
+        } catch { /* keep whatever is on disk */ }
         markTaskEnd(systemJobs.analyticsCache, e);
     } finally {
         isBuildingAnalyticsStats = false;
