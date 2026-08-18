@@ -214,3 +214,15 @@ Object.assign(nl, { settings: { ...nl.settings, notifications: {
     saveReminder: { title: 'Vergeet niet de instellingen op te slaan', hint: 'Sla op via de knop onderaan om kanaalschakelaars en de Discord-webhook te bewaren.' },
     templates: { title: 'Meldingssjablonen', hint: 'Pas tekst per gebeurtenis aan. Laat een veld op de standaardwaarde staan (of maak het leeg) om de ingebouwde tekst te gebruiken.', variablesLabel: 'Variabelen:', resetEvent: 'Gebeurtenis terugzetten naar standaardwaarden', customBadge: 'aangepast', events: { available: 'Verzoek beschikbaar', approved: 'Verzoek goedgekeurd', declined: 'Verzoek geweigerd', season: 'Seizoen beschikbaar', episode: 'Nieuwe aflevering', admin_pending: 'Beheerder - nieuw wachtend verzoek', not_released: 'Nog niet uitgebracht', collexions_failed: 'Beheerder - ColleXions mislukt', scanner_failed: 'Beheerder - Scanner mislukt', status_down: 'Beheerder - statuscontrole offline', status_up: 'Beheerder - statuscontrole hersteld', media_job_failed: 'Beheerder - Media Automation-taak mislukt', media_job_completed: 'Beheerder - Media Automation-taak voltooid' }, fields: { emailSubject: 'E-mailonderwerp', emailHeadline: 'E-mailkop', emailBody: 'E-mailtekst', pushTitle: 'Push- / in-app-titel', pushBody: 'Push- / in-app-tekst', discordContent: 'Discord-bericht', discordEmbedTitle: 'Discord-embedtitel', discordEmbedDescription: 'Discord-embedbeschrijving', gotifyTitle: 'Gotify-titel', gotifyBody: 'Gotify-tekst', ntfyTitle: 'ntfy-titel', ntfyBody: 'ntfy-tekst', webhookBody: 'Webhook JSON-body (optionele template)' } },
 } } });
+Object.assign(nl, { settings: { ...nl.settings, arrIntegrations: {
+    actions: { addInstance: 'Instantie toevoegen', defaultInstance: 'Standaardinstantie', setAsDefault: 'Als standaard instellen', removeInstance: 'Instantie verwijderen', testConnection: 'Verbinding testen' },
+    status: { default: 'Standaard' },
+    empty: { noInstances: 'Geen {appName}-instanties geconfigureerd.' },
+    labels: { instance: 'Instantie {index}', displayName: 'Weergavenaam', ultraHdInstance: '4K / UHD-instantie', url: 'URL', externalUrl: 'Externe URL', apiKey: 'API-sleutel', plexLibraries: 'Plex-bibliotheken' },
+    hints: { ultraHdRouting: 'Het aanvraagvenster stuurt Ultra HD-aanvragen naar deze instantie (HD + UHD kunnen samen worden geselecteerd).', externalUrlOptional: 'Optioneel, voor UI-links', libraryMapping: 'Koppel bibliotheken aan deze instantie voor onderhoudsrouting. Niet-gekoppelde bibliotheken gebruiken de standaardinstantie.' },
+    placeholders: { apiKey: 'API-sleutel' },
+    library: { assignedToAnotherInstance: 'Toegewezen aan een andere instantie' },
+    test: { connectionSuccessful: 'Verbinding geslaagd', connectionFailed: 'Verbinding mislukt' },
+    titles: { sonarrInstances: 'Sonarr-instanties', radarrInstances: 'Radarr-instanties', lidarrInstances: 'Lidarr-instanties', bazarrInstances: 'Bazarr-instanties' },
+    subtitles: { sonarr: 'Automatisering voor tv-series', radarr: 'Automatisering voor films', lidarr: 'Automatisering voor muziek', bazarr: 'Automatisering voor ondertitels' },
+} } });
