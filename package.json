@@ -13,7 +13,7 @@
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
-    "test": "node --test lib/media-automation/media-automation.test.js",
+    "test": "node --test",
     "test:media-automation": "node --test lib/media-automation/media-automation.test.js",
     "start": "npm run build && node --env-file=.env index.js",
     "start:prod": "node index.js"

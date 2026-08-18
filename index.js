@@ -17994,12 +17994,12 @@ const buildSocialMetaTags = async (req) => {
  * iOS Safari only respects maximum-scale=1 (which suppresses focus auto-zoom) when
  * it is present at HTML parse time — setting it from bundled JS is too late for the
  * first focus, and Safari only re-evaluates after a user gesture. Inject it
- * server-side for Apple UAs. Matching Macintosh also covers iPadOS 13+ "desktop"
- * UAs; real desktop browsers ignore the viewport meta, and iOS keeps pinch zoom
- * regardless, so this never disables zoom for anyone.
+ * server-side for iPhone/iPad/iPod UAs. Do NOT match Macintosh: that string is
+ * also real Mac Safari/Chrome, where maximum-scale=1 disables pinch-zoom.
+ * iPadOS "desktop website" mode is handled client-side via maxTouchPoints.
  */
 const lockViewportForAppleClients = (html, userAgent = '') => {
-    if (!/iPhone|iPad|iPod|Macintosh/i.test(String(userAgent || ''))) return html;
+    if (!/iPhone|iPad|iPod/i.test(String(userAgent || ''))) return html;
     return html.replace(
         /<meta\s+name="viewport"\s+content="[^"]*"\s*\/?>/i,
         '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />',

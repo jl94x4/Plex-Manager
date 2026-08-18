@@ -2467,8 +2467,6 @@ export function usePosterSetsDashboardState() {
         filteredWatches,
         watchGroups,
         watchGroupsByCategory,
-        watchesCategoryFilter,
-        setWatchesCategoryFilter,
         categoryFilteredWatchGroups,
         watchesPageCount,
         pagedWatchGroups,

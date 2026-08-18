@@ -43,27 +43,42 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
     const { locale, tAchievements } = useAchievementsI18n();
     const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
     const [loading, setLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
     const [enabled, setEnabled] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const prevRef = useRef<LeaderboardEntry[]>([]);
 
     useEffect(() => {
         let cancelled = false;
-        (async () => {
-            setLoading(true);
-            setError(null);
+        let timer: ReturnType<typeof setTimeout> | null = null;
+
+        const pull = async (initial: boolean) => {
+            if (initial) {
+                setLoading(true);
+                setError(null);
+            }
             try {
                 const data = await apiFetch('/api/achievements/leaderboard?limit=100');
                 if (cancelled) return;
                 setEnabled(data?.enabled !== false);
                 setEntries(Array.isArray(data?.entries) ? data.entries : []);
+                const nextSyncing = !!data?.syncing;
+                setSyncing(nextSyncing);
+                if (nextSyncing) {
+                    timer = setTimeout(() => { void pull(false); }, 4000);
+                }
             } catch (e: any) {
-                if (!cancelled) setError(e?.message || tAchievements('analytics.error'));
+                if (!cancelled && initial) setError(e?.message || tAchievements('analytics.error'));
             } finally {
-                if (!cancelled) setLoading(false);
+                if (!cancelled && initial) setLoading(false);
             }
-        })();
-        return () => { cancelled = true; };
+        };
+
+        void pull(true);
+        return () => {
+            cancelled = true;
+            if (timer) clearTimeout(timer);
+        };
     }, []);
 
     useEffect(() => {
@@ -266,6 +281,12 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
     return (
         <div className="w-full flex flex-col gap-6">
             {title}
+            {syncing ? (
+                <p className="flex items-center gap-2 text-xs text-muted">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-plex" />
+                    {tAchievements('analytics.syncingXp')}
+                </p>
+            ) : null}
 
             {/* Same podium + ranked list layout as the classic plays Hall of Fame */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
