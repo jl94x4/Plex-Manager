@@ -20348,22 +20348,26 @@ async function calculateAnalyticsStats({ force = false } = {}) {
             sourceMeta = { source: 'tautulli', fallback: null, degraded: false };
         }
 
-        // Stamp a "building" stub so the UI can show progress.
-        // On scheduled rebuilds we skip this when there's already a good cache, to avoid
-        // blanking analytics if the run fails. On manual/forced rebuilds we always write it
-        // so the UI immediately reflects that a rebuild is underway.
-        let existingCacheUsable = false;
+        // Stamp building:true into the cache so the UI can show a progress indicator.
+        // KEY: we always patch the flag onto the *existing* cache object rather than
+        // replacing it with an empty stub — this means stats remain visible in the UI
+        // for the full duration of the rebuild (which can take 10-15 min) instead of
+        // blanking out to zeros while Tautulli/Plex history is being fetched.
+        let existingCache = null;
         try {
-            existingCacheUsable = isValidAnalyticsCache(await readAnalyticsCacheFile());
+            const loaded = await readAnalyticsCacheFile();
+            if (isValidAnalyticsCache(loaded)) existingCache = loaded;
         } catch { /* treat unreadable as missing */ }
-        if (!existingCacheUsable || force) {
-            await saveFile(
-                ANALYTICS_CACHE_PATH,
-                buildAnalyticsCachePayload(sourceMeta, { building: true }),
-            );
-            // After a forced write, treat the stub as non-usable so error recovery
-            // will always update the cache if this run fails.
-            existingCacheUsable = false;
+        const existingCacheUsable = existingCache !== null;
+
+        if (force || !existingCacheUsable) {
+            // On a manual/forced rebuild: patch building:true onto existing data if
+            // we have it, so the old stats stay visible. Fall back to an empty stub
+            // only when there is genuinely nothing on disk yet.
+            const stub = existingCache
+                ? { ...existingCache, building: true, rebuildStartedAt: Date.now() }
+                : buildAnalyticsCachePayload(sourceMeta, { building: true });
+            await saveFile(ANALYTICS_CACHE_PATH, stub);
         }
 
         // On a forced/manual rebuild always retry Tautulli, even if a previous
