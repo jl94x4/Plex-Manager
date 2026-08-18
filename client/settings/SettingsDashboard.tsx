@@ -114,6 +114,55 @@ const DOWNLOAD_CLIENT_TYPE_LABELS: Record<DownloadClientConfig['type'], string> 
     nzbget: 'NZBGet',
 };
 
+const taskStatusPillClass = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border whitespace-nowrap';
+
+type TaskStatusSource = {
+    running?: boolean;
+    lastRun?: string | null;
+    lastError?: string | null;
+    lastWarning?: string | null;
+};
+
+const TaskStatusPill: React.FC<{ task: TaskStatusSource }> = ({ task }) => {
+    if (task.running) {
+        return (
+            <span className={`${taskStatusPillClass} bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.15)] animate-pulse`}>
+                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" />
+                Running
+            </span>
+        );
+    }
+    if (task.lastError) {
+        return (
+            <span className={`${taskStatusPillClass} bg-red-500/10 text-red-400 border-red-500/20`}>
+                <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
+                Failed
+            </span>
+        );
+    }
+    if (task.lastWarning) {
+        return (
+            <span className={`${taskStatusPillClass} bg-amber-500/10 text-amber-400 border-amber-500/20`}>
+                <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                Warning
+            </span>
+        );
+    }
+    if (task.lastRun) {
+        return (
+            <span className={`${taskStatusPillClass} bg-emerald-500/10 text-emerald-300 border-emerald-500/20`}>
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                Success
+            </span>
+        );
+    }
+    return (
+        <span className={`${taskStatusPillClass} bg-slate-500/10 text-muted border-border`}>
+            Idle
+        </span>
+    );
+};
+
 const downloadClientUrlPlaceholder = (type: DownloadClientConfig['type']) => (
     type === 'transmission' ? 'http://localhost:9091'
         : type === 'deluge' ? 'http://localhost:8112'
@@ -4210,32 +4259,14 @@ export const SettingsDashboard: React.FC = () => {
                                         <div>
                                             <div className="flex flex-wrap items-center gap-2 mb-1">
                                                 <h4 className="font-bold text-lg">{task.name}</h4>
-                                                {task.running ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.15)] animate-pulse">
-                                                        <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" />
-                                                        Running
-                                                    </span>
-                                                ) : task.lastError ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-                                                        <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
-                                                        Failed
-                                                    </span>
-                                                ) : task.lastWarning ? (
-                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                                        <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
-                                                        Warning
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-500/10 text-muted border border-border">
-                                                        Idle
-                                                    </span>
-                                                )}
+                                                <TaskStatusPill task={task} />
                                             </div>
                                             <p className="text-sm text-muted mb-2">{task.description}</p>
                                             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
                                                 <span><strong className="text-text">Last Run:</strong> {task.lastRun ? new Date(task.lastRun).toLocaleString() : 'Never'}</span>
                                                 <span><strong className="text-text">Next Run:</strong> {task.nextRun ? new Date(task.nextRun).toLocaleString() : 'Not Scheduled'}</span>
                                                 {task.lastDurationMs !== null && <span><strong className="text-text">Duration:</strong> {Math.round(task.lastDurationMs / 1000)}s</span>}
+                                                {task.lastDetail && !task.lastError && <span><strong className="text-text">Result:</strong> {task.lastDetail}</span>}
                                                 {task.lastError && <span className="bg-red-500/20 text-red-300 px-2 py-1 rounded"><strong>Error:</strong> {task.lastError}</span>}
                                                 {task.lastWarning && !task.lastError && <span className="bg-amber-500/20 text-amber-200 px-2 py-1 rounded"><strong>Warning:</strong> {task.lastWarning}</span>}
                                             </div>
@@ -4843,29 +4874,11 @@ export const SettingsDashboard: React.FC = () => {
                                                     Last: {task.lastRun ? new Date(task.lastRun).toLocaleString() : 'Never'} · Next: {task.nextRun ? new Date(task.nextRun).toLocaleString() : 'Not Scheduled'}
                                                     {task.lastDurationMs !== null ? ` · Duration: ${Math.round(task.lastDurationMs / 1000)}s` : ''}
                                                 </div>
+                                                {task.lastDetail && !task.lastError && <div className="text-xs text-muted mt-1">{task.lastDetail}</div>}
                                                 {task.lastError && <div className="text-xs text-red-300 mt-1">Last error: {task.lastError}</div>}
                                                 {task.lastWarning && !task.lastError && <div className="text-xs text-amber-300 mt-1">Last warning: {task.lastWarning}</div>}
                                             </div>
-                                            {task.running ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.15)] animate-pulse whitespace-nowrap">
-                                                    <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" />
-                                                    Running
-                                                </span>
-                                            ) : task.lastError ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/10 text-red-400 border border-red-500/20 whitespace-nowrap">
-                                                    <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
-                                                    Failed
-                                                </span>
-                                            ) : task.lastWarning ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
-                                                    <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
-                                                    Warning
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-500/10 text-muted border border-border whitespace-nowrap">
-                                                    Idle
-                                                </span>
-                                            )}
+                                            <TaskStatusPill task={task} />
                                         </div>
                                     ))}
                                 </div>
