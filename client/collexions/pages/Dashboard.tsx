@@ -113,6 +113,9 @@ const libraryReason = (lib: LibraryRunStats | LogLibraryStats): React.ReactNode 
     return <span className="text-muted">Skipped (Random chance)</span>;
 };
 
+const isTransientWorkerBlip = (text: string) =>
+    /econnreset|econnrefused|econnaborted|socket hang up|network socket disconnected|epipe|worker timed out|did not respond in time/i.test(text);
+
 const Dashboard: React.FC = () => {
     const [status, setStatus] = useState<AppStatus | null>(null);
     const [config, setConfig] = useState<AppConfig | null>(null);
@@ -146,6 +149,7 @@ const Dashboard: React.FC = () => {
     const statusFetchGenRef = useRef(0);
     const healthFetchGenRef = useRef(0);
     const logsFetchGenRef = useRef(0);
+    const healthFailRef = useRef(0);
 
     // --- Helpers ---
     const safeParseDate = (dateStr: string): Date | null => {
@@ -346,11 +350,25 @@ const Dashboard: React.FC = () => {
         try {
             const h = await api.getHealth();
             if (gen !== healthFetchGenRef.current) return;
+            const blipText = [h.worker?.error, ...(h.issues || [])].filter(Boolean).join(' ');
+            const transientDown = !h.worker?.reachable && isTransientWorkerBlip(blipText);
+            if (transientDown) {
+                healthFailRef.current += 1;
+                // Stop can briefly reset the worker socket; don't flash a warning for a 10s blip.
+                if (healthFailRef.current < 3) return;
+            } else {
+                healthFailRef.current = 0;
+            }
             setHealth(h);
             setHealthError('');
         } catch (e: any) {
             if (gen !== healthFetchGenRef.current) return;
-            setHealthError(e?.message || 'Health check failed');
+            const msg = e?.message || 'Health check failed';
+            if (isTransientWorkerBlip(msg)) {
+                healthFailRef.current += 1;
+                if (healthFailRef.current < 3) return;
+            }
+            setHealthError(msg);
         }
     }, []);
 
@@ -419,7 +437,7 @@ const Dashboard: React.FC = () => {
         setLoading(true);
         try {
             await api.stopScript();
-            await Promise.all([fetchStatusOnly(), fetchHealth()]);
+            await fetchStatusOnly();
         } catch (error: any) {
             alert(error?.message || "Failed to stop.");
         }

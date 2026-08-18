@@ -2877,31 +2877,29 @@ def _mark_script_stopped():
 
 
 def _stop_background_process():
-    """Stop the managed pin loop and any leftover ColleXions.py process."""
+    """Stop the pinning script only. Never block or kill the Flask/gunicorn worker."""
     global process
     stopped = False
-    if process is not None and process.poll() is None:
+    managed = process
+    process = None
+    if managed is not None and managed.poll() is None:
         try:
-            process.terminate()
-            try:
-                process.wait(timeout=8)
-            except Exception:
-                process.kill()
-                process.wait(timeout=3)
+            managed.terminate()
             stopped = True
         except Exception as exc:
             logging.warning(f"Failed to terminate managed ColleXions process: {exc}")
-    process = None
+    skip_pids = {os.getpid(), os.getppid()}
     if PSUTIL_AVAILABLE:
         for pid in _collexions_script_pids():
+            if pid in skip_pids:
+                continue
             try:
                 proc = psutil.Process(pid)
+                cmdline = ' '.join(str(part) for part in (proc.cmdline() or [])).lower()
+                if 'gunicorn' in cmdline or 'server:app' in cmdline:
+                    continue
                 proc.terminate()
                 stopped = True
-                try:
-                    proc.wait(timeout=5)
-                except Exception:
-                    proc.kill()
             except (psutil.NoSuchProcess, psutil.AccessDenied) as exc:
                 logging.warning(f"Could not stop ColleXions pid {pid}: {exc}")
             except Exception as exc:
@@ -3469,11 +3467,15 @@ def start_background_process():
         if _DATA_ROOT:
             child_env['COLLEXIONS_DATA_DIR'] = _DATA_ROOT
 
-        process = subprocess.Popen(
-            cmd,
-            cwd=_DATA_ROOT,
-            env=child_env,
-        )
+        popen_kwargs = {
+            'cwd': _DATA_ROOT,
+            'env': child_env,
+        }
+        if os.name == 'nt':
+            popen_kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kwargs['start_new_session'] = True
+        process = subprocess.Popen(cmd, **popen_kwargs)
         logging.info(f"Background process started with PID: {process.pid} (cwd={_DATA_ROOT})")
             
         return True, process.pid

@@ -24115,11 +24115,23 @@ app.get('/api/collexions/health', requireAdmin, async (req, res) => {
         let worker = { ok: false, reachable: false, error: null, detail: null };
         if (enabled && base && serviceKey) {
             try {
-                const upstream = await fetchWithTimeout(
+                const probeWorker = () => fetchWithTimeout(
                     `${base}/api/health`,
                     { headers: { Accept: 'application/json', 'X-Collexions-Service-Key': serviceKey } },
                     6000,
                 );
+                let upstream;
+                try {
+                    upstream = await probeWorker();
+                } catch (first) {
+                    const msg = String(first?.message || first || '');
+                    if (/econnreset|econnrefused|econnaborted|socket hang up|epipe/i.test(msg)) {
+                        await new Promise((r) => setTimeout(r, 400));
+                        upstream = await probeWorker();
+                    } else {
+                        throw first;
+                    }
+                }
                 if (upstream.ok) {
                     const detail = await upstream.json().catch(() => null);
                     worker = { ok: !!(detail && detail.ok), reachable: true, error: null, detail };
